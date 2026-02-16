@@ -110,21 +110,52 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument("--x-csv", default=_env_str("COMFYUI_X_CSV") or DEFAULT_X_CSV)
     parser.add_argument("--y-csv", default=_env_str("COMFYUI_Y_CSV") or DEFAULT_Y_CSV)
-    parser.add_argument("--template", default=DEFAULT_TEMPLATE)
-    parser.add_argument("--base-seed", type=int, default=0)
+    parser.add_argument(
+        "--template",
+        default=_env_str("COMFYUI_TEMPLATE") or DEFAULT_TEMPLATE,
+    )
+    parser.add_argument(
+        "--base-seed",
+        type=int,
+        default=_env_optional_int("COMFYUI_BASE_SEED") or 0,
+    )
     parser.add_argument(
         "--workflow-json",
         default=_env_str("COMFYUI_WORKFLOW_JSON") or DEFAULT_WORKFLOW_JSON,
     )
-    parser.add_argument("--ksampler-node-id", default=None)
+    parser.add_argument(
+        "--ksampler-node-id",
+        default=_env_str("COMFYUI_KSAMPLER_NODE_ID"),
+    )
 
-    parser.add_argument("--x-limit", type=int, default=None)
-    parser.add_argument("--y-limit", type=int, default=None)
-    parser.add_argument("--x-indexes", default=None)
-    parser.add_argument("--y-indexes", default=None)
+    parser.add_argument(
+        "--x-limit",
+        type=int,
+        default=_env_optional_int("COMFYUI_X_LIMIT"),
+    )
+    parser.add_argument(
+        "--y-limit",
+        type=int,
+        default=_env_optional_int("COMFYUI_Y_LIMIT"),
+    )
+    parser.add_argument(
+        "--x-indexes",
+        default=_env_str("COMFYUI_X_INDEXES"),
+    )
+    parser.add_argument(
+        "--y-indexes",
+        default=_env_str("COMFYUI_Y_INDEXES"),
+    )
 
-    parser.add_argument("--run-dir", default=None)
-    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--run-dir",
+        default=_env_str("COMFYUI_RUN_DIR"),
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=_env_bool("COMFYUI_DRY_RUN", default=False),
+    )
 
     parser.add_argument(
         "--base-url",
@@ -578,6 +609,21 @@ def _env_optional_int(name: str) -> int | None:
         return int(raw)
     except ValueError as exc:
         raise ValueError(f"环境变量 {name} 不是有效整数: {raw}") from exc
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = _env_str(name)
+    if raw is None:
+        return default
+
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    raise ValueError(
+        f"环境变量 {name} 不是有效布尔值: {raw} (可用: 1/0 true/false yes/no on/off)"
+    )
 
 
 def _select_rows(
