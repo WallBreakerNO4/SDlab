@@ -115,6 +115,7 @@ class _CellPlan:
     seed: int
     generation_params: dict[str, object | None]
     workflow_hash: str
+    save_image_prefix: str
 
 
 @dataclass(slots=True)
@@ -286,6 +287,11 @@ def run(args: argparse.Namespace) -> int:
         y_selected=y_selected,
         workflow_context=workflow_context,
     )
+
+    run_id_obj = run_payload.get("run_id")
+    if not isinstance(run_id_obj, str) or not run_id_obj:
+        raise ValueError("run payload missing run_id")
+    run_id = run_id_obj
     run_artifacts.run_json_path.write_text(
         json.dumps(run_payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -434,6 +440,9 @@ def run(args: argparse.Namespace) -> int:
                             _write_record(record)
                             continue
 
+                        save_image_prefix = (
+                            f"{run_id}/x{x_index}-y{y_index}-s{seed}-{prompt_hash[:8]}"
+                        )
                         plan = _CellPlan(
                             x_index=x_index,
                             y_index=y_index,
@@ -448,6 +457,7 @@ def run(args: argparse.Namespace) -> int:
                                 seed,
                             ),
                             workflow_hash=workflow_hash,
+                            save_image_prefix=save_image_prefix,
                         )
 
                         future = gen_pool.submit(
@@ -1229,6 +1239,7 @@ def _worker_submit_and_wait(
             negative_prompt=negative_prompt,
             overrides=workflow_overrides,
             ksampler_node_id=workflow_context.selected_ksampler_id,
+            save_image_prefix=plan.save_image_prefix,
         )
 
         client_id = f"{args.client_id}-{uuid.uuid4().hex[:8]}"
