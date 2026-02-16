@@ -17,12 +17,14 @@ from scripts.comfyui_part1_generate import build_parser, main
 COMFY_ENV_KEYS = [
     "COMFYUI_X_CSV",
     "COMFYUI_Y_CSV",
+    "COMFYUI_TEMPLATE",
     "COMFYUI_BASE_URL",
     "COMFYUI_WORKFLOW_JSON",
     "COMFYUI_OUT_DIR",
     "COMFYUI_CLIENT_ID",
     "COMFYUI_REQUEST_TIMEOUT_S",
     "COMFYUI_JOB_TIMEOUT_S",
+    "COMFYUI_CONCURRENCY",
     "COMFYUI_NEGATIVE_PROMPT",
     "COMFYUI_WIDTH",
     "COMFYUI_HEIGHT",
@@ -224,6 +226,7 @@ def test_resume_skip_map_ignores_broken_last_line_and_requires_existing_image(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _clear_comfy_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
     x_csv, y_csv = _write_csv_inputs(tmp_path)
     run_dir = tmp_path / "run-resume"
     images_dir = run_dir / "images"
