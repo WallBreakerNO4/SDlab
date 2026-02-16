@@ -48,6 +48,7 @@ def patch_workflow(
     negative_prompt: str,
     overrides: WorkflowOverrides | None = None,
     ksampler_node_id: str | None = None,
+    save_image_prefix: str | None = None,
 ) -> WorkflowDict:
     patched = copy.deepcopy(workflow)
     active_overrides = overrides or WorkflowOverrides()
@@ -95,6 +96,13 @@ def patch_workflow(
             "batch_size": active_overrides.batch_size,
         },
     )
+
+    if save_image_prefix is not None:
+        for node in patched.values():
+            if node.get("class_type") != "SaveImage":
+                continue
+            save_inputs = _ensure_inputs(node)
+            save_inputs["filename_prefix"] = save_image_prefix
 
     return patched
 

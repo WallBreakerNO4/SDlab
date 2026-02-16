@@ -3,6 +3,7 @@
 import copy
 import sys
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -10,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from scripts.workflow_patch import (
+    WorkflowDict,
     WorkflowOverrides,
     load_workflow,
     patch_workflow,
@@ -18,6 +20,12 @@ from scripts.workflow_patch import (
 
 RF_WORKFLOW = ROOT / "data" / "comfyui-flow" / "CKNOOBRF.json"
 MAIN_WORKFLOW = ROOT / "data" / "comfyui-flow" / "CKNOOBmain.json"
+
+
+def _inputs(node: dict[str, object]) -> dict[str, object]:
+    inputs_obj = node.get("inputs")
+    assert isinstance(inputs_obj, dict)
+    return cast(dict[str, object], inputs_obj)
 
 
 def test_load_workflow_reads_json_dict_from_file_path():
@@ -47,17 +55,17 @@ def test_patch_workflow_reference_chasing_injects_rf_and_applies_overrides():
         ),
     )
 
-    assert patched["12"]["inputs"]["text"] == "pos prompt"
-    assert patched["4"]["inputs"]["text"] == "neg prompt"
-    assert patched["6"]["inputs"]["seed"] == 123
-    assert patched["6"]["inputs"]["steps"] == 44
-    assert patched["6"]["inputs"]["cfg"] == 7.5
-    assert patched["6"]["inputs"]["denoise"] == 0.62
-    assert patched["6"]["inputs"]["sampler_name"] == "heun"
-    assert patched["6"]["inputs"]["scheduler"] == "karras"
-    assert patched["5"]["inputs"]["width"] == 896
-    assert patched["5"]["inputs"]["height"] == 1152
-    assert patched["5"]["inputs"]["batch_size"] == 3
+    assert _inputs(patched["12"]).get("text") == "pos prompt"
+    assert _inputs(patched["4"]).get("text") == "neg prompt"
+    assert _inputs(patched["6"]).get("seed") == 123
+    assert _inputs(patched["6"]).get("steps") == 44
+    assert _inputs(patched["6"]).get("cfg") == 7.5
+    assert _inputs(patched["6"]).get("denoise") == 0.62
+    assert _inputs(patched["6"]).get("sampler_name") == "heun"
+    assert _inputs(patched["6"]).get("scheduler") == "karras"
+    assert _inputs(patched["5"]).get("width") == 896
+    assert _inputs(patched["5"]).get("height") == 1152
+    assert _inputs(patched["5"]).get("batch_size") == 3
 
 
 def test_patch_workflow_reference_chasing_injects_main_with_tristate_none_unchanged():
@@ -71,14 +79,35 @@ def test_patch_workflow_reference_chasing_injects_main_with_tristate_none_unchan
         overrides=WorkflowOverrides(steps=31),
     )
 
-    assert patched["3"]["inputs"]["text"] == "main pos"
-    assert patched["4"]["inputs"]["text"] == "main neg"
-    assert patched["5"]["inputs"]["steps"] == 31
-    assert patched["5"]["inputs"]["seed"] == original["5"]["inputs"]["seed"]
-    assert patched["5"]["inputs"]["cfg"] == original["5"]["inputs"]["cfg"]
-    assert patched["6"]["inputs"]["width"] == original["6"]["inputs"]["width"]
-    assert patched["6"]["inputs"]["height"] == original["6"]["inputs"]["height"]
-    assert patched["6"]["inputs"]["batch_size"] == original["6"]["inputs"]["batch_size"]
+    assert _inputs(patched["3"]).get("text") == "main pos"
+    assert _inputs(patched["4"]).get("text") == "main neg"
+    assert _inputs(patched["5"]).get("steps") == 31
+    assert _inputs(patched["5"]).get("seed") == _inputs(original["5"]).get("seed")
+    assert _inputs(patched["5"]).get("cfg") == _inputs(original["5"]).get("cfg")
+    assert _inputs(patched["6"]).get("width") == _inputs(original["6"]).get("width")
+    assert _inputs(patched["6"]).get("height") == _inputs(original["6"]).get("height")
+    assert _inputs(patched["6"]).get("batch_size") == _inputs(original["6"]).get(
+        "batch_size"
+    )
+
+
+def test_patch_workflow_overrides_save_image_filename_prefix_when_requested():
+    workflow = load_workflow(MAIN_WORKFLOW)
+
+    patched = patch_workflow(
+        workflow,
+        positive_prompt="main pos",
+        negative_prompt="main neg",
+        overrides=WorkflowOverrides(steps=31),
+        save_image_prefix="run-test/x0-y0-s1-deadbeef",
+    )
+
+    save_nodes = [
+        node for node in patched.values() if node.get("class_type") == "SaveImage"
+    ]
+    assert save_nodes
+    for node in save_nodes:
+        assert _inputs(node).get("filename_prefix") == "run-test/x0-y0-s1-deadbeef"
 
 
 def test_patch_workflow_raises_clear_error_when_multiple_ksampler_without_selection():
@@ -119,8 +148,8 @@ def test_patch_workflow_raises_clear_error_when_multiple_ksampler_without_select
     }
 
     with pytest.raises(ValueError) as exc:
-        patch_workflow(
-            workflow,
+        _ = patch_workflow(
+            cast(WorkflowDict, workflow),
             positive_prompt="new-pos",
             negative_prompt="new-neg",
         )
@@ -186,16 +215,16 @@ def test_patch_workflow_can_select_specific_ksampler_when_multiple_exist():
     }
 
     patched = patch_workflow(
-        workflow,
+        cast(WorkflowDict, workflow),
         positive_prompt="picked-pos",
         negative_prompt="picked-neg",
         ksampler_node_id="11",
         overrides=WorkflowOverrides(batch_size=4),
     )
 
-    assert patched["3"]["inputs"]["text"] == "picked-pos"
-    assert patched["4"]["inputs"]["text"] == "picked-neg"
-    assert patched["6"]["inputs"]["batch_size"] == 4
-    assert patched["1"]["inputs"]["text"] == "old-pos-a"
-    assert patched["2"]["inputs"]["text"] == "old-neg-a"
-    assert patched["5"]["inputs"]["batch_size"] == 1
+    assert _inputs(patched["3"]).get("text") == "picked-pos"
+    assert _inputs(patched["4"]).get("text") == "picked-neg"
+    assert _inputs(patched["6"]).get("batch_size") == 4
+    assert _inputs(patched["1"]).get("text") == "old-pos-a"
+    assert _inputs(patched["2"]).get("text") == "old-neg-a"
+    assert _inputs(patched["5"]).get("batch_size") == 1
