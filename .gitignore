@@ -268,3 +268,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# lib/ directory - track TypeScript files only
+!lib/
+lib/**
+!lib/**/*.ts
+!lib/**/*.tsx
