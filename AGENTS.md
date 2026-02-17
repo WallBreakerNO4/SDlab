@@ -1,46 +1,68 @@
 # Agent Guide (sd-style-lab/images-script)
 
-**生成时间:** 2026-02-17T17:53:02+0800
-**Commit:** 94e9de9
-**分支:** master
+**生成时间:** 2026-02-18T02:49:17+0800
+**Commit:** d71e245
+**分支:** website
 
 本文件面向在本仓库里自动写代码/改代码的 agent；子目录的 `AGENTS.md` 只覆盖该目录的“局部知识”，避免与根文件重复。
 
 ## 概览
 
-- 目标：用 ComfyUI 遍历 X/Y prompt 网格生图；落盘 `run.json` + `metadata.jsonl` + `images/`
-- 栈：Python `>=3.13`（本仓库默认 `3.14`，见 `.python-version`）；依赖用 `uv`（`uv.lock` 已提交）；测试 `pytest`
+- 这个仓库包含两部分：展示用的网站（Next.js）+ 生图用的脚本（Python/ComfyUI）
+- 生图脚本：遍历 X/Y prompt 网格；落盘 `run.json` + `metadata.jsonl` + `images/`
+- 网站：读取 `comfyui_api_outputs/` 下的 run 产物并展示 runs/grid/image；E2E 用 Playwright
 
 ## 结构
 
 ```text
 ./
-├── main.py
-├── scripts/                 # 核心实现（CLI runner / ComfyUI client / workflow patch / prompt grid）
+├── app/                      # Next.js App Router（页面 + /api/comfyui/* 读取 run 产物）
 │   └── AGENTS.md
-├── tests/                   # pytest（偏“可观测输出”）
+├── components/               # 业务组件（ComfyUI 预览/虚拟网格等）
+│   ├── ui/                   # shadcn/radix 基础组件（体量大，约定集中）
+│   │   └── AGENTS.md
 │   └── AGENTS.md
-├── data/                    # 输入 CSV 与 ComfyUI workflow JSON（只读资产）
+├── lib/                      # Node 侧读取 run.json/metadata.jsonl + 路径安全
 │   └── AGENTS.md
-├── comfyui_api_outputs/     # 运行输出（生成物；已在 .gitignore）
-├── pyproject.toml
+├── e2e/                      # Playwright 端到端测试
+│   └── AGENTS.md
+├── types/                    # Next.js 生成类型（不要手改）
+│   └── AGENTS.md
+├── main.py                   # Python 程序入口（只做委托）
+├── scripts/                  # 生图脚本核心实现
+│   └── AGENTS.md
+├── tests/                    # pytest（偏“可观测输出”）
+│   └── AGENTS.md
+├── data/                     # 输入资产（CSV + workflow JSON；只读）
+│   └── AGENTS.md
+├── comfyui_api_outputs/      # 运行输出（生成物；已在 .gitignore；网站只读消费）
+├── package.json              # Next.js/ESLint/Playwright
+├── pyproject.toml            # Python deps（uv）
 └── uv.lock
 ```
 
 ## 去哪儿改
 
-| 任务 | 位置 |
-| --- | --- |
-| 顶层入口（只做委托） | `main.py` |
-| CLI 参数/运行逻辑（dry-run/断点续跑/落盘） | `scripts/comfyui_part1_generate.py` |
-| ComfyUI HTTP/WS 与结构化错误 | `scripts/comfyui_client.py` |
-| workflow 注入与引用追溯 | `scripts/workflow_patch.py` |
-| prompt 组合/hash/seed 派生 | `scripts/prompt_grid.py` |
-| 测试 | `tests/` |
+| 任务 | 位置 | 备注 |
+| --- | --- | --- |
+| 顶层 Python 入口（只做委托） | `main.py` | 调 `scripts.comfyui_part1_generate.main()` |
+| CLI 参数/运行逻辑（dry-run/断点续跑/落盘） | `scripts/comfyui_part1_generate.py` | 产物：`run.json`/`metadata.jsonl`/`images/` |
+| ComfyUI HTTP/WS 与结构化错误 | `scripts/comfyui_client.py` | `ComfyUIClientError`（`code`+`context`） |
+| workflow 注入与引用追溯 | `scripts/workflow_patch.py` | 追溯 KSampler 引用链 |
+| prompt 组合/hash/seed 派生 | `scripts/prompt_grid.py` | 纯函数优先 |
+| 网站首页（runs 列表） | `app/page.tsx` | 拉 `/api/comfyui/runs` |
+| run 详情页（grid + 预览） | `app/runs/[runDir]/page.tsx` | 拉 `/api/comfyui/run/*` |
+| API：runs/run/grid/image | `app/api/comfyui/**/route.ts` | `runtime = "nodejs"` |
+| 读取 run 产物（Node） | `lib/comfyui-fs.ts` | 解析 `run.json`/`metadata.jsonl` |
+| 路径/遍历防护（Node） | `lib/comfyui-path.ts` | runDir allowlist + imagePath 安全规则 |
+| UI 基础组件（shadcn） | `components/ui/` | `cva` + `cn()` + Radix |
+| 业务网格组件 | `components/comfyui/virtual-grid.tsx` | 虚拟滚动 + 图片预览 |
+| E2E | `e2e/` | Playwright；产物写 `.sisyphus/evidence/` |
 
 ## 常用命令
 
 ```bash
+# Python（生图脚本）
 uv sync
 uv sync --no-dev
 uv sync --frozen
@@ -52,24 +74,41 @@ uv run python main.py --dry-run --run-dir .sisyphus/evidence/part1-dryrun
 uv run pytest -q
 uv run pytest -q tests/test_prompt_grid.py
 uv run pytest -q -k workflow_patch
+
+# Website（Next.js）
+pnpm dev
+pnpm build
+pnpm start
+pnpm lint
+
+# E2E（Playwright）
+pnpm test:e2e
+E2E_SERVER=start E2E_PORT=3001 pnpm test:e2e -- -g "task 16"
 ```
 
 ## 约定（只列项目特有/容易踩坑的）
 
-- 代码主域在 `scripts/`（没有 `src/`）；`main.py` 只是薄包装，委托到 `scripts.comfyui_part1_generate.main()`
-- I/O 统一用 `pathlib.Path`；run 产物固定为 `run.json` 与 `metadata.jsonl`（写入细节见 `scripts/AGENTS.md`）
-- 错误：远程/WS 失败使用 `ComfyUIClientError`（稳定 `code` + 可序列化 `context`；message 保持短）
-- 类型：倾向全量标注；需要时用 `typing.cast(...)` 表达意图，避免吞类型
-- 本仓库未固定 ruff/black/isort/mypy/pyright 全局配置；不要据此引入新的强制风格/依赖
+- 边界：Node/Next 不调用 Python 代码；网站通过 `lib/comfyui-fs.ts` 读取 `comfyui_api_outputs/` 的产物
+- Python：I/O 统一用 `pathlib.Path`；产物固定为 `run.json` + `metadata.jsonl`（写入细节见 `scripts/AGENTS.md`）
+- Node：所有 `runDir`/`imagePath` 必须经过 `lib/comfyui-path.ts` 校验；API 错误响应避免泄露绝对路径/stack
+- 工具链：Python 用 uv/pytest；Web 用 pnpm/Next/ESLint；E2E 用 Playwright（输出写 `.sisyphus/evidence/playwright/`）
 
 ## 边界 / 反模式
 
-- 不改/不提交：`.env`、`.venv/`、`__pycache__/`、`comfyui_api_outputs/`（生成物；扫描/搜索时优先排除）
-- 不要在修 bug 时顺手大重构；单测失败不要“删测/放宽断言”来过
-- 新增依赖或修改 `pyproject.toml`：除非用户明确要求，否则先停下来问
+- 不改/不提交：`.env*`、`.venv/`、`node_modules/`、`.next/`、`comfyui_api_outputs/`、`.sisyphus/`（均为环境/生成物）
+- 不要把运行输出（`run.json`/`metadata.jsonl`/图片）写进 `data/`（`data/` 只读资产）
+- `types/routes.d.ts`、`types/validator.ts` 为 Next.js 生成文件（文件头已写明），不要手改
+- 修 bug 不要顺手大重构；单测失败不要“删测/放宽断言”来过
+- 新增依赖或修改 `pyproject.toml`/`package.json`：除非用户明确要求，否则先停下来问
 
 ## 分层文档
 
-- `scripts/AGENTS.md`：脚本层 code map、错误/落盘合约、pyright 约定
-- `tests/AGENTS.md`：测试结构、fixture/断言形态、mock 约定
+- `app/AGENTS.md`：App Router 页面与 /api/comfyui 路由约定
+- `components/AGENTS.md`：业务组件目录分工；`components/ui/` 见独立文档
+- `components/ui/AGENTS.md`：shadcn/radix 组件模式（cva/variants/cn）
+- `lib/AGENTS.md`：读取 run 产物与路径安全
+- `e2e/AGENTS.md`：Playwright 约定、环境变量与证据落盘
+- `types/AGENTS.md`：Next 生成类型的边界
+- `scripts/AGENTS.md`：生图脚本层 code map、错误/落盘合约、pyright 约定
+- `tests/AGENTS.md`：pytest 结构、fixture/断言形态、mock 约定
 - `data/AGENTS.md`：CSV/workflow 资产说明（字段与用途）
