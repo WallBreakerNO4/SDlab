@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Additional ignores:
+    ".sisyphus/**",
+    "types/routes.d.ts",
+    "types/validator.ts",
   ]),
 ]);
 
