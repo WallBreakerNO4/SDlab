@@ -116,8 +116,8 @@ function CardExample() {
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Don&apos;t allow</AlertDialogCancel>
-                <AlertDialogAction>Allow</AlertDialogAction>
+                <AlertDialogCancel variant="outline" size="sm">Don&apos;t allow</AlertDialogCancel>
+                <AlertDialogAction variant="default" size="sm">Allow</AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
