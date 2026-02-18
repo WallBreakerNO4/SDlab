@@ -44,10 +44,33 @@ type VirtualGridProps = {
   grid: RunGridData
 }
 
-const ROW_HEIGHT = 140
-const CELL_WIDTH = 184
+const CELL_MIN_WIDTH = 184
 const LEFT_COLUMN_WIDTH = 220
 const DEV_IMAGE_DOM_CAP_NOTE = 300
+
+const CELL_PADDING_PX = 8
+const CELL_GAP_PX = 4
+const CELL_META_HEIGHT_PX = 28
+
+function getPreferredAspectRatio(cells: Record<string, RunGridCell>): number {
+  for (const cell of Object.values(cells)) {
+    const width = cell.generation_params?.width
+    const height = cell.generation_params?.height
+
+    if (
+      typeof width === "number" &&
+      typeof height === "number" &&
+      Number.isFinite(width) &&
+      Number.isFinite(height) &&
+      width > 0 &&
+      height > 0
+    ) {
+      return height / width
+    }
+  }
+
+  return 1
+}
 
 const STATUS_LABELS: Record<GridCellStatus, string> = {
   success: "成功",
@@ -109,23 +132,76 @@ function formatValue(value: string | number | null | undefined): string {
 
 export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
   const scrollElementRef = useRef<HTMLDivElement | null>(null)
+  const [scrollViewportWidth, setScrollViewportWidth] = useState<number | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [selectedCell, setSelectedCell] = useState<SelectedCellPreview | null>(null)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [copiedField, setCopiedField] = useState<"prompt" | "seed" | null>(null)
 
+  useEffect(() => {
+    const element = scrollElementRef.current
+    if (!element) {
+      return
+    }
+
+    const update = () => {
+      setScrollViewportWidth(element.clientWidth)
+    }
+
+    update()
+
+    const observer = new ResizeObserver(() => {
+      update()
+    })
+
+    observer.observe(element)
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [])
+
+  const preferredAspectRatio = useMemo(
+    () => getPreferredAspectRatio(grid.cells),
+    [grid.cells],
+  )
+
+  const cellWidth = useMemo(() => {
+    if (!scrollViewportWidth || scrollViewportWidth <= 0) {
+      return CELL_MIN_WIDTH
+    }
+
+    const xCount = Math.max(1, grid.xLabels.length)
+    const available = scrollViewportWidth - LEFT_COLUMN_WIDTH
+
+    if (available <= 0) {
+      return CELL_MIN_WIDTH
+    }
+
+    return Math.max(CELL_MIN_WIDTH, Math.floor(available / xCount))
+  }, [grid.xLabels.length, scrollViewportWidth])
+
+  const previewHeight = useMemo(() => {
+    const innerWidth = Math.max(1, cellWidth - CELL_PADDING_PX * 2)
+    return Math.max(32, Math.round(innerWidth * preferredAspectRatio))
+  }, [cellWidth, preferredAspectRatio])
+
+  const rowHeight = useMemo(() => {
+    return CELL_PADDING_PX * 2 + previewHeight + CELL_GAP_PX + CELL_META_HEIGHT_PX
+  }, [previewHeight])
+
   const rowVirtualizer = useVirtualizer({
     count: grid.yLabels.length,
     getScrollElement: () => scrollElementRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => rowHeight,
     overscan: 4,
   })
 
   const gridTemplateColumns = useMemo(
-    () => `${LEFT_COLUMN_WIDTH}px repeat(${grid.xLabels.length}, ${CELL_WIDTH}px)`,
-    [grid.xLabels.length],
+    () => `${LEFT_COLUMN_WIDTH}px repeat(${grid.xLabels.length}, ${cellWidth}px)`,
+    [cellWidth, grid.xLabels.length],
   )
-  const gridMinWidth = LEFT_COLUMN_WIDTH + grid.xLabels.length * CELL_WIDTH
+  const gridMinWidth = LEFT_COLUMN_WIDTH + grid.xLabels.length * CELL_MIN_WIDTH
   const virtualRows = rowVirtualizer.getVirtualItems()
   const isDevEnv = process.env.NODE_ENV !== "production"
   const currentImagePath = selectedCell?.imagePaths[currentImageIndex] ?? null
@@ -148,6 +224,10 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
       setCurrentImageIndex(0)
     }
   }, [dialogOpen])
+
+  useEffect(() => {
+    rowVirtualizer.measure()
+  }, [rowHeight, rowVirtualizer])
 
   const openCellDialog = useCallback(
     (cell: RunGridCell, xIndex: number, yIndex: number, xLabel: string, yLabel: string) => {
@@ -203,10 +283,10 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
 
   return (
     <div
-      className="overflow-hidden border"
+      className="flex h-full min-h-0 flex-col overflow-hidden border"
       data-testid="run-grid"
       data-row-count={grid.yLabels.length}
-      data-row-height={ROW_HEIGHT}
+      data-row-height={rowHeight}
     >
       {isDevEnv ? (
         <div
@@ -219,7 +299,7 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
 
       <div
         ref={scrollElementRef}
-        className="relative max-h-[70vh] overflow-auto"
+        className="relative min-h-0 flex-1 overflow-auto"
         data-testid="run-grid-scroll"
       >
         <div className="relative" style={{ minWidth: gridMinWidth }}>
@@ -290,16 +370,18 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
                       const previewNode = imageSrc ? (
                         <img
                           alt={`${yLabel} × ${xLabel}`}
-                          className="h-24 w-full rounded border object-cover"
+                          className="w-full rounded border object-contain"
                           data-testid="run-grid-image"
                           decoding="async"
                           loading="lazy"
+                          style={{ height: previewHeight }}
                           src={imageSrc}
                         />
                       ) : (
                         <div
-                          className="bg-muted/40 text-muted-foreground flex h-24 items-center justify-center rounded border border-dashed text-[10px] font-medium"
+                          className="bg-muted/40 text-muted-foreground flex items-center justify-center rounded border border-dashed text-[10px] font-medium"
                           data-testid="run-grid-placeholder"
+                          style={{ height: previewHeight }}
                         >
                           {placeholderLabel}
                         </div>

@@ -241,7 +241,7 @@ export default function RunDetailPage() {
   const yCount = isReady ? gridData.yLabels.length : 0
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-4 p-4 md:p-8">
+    <main className="mx-auto flex h-dvh w-full max-w-none flex-col gap-3 overflow-hidden p-2 md:p-4">
       <Card>
         <CardHeader>
           <CardTitle>Run 结果页</CardTitle>
@@ -322,15 +322,19 @@ export default function RunDetailPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="flex min-h-0 flex-1 flex-col">
         <CardHeader>
           <CardTitle>Grid 结果</CardTitle>
           <CardDescription>按 Y 轴行虚拟化渲染，支持 sticky 表头与左列。</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex min-h-0 flex-1 flex-col">
           {isLoading ? <GridSkeleton /> : null}
 
-          {isReady ? <VirtualGrid runDir={runDir} grid={gridData} /> : null}
+          {isReady ? (
+            <div className="min-h-0 flex-1">
+              <VirtualGrid runDir={runDir} grid={gridData} />
+            </div>
+          ) : null}
 
           {loadState === "not-found" || loadState === "error" ? (
             <Empty>
