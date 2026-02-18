@@ -1,0 +1,517 @@
+{
+  "schema": "",
+  "items": [
+    {
+      "tags": {
+        "gender": [
+          {
+            "text": "1girl",
+            "weight": 1.0
+          }
+        ],
+        "characters": [
+          {
+            "text": "amiya \\(arknights\\)",
+            "weight": 1.0
+          }
+        ],
+        "series": [
+          {
+            "text": "arknights",
+            "weight": 1.0
+          }
+        ],
+        "rating": [
+          {
+            "text": "safe",
+            "weight": 1.0
+          }
+        ],
+        "general": [
+          {
+            "text": "solo",
+            "weight": 1.0
+          },
+          {
+            "text": "cowboy shot",
+            "weight": 1.0
+          },
+          {
+            "text": "smile",
+            "weight": 1.0
+          },
+          {
+            "text": "looking at viewer",
+            "weight": 1.0
+          }
+        ],
+        "quality": [
+          {
+            "text": "masterpiece",
+            "weight": 1.0
+          },
+          {
+            "text": "high score",
+            "weight": 1.0
+          },
+          {
+            "text": "great score",
+            "weight": 1.0
+          },
+          {
+            "text": "absurdres",
+            "weight": 1.0
+          },
+          {
+            "text": "year 2025",
+            "weight": 1.0
+          }
+        ]
+      },
+      "info": {
+        "index": 0,
+        "type": "sfw"
+      }
+    },
+    {
+      "tags": {
+        "gender": [
+          {
+            "text": "2girls",
+            "weight": 1.0
+          }
+        ],
+        "characters": [
+          {
+            "text": "texas \\(arknights\\)",
+            "weight": 1.0
+          },
+          {
+            "text": "lappland \\(arknights\\)",
+            "weight": 1.0
+          }
+        ],
+        "series": [
+          {
+            "text": "arknights",
+            "weight": 1.0
+          }
+        ],
+        "rating": [
+          {
+            "text": "safe",
+            "weight": 1.0
+          }
+        ],
+        "general": [
+          {
+            "text": "shopping mall",
+            "weight": 1.0
+          },
+          {
+            "text": "indoor",
+            "weight": 1.0
+          },
+          {
+            "text": "cowboy shot",
+            "weight": 1.0
+          },
+          {
+            "text": "holding hands",
+            "weight": 1.0
+          },
+          {
+            "text": "front view",
+            "weight": 1.0
+          }
+        ],
+        "quality": [
+          {
+            "text": "masterpiece",
+            "weight": 1.0
+          },
+          {
+            "text": "high score",
+            "weight": 1.0
+          },
+          {
+            "text": "great score",
+            "weight": 1.0
+          },
+          {
+            "text": "absurdres",
+            "weight": 1.0
+          },
+          {
+            "text": "year 2025",
+            "weight": 1.0
+          }
+        ]
+      },
+      "info": {
+        "index": 1,
+        "type": "sfw"
+      }
+    },
+    {
+      "tags": {
+        "gender": [
+          {
+            "text": "1girl",
+            "weight": 1.0
+          }
+        ],
+        "characters": [
+          {
+            "text": "exusiai \\(arknights\\)",
+            "weight": 1.0
+          }
+        ],
+        "series": [
+          {
+            "text": "arknights",
+            "weight": 1.0
+          }
+        ],
+        "rating": [
+          {
+            "text": "safe",
+            "weight": 1.0
+          }
+        ],
+        "general": [
+          {
+            "text": "solo",
+            "weight": 1.0
+          },
+          {
+            "text": "cowboy shot",
+            "weight": 1.0
+          },
+          {
+            "text": "halo",
+            "weight": 1.0
+          },
+          {
+            "text": "front view",
+            "weight": 1.0
+          },
+          {
+            "text": "street",
+            "weight": 1.0
+          },
+          {
+            "text": "pedestrian street",
+            "weight": 1.0
+          },
+          {
+            "text": "holding cup",
+            "weight": 1.0
+          },
+          {
+            "text": "drinking",
+            "weight": 1.0
+          },
+          {
+            "text": "drinking straw in mouth",
+            "weight": 1.0
+          }
+        ],
+        "quality": [
+          {
+            "text": "masterpiece",
+            "weight": 1.0
+          },
+          {
+            "text": "high score",
+            "weight": 1.0
+          },
+          {
+            "text": "great score",
+            "weight": 1.0
+          },
+          {
+            "text": "absurdres",
+            "weight": 1.0
+          },
+          {
+            "text": "year 2025",
+            "weight": 1.0
+          }
+        ]
+      },
+      "info": {
+        "index": 2,
+        "type": "sfw"
+      }
+    },
+    {
+      "tags": {
+        "gender": [
+          {
+            "text": "1girl",
+            "weight": 1.0
+          }
+        ],
+        "characters": [
+          {
+            "text": "muelsyse \\(arknights\\)",
+            "weight": 1.0
+          }
+        ],
+        "series": [
+          {
+            "text": "arknights",
+            "weight": 1.0
+          }
+        ],
+        "rating": [
+          {
+            "text": "safe",
+            "weight": 1.0
+          }
+        ],
+        "general": [
+          {
+            "text": "solo",
+            "weight": 1.0
+          },
+          {
+            "text": "street",
+            "weight": 1.0
+          },
+          {
+            "text": "night",
+            "weight": 1.0
+          },
+          {
+            "text": "rain",
+            "weight": 1.0
+          },
+          {
+            "text": "umbrella",
+            "weight": 1.0
+          },
+          {
+            "text": "holding umbrella",
+            "weight": 1.0
+          },
+          {
+            "text": "smile",
+            "weight": 1.0
+          },
+          {
+            "text": "walking",
+            "weight": 1.0
+          },
+          {
+            "text": "front view",
+            "weight": 1.0
+          },
+          {
+            "text": "wet pavement",
+            "weight": 1.0
+          },
+          {
+            "text": "reflections",
+            "weight": 1.0
+          },
+          {
+            "text": "city lights",
+            "weight": 1.0
+          }
+        ],
+        "quality": [
+          {
+            "text": "masterpiece",
+            "weight": 1.0
+          },
+          {
+            "text": "high score",
+            "weight": 1.0
+          },
+          {
+            "text": "great score",
+            "weight": 1.0
+          },
+          {
+            "text": "absurdres",
+            "weight": 1.0
+          },
+          {
+            "text": "year 2025",
+            "weight": 1.0
+          }
+        ]
+      },
+      "info": {
+        "index": 3,
+        "type": "sfw"
+      }
+    },
+    {
+      "tags": {
+        "gender": [
+          {
+            "text": "1girl",
+            "weight": 1.0
+          }
+        ],
+        "characters": [
+          {
+            "text": "la pluma \\(summer_flowers\\) \\(arknights\\)",
+            "weight": 1.0
+          }
+        ],
+        "series": [
+          {
+            "text": "arknights",
+            "weight": 1.0
+          }
+        ],
+        "rating": [
+          {
+            "text": "safe",
+            "weight": 1.0
+          }
+        ],
+        "general": [
+          {
+            "text": "bikini",
+            "weight": 1.0
+          },
+          {
+            "text": "front view",
+            "weight": 1.0
+          },
+          {
+            "text": "standing",
+            "weight": 1.0
+          },
+          {
+            "text": "poolside",
+            "weight": 1.0
+          },
+          {
+            "text": "pool",
+            "weight": 1.0
+          },
+          {
+            "text": "detailed swimwear",
+            "weight": 1.0
+          },
+          {
+            "text": "cowboy shot",
+            "weight": 1.0
+          },
+          {
+            "text": "coat",
+            "weight": 1.0
+          }
+        ],
+        "quality": [
+          {
+            "text": "masterpiece",
+            "weight": 1.0
+          },
+          {
+            "text": "high score",
+            "weight": 1.0
+          },
+          {
+            "text": "great score",
+            "weight": 1.0
+          },
+          {
+            "text": "absurdres",
+            "weight": 1.0
+          },
+          {
+            "text": "year 2025",
+            "weight": 1.0
+          }
+        ]
+      },
+      "info": {
+        "index": 4,
+        "type": "sfw"
+      }
+    },
+    {
+      "tags": {
+        "gender": [
+          {
+            "text": "1girl",
+            "weight": 1.0
+          }
+        ],
+        "characters": [
+          {
+            "text": "rosmontis \\(arknights\\)",
+            "weight": 1.0
+          }
+        ],
+        "series": [
+          {
+            "text": "arknights",
+            "weight": 1.0
+          }
+        ],
+        "rating": [
+          {
+            "text": "safe",
+            "weight": 1.0
+          }
+        ],
+        "general": [
+          {
+            "text": "solo",
+            "weight": 1.0
+          },
+          {
+            "text": "cowboy shot",
+            "weight": 1.0
+          },
+          {
+            "text": "loli",
+            "weight": 1.0
+          },
+          {
+            "text": "cat ears",
+            "weight": 1.0
+          },
+          {
+            "text": "white dress",
+            "weight": 1.0
+          }
+        ],
+        "quality": [
+          {
+            "text": "masterpiece",
+            "weight": 1.0
+          },
+          {
+            "text": "high score",
+            "weight": 1.0
+          },
+          {
+            "text": "great score",
+            "weight": 1.0
+          },
+          {
+            "text": "absurdres",
+            "weight": 1.0
+          },
+          {
+            "text": "year 2025",
+            "weight": 1.0
+          }
+        ]
+      },
+      "info": {
+        "index": 5,
+        "type": "sfw"
+      }
+    }
+  ]
+}

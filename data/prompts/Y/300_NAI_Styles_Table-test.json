@@ -1,0 +1,97 @@
+{
+  "schema": "prompt-y-table/v2",
+  "items": [
+    {
+      "tags": [
+        {
+          "text": "gochisousama \\(tanin050\\)",
+          "weight": 1.0
+        },
+        {
+          "text": "tsukareta san",
+          "weight": 0.59
+        },
+        {
+          "text": "cutesexyrobutts",
+          "weight": 0.349
+        }
+      ],
+      "info": {
+        "index": 9,
+        "type": "artists"
+      }
+    },
+    {
+      "tags": [
+        {
+          "text": "takemori shintarou",
+          "weight": 1.331
+        },
+        {
+          "text": "harada takehito",
+          "weight": 1.331
+        },
+        {
+          "text": "cool-kyou shinja",
+          "weight": 1.331
+        },
+        {
+          "text": "kojima takeshi",
+          "weight": 1.0
+        },
+        {
+          "text": "taketora suzume",
+          "weight": 1.1
+        },
+        {
+          "text": "takeuchi takashi",
+          "weight": 0.81
+        },
+        {
+          "text": "lambda \\(kusowarota\\)",
+          "weight": 0.81
+        },
+        {
+          "text": "cle masahiro",
+          "weight": 0.729
+        },
+        {
+          "text": "year 2025",
+          "weight": 1.0
+        }
+      ],
+      "info": {
+        "index": 10,
+        "type": "artists"
+      }
+    },
+    {
+      "tags": [
+        {
+          "text": "piyodera mucha",
+          "weight": 0.81
+        },
+        {
+          "text": "yamamomo \\(plank\\)",
+          "weight": 1.0
+        },
+        {
+          "text": "henreader",
+          "weight": 1.0
+        },
+        {
+          "text": "eufoniuz",
+          "weight": 1.0
+        },
+        {
+          "text": "year 2025",
+          "weight": 1.0
+        }
+      ],
+      "info": {
+        "index": 11,
+        "type": "artists"
+      }
+    }
+  ]
+}
