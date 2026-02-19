@@ -77,10 +77,10 @@ export interface RunDetail {
   created_at: string
   dry_run: boolean
   run_dir: string
-  x_csv_path: string
-  y_csv_path: string
-  x_csv_sha256: string
-  y_csv_sha256: string
+  x_json_path: string
+  y_json_path: string
+  x_json_sha256: string
+  y_json_sha256: string
   template: string
   base_seed: number
   seed_strategy: string

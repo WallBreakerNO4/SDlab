@@ -222,10 +222,10 @@ function normalizeRunDetail(record: JsonObject, runDir: RunDir): RunDetail {
     run_dir:
       toNullableString(record.run_dir) ??
       path.posix.join("comfyui_api_outputs", runDir),
-    x_csv_path: toStringOrEmpty(record.x_csv_path),
-    y_csv_path: toStringOrEmpty(record.y_csv_path),
-    x_csv_sha256: toStringOrEmpty(record.x_csv_sha256),
-    y_csv_sha256: toStringOrEmpty(record.y_csv_sha256),
+    x_json_path: toStringOrEmpty(record.x_json_path),
+    y_json_path: toStringOrEmpty(record.y_json_path),
+    x_json_sha256: toStringOrEmpty(record.x_json_sha256),
+    y_json_sha256: toStringOrEmpty(record.y_json_sha256),
     template: toStringOrEmpty(record.template),
     base_seed: toNumberOrZero(record.base_seed),
     seed_strategy: toStringOrEmpty(record.seed_strategy),
