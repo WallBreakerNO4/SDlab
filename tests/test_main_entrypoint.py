@@ -1,6 +1,6 @@
 import json
-import sys
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -13,10 +13,10 @@ def test_main_dry_run_creates_run_json(tmp_path: Path) -> None:
         "--dry-run",
         "--run-dir",
         str(run_dir),
-        "--x-csv",
-        "data/prompts/X/common_prompts.csv",
-        "--y-csv",
-        "data/prompts/Y/300_NAI_Styles_Table-test.csv",
+        "--x-json",
+        "data/prompts/X/common_prompts.json",
+        "--y-json",
+        "data/prompts/Y/300_NAI_Styles_Table-test.json",
         "--x-limit",
         "2",
         "--y-limit",
@@ -31,12 +31,15 @@ def test_main_dry_run_creates_run_json(tmp_path: Path) -> None:
     run_json_path = run_dir / "run.json"
     assert run_json_path.exists()
 
-    run_data = json.loads(run_json_path.read_text(encoding="utf-8"))
+    run_data = cast(
+        dict[str, object], json.loads(run_json_path.read_text(encoding="utf-8"))
+    )
 
     assert run_data["dry_run"] is True
-    assert run_data["selection"]["x_count"] == 2
-    assert run_data["selection"]["y_count"] == 1
-    assert run_data["selection"]["total_cells"] == 2
+    selection = cast(dict[str, object], run_data["selection"])
+    assert selection["x_count"] == 2
+    assert selection["y_count"] == 1
+    assert selection["total_cells"] == 2
 
     metadata_path = run_dir / "metadata.jsonl"
     assert metadata_path.exists()
@@ -45,20 +48,20 @@ def test_main_dry_run_creates_run_json(tmp_path: Path) -> None:
     assert len(metadata_lines) == 2
 
     for line in metadata_lines:
-        record = json.loads(line)
+        record = cast(dict[str, object], json.loads(line))
         assert record["status"] == "skipped"
         assert record["skip_reason"] == "dry_run"
 
 
 def test_main_propagates_help_to_script_runner() -> None:
     with pytest.raises(SystemExit) as exc_info:
-        main(["--help"])
+        _ = main(["--help"])
 
     assert exc_info.value.code == 0
 
 
 def test_main_propagates_invalid_args_exit_code() -> None:
     with pytest.raises(SystemExit) as exc_info:
-        main(["--invalid-arg"])
+        _ = main(["--invalid-arg"])
 
     assert exc_info.value.code == 2

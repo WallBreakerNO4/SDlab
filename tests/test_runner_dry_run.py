@@ -1,6 +1,5 @@
 # pyright: basic, reportMissingImports=false, reportUnusedCallResult=false
 
-import csv
 import json
 import sys
 from pathlib import Path
@@ -15,8 +14,8 @@ from scripts.comfyui_part1_generate import build_parser, main
 
 
 COMFY_ENV_KEYS = [
-    "COMFYUI_X_CSV",
-    "COMFYUI_Y_CSV",
+    "COMFYUI_X_JSON",
+    "COMFYUI_Y_JSON",
     "COMFYUI_TEMPLATE",
     "COMFYUI_BASE_URL",
     "COMFYUI_WORKFLOW_JSON",
@@ -42,31 +41,49 @@ def _clear_comfy_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(key, raising=False)
 
 
-def _write_csv_inputs(tmp_path: Path) -> tuple[Path, Path]:
-    x_csv = tmp_path / "x.csv"
-    y_csv = tmp_path / "y.csv"
+def _write_json_inputs(tmp_path: Path) -> tuple[Path, Path]:
+    x_csv = tmp_path / "x.json"
+    y_csv = tmp_path / "y.json"
 
-    with x_csv.open("w", encoding="utf-8", newline="") as file:
-        writer = csv.writer(file)
-        writer.writerow(
-            [
-                "Gender tags",
-                "Character(s) tags",
-                "Series tags",
-                "Rating tags",
-                "General tags",
-                "Qulity tags",
-            ]
-        )
-        writer.writerow(
-            ["1girl,", "amiya,", "arknights,", "safe,", "solo,", "masterpiece,"]
-        )
+    x_payload: dict[str, object] = {
+        "schema": "",
+        "items": [
+            {
+                "tags": {
+                    "gender": [{"text": "1girl", "weight": 1.0}],
+                    "characters": [{"text": "amiya", "weight": 1.0}],
+                    "series": [{"text": "arknights", "weight": 1.0}],
+                    "rating": [{"text": "safe", "weight": 1.0}],
+                    "general": [{"text": "solo", "weight": 1.0}],
+                    "quality": [{"text": "masterpiece", "weight": 1.0}],
+                },
+                "info": {"index": 0, "type": "sfw"},
+            }
+        ],
+    }
 
-    with y_csv.open("w", encoding="utf-8", newline="") as file:
-        writer = csv.writer(file)
-        writer.writerow(["Artists"])
-        writer.writerow(["artist-a,"])
-        writer.writerow(["artist-b,"])
+    y_payload: dict[str, object] = {
+        "schema": "prompt-y-table/v2",
+        "items": [
+            {
+                "tags": [{"text": "artist-a", "weight": 1.0}],
+                "info": {"index": 0, "type": "artists"},
+            },
+            {
+                "tags": [{"text": "artist-b", "weight": 1.0}],
+                "info": {"index": 1, "type": "artists"},
+            },
+        ],
+    }
+
+    x_csv.write_text(
+        json.dumps(x_payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    y_csv.write_text(
+        json.dumps(y_payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
     return x_csv, y_csv
 
@@ -89,8 +106,8 @@ def test_cli_help_contains_required_flags() -> None:
     help_text = build_parser().format_help()
 
     for flag in [
-        "--x-csv",
-        "--y-csv",
+        "--x-json",
+        "--y-json",
         "--template",
         "--base-seed",
         "--workflow-json",
@@ -124,7 +141,7 @@ def test_dry_run_loads_utf8_env_writes_run_json_and_prints_example(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     _clear_comfy_env(monkeypatch)
-    x_csv, y_csv = _write_csv_inputs(tmp_path)
+    x_csv, y_csv = _write_json_inputs(tmp_path)
     run_dir = tmp_path / "run-dry"
 
     (tmp_path / ".env").write_text(
@@ -144,9 +161,9 @@ def test_dry_run_loads_utf8_env_writes_run_json_and_prints_example(
     exit_code = main(
         [
             "--dry-run",
-            "--x-csv",
+            "--x-json",
             str(x_csv),
-            "--y-csv",
+            "--y-json",
             str(y_csv),
             "--run-dir",
             str(run_dir),
@@ -180,7 +197,7 @@ def test_dry_run_does_not_call_comfyui_client(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _clear_comfy_env(monkeypatch)
-    x_csv, y_csv = _write_csv_inputs(tmp_path)
+    x_csv, y_csv = _write_json_inputs(tmp_path)
     run_dir = tmp_path / "run-no-comfy"
 
     def should_not_be_called(*args: object, **kwargs: object) -> None:
@@ -207,9 +224,9 @@ def test_dry_run_does_not_call_comfyui_client(
     exit_code = main(
         [
             "--dry-run",
-            "--x-csv",
+            "--x-json",
             str(x_csv),
-            "--y-csv",
+            "--y-json",
             str(y_csv),
             "--run-dir",
             str(run_dir),
@@ -227,7 +244,7 @@ def test_resume_skip_map_ignores_broken_last_line_and_requires_existing_image(
 ) -> None:
     _clear_comfy_env(monkeypatch)
     monkeypatch.chdir(tmp_path)
-    x_csv, y_csv = _write_csv_inputs(tmp_path)
+    x_csv, y_csv = _write_json_inputs(tmp_path)
     run_dir = tmp_path / "run-resume"
     images_dir = run_dir / "images"
     images_dir.mkdir(parents=True, exist_ok=True)
@@ -268,9 +285,9 @@ def test_resume_skip_map_ignores_broken_last_line_and_requires_existing_image(
     exit_code = main(
         [
             "--dry-run",
-            "--x-csv",
+            "--x-json",
             str(x_csv),
-            "--y-csv",
+            "--y-json",
             str(y_csv),
             "--run-dir",
             str(run_dir),
@@ -296,37 +313,51 @@ def test_env_csv_paths_used_when_cli_flags_not_provided(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _clear_comfy_env(monkeypatch)
-    x_csv = tmp_path / "x-env.csv"
-    y_csv = tmp_path / "y-env.csv"
+    x_csv = tmp_path / "x-env.json"
+    y_csv = tmp_path / "y-env.json"
 
-    with x_csv.open("w", encoding="utf-8", newline="") as file:
-        writer = csv.writer(file)
-        writer.writerow(
-            [
-                "Gender tags",
-                "Character(s) tags",
-                "Series tags",
-                "Rating tags",
-                "General tags",
-                "Qulity tags",
-            ]
-        )
-        writer.writerow(
-            ["1girl,", "character-a,", "series-a,", "safe,", "solo,", "best,"]
-        )
+    x_payload: dict[str, object] = {
+        "schema": "",
+        "items": [
+            {
+                "tags": {
+                    "gender": [{"text": "1girl", "weight": 1.0}],
+                    "characters": [{"text": "character-a", "weight": 1.0}],
+                    "series": [{"text": "series-a", "weight": 1.0}],
+                    "rating": [{"text": "safe", "weight": 1.0}],
+                    "general": [{"text": "solo", "weight": 1.0}],
+                    "quality": [{"text": "best", "weight": 1.0}],
+                },
+                "info": {"index": 0, "type": "sfw"},
+            }
+        ],
+    }
+    y_payload: dict[str, object] = {
+        "schema": "prompt-y-table/v2",
+        "items": [
+            {
+                "tags": [{"text": "artist-from-env", "weight": 1.0}],
+                "info": {"index": 0, "type": "artists"},
+            }
+        ],
+    }
 
-    with y_csv.open("w", encoding="utf-8", newline="") as file:
-        writer = csv.writer(file)
-        writer.writerow(["Artists"])
-        writer.writerow(["artist-from-env,"])
+    x_csv.write_text(
+        json.dumps(x_payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    y_csv.write_text(
+        json.dumps(y_payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
     run_dir = tmp_path / "run-env-test"
 
     (tmp_path / ".env").write_text(
         "\n".join(
             [
-                f"COMFYUI_X_CSV={x_csv}",
-                f"COMFYUI_Y_CSV={y_csv}",
+                f"COMFYUI_X_JSON={x_csv}",
+                f"COMFYUI_Y_JSON={y_csv}",
                 "COMFYUI_BASE_URL=http://example.local:8188",
             ]
         )
@@ -349,5 +380,5 @@ def test_env_csv_paths_used_when_cli_flags_not_provided(
     assert exit_code == 0
 
     run_payload = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
-    assert run_payload["x_csv_path"] == str(x_csv)
-    assert run_payload["y_csv_path"] == str(y_csv)
+    assert run_payload["x_json_path"] == str(x_csv)
+    assert run_payload["y_json_path"] == str(y_csv)

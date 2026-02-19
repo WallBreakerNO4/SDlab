@@ -49,8 +49,8 @@ from scripts.workflow_patch import (  # noqa: E402
     patch_workflow,
 )
 
-DEFAULT_X_CSV = "data/prompts/X/common_prompts.csv"
-DEFAULT_Y_CSV = "data/prompts/Y/300_NAI_Styles_Table-test.csv"
+DEFAULT_X_JSON = "data/prompts/X/common_prompts.json"
+DEFAULT_Y_JSON = "data/prompts/Y/300_NAI_Styles_Table-test.json"
 DEFAULT_TEMPLATE = "{gender}{characters}{series}{rating}{y}{general}{quality}"
 DEFAULT_WORKFLOW_JSON = "data/comfyui-flow/CKNOOBRF.json"
 DEFAULT_BASE_URL = "http://127.0.0.1:8188"
@@ -137,8 +137,12 @@ def build_parser() -> argparse.ArgumentParser:
         description="遍历 X/Y prompts 网格，调用 ComfyUI 生图并落盘 metadata。"
     )
 
-    parser.add_argument("--x-csv", default=_env_str("COMFYUI_X_CSV") or DEFAULT_X_CSV)
-    parser.add_argument("--y-csv", default=_env_str("COMFYUI_Y_CSV") or DEFAULT_Y_CSV)
+    parser.add_argument(
+        "--x-json", default=_env_str("COMFYUI_X_JSON") or DEFAULT_X_JSON
+    )
+    parser.add_argument(
+        "--y-json", default=_env_str("COMFYUI_Y_JSON") or DEFAULT_Y_JSON
+    )
     parser.add_argument(
         "--template",
         default=_env_str("COMFYUI_TEMPLATE") or DEFAULT_TEMPLATE,
@@ -256,8 +260,8 @@ def run(args: argparse.Namespace) -> int:
     _validate_args(args)
     _configure_logging()
 
-    x_rows = read_x_rows(args.x_csv)
-    y_rows = read_y_rows(args.y_csv)
+    x_rows = read_x_rows(args.x_json)
+    y_rows = read_y_rows(args.y_json)
 
     x_selected = _select_rows(
         rows=x_rows,
@@ -835,8 +839,8 @@ def _build_run_payload(
         workflow_context.workflow_hash if workflow_context is not None else "not_loaded"
     )
 
-    x_path = Path(args.x_csv)
-    y_path = Path(args.y_csv)
+    x_path = Path(args.x_json)
+    y_path = Path(args.y_json)
 
     run_id = (
         datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -849,10 +853,10 @@ def _build_run_payload(
         "created_at": _now_iso(),
         "dry_run": args.dry_run,
         "run_dir": str(run_dir),
-        "x_csv_path": str(x_path),
-        "y_csv_path": str(y_path),
-        "x_csv_sha256": _sha256_file(x_path),
-        "y_csv_sha256": _sha256_file(y_path),
+        "x_json_path": str(x_path),
+        "y_json_path": str(y_path),
+        "x_json_sha256": _sha256_file(x_path),
+        "y_json_sha256": _sha256_file(y_path),
         "template": args.template,
         "base_seed": args.base_seed,
         "seed_strategy": "sha256(base_seed:x_index:y_index)[:16] mod 18446744073709519872",
