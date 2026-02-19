@@ -32,7 +32,7 @@
   - `patch_workflow()`：选择 `KSampler` → 追溯 `positive/negative/latent_image` 引用并写入 overrides
 
 - `scripts/prompt_grid.py`
-  - 读 CSV：`read_x_rows()`（列映射）/ `read_y_rows()`（默认列名 `Artists`）
+  - 读 JSON：`read_x_rows()`/`read_y_rows()`（从 `data/prompts/**.json` 读取）
   - prompt：`normalize_prompt()`/`compute_prompt_hash()`/`derive_seed()`
 
 ## 约定（本目录特有）

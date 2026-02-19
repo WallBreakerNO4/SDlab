@@ -1,8 +1,8 @@
 # Agent Guide (sd-style-lab/images-script)
 
-**生成时间:** 2026-02-18T02:49:17+0800
-**Commit:** d71e245
-**分支:** website
+**生成时间:** 2026-02-19T03:47:25+0800
+**Commit:** 370756d
+**分支:** master
 
 本文件面向在本仓库里自动写代码/改代码的 agent；子目录的 `AGENTS.md` 只覆盖该目录的“局部知识”，避免与根文件重复。
 
@@ -17,9 +17,13 @@
 ```text
 ./
 ├── app/                      # Next.js App Router（页面 + /api/comfyui/* 读取 run 产物）
-│   └── AGENTS.md
+│   ├── AGENTS.md
+│   └── api/comfyui/           # Node API：runs/run/grid/image（路径安全 + payload 约定）
+│       └── AGENTS.md
 ├── components/               # 业务组件（ComfyUI 预览/虚拟网格等）
 │   ├── ui/                   # shadcn/radix 基础组件（体量大，约定集中）
+│   │   └── AGENTS.md
+│   ├── comfyui/               # ComfyUI 领域组件（网格/预览等）
 │   │   └── AGENTS.md
 │   └── AGENTS.md
 ├── lib/                      # Node 侧读取 run.json/metadata.jsonl + 路径安全
@@ -40,6 +44,18 @@
 ├── pyproject.toml            # Python deps（uv）
 └── uv.lock
 ```
+
+## 复杂度分级（用于 AGENTS 布局）
+
+| 目录 | 复杂度(0-20) | 理由 |
+| --- | ---: | --- |
+| `scripts/` | 20 | CLI runner + 并发 + 落盘合约（`run.json`/`metadata.jsonl`/images） |
+| `components/ui/` | 18 | primitives 体量大；`cva`/`cn()`/Radix 约定集中（含 `sidebar.tsx`） |
+| `lib/` | 14 | 解析 run 产物 + 路径安全（API/页面都依赖） |
+| `app/api/comfyui/` | 12 | Node runtime + allowlist + payload 收敛 + 安全回归 |
+| `components/comfyui/` | 10 | 业务核心（虚拟滚动网格 + 预览交互） |
+| `e2e/` | 10 | Playwright 回归（安全/性能/虚拟滚动） |
+| `tests/` | 9 | pytest 合约测试（结构化错误/落盘/纯函数） |
 
 ## 去哪儿改
 
@@ -68,7 +84,7 @@ uv sync --no-dev
 uv sync --frozen
 
 uv run python main.py --help
-uv run python main.py --dry-run --x-csv data/prompts/X/common_prompts.csv --y-csv data/prompts/Y/300_NAI_Styles_Table-test.csv --base-seed 123
+uv run python main.py --dry-run --x-json data/prompts/X/common_prompts.json --y-json data/prompts/Y/300_NAI_Styles_Table-test.json --base-seed 123
 uv run python main.py --dry-run --run-dir .sisyphus/evidence/part1-dryrun
 
 uv run pytest -q
@@ -104,8 +120,10 @@ E2E_SERVER=start E2E_PORT=3001 pnpm test:e2e -- -g "task 16"
 ## 分层文档
 
 - `app/AGENTS.md`：App Router 页面与 /api/comfyui 路由约定
+- `app/api/comfyui/AGENTS.md`：ComfyUI API 细则（runtime/校验顺序/payload/错误映射）
 - `components/AGENTS.md`：业务组件目录分工；`components/ui/` 见独立文档
 - `components/ui/AGENTS.md`：shadcn/radix 组件模式（cva/variants/cn）
+- `components/comfyui/AGENTS.md`：ComfyUI 领域组件（VirtualGrid 的性能/交互/图片路径约定）
 - `lib/AGENTS.md`：读取 run 产物与路径安全
 - `e2e/AGENTS.md`：Playwright 约定、环境变量与证据落盘
 - `types/AGENTS.md`：Next 生成类型的边界

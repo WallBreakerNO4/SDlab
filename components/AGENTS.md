@@ -9,6 +9,7 @@
 | 场景 | 位置 | 备注 |
 | --- | --- | --- |
 | ComfyUI 网格渲染与预览 | `components/comfyui/virtual-grid.tsx` | 虚拟滚动、sticky 表头、弹窗预览 |
+| ComfyUI 领域组件约定 | `components/comfyui/AGENTS.md` | VirtualGrid 性能/交互/图片路径约定 |
 | UI 组件使用示例 | `components/component-example.tsx` | 用于展示/验证 UI primitives |
 | shadcn 配置 | `components.json` | aliases、style、cssVariables 等 |
 

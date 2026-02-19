@@ -14,6 +14,7 @@
 | API：run 详情 | `app/api/comfyui/run/[runDir]/route.ts` | 返回 run + x/y labels |
 | API：grid 索引 | `app/api/comfyui/run/[runDir]/grid/route.ts` | 返回 cells（适配前端渲染） |
 | API：图片流 | `app/api/comfyui/image/[runDir]/[...imagePath]/route.ts` | `Cache-Control` + content-type |
+| API 约定细则 | `app/api/comfyui/AGENTS.md` | runtime/校验顺序/payload/错误映射 |
 | 全局布局与样式入口 | `app/layout.tsx`、`app/globals.css` | fonts + token CSS vars |
 
 ## 约定（本目录特有）
