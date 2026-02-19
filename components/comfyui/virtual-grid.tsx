@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
+import Image from "next/image"
+
 import { useVirtualizer } from "@tanstack/react-virtual"
 
 import { Button } from "@/components/ui/button"
@@ -190,6 +192,9 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
     return CELL_PADDING_PX * 2 + previewHeight + CELL_GAP_PX + CELL_META_HEIGHT_PX
   }, [previewHeight])
 
+  // TanStack Virtual's hook returns functions that React Compiler can't memoize safely.
+  // We intentionally keep virtualization here for performance.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const rowVirtualizer = useVirtualizer({
     count: grid.yLabels.length,
     getScrollElement: () => scrollElementRef.current,
@@ -368,15 +373,21 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
 
                       const canOpenDialog = status === "success" && cell !== null
                       const previewNode = imageSrc ? (
-                        <img
-                          alt={`${yLabel} × ${xLabel}`}
-                          className="w-full rounded border object-contain"
-                          data-testid="run-grid-image"
-                          decoding="async"
-                          loading="lazy"
+                        <div
+                          className="relative w-full rounded border"
                           style={{ height: previewHeight }}
-                          src={imageSrc}
-                        />
+                        >
+                          <Image
+                            alt={`${yLabel} × ${xLabel}`}
+                            className="object-contain"
+                            data-testid="run-grid-image"
+                            fill
+                            loading="lazy"
+                            sizes={`${Math.max(1, cellWidth)}px`}
+                            src={imageSrc}
+                            unoptimized
+                          />
+                        </div>
                       ) : (
                         <div
                           className="bg-muted/40 text-muted-foreground flex items-center justify-center rounded border border-dashed text-[10px] font-medium"
@@ -439,11 +450,16 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
             <div className="space-y-2">
               {currentImageSrc ? (
-                <img
-                  alt={selectedCell ? `${selectedCell.yLabel} × ${selectedCell.xLabel}` : "cell preview"}
-                  className="bg-muted/20 max-h-[62vh] w-full rounded border object-contain"
-                  src={currentImageSrc}
-                />
+                <div className="bg-muted/20 relative h-[62vh] w-full rounded border">
+                  <Image
+                    alt={selectedCell ? `${selectedCell.yLabel} × ${selectedCell.xLabel}` : "cell preview"}
+                    className="object-contain"
+                    fill
+                    sizes="100vw"
+                    src={currentImageSrc}
+                    unoptimized
+                  />
+                </div>
               ) : (
                 <div className="bg-muted/30 text-muted-foreground flex min-h-64 items-center justify-center rounded border border-dashed text-xs">
                   当前单元格无可用图片
