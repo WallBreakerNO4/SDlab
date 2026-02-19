@@ -19,12 +19,12 @@ from scripts.prompt_grid import (
 )
 
 
-X_CSV = ROOT / "data" / "prompts" / "X" / "common_prompts.csv"
-Y_CSV = ROOT / "data" / "prompts" / "Y" / "300_NAI_Styles_Table-test.csv"
+X_JSON = ROOT / "data" / "prompts" / "X" / "common_prompts.json"
+Y_JSON = ROOT / "data" / "prompts" / "Y" / "300_NAI_Styles_Table-test.json"
 
 
 def test_read_x_rows_maps_real_columns_and_ignores_trailing_empty_column():
-    rows = read_x_rows(X_CSV)
+    rows = read_x_rows(X_JSON)
 
     assert rows
     first = rows[0]
@@ -42,7 +42,7 @@ def test_read_x_rows_maps_real_columns_and_ignores_trailing_empty_column():
 
 
 def test_read_y_rows_uses_artists_column_by_default():
-    rows = read_y_rows(Y_CSV)
+    rows = read_y_rows(Y_JSON)
 
     assert rows
     assert rows[0]["y"].startswith("gochisousama")
@@ -101,8 +101,8 @@ def test_derive_seed_is_deterministic_and_uses_sha256_first_16_hex_modulo():
 
 
 def test_build_prompt_cell_contains_prompt_hash_and_seed():
-    x_rows = read_x_rows(X_CSV)
-    y_rows = read_y_rows(Y_CSV)
+    x_rows = read_x_rows(X_JSON)
+    y_rows = read_y_rows(Y_JSON)
 
     cell = build_prompt_cell(x_rows[0], y_rows[0], base_seed=123, x_index=0, y_index=0)
     positive_prompt = cell["positive_prompt"]

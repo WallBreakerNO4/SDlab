@@ -1,20 +1,12 @@
-import csv
 import hashlib
+import json
 import re
 from collections.abc import Mapping
 from pathlib import Path
+from typing import cast
 
 
 MAX_SEED = 18446744073709519872
-
-X_COLUMN_MAPPING = {
-    "Gender tags": "gender",
-    "Character(s) tags": "characters",
-    "Series tags": "series",
-    "Rating tags": "rating",
-    "General tags": "general",
-    "Qulity tags": "quality",
-}
 
 PROMPT_TEMPLATE_ORDER = (
     "gender",
@@ -27,28 +19,94 @@ PROMPT_TEMPLATE_ORDER = (
 )
 
 
-def read_x_rows(csv_path: str | Path) -> list[dict[str, str]]:
+def _format_weight(weight: float) -> str:
+    rendered = f"{weight:.3f}".rstrip("0").rstrip(".")
+    return rendered or "0"
+
+
+def _render_weighted_tags(tags: object) -> str:
+    if not isinstance(tags, list):
+        return ""
+
+    tokens: list[str] = []
+    tags_list = cast(list[object], tags)
+    for item_obj in tags_list:
+        if not isinstance(item_obj, dict):
+            continue
+        item = cast(dict[str, object], item_obj)
+        text = item.get("text")
+        if not isinstance(text, str):
+            continue
+        tag = text.strip()
+        if not tag:
+            continue
+
+        weight_obj = item.get("weight", 1.0)
+        weight: float
+        if isinstance(weight_obj, (int, float)):
+            weight = float(weight_obj)
+        else:
+            weight = 1.0
+
+        if abs(weight - 1.0) < 1e-9:
+            tokens.append(tag)
+        else:
+            tokens.append(f"({tag}:{_format_weight(weight)})")
+
+    if not tokens:
+        return ""
+    return ",".join(tokens) + ","
+
+
+def read_x_rows(path: str | Path) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
-    with Path(csv_path).open("r", encoding="utf-8", newline="") as file:
-        reader = csv.DictReader(file)
-        for raw_row in reader:
-            mapped_row: dict[str, str] = {}
-            for source_col, target_key in X_COLUMN_MAPPING.items():
-                value = raw_row.get(source_col, "")
-                mapped_row[target_key] = "" if value is None else value
-            rows.append(mapped_row)
+
+    payload_obj = cast(object, json.loads(Path(path).read_text(encoding="utf-8")))
+    if not isinstance(payload_obj, dict):
+        return rows
+
+    payload = cast(dict[str, object], payload_obj)
+    items = payload.get("items")
+    if not isinstance(items, list):
+        return rows
+
+    items_list = cast(list[object], items)
+    for item_obj in items_list:
+        if not isinstance(item_obj, dict):
+            continue
+        item = cast(dict[str, object], item_obj)
+        tags_obj = item.get("tags")
+        tags = cast(dict[str, object], tags_obj) if isinstance(tags_obj, dict) else {}
+
+        mapped_row: dict[str, str] = {}
+        for key in ["gender", "characters", "series", "rating", "general", "quality"]:
+            mapped_row[key] = _render_weighted_tags(tags.get(key, []))
+        rows.append(mapped_row)
     return rows
 
 
 def read_y_rows(
-    csv_path: str | Path, artists_column: str = "Artists"
+    path: str | Path, artists_column: str = "Artists"
 ) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
-    with Path(csv_path).open("r", encoding="utf-8", newline="") as file:
-        reader = csv.DictReader(file)
-        for raw_row in reader:
-            value = raw_row.get(artists_column, "")
-            rows.append({"y": "" if value is None else value})
+
+    _ = artists_column
+
+    payload_obj = cast(object, json.loads(Path(path).read_text(encoding="utf-8")))
+    if not isinstance(payload_obj, dict):
+        return rows
+
+    payload = cast(dict[str, object], payload_obj)
+    items = payload.get("items")
+    if not isinstance(items, list):
+        return rows
+
+    items_list = cast(list[object], items)
+    for item_obj in items_list:
+        if not isinstance(item_obj, dict):
+            continue
+        item = cast(dict[str, object], item_obj)
+        rows.append({"y": _render_weighted_tags(item.get("tags", []))})
     return rows
 
 
