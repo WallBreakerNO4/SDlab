@@ -36,6 +36,7 @@ from scripts.comfyui_client import (  # noqa: E402
     comfy_ws_wait_prompt_done,
 )
 from scripts.prompt_grid import (  # noqa: E402
+    X_INFO_TYPE_KEY,
     compute_prompt_hash,
     derive_seed,
     read_x_rows,
@@ -116,6 +117,15 @@ class _CellPlan:
     generation_params: dict[str, object | None]
     workflow_hash: str
     save_image_prefix: str
+
+
+def _extract_x_info_type(x_row: dict[str, str]) -> str | None:
+    value = x_row.get(X_INFO_TYPE_KEY)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped:
+            return stripped
+    return None
 
 
 @dataclass(slots=True)
@@ -879,6 +889,10 @@ def _build_run_payload(
             "x_count": len(x_selected),
             "y_count": len(y_selected),
             "total_cells": len(x_selected) * len(y_selected),
+            "x_columns": [
+                {"x_index": item.index, "type": _extract_x_info_type(item.value)}
+                for item in x_selected
+            ],
             "x_limit": args.x_limit,
             "y_limit": args.y_limit,
             "x_indexes_raw": args.x_indexes,
@@ -1161,6 +1175,7 @@ def _build_base_metadata_record(
             "general": x_row.get("general", ""),
             "quality": x_row.get("quality", ""),
         },
+        "x_info_type": _extract_x_info_type(x_row),
         "y_value": y_value,
         "positive_prompt": positive_prompt,
         "prompt_hash": prompt_hash,

@@ -9,6 +9,7 @@ sys.path.insert(0, str(ROOT))
 
 from scripts.prompt_grid import (
     MAX_SEED,
+    X_INFO_TYPE_KEY,
     build_prompt_cell,
     compute_prompt_hash,
     derive_seed,
@@ -35,10 +36,12 @@ def test_read_x_rows_maps_real_columns_and_ignores_trailing_empty_column():
         "rating",
         "general",
         "quality",
+        X_INFO_TYPE_KEY,
     }
     assert first["gender"] == "1girl,"
     assert first["characters"] == "amiya \\(arknights\\),"
     assert first["quality"] == "masterpiece,high score,great score,absurdres,year 2025,"
+    assert first[X_INFO_TYPE_KEY] == "normal"
 
 
 def test_read_y_rows_uses_artists_column_by_default():

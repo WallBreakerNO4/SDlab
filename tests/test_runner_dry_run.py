@@ -186,11 +186,14 @@ def test_dry_run_loads_utf8_env_writes_run_json_and_prints_example(
     assert (
         run_payload["generation_overrides"]["negative_prompt"] == "低质量,bad anatomy,"
     )
+    selection = run_payload["selection"]
+    assert selection["x_columns"] == [{"x_index": 0, "type": "sfw"}]
 
     metadata_records = _read_valid_jsonl(run_dir / "metadata.jsonl")
     assert len(metadata_records) == 2
     assert all(record["status"] == "skipped" for record in metadata_records)
     assert all(record["workflow_hash"] == "not_loaded" for record in metadata_records)
+    assert all(record["x_info_type"] == "sfw" for record in metadata_records)
 
 
 def test_dry_run_does_not_call_comfyui_client(

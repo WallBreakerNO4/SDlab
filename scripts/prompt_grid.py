@@ -7,6 +7,7 @@ from typing import cast
 
 
 MAX_SEED = 18446744073709519872
+X_INFO_TYPE_KEY = "_x_info_type"
 
 PROMPT_TEMPLATE_ORDER = (
     "gender",
@@ -77,10 +78,19 @@ def read_x_rows(path: str | Path) -> list[dict[str, str]]:
         item = cast(dict[str, object], item_obj)
         tags_obj = item.get("tags")
         tags = cast(dict[str, object], tags_obj) if isinstance(tags_obj, dict) else {}
+        info_obj = item.get("info")
+        info = cast(dict[str, object], info_obj) if isinstance(info_obj, dict) else {}
 
         mapped_row: dict[str, str] = {}
         for key in ["gender", "characters", "series", "rating", "general", "quality"]:
             mapped_row[key] = _render_weighted_tags(tags.get(key, []))
+
+        info_type_obj = info.get("type")
+        if isinstance(info_type_obj, str):
+            mapped_row[X_INFO_TYPE_KEY] = info_type_obj.strip()
+        else:
+            mapped_row[X_INFO_TYPE_KEY] = ""
+
         rows.append(mapped_row)
     return rows
 
