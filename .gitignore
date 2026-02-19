@@ -274,3 +274,4 @@ next-env.d.ts
 lib/**
 !lib/**/*.ts
 !lib/**/*.tsx
+!lib/AGENTS.md
