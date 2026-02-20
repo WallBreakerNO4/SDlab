@@ -61,11 +61,11 @@
 
 | 任务 | 位置 | 备注 |
 | --- | --- | --- |
-| 顶层 Python 入口（只做委托） | `main.py` | 调 `scripts.comfyui_part1_generate.main()` |
-| CLI 参数/运行逻辑（dry-run/断点续跑/落盘） | `scripts/comfyui_part1_generate.py` | 产物：`run.json`/`metadata.jsonl`/`images/` |
-| ComfyUI HTTP/WS 与结构化错误 | `scripts/comfyui_client.py` | `ComfyUIClientError`（`code`+`context`） |
-| workflow 注入与引用追溯 | `scripts/workflow_patch.py` | 追溯 KSampler 引用链 |
-| prompt 组合/hash/seed 派生 | `scripts/prompt_grid.py` | 纯函数优先 |
+| 顶层 Python 入口（只做委托） | `main.py` | 调 `scripts.generation.comfyui_part1_generate.main()` |
+| CLI 参数/运行逻辑（dry-run/断点续跑/落盘） | `scripts/generation/comfyui_part1_generate.py` | 产物：`run.json`/`metadata.jsonl`/`images/` |
+| ComfyUI HTTP/WS 与结构化错误 | `scripts/generation/comfyui_client.py` | `ComfyUIClientError`（`code`+`context`） |
+| workflow 注入与引用追溯 | `scripts/generation/workflow_patch.py` | 追溯 KSampler 引用链 |
+| prompt 组合/hash/seed 派生 | `scripts/generation/prompt_grid.py` | 纯函数优先 |
 | 网站首页（runs 列表） | `app/page.tsx` | 拉 `/api/comfyui/runs` |
 | run 详情页（grid + 预览） | `app/runs/[runDir]/page.tsx` | 拉 `/api/comfyui/run/*` |
 | API：runs/run/grid/image | `app/api/comfyui/**/route.ts` | `runtime = "nodejs"` |

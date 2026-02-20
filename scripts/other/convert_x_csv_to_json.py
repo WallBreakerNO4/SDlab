@@ -7,11 +7,11 @@ import sys
 from pathlib import Path
 
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
+ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from scripts.convert_y_csv_to_json import parse_weighted_tags  # noqa: E402
+from scripts.other.convert_y_csv_to_json import parse_weighted_tags  # noqa: E402
 
 
 X_COLUMN_MAPPING: dict[str, str] = {

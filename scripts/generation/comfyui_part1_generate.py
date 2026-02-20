@@ -23,11 +23,11 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 if __package__ in {None, ""}:
-    ROOT = Path(__file__).resolve().parents[1]
+    ROOT = Path(__file__).resolve().parents[2]
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
 
-from scripts.comfyui_client import (  # noqa: E402
+from scripts.generation.comfyui_client import (  # noqa: E402
     ComfyUIClientError,
     comfy_download_image_to_path,
     comfy_get_history_item,
@@ -35,7 +35,7 @@ from scripts.comfyui_client import (  # noqa: E402
     comfy_ws_connect,
     comfy_ws_wait_prompt_done,
 )
-from scripts.prompt_grid import (  # noqa: E402
+from scripts.generation.prompt_grid import (  # noqa: E402
     X_INFO_TYPE_KEY,
     compute_prompt_hash,
     derive_seed,
@@ -43,7 +43,7 @@ from scripts.prompt_grid import (  # noqa: E402
     read_y_rows,
     render_positive_prompt,
 )
-from scripts.workflow_patch import (  # noqa: E402
+from scripts.generation.workflow_patch import (  # noqa: E402
     WorkflowDict,
     WorkflowOverrides,
     load_workflow,

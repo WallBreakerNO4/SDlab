@@ -9,11 +9,11 @@ ROOT = Path(__file__).resolve().parents[0]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.comfyui_part1_generate import main as generate_main
+from scripts.generation.comfyui_part1_generate import main as generate_main
 
 
 def main(argv: list[str] | None = None) -> int:
-    """主入口点，委托给 scripts.comfyui_part1_generate.main()"""
+    """主入口点，委托给 scripts.generation.comfyui_part1_generate.main()"""
     return generate_main(argv)
 
 

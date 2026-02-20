@@ -1,16 +1,4 @@
-# pyright: reportMissingImports=false, reportUnknownVariableType=false
-
-from .generation.prompt_grid import (
-    MAX_SEED,
-    build_prompt_cell,
-    compute_prompt_hash,
-    derive_seed,
-    normalize_prompt,
-    read_x_rows,
-    read_y_rows,
-    render_positive_prompt,
-)
-from .generation.comfyui_client import (
+from .comfyui_client import (
     ComfyUIClientError,
     ComfyUIJobTimeoutError,
     ComfyUIRequestError,
@@ -23,10 +11,27 @@ from .generation.comfyui_client import (
     comfy_ws_connect,
     comfy_ws_wait_prompt_done,
 )
-from .generation.workflow_patch import WorkflowOverrides, load_workflow, patch_workflow
+from .prompt_grid import (
+    MAX_SEED,
+    X_INFO_TYPE_KEY,
+    build_prompt_cell,
+    compute_prompt_hash,
+    derive_seed,
+    normalize_prompt,
+    read_x_rows,
+    read_y_rows,
+    render_positive_prompt,
+)
+from .workflow_patch import (
+    WorkflowDict,
+    WorkflowOverrides,
+    load_workflow,
+    patch_workflow,
+)
 
 __all__ = [
     "MAX_SEED",
+    "X_INFO_TYPE_KEY",
     "build_prompt_cell",
     "compute_prompt_hash",
     "derive_seed",
@@ -45,6 +50,7 @@ __all__ = [
     "comfy_build_view_params",
     "comfy_download_image_bytes",
     "comfy_download_image_to_path",
+    "WorkflowDict",
     "WorkflowOverrides",
     "load_workflow",
     "patch_workflow",

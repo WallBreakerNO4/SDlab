@@ -12,7 +12,7 @@ from websocket import WebSocketTimeoutException
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-import scripts.comfyui_client as comfy
+import scripts.generation.comfyui_client as comfy
 
 
 class MockResponse:
@@ -94,7 +94,7 @@ def test_comfy_submit_prompt_accepts_prompt_id_and_promptId(
         captured["timeout"] = timeout
         return MockResponse(json_data={id_key: "p-123"})
 
-    monkeypatch.setattr("scripts.comfyui_client.requests.post", fake_post)
+    monkeypatch.setattr("scripts.generation.comfyui_client.requests.post", fake_post)
 
     prompt_id = comfy.comfy_submit_prompt(
         base_url="http://127.0.0.1:8188/",
@@ -119,7 +119,7 @@ def test_comfy_submit_prompt_raises_structured_error_when_prompt_id_missing(
         _ = (url, json, timeout)
         return MockResponse(json_data={"status": "ok"})
 
-    monkeypatch.setattr("scripts.comfyui_client.requests.post", fake_post)
+    monkeypatch.setattr("scripts.generation.comfyui_client.requests.post", fake_post)
 
     with pytest.raises(comfy.ComfyUIClientError) as exc:
         _ = comfy.comfy_submit_prompt(
@@ -146,7 +146,8 @@ def test_comfy_ws_connect_uses_clientId_query_and_preserves_base_path(
         return fake_ws
 
     monkeypatch.setattr(
-        "scripts.comfyui_client.websocket.create_connection", fake_create_connection
+        "scripts.generation.comfyui_client.websocket.create_connection",
+        fake_create_connection,
     )
 
     ws = comfy.comfy_ws_connect(
@@ -228,7 +229,7 @@ def test_comfy_ws_wait_prompt_done_retries_request_timeout_until_job_timeout(
         ]
     )
     clock = ControlledClock([0.0, 0.3, 0.7, 1.2, 1.4])
-    monkeypatch.setattr("scripts.comfyui_client.time.monotonic", clock)
+    monkeypatch.setattr("scripts.generation.comfyui_client.time.monotonic", clock)
 
     with pytest.raises(comfy.ComfyUIJobTimeoutError) as exc:
         comfy.comfy_ws_wait_prompt_done(
@@ -263,7 +264,7 @@ def test_comfy_get_history_item_supports_response_compatibility(
         captured["params"] = params
         return MockResponse(json_data=history_payload)
 
-    monkeypatch.setattr("scripts.comfyui_client.requests.get", fake_get)
+    monkeypatch.setattr("scripts.generation.comfyui_client.requests.get", fake_get)
 
     item = comfy.comfy_get_history_item(
         base_url="http://127.0.0.1:8188/",
@@ -303,7 +304,7 @@ def test_comfy_download_image_bytes_calls_view_endpoint_with_query_params(
         captured["params"] = params
         return MockResponse(content=b"PNGDATA")
 
-    monkeypatch.setattr("scripts.comfyui_client.requests.get", fake_get)
+    monkeypatch.setattr("scripts.generation.comfyui_client.requests.get", fake_get)
 
     image_bytes = comfy.comfy_download_image_bytes(
         base_url="http://127.0.0.1:8188",
@@ -328,7 +329,7 @@ def test_comfy_download_image_to_path_saves_downloaded_bytes(
         _ = (url, timeout, params)
         return MockResponse(content=b"image-bytes")
 
-    monkeypatch.setattr("scripts.comfyui_client.requests.get", fake_get)
+    monkeypatch.setattr("scripts.generation.comfyui_client.requests.get", fake_get)
 
     output_path = tmp_path / "out.png"
     saved_path = comfy.comfy_download_image_to_path(

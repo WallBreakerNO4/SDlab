@@ -9,8 +9,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from scripts.prompt_grid import build_prompt_cell
-from scripts.comfyui_part1_generate import build_parser, main
+from scripts.generation.prompt_grid import build_prompt_cell
+from scripts.generation.comfyui_part1_generate import build_parser, main
 
 
 COMFY_ENV_KEYS = [
@@ -208,19 +208,23 @@ def test_dry_run_does_not_call_comfyui_client(
         raise AssertionError("dry-run 不应调用 ComfyUI 客户端")
 
     monkeypatch.setattr(
-        "scripts.comfyui_part1_generate.comfy_ws_connect", should_not_be_called
+        "scripts.generation.comfyui_part1_generate.comfy_ws_connect",
+        should_not_be_called,
     )
     monkeypatch.setattr(
-        "scripts.comfyui_part1_generate.comfy_submit_prompt", should_not_be_called
+        "scripts.generation.comfyui_part1_generate.comfy_submit_prompt",
+        should_not_be_called,
     )
     monkeypatch.setattr(
-        "scripts.comfyui_part1_generate.comfy_ws_wait_prompt_done", should_not_be_called
+        "scripts.generation.comfyui_part1_generate.comfy_ws_wait_prompt_done",
+        should_not_be_called,
     )
     monkeypatch.setattr(
-        "scripts.comfyui_part1_generate.comfy_get_history_item", should_not_be_called
+        "scripts.generation.comfyui_part1_generate.comfy_get_history_item",
+        should_not_be_called,
     )
     monkeypatch.setattr(
-        "scripts.comfyui_part1_generate.comfy_download_image_to_path",
+        "scripts.generation.comfyui_part1_generate.comfy_download_image_to_path",
         should_not_be_called,
     )
 

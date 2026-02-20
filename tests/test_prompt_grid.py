@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from scripts.prompt_grid import (
+from scripts.generation.prompt_grid import (
     MAX_SEED,
     X_INFO_TYPE_KEY,
     build_prompt_cell,
