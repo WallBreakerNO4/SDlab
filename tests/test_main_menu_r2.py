@@ -1,12 +1,13 @@
-"""Test R2 upload menu placeholder behavior."""
+"""Test R2 upload menu integration."""
 
 from __future__ import annotations
 
-import importlib
+import sys
+from pathlib import Path
 from typing import override
-from unittest.mock import patch
 
-import pytest
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 from scripts.cli.io import MenuIO
 from scripts.cli.menu import run_menu
@@ -51,102 +52,86 @@ def test_r2_upload_menu_entry_is_selectable() -> None:
     assert r2_entry.enabled is True, "R2 upload should be enabled"
 
 
-def test_r2_upload_selection_shows_placeholder_message() -> None:
-    """Test that selecting R2 upload shows controlled message without importing R2 module."""
-    original_import_module = importlib.import_module
-
-    def blocked_import_module(name: str, *args: str, **kwargs: str) -> object:
-        if "scripts.r2_upload.upload_images_to_r2" in name:
-            pytest.fail(
-                f"R2 upload module should NOT be imported, but tried to import: {name}"
-            )
-        return original_import_module(name)
-
-    with patch.object(importlib, "import_module", side_effect=blocked_import_module):
-        io = DummyMenuIO(["4", "q"])
-        exit_code = run_menu(io)
+def test_r2_upload_prompts_extra_argv_and_shows_preview() -> None:
+    """Test that selecting R2 upload prompts for extra argv and shows preview command."""
+    io = DummyMenuIO(["4", "--help", "n", "q"])
+    exit_code = run_menu(io)
 
     assert exit_code == 0
     assert len(io.outputs) > 0
 
-    preview_command = "uv run python scripts/r2_upload/upload_images_to_r2.py"
+    preview_command = "uv run python scripts/r2_upload/upload_images_to_r2.py --help"
     assert any(
         "Preview command:" in output and preview_command in output
         for output in io.outputs
-    ), f"Should show preview command for R2 upload"
-
-    assert any("未实现" in output for output in io.outputs), (
-        "Should show '未实现' message"
-    )
-
-    assert all(
-        "Traceback (most recent call last)" not in output
-        and "NotImplementedError" not in output
-        for output in io.outputs
-    ), "Should NOT show traceback or NotImplementedError"
+    ), f"Should show preview command with extra argv: {preview_command}"
 
 
-def test_r2_upload_selection_by_key() -> None:
-    """Test that R2 upload can be selected by key 'upload_r2'."""
-    original_import_module = importlib.import_module
-
-    def blocked_import_module(name: str, *args: str, **kwargs: str) -> object:
-        if "scripts.r2_upload.upload_images_to_r2" in name:
-            pytest.fail(
-                f"R2 upload module should NOT be imported, but tried to import: {name}"
-            )
-        return original_import_module(name)
-
-    with patch.object(importlib, "import_module", side_effect=blocked_import_module):
-        io = DummyMenuIO(["upload_r2", "q"])
-        exit_code = run_menu(io)
+def test_r2_upload_selection_by_key_with_extra_argv() -> None:
+    """Test that R2 upload can be selected by key with extra argv."""
+    io = DummyMenuIO(["upload_r2", "--run-dir .sisyphus/test", "n", "q"])
+    exit_code = run_menu(io)
 
     assert exit_code == 0
 
-    preview_command = "uv run python scripts/r2_upload/upload_images_to_r2.py"
+    preview_command = "uv run python scripts/r2_upload/upload_images_to_r2.py --run-dir .sisyphus/test"
     assert any(
         "Preview command:" in output and preview_command in output
         for output in io.outputs
     ), "Should show preview command when selecting by key"
 
-    assert any("未实现" in output for output in io.outputs), (
-        "Should show '未实现' message when selecting by key"
-    )
 
-
-def test_r2_upload_does_not_call_main() -> None:
-    """Test that R2 upload main() is never called."""
-    with patch("scripts.r2_upload.upload_images_to_r2.main") as mock_main:
-        mock_main.side_effect = AssertionError("R2 main() should NOT be called")
-        io = DummyMenuIO(["4", "q"])
-        exit_code = run_menu(io)
+def test_r2_upload_with_empty_extra_argv() -> None:
+    """Test that R2 upload works with empty extra argv."""
+    io = DummyMenuIO(["4", "", "n", "q"])
+    exit_code = run_menu(io)
 
     assert exit_code == 0
-    assert not mock_main.called, "R2 main() should never be called"
+
+    preview_command = "uv run python scripts/r2_upload/upload_images_to_r2.py"
+    assert any(
+        "Preview command:" in output and preview_command in output
+        for output in io.outputs
+    ), "Should show base command with no extra argv"
 
 
-def test_r2_upload_returns_to_menu_loop() -> None:
-    """Test that after R2 upload placeholder, we can still interact with menu."""
-    inputs = ["4", "2", "n", "q"]
+def test_r2_upload_invalid_extra_argv_returns_to_menu() -> None:
+    """Test that invalid extra argv shows error and returns to menu."""
+    io = DummyMenuIO(["4", "'unclosed", "q"])
+    exit_code = run_menu(io)
+
+    assert exit_code == 0
+
+    assert any(
+        "Invalid selection: Invalid extra argv" in output for output in io.outputs
+    ), "Should show error for invalid extra argv"
+
+
+def test_r2_upload_returns_to_menu_loop_after_cancel() -> None:
+    """Test that after R2 upload cancellation, menu continues to work."""
+    inputs = ["4", "--help", "n", "2", "n", "q"]
     io = DummyMenuIO(inputs)
-
-    # Monkeypatch importlib to prevent R2 module import
-    original_import_module = importlib.import_module
-
-    def blocked_import_module(name: str, *args: str, **kwargs: str) -> object:
-        if "scripts.r2_upload.upload_images_to_r2" in name:
-            pytest.fail(
-                f"R2 upload module should NOT be imported, but tried to import: {name}"
-            )
-        return original_import_module(name)
-
-    with patch.object(importlib, "import_module", side_effect=blocked_import_module):
-        exit_code = run_menu(io)
+    exit_code = run_menu(io)
 
     assert exit_code == 0
 
-    # Should have multiple menu displays (R2 upload + convert_x_csv)
     menu_lines_count = sum(1 for output in io.outputs if "Available scripts:" in output)
     assert menu_lines_count >= 2, (
         "Menu should be displayed multiple times (after R2, after convert_x)"
     )
+
+
+def test_r2_upload_extra_argv_with_spaces() -> None:
+    """Test that extra argv with spaces are properly parsed via shlex."""
+    io = DummyMenuIO(["4", '--run-dir ".sisyphus/some path"', "n", "q"])
+    exit_code = run_menu(io)
+
+    assert exit_code == 0
+
+    assert any("Preview command:" in output for output in io.outputs), (
+        "Should show preview command"
+    )
+    assert any(
+        "Preview command:" in output and ".sisyphus/some path" in output
+        for output in io.outputs
+    ), "Should preserve spaces in extra argv through preview command"

@@ -256,10 +256,37 @@ def run_menu(
                 continue
 
         if selection.entry is not None and selection.entry.key == "upload_r2":
-            preview_command = UPLOAD_R2_BASE_COMMAND
+            extra_argv_result = _safe_read(io, "Extra argv (optional): ")
+            if extra_argv_result.exit_code is not None:
+                return extra_argv_result.exit_code
+            extra_argv_line = (extra_argv_result.value or "").strip()
+            try:
+                extra_argv = shlex.split(extra_argv_line)
+            except ValueError as exc:
+                io.write(f"{invalid_prefix}Invalid extra argv: {exc}")
+                continue
+
+            preview_command = _build_upload_r2_preview_command(extra_argv)
             io.write(f"Preview command: {preview_command}")
-            io.write("未实现")
-            continue
+
+            confirm_result = _safe_read(io, "Confirm execution? [Y/n]: ")
+            if confirm_result.exit_code is not None:
+                return confirm_result.exit_code
+            confirm = (confirm_result.value or "").strip().lower()
+            if confirm in {"", "y", "yes"}:
+                _run_selection_with_guard(
+                    io,
+                    selection,
+                    extra_argv,
+                    success_prefix="Upload finished with exit code: ",
+                )
+                continue
+            else:
+                if confirm not in {"n", "no"}:
+                    io.write("Invalid confirmation, cancelled.")
+                else:
+                    io.write("Upload cancelled.")
+                continue
 
         io.write(placeholder_message)
         return 0
@@ -281,6 +308,12 @@ def _build_convert_y_preview_command(extra_argv: list[str]) -> str:
     if not extra_argv:
         return CONVERT_Y_BASE_COMMAND
     return f"{CONVERT_Y_BASE_COMMAND} {shlex.join(extra_argv)}"
+
+
+def _build_upload_r2_preview_command(extra_argv: list[str]) -> str:
+    if not extra_argv:
+        return UPLOAD_R2_BASE_COMMAND
+    return f"{UPLOAD_R2_BASE_COMMAND} {shlex.join(extra_argv)}"
 
 
 def _resolve_convert_argv(
