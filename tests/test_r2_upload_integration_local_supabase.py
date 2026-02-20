@@ -50,8 +50,13 @@ def _require_local_supabase_env() -> tuple[str, str]:
     supabase_url = os.getenv("SUPABASE_URL", "").strip()
     if not supabase_url:
         pytest.fail("启用本地 Supabase 集成测试时必须设置 SUPABASE_URL。")
-    if not supabase_url.startswith("http://localhost:"):
-        pytest.fail("启用本地 Supabase 集成测试时，SUPABASE_URL 必须指向 localhost。")
+    if not (
+        supabase_url.startswith("http://localhost:")
+        or supabase_url.startswith("http://127.0.0.1:")
+    ):
+        pytest.fail(
+            "启用本地 Supabase 集成测试时，SUPABASE_URL 必须指向 localhost 或 127.0.0.1。"
+        )
 
     service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
     if not service_role_key:
@@ -112,9 +117,9 @@ def test_local_supabase_integration_with_fake_r2_is_idempotent(
 
     supabase_url, service_role_key = _require_local_supabase_env()
 
-    from supabase.client import create_client
+    from scripts.r2_upload.supabase_writer import _default_client_factory
 
-    supabase_client = create_client(supabase_url, service_role_key)
+    supabase_client = _default_client_factory(supabase_url, service_role_key)
 
     fake_r2 = _FakeR2Client()
     monkeypatch.setenv("R2_PUBLIC_BUCKET", "itest-public")

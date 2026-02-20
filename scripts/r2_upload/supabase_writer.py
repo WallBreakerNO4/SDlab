@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from collections.abc import Callable, Mapping
 from typing import Protocol, cast
+from urllib import error as urllib_error
+from urllib import parse as urllib_parse
+from urllib import request as urllib_request
 
 _MISSING_ENV_MESSAGE = "missing required Supabase configuration"
 
@@ -29,6 +33,198 @@ class SupabaseClientLike(Protocol):
 
 
 ClientFactory = Callable[[str, str], SupabaseClientLike]
+
+
+class _SupabaseHTTPResponse:
+    data: object
+
+    def __init__(self, data: object) -> None:
+        self.data = data
+
+
+class _PostgrestHTTPError(RuntimeError):
+    code: str | None
+
+    def __init__(self, message: str, *, code: str | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+class _PostgrestHTTPQuery:
+    _client: _PostgrestHTTPClient
+    _table_name: str
+    _mode: str | None
+    _upsert_json: Mapping[str, object] | None
+    _on_conflict: str
+    _select_columns: str
+    _filters: list[tuple[str, object]]
+    _limit: int | None
+
+    def __init__(self, client: "_PostgrestHTTPClient", table_name: str) -> None:
+        self._client = client
+        self._table_name = table_name
+        self._mode = None
+        self._upsert_json = None
+        self._on_conflict = ""
+        self._select_columns = "*"
+        self._filters = []
+        self._limit = None
+
+    def upsert(self, json: object, *, on_conflict: str) -> "_PostgrestHTTPQuery":
+        if not isinstance(json, Mapping):
+            raise TypeError("upsert payload must be a JSON object")
+        self._mode = "upsert"
+        self._upsert_json = cast(Mapping[str, object], json)
+        self._on_conflict = on_conflict
+        return self
+
+    def select(self, columns: str) -> "_PostgrestHTTPQuery":
+        self._mode = "select"
+        self._select_columns = columns
+        return self
+
+    def eq(self, column: str, value: object) -> "_PostgrestHTTPQuery":
+        self._filters.append((column, value))
+        return self
+
+    def limit(self, size: int) -> "_PostgrestHTTPQuery":
+        self._limit = size
+        return self
+
+    def execute(self) -> _SupabaseHTTPResponse:
+        if self._mode == "upsert":
+            if self._upsert_json is None:
+                raise _PostgrestHTTPError("upsert payload is not set")
+            data = self._client.request_json(
+                method="POST",
+                table_name=self._table_name,
+                query_params=(("on_conflict", self._on_conflict),),
+                body=[dict(self._upsert_json)],
+                extra_headers={
+                    "Prefer": "resolution=merge-duplicates, return=representation"
+                },
+            )
+            return _SupabaseHTTPResponse(data)
+
+        if self._mode == "select":
+            query_params: list[tuple[str, str]] = [("select", self._select_columns)]
+            for key, value in self._filters:
+                query_params.append((key, _to_postgrest_eq_filter(value)))
+            if self._limit is not None:
+                query_params.append(("limit", str(self._limit)))
+            data = self._client.request_json(
+                method="GET",
+                table_name=self._table_name,
+                query_params=tuple(query_params),
+                body=None,
+                extra_headers={},
+            )
+            return _SupabaseHTTPResponse(data)
+
+        raise _PostgrestHTTPError("query mode is not set")
+
+
+class _PostgrestHTTPClient:
+    _rest_base_url: str
+    _service_role_key: str
+
+    def __init__(self, supabase_url: str, service_role_key: str) -> None:
+        self._rest_base_url = f"{supabase_url.rstrip('/')}/rest/v1"
+        self._service_role_key = service_role_key
+
+    def table(self, table_name: str) -> _PostgrestHTTPQuery:
+        return _PostgrestHTTPQuery(self, table_name)
+
+    def request_json(
+        self,
+        *,
+        method: str,
+        table_name: str,
+        query_params: tuple[tuple[str, str], ...],
+        body: object | None,
+        extra_headers: Mapping[str, str],
+    ) -> object:
+        url = _build_postgrest_url(self._rest_base_url, table_name, query_params)
+        request_body: bytes | None = None
+        headers = {
+            "apikey": self._service_role_key,
+            "Authorization": f"Bearer {self._service_role_key}",
+            "Accept": "application/json",
+            **dict(extra_headers),
+        }
+        if body is not None:
+            headers["Content-Type"] = "application/json"
+            request_body = json.dumps(body, separators=(",", ":")).encode("utf-8")
+
+        request = urllib_request.Request(
+            url=url,
+            data=request_body,
+            headers=headers,
+            method=method,
+        )
+
+        try:
+            with cast(
+                _ResponseReadBytesLike, urllib_request.urlopen(request)
+            ) as response:
+                return _parse_postgrest_json(response.read())
+        except urllib_error.HTTPError as exc:
+            code = _extract_postgrest_error_code(exc)
+            raise _PostgrestHTTPError("postgrest request failed", code=code) from exc
+        except urllib_error.URLError as exc:
+            raise _PostgrestHTTPError("postgrest request failed") from exc
+
+
+class _ResponseReadBytesLike(Protocol):
+    def __enter__(self) -> "_ResponseReadBytesLike": ...
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> bool | None: ...
+
+    def read(self) -> bytes: ...
+
+
+def _build_postgrest_url(
+    rest_base_url: str,
+    table_name: str,
+    query_params: tuple[tuple[str, str], ...],
+) -> str:
+    encoded_table = urllib_parse.quote(table_name, safe="")
+    base = f"{rest_base_url}/{encoded_table}"
+    if not query_params:
+        return base
+    return f"{base}?{urllib_parse.urlencode(query_params)}"
+
+
+def _parse_postgrest_json(raw: bytes) -> object:
+    if not raw:
+        return []
+    try:
+        decoded = raw.decode("utf-8")
+        return cast(object, json.loads(decoded))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise _PostgrestHTTPError("invalid postgrest response") from exc
+
+
+def _extract_postgrest_error_code(exc: urllib_error.HTTPError) -> str | None:
+    try:
+        payload = _parse_postgrest_json(exc.read())
+    except Exception:
+        return None
+    if not isinstance(payload, Mapping):
+        return None
+    payload_map = cast(Mapping[str, object], payload)
+    code = payload_map.get("code")
+    if isinstance(code, str) and code.strip():
+        return code.strip()
+    return None
+
+
+def _to_postgrest_eq_filter(value: object) -> str:
+    if isinstance(value, bool):
+        encoded = "true" if value else "false"
+    else:
+        encoded = str(value)
+    return f"eq.{encoded}"
 
 
 class SupabaseWriterError(RuntimeError):
@@ -373,15 +569,7 @@ def _default_client_factory(
     supabase_url: str, service_role_key: str
 ) -> SupabaseClientLike:
     try:
-        from supabase.client import create_client
-    except Exception as exc:
-        raise SupabaseConfigError(
-            "supabase dependency is unavailable",
-            code="dependency_unavailable",
-        ) from exc
-
-    try:
-        client = create_client(supabase_url, service_role_key)
+        client = _PostgrestHTTPClient(supabase_url, service_role_key)
         return cast(SupabaseClientLike, cast(object, client))
     except Exception as exc:
         raise SupabaseConfigError(
