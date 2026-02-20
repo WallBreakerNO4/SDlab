@@ -193,3 +193,89 @@ print(f"Service role key: {mask_secret(key)}")
 
 - Supabase 官方文档：https://supabase.com/docs
 - Supabase CLI 文档：https://supabase.com/docs/guides/cli
+
+## 最小工作流
+
+本节提供最核心的命令集合，用于日常开发。
+
+### 初始化（仅用于全新项目）
+
+**注意：** 本仓库已包含 `supabase/` 目录和迁移文件，无需再次初始化。如果你从零开始新项目，请运行：
+
+```bash
+supabase init
+# 或
+pnpm dlx supabase init
+```
+
+### 启动和检查状态
+
+```bash
+# 启动本地 Supabase（首次运行会拉取 Docker 镜像）
+supabase start
+# 或
+pnpm dlx supabase start
+
+# 检查运行状态（获取 API URL、DB URL、Studio URL、密钥）
+supabase status
+# 或
+pnpm dlx supabase status
+
+# 停止本地 Supabase
+supabase stop
+# 或
+pnpm dlx supabase stop
+```
+
+### 数据库管理
+
+```bash
+# 重置数据库（清空并重新应用所有迁移）
+supabase db reset
+# 或
+pnpm dlx supabase db reset
+
+# 创建新迁移
+supabase migration new add_users_table
+# 或
+pnpm dlx supabase migration new add_users_table
+
+# 推送本地迁移到远程（需先执行 supabase link）
+supabase db push
+# 或
+pnpm dlx supabase db push
+
+# 拉取远程数据库结构到本地
+supabase db pull
+# 或
+pnpm dlx supabase db pull
+```
+
+### 类型生成
+
+```bash
+# 生成本地数据库的 TypeScript 类型定义（文档用）
+supabase gen types --local > types/supabase.ts
+# 或
+pnpm dlx supabase gen types --local > types/supabase.ts
+```
+
+### 远程同步（可选）
+
+```bash
+# 链接本地项目到远程 Supabase 项目（会交互式选择项目）
+supabase link
+# 或
+pnpm dlx supabase link
+```
+
+### ORM/tRPC 考量
+
+当前项目规模下，ORM/tRPC 不必需。如后续扩展服务器端逻辑，可在以下情况考虑引入：
+
+- ORM（如 Prisma、Drizzle）：当业务复杂度增加，需要类型安全的数据库抽象时
+- tRPC：当前使用 Next.js API Routes；当需要端到端类型安全且前端与服务器共享类型时
+
+### 命令降级说明
+
+如果全局未安装 Supabase CLI，所有命令都可以通过 `pnpm dlx supabase` 降级运行，无需额外安装步骤。
