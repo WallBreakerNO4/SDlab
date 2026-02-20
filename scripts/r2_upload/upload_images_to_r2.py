@@ -37,6 +37,29 @@ _IMAGE_VARIANTS = {
     "thumb_avif",
 }
 
+# 退出码映射（稳定约定）：
+# - 0: 成功
+# - 1: 未分类异常（无 category）
+# - 2..9: 已分类错误，便于自动化/CI 精确识别失败原因
+_EXIT_CODES_BY_CATEGORY: dict[str, int] = {
+    "argument": 2,
+    "config": 3,
+    "auth": 4,
+    "network": 5,
+    "rate_limit": 6,
+    "retry_exhausted": 7,
+    "remote": 8,
+    "unexpected": 9,
+}
+
+
+class UploadScriptError(RuntimeError):
+    category: str
+
+    def __init__(self, message: str, *, category: str) -> None:
+        super().__init__(message)
+        self.category = category
+
 
 @dataclass(frozen=True)
 class PlannedUpload:
@@ -492,10 +515,14 @@ def _require_bucket_names() -> dict[BucketScope, str]:
     public_name = os.getenv("R2_PUBLIC_BUCKET")
     private_name = os.getenv("R2_PRIVATE_BUCKET")
     if public_name is None or not public_name.strip():
-        raise RuntimeError("missing required R2 bucket configuration: R2_PUBLIC_BUCKET")
+        raise UploadScriptError(
+            "missing required R2 bucket configuration: R2_PUBLIC_BUCKET",
+            category="config",
+        )
     if private_name is None or not private_name.strip():
-        raise RuntimeError(
-            "missing required R2 bucket configuration: R2_PRIVATE_BUCKET"
+        raise UploadScriptError(
+            "missing required R2 bucket configuration: R2_PRIVATE_BUCKET",
+            category="config",
         )
     return {
         "public": public_name.strip(),
@@ -635,6 +662,13 @@ def _execute(plans: list[RunPlan]) -> dict[str, object]:
     }
 
 
+def _exit_code_for_exception(exc: Exception) -> int:
+    category = getattr(exc, "category", None)
+    if isinstance(category, str):
+        return _EXIT_CODES_BY_CATEGORY.get(category, 1)
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     try:
@@ -655,13 +689,18 @@ def main(argv: list[str] | None = None) -> int:
         print(_to_json_line(_execute(plans)))
         return 0
     except Exception as exc:
+        category = getattr(exc, "category", None)
+        exit_code = _exit_code_for_exception(exc)
         error_payload = {
             "mode": "error",
             "error": exc.__class__.__name__,
             "message": str(exc),
+            "exit_code": exit_code,
         }
+        if isinstance(category, str):
+            error_payload["category"] = category
         print(_to_json_line(error_payload))
-        return 1
+        return exit_code
 
 
 if __name__ == "__main__":
