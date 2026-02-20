@@ -187,13 +187,19 @@ def test_dry_run_loads_utf8_env_writes_run_json_and_prints_example(
         run_payload["generation_overrides"]["negative_prompt"] == "低质量,bad anatomy,"
     )
     selection = run_payload["selection"]
-    assert selection["x_columns"] == [{"x_index": 0, "type": "sfw"}]
+    assert selection["x_columns"] == [
+        {"x_index": 0, "type": "sfw", "description": {"zh": "", "en": ""}}
+    ]
 
     metadata_records = _read_valid_jsonl(run_dir / "metadata.jsonl")
     assert len(metadata_records) == 2
     assert all(record["status"] == "skipped" for record in metadata_records)
     assert all(record["workflow_hash"] == "not_loaded" for record in metadata_records)
     assert all(record["x_info_type"] == "sfw" for record in metadata_records)
+    assert all(
+        record.get("x_description") == {"zh": "", "en": ""}
+        for record in metadata_records
+    )
 
 
 def test_dry_run_does_not_call_comfyui_client(
@@ -389,3 +395,166 @@ def test_env_csv_paths_used_when_cli_flags_not_provided(
     run_payload = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
     assert run_payload["x_json_path"] == str(x_csv)
     assert run_payload["y_json_path"] == str(y_csv)
+
+
+def test_dry_run_preserves_newline_in_x_description(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证含换行的 description 能正确 round-trip"""
+    _clear_comfy_env(monkeypatch)
+
+    x_csv = tmp_path / "x-multiline.json"
+    y_csv = tmp_path / "y-multiline.json"
+
+    x_payload: dict[str, object] = {
+        "schema": "",
+        "items": [
+            {
+                "tags": {
+                    "gender": [{"text": "1girl", "weight": 1.0}],
+                    "characters": [{"text": "test", "weight": 1.0}],
+                    "series": [{"text": "test", "weight": 1.0}],
+                    "rating": [{"text": "safe", "weight": 1.0}],
+                    "general": [{"text": "solo", "weight": 1.0}],
+                    "quality": [{"text": "best", "weight": 1.0}],
+                },
+                "info": {"index": 0, "type": "sfw"},
+                "description": {
+                    "zh": "第一行\n第二行\n第三行",
+                    "en": "Line 1\nLine 2\nLine 3",
+                },
+            }
+        ],
+    }
+
+    y_payload: dict[str, object] = {
+        "schema": "prompt-y-table/v2",
+        "items": [
+            {
+                "tags": [{"text": "artist", "weight": 1.0}],
+                "info": {"index": 0, "type": "artists"},
+            }
+        ],
+    }
+
+    x_csv.write_text(
+        json.dumps(x_payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    y_csv.write_text(
+        json.dumps(y_payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    run_dir = tmp_path / "run-multiline"
+
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = main(
+        [
+            "--dry-run",
+            "--x-json",
+            str(x_csv),
+            "--y-json",
+            str(y_csv),
+            "--run-dir",
+            str(run_dir),
+            "--base-seed",
+            "1",
+        ]
+    )
+
+    assert exit_code == 0
+
+    metadata_records = _read_valid_jsonl(run_dir / "metadata.jsonl")
+    assert len(metadata_records) == 1
+    record = metadata_records[0]
+
+    x_desc = record.get("x_description")
+    assert isinstance(x_desc, dict)
+    assert x_desc.get("zh") == "第一行\n第二行\n第三行"
+    assert x_desc.get("en") == "Line 1\nLine 2\nLine 3"
+
+
+def test_dry_run_x_json_missing_description_uses_default(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_comfy_env(monkeypatch)
+
+    x_csv = tmp_path / "x-missing-desc.json"
+    y_csv = tmp_path / "y-missing-desc.json"
+
+    x_payload: dict[str, object] = {
+        "schema": "",
+        "items": [
+            {
+                "tags": {
+                    "gender": [{"text": "1girl", "weight": 1.0}],
+                    "characters": [{"text": "test-char", "weight": 1.0}],
+                    "series": [{"text": "test-series", "weight": 1.0}],
+                    "rating": [{"text": "safe", "weight": 1.0}],
+                    "general": [{"text": "solo", "weight": 1.0}],
+                    "quality": [{"text": "best", "weight": 1.0}],
+                },
+                "info": {"index": 0, "type": "sfw"},
+            }
+        ],
+    }
+
+    y_payload: dict[str, object] = {
+        "schema": "prompt-y-table/v2",
+        "items": [
+            {
+                "tags": [{"text": "artist-missing", "weight": 1.0}],
+                "info": {"index": 0, "type": "artists"},
+            },
+            {
+                "tags": [{"text": "artist-another", "weight": 1.0}],
+                "info": {"index": 1, "type": "artists"},
+            },
+        ],
+    }
+
+    x_csv.write_text(
+        json.dumps(x_payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    y_csv.write_text(
+        json.dumps(y_payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    run_dir = tmp_path / "run-missing-desc"
+
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = main(
+        [
+            "--dry-run",
+            "--x-json",
+            str(x_csv),
+            "--y-json",
+            str(y_csv),
+            "--run-dir",
+            str(run_dir),
+            "--base-seed",
+            "777",
+        ]
+    )
+
+    assert exit_code == 0
+
+    run_payload = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    selection = run_payload["selection"]
+    assert selection["x_columns"] == [
+        {"x_index": 0, "type": "sfw", "description": {"zh": "", "en": ""}}
+    ]
+
+    metadata_records = _read_valid_jsonl(run_dir / "metadata.jsonl")
+    assert len(metadata_records) == 2
+    assert all(
+        record.get("x_description") == {"zh": "", "en": ""}
+        for record in metadata_records
+    )

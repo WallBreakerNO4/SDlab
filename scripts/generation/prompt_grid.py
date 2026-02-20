@@ -95,6 +95,43 @@ def read_x_rows(path: str | Path) -> list[dict[str, str]]:
     return rows
 
 
+def read_x_descriptions(path: str | Path) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+
+    payload_obj = cast(object, json.loads(Path(path).read_text(encoding="utf-8")))
+    if not isinstance(payload_obj, dict):
+        return rows
+
+    payload = cast(dict[str, object], payload_obj)
+    items = payload.get("items")
+    if not isinstance(items, list):
+        return rows
+
+    items_list = cast(list[object], items)
+    for item_obj in items_list:
+        if not isinstance(item_obj, dict):
+            rows.append({"zh": "", "en": ""})
+            continue
+
+        item = cast(dict[str, object], item_obj)
+        description_obj = item.get("description")
+        description = (
+            cast(dict[str, object], description_obj)
+            if isinstance(description_obj, dict)
+            else {}
+        )
+
+        zh_obj = description.get("zh")
+        en_obj = description.get("en")
+
+        zh = zh_obj.strip() if isinstance(zh_obj, str) else ""
+        en = en_obj.strip() if isinstance(en_obj, str) else ""
+
+        rows.append({"zh": zh, "en": en})
+
+    return rows
+
+
 def read_y_rows(
     path: str | Path, artists_column: str = "Artists"
 ) -> list[dict[str, str]]:

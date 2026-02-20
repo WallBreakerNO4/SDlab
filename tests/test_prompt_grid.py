@@ -14,6 +14,7 @@ from scripts.generation.prompt_grid import (
     compute_prompt_hash,
     derive_seed,
     normalize_prompt,
+    read_x_descriptions,
     read_x_rows,
     read_y_rows,
     render_positive_prompt,
@@ -118,3 +119,96 @@ def test_build_prompt_cell_contains_prompt_hash_and_seed():
         == hashlib.sha256(normalize_prompt(positive_prompt).encode("utf-8")).hexdigest()
     )
     assert cell["seed"] == derive_seed(123, 0, 0)
+
+
+def test_read_x_descriptions_returns_list_with_zh_and_en_keys(tmp_path):
+    json_path = tmp_path / "test.json"
+    json_path.write_text(
+        '{"items": [{"description": {"zh": "测试", "en": "test"}}]}',
+        encoding="utf-8",
+    )
+
+    result = read_x_descriptions(json_path)
+
+    assert result == [{"zh": "测试", "en": "test"}]
+
+
+def test_read_x_descriptions_missing_description_returns_empty_strings(tmp_path):
+    json_path = tmp_path / "test.json"
+    json_path.write_text(
+        '{"items": [{"tags": {"gender": [{"text": "1girl"}]}}]}',
+        encoding="utf-8",
+    )
+
+    result = read_x_descriptions(json_path)
+
+    assert result == [{"zh": "", "en": ""}]
+
+
+def test_read_x_descriptions_preserves_markdown_newlines(tmp_path):
+    json_path = tmp_path / "test.json"
+    json_path.write_text(
+        '{"items": [{"description": {"zh": "标题\\n- 列表项1\\n- 列表项2", "en": "Title\\n- Item 1\\n- Item 2"}}]}',
+        encoding="utf-8",
+    )
+
+    result = read_x_descriptions(json_path)
+
+    assert result == [
+        {"zh": "标题\n- 列表项1\n- 列表项2", "en": "Title\n- Item 1\n- Item 2"}
+    ]
+
+
+def test_read_x_descriptions_non_dict_item_returns_empty_strings(tmp_path):
+    json_path = tmp_path / "test.json"
+    json_path.write_text(
+        '{"items": ["string", 123, {"description": {"zh": "测试"}}]}',
+        encoding="utf-8",
+    )
+
+    result = read_x_descriptions(json_path)
+
+    assert result == [
+        {"zh": "", "en": ""},
+        {"zh": "", "en": ""},
+        {"zh": "测试", "en": ""},
+    ]
+
+
+def test_read_x_descriptions_invalid_json_top_level_returns_empty_list(tmp_path):
+    json_path = tmp_path / "test.json"
+    json_path.write_text('["not", "a", "dict"]', encoding="utf-8")
+
+    result = read_x_descriptions(json_path)
+
+    assert result == []
+
+
+def test_read_x_descriptions_missing_items_returns_empty_list(tmp_path):
+    json_path = tmp_path / "test.json"
+    json_path.write_text('{"other": "data"}', encoding="utf-8")
+
+    result = read_x_descriptions(json_path)
+
+    assert result == []
+
+
+def test_read_x_descriptions_items_not_list_returns_empty_list(tmp_path):
+    json_path = tmp_path / "test.json"
+    json_path.write_text('{"items": "not a list"}', encoding="utf-8")
+
+    result = read_x_descriptions(json_path)
+
+    assert result == []
+
+
+def test_read_x_descriptions_strips_whitespace(tmp_path):
+    json_path = tmp_path / "test.json"
+    json_path.write_text(
+        '{"items": [{"description": {"zh": "  测试  ", "en": "  test  "}}]}',
+        encoding="utf-8",
+    )
+
+    result = read_x_descriptions(json_path)
+
+    assert result == [{"zh": "测试", "en": "test"}]

@@ -39,6 +39,7 @@ from scripts.generation.prompt_grid import (  # noqa: E402
     X_INFO_TYPE_KEY,
     compute_prompt_hash,
     derive_seed,
+    read_x_descriptions,
     read_x_rows,
     read_y_rows,
     render_positive_prompt,
@@ -117,6 +118,7 @@ class _CellPlan:
     generation_params: dict[str, object | None]
     workflow_hash: str
     save_image_prefix: str
+    x_description: dict[str, str]
 
 
 def _extract_x_info_type(x_row: dict[str, str]) -> str | None:
@@ -272,6 +274,7 @@ def run(args: argparse.Namespace) -> int:
 
     x_rows = read_x_rows(args.x_json)
     y_rows = read_y_rows(args.y_json)
+    x_descriptions = read_x_descriptions(args.x_json)
 
     x_selected = _select_rows(
         rows=x_rows,
@@ -375,6 +378,11 @@ def run(args: argparse.Namespace) -> int:
                     )
                     pbar.update(1)
 
+                def _get_x_description(x_index: int) -> dict[str, str]:
+                    if x_index < len(x_descriptions):
+                        return x_descriptions[x_index]
+                    return {"zh": "", "en": ""}
+
                 def _schedule_until_full(gen_pool: ThreadPoolExecutor) -> None:
                     nonlocal exhausted
                     while not exhausted and len(gen_futures) < args.concurrency:
@@ -420,6 +428,7 @@ def run(args: argparse.Namespace) -> int:
                                 workflow_hash=workflow_hash,
                             )
                             record["skip_reason"] = "resume_hit"
+                            record["x_description"] = _get_x_description(x_index)
                             record["local_image_path"] = _extract_local_image_path(
                                 resume_record
                             )
@@ -451,12 +460,14 @@ def run(args: argparse.Namespace) -> int:
                                 workflow_hash=workflow_hash,
                             )
                             record["skip_reason"] = "dry_run"
+                            record["x_description"] = _get_x_description(x_index)
                             _write_record(record)
                             continue
 
                         save_image_prefix = (
                             f"{run_id}/x{x_index}-y{y_index}-s{seed}-{prompt_hash[:8]}"
                         )
+                        x_desc = _get_x_description(x_index)
                         plan = _CellPlan(
                             x_index=x_index,
                             y_index=y_index,
@@ -472,6 +483,7 @@ def run(args: argparse.Namespace) -> int:
                             ),
                             workflow_hash=workflow_hash,
                             save_image_prefix=save_image_prefix,
+                            x_description=x_desc,
                         )
 
                         future = gen_pool.submit(
@@ -858,6 +870,8 @@ def _build_run_payload(
         + uuid.uuid4().hex[:8]
     )
 
+    x_descriptions = read_x_descriptions(args.x_json)
+
     return {
         "run_id": run_id,
         "created_at": _now_iso(),
@@ -890,7 +904,13 @@ def _build_run_payload(
             "y_count": len(y_selected),
             "total_cells": len(x_selected) * len(y_selected),
             "x_columns": [
-                {"x_index": item.index, "type": _extract_x_info_type(item.value)}
+                {
+                    "x_index": item.index,
+                    "type": _extract_x_info_type(item.value),
+                    "description": x_descriptions[item.index]
+                    if item.index < len(x_descriptions)
+                    else {"zh": "", "en": ""},
+                }
                 for item in x_selected
             ],
             "x_limit": args.x_limit,
@@ -1305,6 +1325,7 @@ def _worker_submit_and_wait(
             generation_params=plan.generation_params,
             workflow_hash=plan.workflow_hash,
         )
+        record["x_description"] = plan.x_description
         record["comfyui_prompt_id"] = prompt_id
         record["started_at"] = started_at
         record["finished_at"] = finished_at
@@ -1366,6 +1387,7 @@ def _worker_fetch_and_download(
             generation_params=plan.generation_params,
             workflow_hash=plan.workflow_hash,
         )
+        record["x_description"] = plan.x_description
         record["comfyui_prompt_id"] = prompt_id
         record["remote_images"] = remote_images
         record["local_image_paths"] = local_image_paths
@@ -1390,6 +1412,7 @@ def _worker_fetch_and_download(
             generation_params=plan.generation_params,
             workflow_hash=plan.workflow_hash,
         )
+        record["x_description"] = plan.x_description
         record["comfyui_prompt_id"] = prompt_id
         record["remote_images"] = remote_images
         record["local_image_paths"] = local_image_paths
