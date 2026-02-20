@@ -24,6 +24,18 @@ def mock_convert_y_main() -> Mock:
     return mock
 
 
+@pytest.fixture(autouse=True)
+def clear_convert_env_vars(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Clear CONVERT_X_DEFAULT_CSV and CONVERT_Y_DEFAULT_CSV env vars for all tests.
+
+    This ensures tests don't depend on external environment configuration.
+    Tests that intentionally set these vars (e.g., test_convert_x_csv_no_args_uses_env_default)
+    will set them before this autouse fixture runs due to fixture ordering.
+    """
+    monkeypatch.delenv("CONVERT_X_DEFAULT_CSV", raising=False)
+    monkeypatch.delenv("CONVERT_Y_DEFAULT_CSV", raising=False)
+
+
 class FakeIO(MenuIO):
     def __init__(self, inputs: list[str], outputs: list[str] | None = None) -> None:
         super().__init__()
