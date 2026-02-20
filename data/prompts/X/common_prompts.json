@@ -73,8 +73,8 @@
         "type": "normal"
       },
       "description": {
-        "zh": "\u963f\u7c73\u5a05\u5355\u4eba\u7279\u5199\n\u5c55\u73b0\u89d2\u8272\u7684\u5fae\u7b11\u8868\u60c5\u4e0e\u773c\u795e\u4ea4\u6d41\n\u89c2\u5bdf\u91cd\u70b9\uff1a\u9762\u90e8\u7ec6\u8282\u4e0e\u60c5\u611f\u8868\u8fbe",
-        "en": "Amiya solo close-up\nShowcasing smile and eye contact\nObservation focus: facial details and expression"
+        "zh": "展示：Amiya 单人中景正面微笑。观察：身份一致性、构图距离、表情与视线稳定性。",
+        "en": "Shows: Amiya in a front-view cowboy shot. Look for identity consistency, framing stability, and smile/gaze accuracy."
       }
     },
     {
@@ -157,8 +157,8 @@
         "type": "normal"
       },
       "description": {
-        "zh": "\u5fb7\u514b\u8428\u65af\u4e0e\u62c9\u666e\u5170\u5fb7\u53cc\u4eba\u573a\u666f\n\u5546\u573a\u5185\u666f\uff0c\u624b\u7275\u624b\u4e92\u52a8\n\u89c2\u5bdf\u91cd\u70b9\uff1a\u53cc\u4eba\u4e92\u52a8\u4e0e\u6784\u56fe\u5e73\u8861",
-        "en": "Texas and Lappland duo scene\nIndoor shopping mall, holding hands\nObservation focus: character interaction and composition balance"
+        "zh": "展示：Texas 与 Lappland 双人牵手室内场景。观察：手部接触自然度、人物间距与场景可读性。",
+        "en": "Shows: Texas and Lappland holding hands in an indoor mall. Look for natural hand contact, spacing, and clear scene readability."
       }
     },
     {
@@ -253,8 +253,8 @@
         "type": "normal"
       },
       "description": {
-        "zh": "\u80fd\u5929\u4f7f\u8857\u5934\u573a\u666f\n\u5934\u6234\u5149\u73af\uff0c\u624b\u6301\u676f\u5b50\u996e\u7528\n\u89c2\u5bdf\u91cd\u70b9\uff1a\u4f11\u95f2\u6c1b\u56f4\u4e0e\u9053\u5177\u7ec6\u8282",
-        "en": "Exusiai street scene\nHalo, drinking from cup with straw\nObservation focus: casual atmosphere and prop details"
+        "zh": "展示：Exusiai 街头手持杯子并用吸管饮用。观察：吸管与嘴部对位、手部抓握与道具形体稳定性。",
+        "en": "Shows: Exusiai on a street, holding a cup and drinking through a straw. Look for straw-to-mouth alignment, hand grip, and prop shape stability."
       }
     },
     {
@@ -361,8 +361,8 @@
         "type": "normal"
       },
       "description": {
-        "zh": "\u7f2a\u5c14\u8d5b\u601d\u96e8\u591c\u6f2b\u6b65\n\u6491\u4f1e\u884c\u8d70\uff0c\u591c\u8272\u706f\u5149\u5012\u5f71\n\u89c2\u5bdf\u91cd\u70b9\uff1a\u5149\u5f71\u6c1b\u56f4\u4e0e\u73af\u5883\u53cd\u5c04",
-        "en": "Muelsyse night walk in rain\nHolding umbrella, city light reflections\nObservation focus: lighting atmosphere and environmental reflections"
+        "zh": "展示：Muelsyse 雨夜撑伞街景。观察：雨夜光影一致性、地面反射层次与主体清晰度。",
+        "en": "Shows: Muelsyse walking with an umbrella in a rainy night street. Look for coherent lighting, wet-surface reflections, and subject clarity."
       }
     },
     {
@@ -453,8 +453,8 @@
         "type": "normal"
       },
       "description": {
-        "zh": "La Pluma \u6cf3\u6c60\u8fb9\u573a\u666f\n\u6cf3\u88c5\u7279\u5199\uff0c\u590f\u65e5\u6c1b\u56f4\n\u89c2\u5bdf\u91cd\u70b9\uff1a\u6cf3\u88c5\u7ec6\u8282\u4e0e\u8eab\u4f53\u523b\u753b",
-        "en": "La Pluma poolside scene\nBikini close-up, summer atmosphere\nObservation focus: swimwear details and physique depiction"
+        "zh": "展示：La Pluma 泳池边泳装与外套层叠。观察：泳装细节、材质区分与遮挡关系是否自然。",
+        "en": "Shows: La Pluma poolside with detailed swimwear and coat layering. Look for swimwear detail, material separation, and natural occlusion."
       }
     },
     {
@@ -533,8 +533,8 @@
         "type": "normal"
       },
       "description": {
-        "zh": "\u8ff7\u8fed\u9999\u841d\u8389\u89d2\u8272\n\u732b\u8033\u914d\u7f6e\uff0c\u767d\u8272\u8fde\u8863\u88d9\n\u89c2\u5bdf\u91cd\u70b9\uff1a\u840c\u7cfb\u98ce\u683c\u4e0e\u670d\u88c5\u8d28\u611f",
-        "en": "Rosmontis loli character\nCat ears, white dress\nObservation focus: moe style and costume texture"
+        "zh": "展示：Rosmontis 白裙猫耳中景。观察：猫耳位置稳定性、裙装细节与角色比例一致性。",
+        "en": "Shows: Rosmontis in a white dress with cat ears. Look for ear placement stability, dress detail, and consistent character proportions."
       }
     }
   ]

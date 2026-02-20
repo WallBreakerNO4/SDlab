@@ -23,6 +23,10 @@ X_COLUMN_MAPPING: dict[str, str] = {
     "Qulity tags": "quality",
 }
 
+TYPE_COLUMN = "Type"
+DESCRIPTION_ZH_COLUMN = "description_zh"
+DESCRIPTION_EN_COLUMN = "description_en"
+
 
 def convert_csv_to_json(
     csv_path: Path,
@@ -41,7 +45,23 @@ def convert_csv_to_json(
                 value = "" if raw_value is None else raw_value
                 tags[key] = parse_weighted_tags(value)
 
-            items.append({"tags": tags, "info": {"index": i, "type": item_type}})
+            raw_type = row.get(TYPE_COLUMN, "")
+            type_value = "" if raw_type is None else raw_type.strip()
+            info_type = type_value if type_value else item_type
+
+            raw_desc_zh = row.get(DESCRIPTION_ZH_COLUMN, "")
+            desc_zh = "" if raw_desc_zh is None else raw_desc_zh.strip()
+
+            raw_desc_en = row.get(DESCRIPTION_EN_COLUMN, "")
+            desc_en = "" if raw_desc_en is None else raw_desc_en.strip()
+
+            items.append(
+                {
+                    "tags": tags,
+                    "info": {"index": i, "type": info_type},
+                    "description": {"zh": desc_zh, "en": desc_en},
+                }
+            )
 
     payload = {"schema": schema, "items": items}
     out_path.parent.mkdir(parents=True, exist_ok=True)
