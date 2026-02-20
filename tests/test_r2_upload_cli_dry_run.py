@@ -1,0 +1,198 @@
+# pyright: basic, reportMissingImports=false
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+from typing import cast
+
+import pytest
+from PIL import Image
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from scripts.r2_upload.upload_images_to_r2 import main
+
+
+def _write_png(path: Path, *, size: tuple[int, int] = (8, 6)) -> None:
+    image = Image.new("RGB", size, (10, 20, 30))
+    image.save(path, format="PNG")
+
+
+def _write_run_fixture(
+    root: Path,
+    *,
+    run_name: str,
+    use_multi_paths: bool = False,
+) -> Path:
+    run_dir = root / run_name
+    images_dir = run_dir / "images"
+    images_dir.mkdir(parents=True)
+
+    first = images_dir / "x0-y0.png"
+    _write_png(first)
+
+    metadata_record: dict[str, object] = {
+        "status": "success",
+        "x_index": 0,
+        "y_index": 0,
+        "local_image_path": "images/x0-y0.png",
+    }
+
+    if use_multi_paths:
+        second = images_dir / "x0-y0-1.png"
+        _write_png(second, size=(10, 8))
+        metadata_record = {
+            "status": "success",
+            "x_index": 0,
+            "y_index": 0,
+            "local_image_paths": ["images/x0-y0.png", "images/x0-y0-1.png"],
+        }
+
+    (run_dir / "run.json").write_text(
+        json.dumps(
+            {
+                "run_id": "test-run-id",
+                "run_dir": str(run_dir),
+                "dry_run": False,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "metadata.jsonl").write_text(
+        json.dumps(metadata_record, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return run_dir
+
+
+def _read_stdout_json(capsys: pytest.CaptureFixture[str]) -> dict[str, object]:
+    output = capsys.readouterr().out.strip()
+    assert output
+    lines = [line for line in output.splitlines() if line.strip()]
+    assert len(lines) == 1
+    parsed = json.loads(lines[0])
+    assert isinstance(parsed, dict)
+    return parsed
+
+
+def test_cli_dry_run_outputs_required_keys_and_manifest_uploads(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_dir = _write_run_fixture(tmp_path, run_name="run-20260221T120000Z")
+
+    for key in [
+        "R2_ENDPOINT",
+        "R2_ACCESS_KEY_ID",
+        "R2_SECRET_ACCESS_KEY",
+        "R2_PUBLIC_BUCKET",
+        "R2_PRIVATE_BUCKET",
+        "SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY",
+    ]:
+        monkeypatch.delenv(key, raising=False)
+
+    exit_code = main(["--dry-run", "--run-dir", str(run_dir)])
+
+    assert exit_code == 0
+    payload = _read_stdout_json(capsys)
+
+    assert isinstance(payload.get("planned_variants"), int)
+    assert payload["planned_variants"] == 5
+
+    planned_uploads = payload.get("planned_uploads")
+    assert isinstance(planned_uploads, list)
+    assert len(planned_uploads) >= 7
+
+    required_fields = {
+        "bucket_scope",
+        "key",
+        "content_type",
+        "cache_control",
+        "byte_size",
+    }
+    for item in planned_uploads:
+        assert isinstance(item, dict)
+        assert required_fields.issubset(set(item.keys()))
+
+    variant_names = {
+        str(cast(dict[str, object], item).get("variant")) for item in planned_uploads
+    }
+    assert "manifest_public" in variant_names
+    assert "manifest_private" in variant_names
+
+    manifest_keys = payload.get("manifest_keys")
+    assert isinstance(manifest_keys, dict)
+    assert isinstance(manifest_keys.get("public"), list)
+    assert isinstance(manifest_keys.get("private"), list)
+    assert len(cast(list[object], manifest_keys["public"])) == 1
+    assert len(cast(list[object], manifest_keys["private"])) == 1
+
+
+def test_cli_default_selects_latest_run_under_run_root(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_root = tmp_path / "outputs"
+    _ = _write_run_fixture(run_root, run_name="run-20260220T120000Z")
+    _ = _write_run_fixture(run_root, run_name="run-20260221T120000Z")
+
+    exit_code = main(["--dry-run", "--run-root", str(run_root)])
+
+    assert exit_code == 0
+    payload = _read_stdout_json(capsys)
+    assert payload.get("run_dirs") == ["run-20260221T120000Z"]
+
+
+def test_cli_dry_run_limit_applies_to_resolved_metadata_paths(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_root = tmp_path / "outputs"
+    run_dir = _write_run_fixture(
+        run_root,
+        run_name="run-20260221T130000Z",
+        use_multi_paths=True,
+    )
+
+    exit_code = main(
+        [
+            "--dry-run",
+            "--run-dir",
+            str(run_dir),
+            "--limit",
+            "1",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = _read_stdout_json(capsys)
+    assert payload.get("processed_images") == 1
+    assert payload.get("planned_variants") == 5
+
+
+def test_cli_run_dir_can_be_name_when_run_root_is_provided(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_root = tmp_path / "outputs"
+    _ = _write_run_fixture(run_root, run_name="run-20260221T140000Z")
+
+    exit_code = main(
+        [
+            "--dry-run",
+            "--run-root",
+            str(run_root),
+            "--run-dir",
+            "run-20260221T140000Z",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = _read_stdout_json(capsys)
+    assert payload.get("run_dirs") == ["run-20260221T140000Z"]
