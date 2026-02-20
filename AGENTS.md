@@ -1,8 +1,8 @@
 # Agent Guide (sd-style-lab/images-script)
 
-**生成时间:** 2026-02-19T03:47:25+0800
-**Commit:** 370756d
-**分支:** master
+**生成时间:** 2026-02-20T22:37:06+0800
+**Commit:** 1fd8fc8
+**分支:** main
 
 本文件面向在本仓库里自动写代码/改代码的 agent；子目录的 `AGENTS.md` 只覆盖该目录的“局部知识”，避免与根文件重复。
 
@@ -35,10 +35,18 @@
 ├── main.py                   # Python 程序入口（只做委托）
 ├── scripts/                  # 生图脚本核心实现
 │   └── AGENTS.md
+│   ├── cli/                  # 交互菜单与脚本入口注册
+│   │   └── AGENTS.md
+│   ├── other/                # CSV 转 JSON 的辅助转换脚本
+│   └── r2_upload/            # R2 上传脚本（外部集成边界）
+│       └── AGENTS.md
 ├── tests/                    # pytest（偏“可观测输出”）
 │   └── AGENTS.md
 ├── data/                     # 输入资产（CSV + workflow JSON；只读）
 │   └── AGENTS.md
+├── hooks/                    # 前端复用 hooks（当前规模小）
+│   └── AGENTS.md
+├── public/                   # Next.js 静态资源（无独立约定）
 ├── comfyui_api_outputs/      # 运行输出（生成物；已在 .gitignore；网站只读消费）
 ├── package.json              # Next.js/ESLint/Playwright
 ├── pyproject.toml            # Python deps（uv）
@@ -56,6 +64,9 @@
 | `components/comfyui/` | 10 | 业务核心（虚拟滚动网格 + 预览交互） |
 | `e2e/` | 10 | Playwright 回归（安全/性能/虚拟滚动） |
 | `tests/` | 9 | pytest 合约测试（结构化错误/落盘/纯函数） |
+| `scripts/cli/` | 8 | 交互入口层（菜单、入口点注册、执行守卫） |
+| `scripts/r2_upload/` | 8 | 外部上传边界（凭证/网络失败/重试策略） |
+| `hooks/` | 6 | 共享前端行为（当前体量小，防止与组件层职责混淆） |
 
 ## 去哪儿改
 
@@ -66,6 +77,8 @@
 | ComfyUI HTTP/WS 与结构化错误 | `scripts/generation/comfyui_client.py` | `ComfyUIClientError`（`code`+`context`） |
 | workflow 注入与引用追溯 | `scripts/generation/workflow_patch.py` | 追溯 KSampler 引用链 |
 | prompt 组合/hash/seed 派生 | `scripts/generation/prompt_grid.py` | 纯函数优先 |
+| 交互菜单与入口注册 | `scripts/cli/menu.py`、`scripts/cli/registry.py` | 负责菜单交互、脚本发现、入口分发 |
+| R2 上传入口（未实现） | `scripts/r2_upload/upload_images_to_r2.py` | 保持占位；避免在此目录扩散凭证逻辑 |
 | 网站首页（runs 列表） | `app/page.tsx` | 拉 `/api/comfyui/runs` |
 | run 详情页（grid + 预览） | `app/runs/[runDir]/page.tsx` | 拉 `/api/comfyui/run/*` |
 | API：runs/run/grid/image | `app/api/comfyui/**/route.ts` | `runtime = "nodejs"` |
@@ -73,6 +86,7 @@
 | 路径/遍历防护（Node） | `lib/comfyui-path.ts` | runDir allowlist + imagePath 安全规则 |
 | UI 基础组件（shadcn） | `components/ui/` | `cva` + `cn()` + Radix |
 | 业务网格组件 | `components/comfyui/virtual-grid.tsx` | 虚拟滚动 + 图片预览 |
+| 共享移动端判断 hook | `hooks/use-mobile.ts` | 仅放跨组件可复用行为，不承载业务数据读取 |
 | E2E | `e2e/` | Playwright；产物写 `.sisyphus/evidence/` |
 
 ## 常用命令
@@ -128,5 +142,8 @@ E2E_SERVER=start E2E_PORT=3001 pnpm test:e2e -- -g "task 16"
 - `e2e/AGENTS.md`：Playwright 约定、环境变量与证据落盘
 - `types/AGENTS.md`：Next 生成类型的边界
 - `scripts/AGENTS.md`：生图脚本层 code map、错误/落盘合约、pyright 约定
+- `scripts/cli/AGENTS.md`：交互菜单层（选择、确认、入口加载、异常守卫）
+- `scripts/r2_upload/AGENTS.md`：R2 上传边界（未实现状态、凭证与错误处理约束）
 - `tests/AGENTS.md`：pytest 结构、fixture/断言形态、mock 约定
 - `data/AGENTS.md`：CSV/workflow 资产说明（字段与用途）
+- `hooks/AGENTS.md`：前端 hooks 的职责边界与放置规则

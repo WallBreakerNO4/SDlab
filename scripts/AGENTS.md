@@ -12,7 +12,17 @@
 | ComfyUI 请求/WS/错误码 | `scripts/generation/comfyui_client.py` | `ComfyUIClientError`（`code`+`context`） |
 | workflow JSON 注入 | `scripts/generation/workflow_patch.py` | 追溯 `KSampler` 引用到 `CLIPTextEncode`/`EmptyLatentImage` |
 | CSV 读取与 prompt/seed | `scripts/generation/prompt_grid.py` | prompt 归一化 + sha256 hash + seed 派生 |
+| 菜单交互与入口注册 | `scripts/cli/menu.py`、`scripts/cli/registry.py` | 交互菜单、入口动态加载、错误守卫 |
+| CSV 转 JSON 辅助脚本 | `scripts/other/convert_*.py` | 资产转换，保持纯 I/O 逻辑 |
+| R2 上传入口（未实现） | `scripts/r2_upload/upload_images_to_r2.py` | 当前仅占位，后续承载上传集成 |
 | 对外导出（给测试/调用） | `scripts/__init__.py` | `__all__` 统一导出 |
+
+## 子目录职责（避免串层）
+
+- `scripts/generation/`：核心 runner 与 ComfyUI 通信、workflow patch、metadata 落盘。
+- `scripts/cli/`：仅处理“如何选择并执行脚本”；不持有生图业务状态。
+- `scripts/other/`：离线转换工具；不依赖 Web/API 层。
+- `scripts/r2_upload/`：外部上传边界；不要把凭证细节扩散到其他目录。
 
 ## Code Map（高频入口）
 
@@ -45,3 +55,4 @@
 
 - 不要把 ComfyUI 的整段响应对象塞进异常 message/context（体积与可序列化都会踩坑）
 - 不要在 tqdm 循环里 `print()`；用 `logging` 并保持与 tqdm 的输出兼容
+- 不要在 `scripts/cli/` 里复制 `scripts/generation/` 的业务参数解析；菜单层只做分发和确认
