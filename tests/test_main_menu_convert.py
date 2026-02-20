@@ -8,6 +8,10 @@ from scripts.cli.io import MenuIO
 from scripts.cli.menu import run_menu
 
 
+DEFAULT_X_CSV = "data/prompts/X/common_prompts.csv"
+DEFAULT_Y_CSV = "data/prompts/Y/300_NAI_Styles_Table-test.csv"
+
+
 @pytest.fixture
 def mock_convert_x_main() -> Mock:
     mock = Mock(return_value=0)
@@ -95,14 +99,19 @@ def test_convert_x_csv_confirm_path_no_args(
 
     assert exit_code == 0
     assert "Convert finished with exit code: 0" in io.outputs
-    assert (
-        "Preview command: uv run python scripts/other/convert_x_csv_to_json.py"
-        in io.outputs
+    assert any(
+        "No extra argv provided, using default: data/prompts/X/common_prompts.csv"
+        in out
+        for out in io.outputs
     )
-    # Verify main was called with empty argv
+    assert any(
+        "Preview command: uv run python scripts/other/convert_x_csv_to_json.py data/prompts/X/common_prompts.csv"
+        in out
+        for out in io.outputs
+    )
     assert mock_main.call_count == 1
     called_argv = mock_main.call_args[0][0]
-    assert called_argv == []
+    assert called_argv == [DEFAULT_X_CSV]
 
 
 def test_convert_y_csv_cancel_path(
@@ -165,14 +174,19 @@ def test_convert_y_csv_confirm_path_no_args(
 
     assert exit_code == 0
     assert "Convert finished with exit code: 0" in io.outputs
-    assert (
-        "Preview command: uv run python scripts/other/convert_y_csv_to_json.py"
-        in io.outputs
+    assert any(
+        "No extra argv provided, using default: data/prompts/Y/300_NAI_Styles_Table-test.csv"
+        in out
+        for out in io.outputs
     )
-    # Verify main was called with empty argv
+    assert any(
+        "Preview command: uv run python scripts/other/convert_y_csv_to_json.py data/prompts/Y/300_NAI_Styles_Table-test.csv"
+        in out
+        for out in io.outputs
+    )
     assert mock_main.call_count == 1
     called_argv = mock_main.call_args[0][0]
-    assert called_argv == []
+    assert called_argv == [DEFAULT_Y_CSV]
 
 
 def test_convert_invalid_extra_argv(
@@ -210,13 +224,77 @@ def test_convert_x_csv_empty_confirm_calls_main_with_default_yes(
 
     assert exit_code == 0
     assert "Convert finished with exit code: 0" in io.outputs
-    assert (
-        "Preview command: uv run python scripts/other/convert_x_csv_to_json.py"
-        in io.outputs
+    assert any(
+        "No extra argv provided, using default: data/prompts/X/common_prompts.csv"
+        in out
+        for out in io.outputs
+    )
+    assert any(
+        "Preview command: uv run python scripts/other/convert_x_csv_to_json.py data/prompts/X/common_prompts.csv"
+        in out
+        for out in io.outputs
     )
     assert mock_main.call_count == 1
     called_argv = mock_main.call_args[0][0]
-    assert called_argv == []
+    assert called_argv == [DEFAULT_X_CSV]
+
+
+def test_convert_x_csv_no_args_uses_env_default(
+    monkeypatch: pytest.MonkeyPatch,
+    mock_convert_x_main: Mock,
+) -> None:
+    monkeypatch.setenv("CONVERT_X_DEFAULT_CSV", "custom/x.csv")
+    inputs = ["convert_x_csv", "", "y", "q"]
+    io = FakeIO(inputs)
+
+    with patch(
+        "scripts.other.convert_x_csv_to_json.main",
+        side_effect=mock_convert_x_main,
+    ) as mock_main:
+        exit_code = run_menu(io)
+
+    assert exit_code == 0
+    assert any(
+        "No extra argv provided, using default: custom/x.csv" in out
+        for out in io.outputs
+    )
+    assert any(
+        "Preview command: uv run python scripts/other/convert_x_csv_to_json.py custom/x.csv"
+        in out
+        for out in io.outputs
+    )
+    assert mock_main.call_count == 1
+    called_argv = mock_main.call_args[0][0]
+    assert called_argv == ["custom/x.csv"]
+
+
+def test_convert_y_csv_no_args_uses_env_default(
+    monkeypatch: pytest.MonkeyPatch,
+    mock_convert_y_main: Mock,
+) -> None:
+    monkeypatch.setenv("CONVERT_Y_DEFAULT_CSV", "custom/y.csv")
+    inputs = ["convert_y_csv", "", "yes", "q"]
+    io = FakeIO(inputs)
+
+    with patch(
+        "scripts.other.convert_y_csv_to_json.main",
+        side_effect=mock_convert_y_main,
+    ) as mock_main:
+        exit_code = run_menu(io)
+
+    assert exit_code == 0
+    assert any(
+        "No extra argv provided, using default: custom/y.csv" in out
+        for out in io.outputs
+    )
+    assert any(
+        "Preview command: uv run python scripts/other/convert_y_csv_to_json.py custom/y.csv"
+        in out
+        for out in io.outputs
+    )
+    assert mock_main.call_count == 1
+    called_argv = mock_main.call_args[0][0]
+    assert called_argv == ["custom/y.csv"]
 
 
 def test_convert_continues_after_completion(

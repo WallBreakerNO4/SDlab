@@ -4,6 +4,8 @@
 import sys
 from pathlib import Path
 
+from dotenv import find_dotenv, load_dotenv
+
 # 添加项目根目录到 Python 路径
 ROOT = Path(__file__).resolve().parents[0]
 if str(ROOT) not in sys.path:
@@ -23,6 +25,7 @@ def _effective_argv(argv: list[str] | None) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    _autoload_dotenv()
     effective_argv = _effective_argv(argv)
     io = MenuIO()
     force_menu = MENU_FLAG in effective_argv
@@ -41,6 +44,12 @@ def main(argv: list[str] | None = None) -> int:
         return run_menu(io)
 
     return generate_main(argv)
+
+
+def _autoload_dotenv() -> None:
+    dotenv_path = find_dotenv(filename=".env", usecwd=True)
+    if dotenv_path:
+        _ = load_dotenv(dotenv_path=dotenv_path, encoding="utf-8")
 
 
 if __name__ == "__main__":

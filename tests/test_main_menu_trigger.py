@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import builtins
+import importlib
 import sys
 from pathlib import Path
 
@@ -122,6 +123,48 @@ def test_main_menu_generate_cancel_returns_to_loop_and_does_not_dispatch(
         in stdout_stream.getvalue()
     )
     assert "Generation cancelled." in stdout_stream.getvalue()
+
+
+def test_main_menu_convert_uses_dotenv_default_csv(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    stdout_stream = _patch_stdio_tty(monkeypatch, stdin_tty=True, stdout_tty=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CONVERT_Y_DEFAULT_CSV", raising=False)
+    _ = (tmp_path / ".env").write_text(
+        "CONVERT_Y_DEFAULT_CSV=from-dotenv.csv\n",
+        encoding="utf-8",
+    )
+
+    steps = iter(["3", "", "y", "q"])
+
+    def _input_select_convert_y_then_quit(_prompt: str = "") -> str:
+        return next(steps)
+
+    monkeypatch.setattr(builtins, "input", _input_select_convert_y_then_quit)
+
+    captured: dict[str, list[str] | None] = {"argv": None}
+
+    def _fake_convert_y_main(argv: list[str] | None) -> int:
+        captured["argv"] = argv
+        return 0
+
+    convert_y_module = importlib.import_module("scripts.other.convert_y_csv_to_json")
+    monkeypatch.setattr(convert_y_module, "main", _fake_convert_y_main)
+
+    exit_code = main_module.main([])
+
+    assert exit_code == 0
+    assert captured["argv"] == ["from-dotenv.csv"]
+    assert (
+        "No extra argv provided, using default: from-dotenv.csv"
+        in stdout_stream.getvalue()
+    )
+    assert (
+        "Preview command: uv run python scripts/other/convert_y_csv_to_json.py from-dotenv.csv"
+        in stdout_stream.getvalue()
+    )
 
 
 def test_main_menu_flag_non_tty_prints_reason_and_returns_2(

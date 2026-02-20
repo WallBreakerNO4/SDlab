@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+import os
 import shlex
 
 from .io import MenuIO
@@ -13,6 +14,10 @@ GENERATE_BASE_COMMAND = "uv run python scripts/generation/comfyui_part1_generate
 CONVERT_X_BASE_COMMAND = "uv run python scripts/other/convert_x_csv_to_json.py"
 CONVERT_Y_BASE_COMMAND = "uv run python scripts/other/convert_y_csv_to_json.py"
 UPLOAD_R2_BASE_COMMAND = "uv run python scripts/r2_upload/upload_images_to_r2.py"
+DEFAULT_CONVERT_X_CSV = "data/prompts/X/common_prompts.csv"
+DEFAULT_CONVERT_Y_CSV = "data/prompts/Y/300_NAI_Styles_Table-test.csv"
+CONVERT_X_DEFAULT_ENV = "CONVERT_X_DEFAULT_CSV"
+CONVERT_Y_DEFAULT_ENV = "CONVERT_Y_DEFAULT_CSV"
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,7 +186,14 @@ def run_menu(
                 io.write(f"{invalid_prefix}Invalid extra argv: {exc}")
                 continue
 
-            preview_command = _build_convert_x_preview_command(extra_argv)
+            effective_argv = _resolve_convert_argv(
+                extra_argv, _default_convert_x_argv()
+            )
+            if not extra_argv:
+                io.write(
+                    f"No extra argv provided, using default: {shlex.join(effective_argv)}"
+                )
+            preview_command = _build_convert_x_preview_command(effective_argv)
             io.write(f"Preview command: {preview_command}")
 
             confirm_result = _safe_read(io, "Confirm execution? [Y/n]: ")
@@ -192,7 +204,7 @@ def run_menu(
                 _run_selection_with_guard(
                     io,
                     selection,
-                    extra_argv,
+                    effective_argv,
                     success_prefix="Convert finished with exit code: ",
                 )
                 continue
@@ -214,7 +226,14 @@ def run_menu(
                 io.write(f"{invalid_prefix}Invalid extra argv: {exc}")
                 continue
 
-            preview_command = _build_convert_y_preview_command(extra_argv)
+            effective_argv = _resolve_convert_argv(
+                extra_argv, _default_convert_y_argv()
+            )
+            if not extra_argv:
+                io.write(
+                    f"No extra argv provided, using default: {shlex.join(effective_argv)}"
+                )
+            preview_command = _build_convert_y_preview_command(effective_argv)
             io.write(f"Preview command: {preview_command}")
 
             confirm_result = _safe_read(io, "Confirm execution? [Y/n]: ")
@@ -225,7 +244,7 @@ def run_menu(
                 _run_selection_with_guard(
                     io,
                     selection,
-                    extra_argv,
+                    effective_argv,
                     success_prefix="Convert finished with exit code: ",
                 )
                 continue
@@ -262,6 +281,32 @@ def _build_convert_y_preview_command(extra_argv: list[str]) -> str:
     if not extra_argv:
         return CONVERT_Y_BASE_COMMAND
     return f"{CONVERT_Y_BASE_COMMAND} {shlex.join(extra_argv)}"
+
+
+def _resolve_convert_argv(
+    extra_argv: list[str], defaults: tuple[str, ...]
+) -> list[str]:
+    if extra_argv:
+        return extra_argv
+    return list(defaults)
+
+
+def _default_convert_x_argv() -> tuple[str, ...]:
+    return _default_convert_argv(CONVERT_X_DEFAULT_ENV, DEFAULT_CONVERT_X_CSV)
+
+
+def _default_convert_y_argv() -> tuple[str, ...]:
+    return _default_convert_argv(CONVERT_Y_DEFAULT_ENV, DEFAULT_CONVERT_Y_CSV)
+
+
+def _default_convert_argv(env_name: str, fallback_csv: str) -> tuple[str, ...]:
+    configured = os.getenv(env_name)
+    if configured is None:
+        return (fallback_csv,)
+    normalized = configured.strip()
+    if not normalized:
+        return (fallback_csv,)
+    return (normalized,)
 
 
 def _safe_read(io: MenuIO, prompt: str) -> ReadResult:
