@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -51,9 +52,15 @@ def main(argv: list[str] | None = None) -> int:
         return int(code) if isinstance(code, int) else 1
 
     dry_run = bool(getattr(args, "dry_run", False))
-    mode = "dry-run" if dry_run else "execution"
-    print(f"R2 uploader skeleton only: {mode} is not implemented yet.")
-    print("Accepted arguments are parsed and currently ignored.")
+    if dry_run:
+        summary: dict[str, object] = {
+            "planned_variants": 0,
+            "planned_uploads": [],
+        }
+        print(json.dumps(summary))
+    else:
+        print("R2 uploader skeleton only: execution is not implemented yet.")
+        print("Accepted arguments are parsed and currently ignored.")
     return 0
 
 
