@@ -32,8 +32,7 @@ from scripts.generation.comfyui_client import (  # noqa: E402
     comfy_download_image_to_path,
     comfy_get_history_item,
     comfy_submit_prompt,
-    comfy_ws_connect,
-    comfy_ws_wait_prompt_done,
+    comfy_wait_prompt_done_with_fallback,
 )
 from scripts.generation.prompt_grid import (  # noqa: E402
     X_INFO_TYPE_KEY,
@@ -1257,7 +1256,6 @@ def _worker_submit_and_wait(
     started_at = _now_iso()
     started_mono = monotonic()
     prompt_id: str | None = None
-    ws = None
 
     try:
         negative_prompt = _effective_negative_prompt(args, workflow_context)
@@ -1282,19 +1280,15 @@ def _worker_submit_and_wait(
         )
 
         client_id = f"{args.client_id}-{uuid.uuid4().hex[:8]}"
-        ws = comfy_ws_connect(
-            base_url=args.base_url,
-            client_id=client_id,
-            request_timeout_s=args.request_timeout_s,
-        )
         prompt_id = comfy_submit_prompt(
             base_url=args.base_url,
             workflow=cast(dict[str, object], patched_workflow),
             client_id=client_id,
             request_timeout_s=args.request_timeout_s,
         )
-        comfy_ws_wait_prompt_done(
-            ws=ws,
+        comfy_wait_prompt_done_with_fallback(
+            base_url=args.base_url,
+            client_id=client_id,
             prompt_id=prompt_id,
             request_timeout_s=args.request_timeout_s,
             job_timeout_s=args.job_timeout_s,
@@ -1332,12 +1326,6 @@ def _worker_submit_and_wait(
         record["elapsed_ms"] = elapsed_ms
         record["error"] = _serialize_error(exc)
         return _GenOutcome(record=record, download=None)
-    finally:
-        if ws is not None:
-            try:
-                ws.close()
-            except Exception:
-                pass
 
 
 def _worker_fetch_and_download(

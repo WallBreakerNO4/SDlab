@@ -214,15 +214,11 @@ def test_dry_run_does_not_call_comfyui_client(
         raise AssertionError("dry-run 不应调用 ComfyUI 客户端")
 
     monkeypatch.setattr(
-        "scripts.generation.comfyui_part1_generate.comfy_ws_connect",
-        should_not_be_called,
-    )
-    monkeypatch.setattr(
         "scripts.generation.comfyui_part1_generate.comfy_submit_prompt",
         should_not_be_called,
     )
     monkeypatch.setattr(
-        "scripts.generation.comfyui_part1_generate.comfy_ws_wait_prompt_done",
+        "scripts.generation.comfyui_part1_generate.comfy_wait_prompt_done_with_fallback",
         should_not_be_called,
     )
     monkeypatch.setattr(

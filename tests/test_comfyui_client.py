@@ -4,6 +4,7 @@ import json
 import sys
 from collections.abc import Iterator
 from pathlib import Path
+from typing import cast
 
 import pytest
 import requests
@@ -38,7 +39,33 @@ class MockResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise requests.HTTPError(f"HTTP {self.status_code}")
+            raise requests.HTTPError(
+                f"HTTP {self.status_code}",
+                response=cast(requests.Response, cast(object, self)),
+            )
+
+
+class MockStreamResponse(MockResponse):
+    _chunks: list[bytes]
+    _iter_error: BaseException | None
+
+    def __init__(
+        self,
+        *,
+        chunks: list[bytes],
+        iter_error: BaseException | None = None,
+        status_code: int = 200,
+    ) -> None:
+        super().__init__(status_code=status_code)
+        self._chunks = list(chunks)
+        self._iter_error = iter_error
+
+    def iter_content(self, chunk_size: int = 1) -> Iterator[bytes]:
+        _ = chunk_size
+        for chunk in self._chunks:
+            yield chunk
+        if self._iter_error is not None:
+            raise self._iter_error
 
 
 class FakeWebSocket:
@@ -80,6 +107,19 @@ class ControlledClock:
         except StopIteration:
             pass
         return self._last
+
+
+class MutableClock:
+    now: float
+
+    def __init__(self, now: float = 0.0) -> None:
+        self.now = now
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += seconds
 
 
 @pytest.mark.parametrize("id_key", ["prompt_id", "promptId"])
@@ -218,6 +258,101 @@ def test_comfy_ws_wait_prompt_done_supports_execution_success_fallback() -> None
     )
 
 
+def test_comfy_ws_wait_prompt_done_raises_execution_error_for_current_prompt() -> None:
+    ws = FakeWebSocket(
+        messages=[
+            json.dumps(
+                {
+                    "type": "execution_error",
+                    "data": {
+                        "prompt_id": "p-err",
+                        "node_id": "17",
+                        "node_type": "KSampler",
+                        "exception_type": "RuntimeError",
+                        "exception_message": "latent shape mismatch",
+                        "traceback": ["line1", "line2"],
+                    },
+                }
+            )
+        ]
+    )
+
+    with pytest.raises(comfy.ComfyUIClientError) as exc:
+        comfy.comfy_ws_wait_prompt_done(
+            ws=ws,
+            prompt_id="p-err",
+            request_timeout_s=0.2,
+            job_timeout_s=1.0,
+        )
+
+    err = exc.value
+    assert err.code == "execution_error"
+    assert "p-err" in str(err)
+    _ = json.dumps(err.context)
+
+
+def test_comfy_ws_wait_prompt_done_raises_execution_interrupted_for_current_prompt() -> (
+    None
+):
+    ws = FakeWebSocket(
+        messages=[
+            json.dumps(
+                {
+                    "type": "execution_interrupted",
+                    "data": {
+                        "prompt_id": "p-stop",
+                        "node_id": "4",
+                        "node_type": "KSampler",
+                    },
+                }
+            )
+        ]
+    )
+
+    with pytest.raises(comfy.ComfyUIClientError) as exc:
+        comfy.comfy_ws_wait_prompt_done(
+            ws=ws,
+            prompt_id="p-stop",
+            request_timeout_s=0.2,
+            job_timeout_s=1.0,
+        )
+
+    err = exc.value
+    assert err.code == "execution_interrupted"
+    assert "p-stop" in str(err)
+    _ = json.dumps(err.context)
+
+
+def test_comfy_ws_wait_prompt_done_ignores_other_prompt_execution_error() -> None:
+    ws = FakeWebSocket(
+        messages=[
+            json.dumps(
+                {
+                    "type": "execution_error",
+                    "data": {
+                        "prompt_id": "other-prompt",
+                        "node_id": "9",
+                        "exception_message": "should be ignored",
+                    },
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "execution_success",
+                    "data": {"prompt_id": "p-ok"},
+                }
+            ),
+        ]
+    )
+
+    comfy.comfy_ws_wait_prompt_done(
+        ws=ws,
+        prompt_id="p-ok",
+        request_timeout_s=0.2,
+        job_timeout_s=1.0,
+    )
+
+
 def test_comfy_ws_wait_prompt_done_retries_request_timeout_until_job_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -242,6 +377,144 @@ def test_comfy_ws_wait_prompt_done_retries_request_timeout_until_job_timeout(
     message = str(exc.value)
     assert "p-timeout" in message
     assert "job" in message.lower()
+
+
+def test_wait_prompt_done_with_fallback_recovers_from_ws_receive_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ws = FakeWebSocket(messages=[Exception("socket read failed")])
+    history_payloads = [
+        {"p-fallback": {"outputs": {"10": {"images": []}}}},
+        {"p-fallback": {"outputs": {"10": {"images": [{"filename": "a.png"}]}}}},
+    ]
+    attempts = 0
+    submit_calls = 0
+    clock = MutableClock(now=0.0)
+
+    def fake_submit_prompt(*args: object, **kwargs: object) -> str:
+        nonlocal submit_calls
+        submit_calls += 1
+        _ = (args, kwargs)
+        return "unexpected"
+
+    def fake_get(
+        url: str, timeout: float, params: object | None = None
+    ) -> MockResponse:
+        nonlocal attempts
+        attempts += 1
+        _ = (url, timeout, params)
+        return MockResponse(json_data=history_payloads[min(attempts - 1, 1)])
+
+    def fake_ws_connect(*args: object, **kwargs: object) -> FakeWebSocket:
+        _ = (args, kwargs)
+        return ws
+
+    monkeypatch.setattr(comfy, "comfy_submit_prompt", fake_submit_prompt)
+    monkeypatch.setattr(comfy, "comfy_ws_connect", fake_ws_connect)
+    monkeypatch.setattr("scripts.generation.comfyui_client.requests.get", fake_get)
+    monkeypatch.setattr(
+        "scripts.generation.comfyui_client.time.monotonic", clock.monotonic
+    )
+    monkeypatch.setattr("scripts.generation.comfyui_client.time.sleep", clock.sleep)
+
+    comfy.comfy_wait_prompt_done_with_fallback(
+        base_url="http://127.0.0.1:8188",
+        client_id="cid",
+        prompt_id="p-fallback",
+        request_timeout_s=0.1,
+        job_timeout_s=3.0,
+    )
+
+    assert attempts == 2
+    assert submit_calls == 0
+
+
+def test_wait_prompt_done_with_fallback_recovers_from_ws_connect_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    history_payloads = [
+        {"p-fallback": {"outputs": {"10": {"images": []}}}},
+        {"p-fallback": {"outputs": {"10": {"images": [{"filename": "a.png"}]}}}},
+    ]
+    attempts = 0
+    clock = MutableClock(now=0.0)
+
+    def fake_get(
+        url: str, timeout: float, params: object | None = None
+    ) -> MockResponse:
+        nonlocal attempts
+        attempts += 1
+        _ = (url, timeout, params)
+        return MockResponse(json_data=history_payloads[min(attempts - 1, 1)])
+
+    def fake_ws_connect(*args: object, **kwargs: object) -> FakeWebSocket:
+        _ = (args, kwargs)
+        raise comfy.ComfyUIRequestError(
+            "websocket connect failed",
+            code="ws_connect_failed",
+            context={"url": "ws://127.0.0.1:8188/ws"},
+        )
+
+    monkeypatch.setattr(comfy, "comfy_ws_connect", fake_ws_connect)
+    monkeypatch.setattr("scripts.generation.comfyui_client.requests.get", fake_get)
+    monkeypatch.setattr(
+        "scripts.generation.comfyui_client.time.monotonic", clock.monotonic
+    )
+    monkeypatch.setattr("scripts.generation.comfyui_client.time.sleep", clock.sleep)
+
+    comfy.comfy_wait_prompt_done_with_fallback(
+        base_url="http://127.0.0.1:8188",
+        client_id="cid",
+        prompt_id="p-fallback",
+        request_timeout_s=0.1,
+        job_timeout_s=3.0,
+    )
+
+    assert attempts == 2
+
+
+def test_wait_prompt_done_with_fallback_raises_job_timeout_when_history_never_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = 0
+    clock = MutableClock(now=0.0)
+
+    def fake_get(
+        url: str, timeout: float, params: object | None = None
+    ) -> MockResponse:
+        nonlocal attempts
+        attempts += 1
+        _ = (url, timeout, params)
+        return MockResponse(
+            json_data={"p-timeout": {"outputs": {"10": {"images": []}}}}
+        )
+
+    def fake_ws_connect(*args: object, **kwargs: object) -> FakeWebSocket:
+        _ = (args, kwargs)
+        raise comfy.ComfyUIRequestError(
+            "websocket connect failed",
+            code="ws_connect_failed",
+        )
+
+    monkeypatch.setattr(comfy, "comfy_ws_connect", fake_ws_connect)
+    monkeypatch.setattr("scripts.generation.comfyui_client.requests.get", fake_get)
+    monkeypatch.setattr(
+        "scripts.generation.comfyui_client.time.monotonic", clock.monotonic
+    )
+    monkeypatch.setattr("scripts.generation.comfyui_client.time.sleep", clock.sleep)
+
+    with pytest.raises(comfy.ComfyUIClientError) as exc:
+        comfy.comfy_wait_prompt_done_with_fallback(
+            base_url="http://127.0.0.1:8188",
+            client_id="cid",
+            prompt_id="p-timeout",
+            request_timeout_s=0.1,
+            job_timeout_s=0.6,
+        )
+
+    assert exc.value.code == "job_timeout"
+    _ = json.dumps(exc.value.context)
+    assert attempts >= 2
 
 
 @pytest.mark.parametrize(
@@ -276,6 +549,121 @@ def test_comfy_get_history_item_supports_response_compatibility(
     assert captured["url"] == "http://127.0.0.1:8188/history/p-1"
     assert captured["timeout"] == 8.0
     assert captured["params"] is None
+
+
+def test_comfy_get_history_item_retries_transient_http_status_and_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = 0
+
+    def fake_get(
+        url: str, timeout: float, params: object | None = None
+    ) -> MockResponse:
+        nonlocal attempts
+        attempts += 1
+        _ = (url, timeout, params)
+        if attempts < 3:
+            return MockResponse(status_code=503)
+        return MockResponse(json_data={"p-1": {"outputs": {}}})
+
+    monkeypatch.setattr("scripts.generation.comfyui_client.requests.get", fake_get)
+    monkeypatch.setattr("scripts.generation.retry.random.random", lambda: 0.0)
+
+    item = comfy.comfy_get_history_item(
+        base_url="http://127.0.0.1:8188",
+        prompt_id="p-1",
+        request_timeout_s=1.0,
+    )
+
+    assert attempts == 3
+    assert item == {"outputs": {}}
+
+
+def test_comfy_get_history_item_retries_connection_error_and_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = 0
+
+    def fake_get(
+        url: str, timeout: float, params: object | None = None
+    ) -> MockResponse:
+        nonlocal attempts
+        attempts += 1
+        _ = (url, timeout, params)
+        if attempts < 3:
+            raise requests.ConnectionError("connection dropped")
+        return MockResponse(json_data={"outputs": {"10": {}}})
+
+    monkeypatch.setattr("scripts.generation.comfyui_client.requests.get", fake_get)
+    monkeypatch.setattr("scripts.generation.retry.random.random", lambda: 0.0)
+
+    item = comfy.comfy_get_history_item(
+        base_url="http://127.0.0.1:8188",
+        prompt_id="p-conn",
+    )
+
+    assert attempts == 3
+    assert item == {"outputs": {"10": {}}}
+
+
+def test_comfy_get_history_item_does_not_retry_http_404(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = 0
+
+    def fake_get(
+        url: str, timeout: float, params: object | None = None
+    ) -> MockResponse:
+        nonlocal attempts
+        attempts += 1
+        _ = (url, timeout, params)
+        return MockResponse(status_code=404)
+
+    monkeypatch.setattr("scripts.generation.comfyui_client.requests.get", fake_get)
+    monkeypatch.setattr("scripts.generation.retry.random.random", lambda: 0.0)
+
+    with pytest.raises(comfy.ComfyUIRequestError) as exc:
+        _ = comfy.comfy_get_history_item(
+            base_url="http://127.0.0.1:8188",
+            prompt_id="p-404",
+            request_timeout_s=1.0,
+        )
+
+    assert attempts == 1
+    assert exc.value.context["status_code"] == 404
+
+
+def test_comfy_get_history_item_transient_retry_stops_after_total_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = 0
+    clock = MutableClock(now=0.0)
+
+    def fake_get(
+        url: str, timeout: float, params: object | None = None
+    ) -> MockResponse:
+        nonlocal attempts
+        attempts += 1
+        _ = (url, timeout, params)
+        raise requests.Timeout("read timeout")
+
+    monkeypatch.setattr("scripts.generation.comfyui_client.requests.get", fake_get)
+    monkeypatch.setattr(comfy, "HISTORY_GET_RETRY_MAX_ATTEMPTS", 99)
+    monkeypatch.setattr(comfy, "HISTORY_GET_RETRY_STOP_AFTER_DELAY_S", 0.3)
+    monkeypatch.setattr("scripts.generation.retry.time.monotonic", clock.monotonic)
+    monkeypatch.setattr("scripts.generation.retry.time.sleep", clock.sleep)
+    monkeypatch.setattr("scripts.generation.retry.random.random", lambda: 1.0)
+
+    with pytest.raises(comfy.ComfyUITransientRequestError) as exc:
+        _ = comfy.comfy_get_history_item(
+            base_url="http://127.0.0.1:8188",
+            prompt_id="p-budget",
+            request_timeout_s=1.0,
+        )
+
+    assert attempts == 3
+    assert exc.value.context["method"] == "GET"
+    assert exc.value.context["url"] == "http://127.0.0.1:8188/history/p-budget"
 
 
 def test_comfy_build_view_params_defaults_type_and_validates_filename() -> None:
@@ -325,9 +713,14 @@ def test_comfy_download_image_bytes_calls_view_endpoint_with_query_params(
 def test_comfy_download_image_to_path_saves_downloaded_bytes(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    def fake_get(url: str, timeout: float, params: dict[str, str]) -> MockResponse:
-        _ = (url, timeout, params)
-        return MockResponse(content=b"image-bytes")
+    def fake_get(
+        url: str,
+        timeout: float,
+        params: dict[str, str],
+        stream: bool = False,
+    ) -> MockResponse:
+        _ = (url, timeout, params, stream)
+        return MockStreamResponse(chunks=[b"image-bytes"])
 
     monkeypatch.setattr("scripts.generation.comfyui_client.requests.get", fake_get)
 
@@ -341,3 +734,105 @@ def test_comfy_download_image_to_path_saves_downloaded_bytes(
 
     assert saved_path == output_path
     assert output_path.read_bytes() == b"image-bytes"
+
+
+def test_view_download_retries_404_and_then_succeeds(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    attempts = 0
+
+    def fake_get(
+        url: str,
+        timeout: float,
+        params: dict[str, str],
+        stream: bool = False,
+    ) -> MockResponse:
+        nonlocal attempts
+        attempts += 1
+        _ = (url, timeout, params, stream)
+        if attempts == 1:
+            return MockResponse(status_code=404)
+        return MockStreamResponse(chunks=[b"hello", b"-", b"world"])
+
+    monkeypatch.setattr("scripts.generation.comfyui_client.requests.get", fake_get)
+    monkeypatch.setattr("scripts.generation.retry.random.random", lambda: 0.0)
+
+    output_path = tmp_path / "view-404-retry.png"
+    saved_path = comfy.comfy_download_image_to_path(
+        base_url="http://127.0.0.1:8188",
+        image={"filename": "x.png"},
+        output_path=output_path,
+        request_timeout_s=1.0,
+    )
+
+    assert attempts == 2
+    assert saved_path == output_path
+    assert output_path.read_bytes() == b"hello-world"
+
+
+def test_view_download_stream_interrupted_cleans_temp_and_target(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def fake_get(
+        url: str,
+        timeout: float,
+        params: dict[str, str],
+        stream: bool = False,
+    ) -> MockResponse:
+        _ = (url, timeout, params, stream)
+        return MockStreamResponse(
+            chunks=[b"part"],
+            iter_error=requests.exceptions.ChunkedEncodingError("stream broken"),
+        )
+
+    monkeypatch.setattr("scripts.generation.comfyui_client.requests.get", fake_get)
+    monkeypatch.setattr("scripts.generation.retry.random.random", lambda: 0.0)
+    monkeypatch.setattr(comfy, "VIEW_GET_RETRY_MAX_ATTEMPTS", 1)
+
+    output_dir = tmp_path / "atomic-download"
+    output_path = output_dir / "broken.png"
+
+    with pytest.raises(comfy.ComfyUITransientRequestError) as exc:
+        _ = comfy.comfy_download_image_to_path(
+            base_url="http://127.0.0.1:8188",
+            image={"filename": "x.png"},
+            output_path=output_path,
+            request_timeout_s=1.0,
+        )
+
+    assert exc.value.code == "http_request_failed"
+    assert not output_path.exists()
+    assert output_dir.exists()
+    assert list(output_dir.iterdir()) == []
+
+
+def test_view_download_does_not_retry_http_400(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    attempts = 0
+
+    def fake_get(
+        url: str,
+        timeout: float,
+        params: dict[str, str],
+        stream: bool = False,
+    ) -> MockResponse:
+        nonlocal attempts
+        attempts += 1
+        _ = (url, timeout, params, stream)
+        return MockResponse(status_code=400)
+
+    monkeypatch.setattr("scripts.generation.comfyui_client.requests.get", fake_get)
+    monkeypatch.setattr("scripts.generation.retry.random.random", lambda: 0.0)
+
+    with pytest.raises(comfy.ComfyUIRequestError) as exc:
+        _ = comfy.comfy_download_image_to_path(
+            base_url="http://127.0.0.1:8188",
+            image={"filename": "x.png"},
+            output_path=tmp_path / "bad-request.png",
+            request_timeout_s=1.0,
+        )
+
+    assert attempts == 1
+    assert exc.value.code == "http_request_failed"
+    assert exc.value.context["status_code"] == 400
