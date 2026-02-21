@@ -530,11 +530,131 @@
       },
       "info": {
         "index": 5,
-        "type": "normal"
+        "type": "advance"
       },
       "description": {
         "zh": "展示：Rosmontis 白裙猫耳中景。观察：猫耳位置稳定性、裙装细节与角色比例一致性。",
         "en": "Shows: Rosmontis in a white dress with cat ears. Look for ear placement stability, dress detail, and consistent character proportions."
+      }
+    },
+    {
+      "tags": {
+        "gender": [
+          {
+            "text": "1girl",
+            "weight": 1.0
+          }
+        ],
+        "characters": [
+          {
+            "text": "ho'olheyak \\(arknights\\)",
+            "weight": 1.0
+          }
+        ],
+        "series": [
+          {
+            "text": "arknights",
+            "weight": 1.0
+          }
+        ],
+        "rating": [
+          {
+            "text": "nsfw",
+            "weight": 1.0
+          }
+        ],
+        "general": [
+          {
+            "text": "solo",
+            "weight": 1.0
+          },
+          {
+            "text": "cowboy shot",
+            "weight": 1.0
+          },
+          {
+            "text": "night",
+            "weight": 1.0
+          },
+          {
+            "text": "street",
+            "weight": 1.0
+          },
+          {
+            "text": "cityscape",
+            "weight": 1.0
+          },
+          {
+            "text": "people",
+            "weight": 1.0
+          },
+          {
+            "text": "nude",
+            "weight": 1.0
+          },
+          {
+            "text": "cross pasties",
+            "weight": 1.0
+          },
+          {
+            "text": "pussy",
+            "weight": 1.0
+          },
+          {
+            "text": "large breasts",
+            "weight": 1.0
+          },
+          {
+            "text": "white thighhighs",
+            "weight": 1.0
+          },
+          {
+            "text": "trench coat",
+            "weight": 1.0
+          },
+          {
+            "text": "one hand in pocket",
+            "weight": 1.0
+          },
+          {
+            "text": "v sign",
+            "weight": 1.0
+          },
+          {
+            "text": "leaning on wall",
+            "weight": 1.0
+          }
+        ],
+        "quality": [
+          {
+            "text": "masterpiece",
+            "weight": 1.0
+          },
+          {
+            "text": "high score",
+            "weight": 1.0
+          },
+          {
+            "text": "great score",
+            "weight": 1.0
+          },
+          {
+            "text": "absurdres",
+            "weight": 1.0
+          },
+          {
+            "text": "year 2025",
+            "weight": 1.0
+          }
+        ]
+      },
+      "info": {
+        "index": 6,
+        "type": "nsfw"
+      },
+      "description": {
+        "zh": "展示：Ho'olheyak 夜晚街头半裸姿态。观察：裸体细节、姿势自然度与夜景光影一致性。",
+        "en": "Shows: Ho'olheyak in a night street scene with a nude pose. Look for nude detail, natural posture, and coherent night lighting."
       }
     }
   ]
