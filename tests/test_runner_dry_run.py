@@ -25,6 +25,7 @@ COMFY_ENV_KEYS = [
     "COMFYUI_JOB_TIMEOUT_S",
     "COMFYUI_CONCURRENCY",
     "COMFYUI_NEGATIVE_PROMPT",
+    "COMFYUI_APPEND_NEGATIVE_PROMPT",
     "COMFYUI_WIDTH",
     "COMFYUI_HEIGHT",
     "COMFYUI_BATCH_SIZE",
@@ -41,7 +42,11 @@ def _clear_comfy_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(key, raising=False)
 
 
-def _write_json_inputs(tmp_path: Path) -> tuple[Path, Path]:
+def _write_json_inputs(
+    tmp_path: Path,
+    *,
+    x_info_type: str = "sfw",
+) -> tuple[Path, Path]:
     x_csv = tmp_path / "x.json"
     y_csv = tmp_path / "y.json"
 
@@ -57,7 +62,7 @@ def _write_json_inputs(tmp_path: Path) -> tuple[Path, Path]:
                     "general": [{"text": "solo", "weight": 1.0}],
                     "quality": [{"text": "masterpiece", "weight": 1.0}],
                 },
-                "info": {"index": 0, "type": "sfw"},
+                "info": {"index": 0, "type": x_info_type},
             }
         ],
     }
@@ -200,6 +205,55 @@ def test_dry_run_loads_utf8_env_writes_run_json_and_prints_example(
         record.get("x_description") == {"zh": "", "en": ""}
         for record in metadata_records
     )
+
+
+def test_dry_run_append_negative_prompt_for_normal_type_updates_generation_params(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_comfy_env(monkeypatch)
+    x_csv, y_csv = _write_json_inputs(tmp_path, x_info_type="normal")
+    run_dir = tmp_path / "run-dry-append-negative"
+
+    (tmp_path / ".env").write_text(
+        "\n".join(
+            [
+                "COMFYUI_NEGATIVE_PROMPT=neg,",
+                "COMFYUI_APPEND_NEGATIVE_PROMPT=app,",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = main(
+        [
+            "--dry-run",
+            "--x-json",
+            str(x_csv),
+            "--y-json",
+            str(y_csv),
+            "--run-dir",
+            str(run_dir),
+            "--base-seed",
+            "321",
+        ]
+    )
+
+    assert exit_code == 0
+
+    run_payload = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert run_payload["generation_overrides"]["negative_prompt"] == "neg,"
+
+    metadata_records = _read_valid_jsonl(run_dir / "metadata.jsonl")
+    assert len(metadata_records) == 2
+    for record in metadata_records:
+        assert record["x_info_type"] == "normal"
+        generation_params = record.get("generation_params")
+        assert isinstance(generation_params, dict)
+        assert generation_params["negative_prompt"] == "neg, app,"
 
 
 def test_dry_run_does_not_call_comfyui_client(

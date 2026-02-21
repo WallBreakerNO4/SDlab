@@ -422,6 +422,7 @@ def run(args: argparse.Namespace) -> int:
                                 generation_params=_effective_generation_params(
                                     args,
                                     workflow_context,
+                                    x_row,
                                     seed,
                                 ),
                                 workflow_hash=workflow_hash,
@@ -454,6 +455,7 @@ def run(args: argparse.Namespace) -> int:
                                 generation_params=_effective_generation_params(
                                     args,
                                     workflow_context,
+                                    x_row,
                                     seed,
                                 ),
                                 workflow_hash=workflow_hash,
@@ -478,6 +480,7 @@ def run(args: argparse.Namespace) -> int:
                             generation_params=_effective_generation_params(
                                 args,
                                 workflow_context,
+                                x_row,
                                 seed,
                             ),
                             workflow_hash=workflow_hash,
@@ -650,6 +653,76 @@ def _env_bool(name: str, default: bool) -> bool:
     raise ValueError(
         f"环境变量 {name} 不是有效布尔值: {raw} (可用: 1/0 true/false yes/no on/off)"
     )
+
+
+def _append_negative_prompt(base: str | None, append: str | None) -> str:
+    """纯函数：拼接 base negative prompt 和 append negative prompt。
+
+    Args:
+        base: 基础负面提示词，None 视为空字符串
+        append: 追加负面提示词，None 视为空字符串
+
+    Returns:
+        拼接后的负面提示词
+    """
+    if base is None:
+        base = ""
+    if append is None:
+        append = ""
+
+    base_stripped = base.strip()
+    append_stripped = append.strip()
+
+    if not base_stripped:
+        return append_stripped.lstrip(", ").lstrip(",")
+
+    if not append_stripped:
+        return base_stripped
+
+    append_cleaned = append_stripped.lstrip(", ").lstrip(",")
+
+    if not append_cleaned:
+        return base_stripped
+
+    if base_stripped.endswith(","):
+        delimiter = " "
+    else:
+        delimiter = ", "
+
+    return base_stripped + delimiter + append_cleaned
+
+
+def _resolve_append_negative_prompt(raw: str | None) -> str | None:
+    """纯解析器：根据原始环境变量值解析追加负面提示词。
+
+    Args:
+        raw: 从 os.getenv 获取的原始值
+
+    Returns:
+        - None: 表示禁用追加（raw 存在但为空字符串）
+        - str: 追加的负面提示词（raw 为 None 时返回默认值）
+    """
+    DEFAULT_APPEND = "nsfw, nipples, pussy, nude,"
+
+    if raw is None:
+        return DEFAULT_APPEND
+
+    stripped = raw.strip()
+    if not stripped:
+        return None
+
+    return stripped
+
+
+def _env_append_negative_prompt() -> str | None:
+    """读取 COMFYUI_APPEND_NEGATIVE_PROMPT 环境变量并解析。
+
+    Returns:
+        - None: 表示禁用追加（环境变量存在但为空）
+        - str: 追加的负面提示词（环境变量缺失时返回默认值）
+    """
+    raw = os.getenv("COMFYUI_APPEND_NEGATIVE_PROMPT")
+    return _resolve_append_negative_prompt(raw)
 
 
 def _select_rows(
@@ -1130,16 +1203,34 @@ def _ensure_newline_terminated(path: Path) -> None:
 
 def _effective_negative_prompt(
     args: argparse.Namespace,
-    workflow_context: WorkflowContext,
-) -> str:
+    workflow_context: WorkflowContext | None,
+) -> str | None:
     if args.negative_prompt is not None:
         return args.negative_prompt
+    if workflow_context is None:
+        return None
     return workflow_context.default_negative_prompt
+
+
+def _final_negative_prompt_for_x_row(
+    args: argparse.Namespace,
+    workflow_context: WorkflowContext | None,
+    x_row: dict[str, str],
+) -> str | None:
+    base_negative_prompt = _effective_negative_prompt(args, workflow_context)
+    if base_negative_prompt is None:
+        return None
+
+    if _extract_x_info_type(x_row) != "normal":
+        return base_negative_prompt
+
+    return _append_negative_prompt(base_negative_prompt, _env_append_negative_prompt())
 
 
 def _effective_generation_params(
     args: argparse.Namespace,
     workflow_context: WorkflowContext | None,
+    x_row: dict[str, str],
     seed: int,
 ) -> dict[str, object | None]:
     defaults = workflow_context.default_params if workflow_context is not None else {}
@@ -1149,11 +1240,7 @@ def _effective_generation_params(
             return override
         return defaults.get(key)
 
-    negative_prompt: object | None
-    if args.negative_prompt is not None:
-        negative_prompt = args.negative_prompt
-    else:
-        negative_prompt = defaults.get("negative_prompt")
+    negative_prompt = _final_negative_prompt_for_x_row(args, workflow_context, x_row)
 
     return {
         "seed": seed,
@@ -1258,7 +1345,13 @@ def _worker_submit_and_wait(
     prompt_id: str | None = None
 
     try:
-        negative_prompt = _effective_negative_prompt(args, workflow_context)
+        negative_prompt = _final_negative_prompt_for_x_row(
+            args,
+            workflow_context,
+            plan.x_row,
+        )
+        if negative_prompt is None:
+            raise ValueError("无法确定负面提示词")
         workflow_overrides = WorkflowOverrides(
             seed=plan.seed,
             steps=args.steps,
