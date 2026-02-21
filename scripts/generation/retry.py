@@ -40,6 +40,8 @@ def retry_call(
     sleep: Callable[[float], None] | None = None,
     monotonic: Callable[[], float] | None = None,
     random_fn: Callable[[], float] | None = None,
+    on_retry: Callable[[int, float, Exception], None] | None = None,
+    on_giveup: Callable[[int, Exception], None] | None = None,
 ) -> T:
     if max_attempts is not None and max_attempts <= 0:
         raise ValueError("max_attempts must be greater than 0")
@@ -65,14 +67,18 @@ def retry_call(
         attempts += 1
         try:
             return operation()
-        except retry_exceptions:
+        except retry_exceptions as exc:
             if max_attempts is not None and attempts >= max_attempts:
+                if on_giveup is not None:
+                    on_giveup(attempts, exc)
                 raise
 
             remaining_budget_s: float | None = None
             if deadline_s is not None:
                 remaining_budget_s = deadline_s - monotonic_fn()
                 if remaining_budget_s <= 0:
+                    if on_giveup is not None:
+                        on_giveup(attempts, exc)
                     raise
 
             planned_wait_s = _compute_wait_with_full_jitter(
@@ -84,6 +90,9 @@ def retry_call(
 
             if remaining_budget_s is not None:
                 planned_wait_s = min(planned_wait_s, remaining_budget_s)
+
+            if on_retry is not None:
+                on_retry(attempts, planned_wait_s, exc)
 
             if planned_wait_s > 0:
                 sleep_fn(planned_wait_s)

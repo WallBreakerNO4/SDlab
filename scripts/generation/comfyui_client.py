@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import tempfile
 import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Protocol, cast
 from urllib.parse import ParseResult, quote, urlparse, urlunparse
@@ -14,6 +15,9 @@ import requests
 import websocket
 
 from scripts.generation.retry import retry_call
+
+
+LOG = logging.getLogger(__name__)
 
 
 HISTORY_GET_RETRY_MAX_ATTEMPTS = 5
@@ -216,6 +220,11 @@ def comfy_wait_prompt_done_with_fallback(
     except ComfyUIClientError as exc:
         if exc.code not in {"ws_connect_failed", "ws_receive_failed"}:
             raise
+        LOG.warning(
+            "ComfyUI WS fallback to history: prompt_id=%s ws_error_code=%s",
+            prompt_id,
+            exc.code,
+        )
     finally:
         if ws is not None:
             close_method = getattr(ws, "close", None)
@@ -256,6 +265,7 @@ def comfy_get_history_item(
     request_timeout_s: float = 30.0,
 ) -> dict[str, object]:
     url = _build_http_url(base_url, f"history/{prompt_id}")
+    on_retry, on_giveup = _build_get_retry_callbacks(default_url=url)
     response = retry_call(
         lambda: _request_history_item_with_transient_mapping(
             url=url,
@@ -264,6 +274,8 @@ def comfy_get_history_item(
         retry_exceptions=(ComfyUITransientRequestError,),
         max_attempts=HISTORY_GET_RETRY_MAX_ATTEMPTS,
         stop_after_delay_s=HISTORY_GET_RETRY_STOP_AFTER_DELAY_S,
+        on_retry=on_retry,
+        on_giveup=on_giveup,
     )
     body = _response_json_dict(response, endpoint="/history/{prompt_id}")
 
@@ -317,6 +329,7 @@ def comfy_download_image_to_path(
     path.parent.mkdir(parents=True, exist_ok=True)
     url = _build_http_url(base_url, "view")
     params = comfy_build_view_params(image)
+    on_retry, on_giveup = _build_get_retry_callbacks(default_url=url)
     return retry_call(
         lambda: _download_view_image_once(
             url=url,
@@ -327,7 +340,71 @@ def comfy_download_image_to_path(
         retry_exceptions=(ComfyUITransientRequestError,),
         max_attempts=VIEW_GET_RETRY_MAX_ATTEMPTS,
         stop_after_delay_s=VIEW_GET_RETRY_STOP_AFTER_DELAY_S,
+        on_retry=on_retry,
+        on_giveup=on_giveup,
     )
+
+
+def _build_get_retry_callbacks(
+    *,
+    default_url: str,
+) -> tuple[Callable[[int, float, Exception], None], Callable[[int, Exception], None]]:
+    def on_retry(attempts: int, wait_s: float, exc: Exception) -> None:
+        method, url, status_code = _extract_request_log_fields(
+            exc,
+            default_method="GET",
+            default_url=default_url,
+        )
+        LOG.warning(
+            "ComfyUI request retry: attempts=%d wait_s=%.3f method=%s url=%s status_code=%s",
+            attempts,
+            wait_s,
+            method,
+            url,
+            status_code,
+        )
+
+    def on_giveup(attempts: int, exc: Exception) -> None:
+        method, url, status_code = _extract_request_log_fields(
+            exc,
+            default_method="GET",
+            default_url=default_url,
+        )
+        LOG.warning(
+            "ComfyUI request give up: attempts=%d method=%s url=%s status_code=%s",
+            attempts,
+            method,
+            url,
+            status_code,
+        )
+
+    return on_retry, on_giveup
+
+
+def _extract_request_log_fields(
+    exc: Exception,
+    *,
+    default_method: str,
+    default_url: str,
+) -> tuple[str, str, int | None]:
+    method = default_method
+    url = default_url
+    status_code: int | None = None
+
+    if isinstance(exc, ComfyUIClientError):
+        method_obj = exc.context.get("method")
+        if isinstance(method_obj, str) and method_obj:
+            method = method_obj
+
+        url_obj = exc.context.get("url")
+        if isinstance(url_obj, str) and url_obj:
+            url = url_obj
+
+        status_code_obj = exc.context.get("status_code")
+        if isinstance(status_code_obj, int) and not isinstance(status_code_obj, bool):
+            status_code = status_code_obj
+
+    return method, url, status_code
 
 
 def _parse_base_url(base_url: str) -> ParseResult:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from unittest.mock import Mock, patch
 
 import pytest
@@ -160,9 +161,11 @@ def test_convert_y_csv_confirm_path_with_args(
 
 
 def test_convert_y_csv_confirm_path_no_args(
+    monkeypatch: pytest.MonkeyPatch,
     mock_convert_y_main: Mock,
 ) -> None:
     """Test confirm path for convert_y_csv entry without extra argv."""
+    monkeypatch.delenv("CONVERT_Y_DEFAULT_CSV", raising=False)
     inputs = ["convert_y_csv", "", "y", "q"]
     io = FakeIO(inputs)
 
