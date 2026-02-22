@@ -43,6 +43,13 @@ from scripts.generation.prompt_grid import (  # noqa: E402
     read_y_rows,
     render_positive_prompt,
 )
+from scripts.generation.retry_failed_selection import (  # noqa: E402
+    select_failed_and_incomplete_cells,
+)
+from scripts.generation.run_replay import (  # noqa: E402
+    RunReplayConfig,
+    load_run_replay_config,
+)
 from scripts.generation.workflow_patch import (  # noqa: E402
     WorkflowDict,
     WorkflowOverrides,
@@ -118,6 +125,7 @@ class _CellPlan:
     workflow_hash: str
     save_image_prefix: str
     x_description: dict[str, str]
+    attempt: int = 1
 
 
 def _extract_x_info_type(x_row: dict[str, str]) -> str | None:
@@ -200,6 +208,20 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=_env_bool("COMFYUI_DRY_RUN", default=False),
     )
+    parser.add_argument(
+        "--retry-failed",
+        action="store_true",
+        default=_env_bool("COMFYUI_RETRY_FAILED", default=False),
+    )
+    parser.add_argument(
+        "--retry-incomplete",
+        action="store_true",
+        default=_env_bool("COMFYUI_RETRY_INCOMPLETE", default=False),
+    )
+    parser.add_argument(
+        "--retry-error-code",
+        default=_env_str("COMFYUI_RETRY_ERROR_CODE"),
+    )
 
     parser.add_argument(
         "--base-url",
@@ -258,6 +280,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        if _is_retry_mode(args):
+            return run_retry(args)
         return run(args)
     except ValueError as exc:
         print(f"参数错误: {exc}", file=sys.stderr)
@@ -265,6 +289,10 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as exc:
         print(f"运行失败: {exc}", file=sys.stderr)
         return 2
+
+
+def _is_retry_mode(args: argparse.Namespace) -> bool:
+    return bool(args.retry_failed or args.retry_incomplete)
 
 
 def run(args: argparse.Namespace) -> int:
@@ -403,6 +431,7 @@ def run(args: argparse.Namespace) -> int:
                         seed = derive_seed(args.base_seed, x_index, y_index)
 
                         resume_record = latest_records.get((x_index, y_index))
+                        skip_attempt = _next_attempt(resume_record, increment=False)
                         if _should_resume_skip(
                             existing=resume_record,
                             run_dir=run_artifacts.run_dir,
@@ -426,6 +455,7 @@ def run(args: argparse.Namespace) -> int:
                                     seed,
                                 ),
                                 workflow_hash=workflow_hash,
+                                attempt=skip_attempt,
                             )
                             record["skip_reason"] = "resume_hit"
                             record["x_description"] = _get_x_description(x_index)
@@ -459,6 +489,7 @@ def run(args: argparse.Namespace) -> int:
                                     seed,
                                 ),
                                 workflow_hash=workflow_hash,
+                                attempt=skip_attempt,
                             )
                             record["skip_reason"] = "dry_run"
                             record["x_description"] = _get_x_description(x_index)
@@ -486,6 +517,7 @@ def run(args: argparse.Namespace) -> int:
                             workflow_hash=workflow_hash,
                             save_image_prefix=save_image_prefix,
                             x_description=x_desc,
+                            attempt=_next_attempt(resume_record, increment=True),
                         )
 
                         future = gen_pool.submit(
@@ -549,6 +581,492 @@ def run(args: argparse.Namespace) -> int:
     return 1 if has_failed else 0
 
 
+def run_retry(args: argparse.Namespace) -> int:
+    _validate_args(args)
+    _configure_logging()
+
+    run_artifacts = _prepare_existing_run_artifacts(args.run_dir)
+    run_artifacts.images_dir.mkdir(parents=True, exist_ok=True)
+    replay = load_run_replay_config(run_artifacts.run_dir, strict_sha256=True)
+    _apply_replay_config_to_args(args, replay)
+
+    x_rows = read_x_rows(args.x_json)
+    y_rows = read_y_rows(args.y_json)
+    x_descriptions = read_x_descriptions(args.x_json)
+
+    x_selected = _select_rows_by_fixed_indexes(
+        rows=x_rows,
+        indexes=replay.selection.x_indexes,
+        axis_name="x",
+    )
+    y_selected = _select_rows_by_fixed_indexes(
+        rows=y_rows,
+        indexes=replay.selection.y_indexes,
+        axis_name="y",
+    )
+
+    workflow_context = _load_workflow_context(args)
+    workflow_hash = (
+        workflow_context.workflow_hash if workflow_context is not None else "not_loaded"
+    )
+
+    expected_cells = set(
+        product(
+            [item.index for item in x_selected],
+            [item.index for item in y_selected],
+        )
+    )
+    selection = select_failed_and_incomplete_cells(
+        metadata_path=run_artifacts.metadata_path,
+        run_dir=run_artifacts.run_dir,
+        expected_cells=expected_cells,
+    )
+    latest_records = _load_latest_metadata_records_strict(run_artifacts.metadata_path)
+
+    retry_error_codes = _parse_retry_error_codes(args.retry_error_code)
+    failed_cells = _filter_retry_failed_cells(
+        failed_cells=selection.failed_cells,
+        latest_records=latest_records,
+        retry_error_codes=retry_error_codes,
+    )
+    target_cells = _build_retry_target_cells(
+        retry_failed=args.retry_failed,
+        retry_incomplete=args.retry_incomplete,
+        failed_cells=failed_cells,
+        incomplete_cells=selection.incomplete_cells,
+    )
+
+    x_rows_by_index = {item.index: item.value for item in x_selected}
+    y_values_by_index = {item.index: item.value.get("y", "") for item in y_selected}
+    _validate_retry_failed_cells_consistency(
+        target_cells=target_cells,
+        latest_records=latest_records,
+        x_rows_by_index=x_rows_by_index,
+        y_values_by_index=y_values_by_index,
+        template=args.template,
+        base_seed=args.base_seed,
+        workflow_hash=workflow_hash,
+    )
+
+    if not args.dry_run and workflow_context is None:
+        raise ValueError("非 dry-run 模式必须提供可用 workflow")
+
+    total_cells = len(target_cells)
+    has_failed = False
+    stats = RunStats()
+
+    LOG.info(
+        "重试运行: retry_failed=%s retry_incomplete=%s total_cells=%s run_dir=%s",
+        args.retry_failed,
+        args.retry_incomplete,
+        total_cells,
+        run_artifacts.run_dir,
+    )
+
+    def _get_x_description(x_index: int) -> dict[str, str]:
+        if x_index < len(x_descriptions):
+            return x_descriptions[x_index]
+        return {"zh": "", "en": ""}
+
+    with logging_redirect_tqdm():
+        with tqdm(
+            total=total_cells,
+            desc="重试进度",
+            unit="cell",
+            dynamic_ncols=True,
+        ) as pbar:
+            with _metadata_writer(run_artifacts.metadata_path) as writer:
+
+                def _write_record(record: dict[str, object]) -> None:
+                    nonlocal has_failed
+                    writer.append(record)
+
+                    x_index_obj = record.get("x_index")
+                    y_index_obj = record.get("y_index")
+                    if isinstance(x_index_obj, int) and isinstance(y_index_obj, int):
+                        latest_records[(x_index_obj, y_index_obj)] = record
+
+                    status = record.get("status")
+                    if status == "success":
+                        stats.success += 1
+                    elif status == "failed":
+                        stats.failed += 1
+                        has_failed = True
+                    elif status == "skipped":
+                        stats.skipped += 1
+                        if record.get("skip_reason") == "resume_hit":
+                            stats.resume_hit += 1
+
+                    pbar.set_postfix(
+                        success=stats.success,
+                        skipped=stats.skipped,
+                        failed=stats.failed,
+                        resume_hit=stats.resume_hit,
+                        refresh=False,
+                    )
+                    pbar.update(1)
+
+                if args.dry_run:
+                    for x_index, y_index in target_cells:
+                        x_row = x_rows_by_index[x_index]
+                        y_value = y_values_by_index[y_index]
+                        positive_prompt = _render_prompt_by_template(
+                            args.template,
+                            x_row,
+                            y_value,
+                        )
+                        prompt_hash = compute_prompt_hash(positive_prompt)
+                        seed = derive_seed(args.base_seed, x_index, y_index)
+                        record = _build_base_metadata_record(
+                            status="skipped",
+                            x_index=x_index,
+                            y_index=y_index,
+                            x_row=x_row,
+                            y_value=y_value,
+                            positive_prompt=positive_prompt,
+                            prompt_hash=prompt_hash,
+                            seed=seed,
+                            generation_params=_effective_generation_params(
+                                args,
+                                workflow_context,
+                                x_row,
+                                seed,
+                            ),
+                            workflow_hash=workflow_hash,
+                            attempt=_next_attempt(
+                                latest_records.get((x_index, y_index)),
+                                increment=False,
+                            ),
+                        )
+                        record["skip_reason"] = "dry_run"
+                        record["x_description"] = _get_x_description(x_index)
+                        _write_record(record)
+                else:
+                    plans: list[_CellPlan] = []
+                    for x_index, y_index in target_cells:
+                        x_row = x_rows_by_index[x_index]
+                        y_value = y_values_by_index[y_index]
+                        positive_prompt = _render_prompt_by_template(
+                            args.template,
+                            x_row,
+                            y_value,
+                        )
+                        prompt_hash = compute_prompt_hash(positive_prompt)
+                        seed = derive_seed(args.base_seed, x_index, y_index)
+                        plans.append(
+                            _CellPlan(
+                                x_index=x_index,
+                                y_index=y_index,
+                                x_row=x_row,
+                                y_value=y_value,
+                                positive_prompt=positive_prompt,
+                                prompt_hash=prompt_hash,
+                                seed=seed,
+                                generation_params=_effective_generation_params(
+                                    args,
+                                    workflow_context,
+                                    x_row,
+                                    seed,
+                                ),
+                                workflow_hash=workflow_hash,
+                                save_image_prefix=(
+                                    f"{run_artifacts.run_dir.name}/"
+                                    f"retry-x{x_index}-y{y_index}-s{seed}-{prompt_hash[:8]}"
+                                ),
+                                x_description=_get_x_description(x_index),
+                                attempt=_next_attempt(
+                                    latest_records.get((x_index, y_index)),
+                                    increment=True,
+                                ),
+                            )
+                        )
+
+                    plan_iter = iter(plans)
+                    exhausted = False
+                    gen_futures: set[Future] = set()
+                    dl_futures: set[Future] = set()
+
+                    def _schedule_until_full(gen_pool: ThreadPoolExecutor) -> None:
+                        nonlocal exhausted
+                        while not exhausted and len(gen_futures) < args.concurrency:
+                            try:
+                                plan = next(plan_iter)
+                            except StopIteration:
+                                exhausted = True
+                                return
+
+                            future = gen_pool.submit(
+                                _worker_submit_and_wait,
+                                args,
+                                cast(WorkflowContext, workflow_context),
+                                plan,
+                            )
+                            gen_futures.add(future)
+
+                    with ThreadPoolExecutor(max_workers=args.concurrency) as gen_pool:
+                        with ThreadPoolExecutor(
+                            max_workers=args.concurrency
+                        ) as dl_pool:
+                            while True:
+                                _schedule_until_full(gen_pool)
+
+                                if exhausted and not gen_futures and not dl_futures:
+                                    break
+
+                                if not gen_futures and not dl_futures:
+                                    continue
+
+                                done, _ = wait(
+                                    gen_futures | dl_futures,
+                                    return_when=FIRST_COMPLETED,
+                                )
+
+                                for fut in done:
+                                    if fut in gen_futures:
+                                        gen_futures.remove(fut)
+                                        outcome = cast(_GenOutcome, fut.result())
+                                        if outcome.record is not None:
+                                            _write_record(outcome.record)
+                                            continue
+                                        if outcome.download is not None:
+                                            dl_future = dl_pool.submit(
+                                                _worker_fetch_and_download,
+                                                args,
+                                                run_artifacts.run_dir,
+                                                outcome.download,
+                                            )
+                                            dl_futures.add(dl_future)
+                                            continue
+                                        raise RuntimeError(
+                                            "internal error: gen outcome missing record and download"
+                                        )
+
+                                    if fut in dl_futures:
+                                        dl_futures.remove(fut)
+                                        record = cast(dict[str, object], fut.result())
+                                        _write_record(record)
+                                        continue
+
+                                    raise RuntimeError(
+                                        "internal error: future not tracked"
+                                    )
+
+    print(
+        "结果统计: "
+        f"success={stats.success}, skipped={stats.skipped}, "
+        f"failed={stats.failed}, resume_hit={stats.resume_hit}"
+    )
+
+    return 1 if has_failed else 0
+
+
+def _prepare_existing_run_artifacts(run_dir_arg: str | None) -> RunArtifacts:
+    if not run_dir_arg:
+        raise ValueError("retry 模式必须提供 --run-dir")
+
+    run_dir = Path(run_dir_arg)
+    if not run_dir.exists() or not run_dir.is_dir():
+        raise ValueError(f"retry 模式 --run-dir 不存在或不是目录: {run_dir}")
+
+    return RunArtifacts(
+        run_dir=run_dir,
+        images_dir=run_dir / "images",
+        run_json_path=run_dir / "run.json",
+        metadata_path=run_dir / "metadata.jsonl",
+    )
+
+
+def _apply_replay_config_to_args(
+    args: argparse.Namespace,
+    replay: RunReplayConfig,
+) -> None:
+    args.x_json = str(replay.x_json_path)
+    args.y_json = str(replay.y_json_path)
+    args.template = replay.template
+    args.base_seed = replay.base_seed
+    args.workflow_json = replay.workflow_json_path
+
+    args.negative_prompt = replay.generation_overrides.negative_prompt
+    args.width = replay.generation_overrides.width
+    args.height = replay.generation_overrides.height
+    args.batch_size = replay.generation_overrides.batch_size
+    args.steps = replay.generation_overrides.steps
+    args.cfg = replay.generation_overrides.cfg
+    args.denoise = replay.generation_overrides.denoise
+    args.sampler_name = replay.generation_overrides.sampler_name
+    args.scheduler = replay.generation_overrides.scheduler
+
+    args.x_limit = None
+    args.y_limit = None
+    args.x_indexes = ",".join(str(i) for i in replay.selection.x_indexes)
+    args.y_indexes = ",".join(str(i) for i in replay.selection.y_indexes)
+
+
+def _select_rows_by_fixed_indexes(
+    *,
+    rows: list[dict[str, str]],
+    indexes: list[int],
+    axis_name: str,
+) -> list[SelectedRow]:
+    selected: list[SelectedRow] = []
+    for index in indexes:
+        if index < 0 or index >= len(rows):
+            raise ValueError(
+                f"run.json.selection.{axis_name}_indexes 包含越界索引: {index} (最大 {len(rows) - 1})"
+            )
+        selected.append(SelectedRow(index=index, value=rows[index]))
+    return selected
+
+
+def _parse_retry_error_codes(raw: str | None) -> set[str] | None:
+    if raw is None:
+        return None
+
+    codes = [token.strip() for token in raw.split(",") if token.strip()]
+    if not codes:
+        raise ValueError("--retry-error-code 不能为空；可用逗号分隔多个错误码")
+    return set(codes)
+
+
+def _load_latest_metadata_records_strict(
+    metadata_path: Path,
+) -> dict[tuple[int, int], dict[str, object]]:
+    latest: dict[tuple[int, int], dict[str, object]] = {}
+    if not metadata_path.exists():
+        return latest
+
+    with metadata_path.open("r", encoding="utf-8") as file:
+        for line_num, line in enumerate(file, start=1):
+            stripped = line.strip()
+            if not stripped:
+                continue
+
+            try:
+                payload = json.loads(stripped)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"metadata.jsonl:{line_num}: malformed JSON: {exc}"
+                ) from exc
+
+            if not isinstance(payload, dict):
+                raise ValueError(
+                    f"metadata.jsonl:{line_num}: line is not a JSON object"
+                )
+
+            x_index = _coerce_int_or_none(payload.get("x_index"))
+            y_index = _coerce_int_or_none(payload.get("y_index"))
+            if x_index is None or y_index is None:
+                continue
+
+            latest[(x_index, y_index)] = payload
+
+    return latest
+
+
+def _extract_retry_error_code(record: dict[str, object] | None) -> str | None:
+    if record is None:
+        return None
+
+    error_obj = record.get("error")
+    if not isinstance(error_obj, dict):
+        return None
+
+    code = error_obj.get("code")
+    if isinstance(code, str):
+        stripped = code.strip()
+        if stripped:
+            return stripped
+    return None
+
+
+def _filter_retry_failed_cells(
+    *,
+    failed_cells: list[tuple[int, int]],
+    latest_records: dict[tuple[int, int], dict[str, object]],
+    retry_error_codes: set[str] | None,
+) -> list[tuple[int, int]]:
+    if retry_error_codes is None:
+        return failed_cells
+
+    filtered: list[tuple[int, int]] = []
+    for cell in failed_cells:
+        code = _extract_retry_error_code(latest_records.get(cell))
+        if code in retry_error_codes:
+            filtered.append(cell)
+    return filtered
+
+
+def _build_retry_target_cells(
+    *,
+    retry_failed: bool,
+    retry_incomplete: bool,
+    failed_cells: list[tuple[int, int]],
+    incomplete_cells: list[tuple[int, int]],
+) -> list[tuple[int, int]]:
+    if retry_incomplete:
+        return failed_cells + incomplete_cells
+    if retry_failed:
+        return failed_cells
+    return []
+
+
+def _record_workflow_hash(record: dict[str, object]) -> str | None:
+    workflow_hash = record.get("workflow_hash")
+    if isinstance(workflow_hash, str) and workflow_hash:
+        return workflow_hash
+
+    legacy_hash = record.get("workflow_json_sha256")
+    if isinstance(legacy_hash, str) and legacy_hash:
+        return legacy_hash
+    return None
+
+
+def _validate_retry_failed_cells_consistency(
+    *,
+    target_cells: list[tuple[int, int]],
+    latest_records: dict[tuple[int, int], dict[str, object]],
+    x_rows_by_index: dict[int, dict[str, str]],
+    y_values_by_index: dict[int, str],
+    template: str,
+    base_seed: int,
+    workflow_hash: str,
+) -> None:
+    for x_index, y_index in target_cells:
+        record = latest_records.get((x_index, y_index))
+        if record is None or record.get("status") != "failed":
+            continue
+
+        x_row = x_rows_by_index.get(x_index)
+        y_value = y_values_by_index.get(y_index)
+        if x_row is None or y_value is None:
+            raise ValueError(f"retry cell 不在回放选择范围内: x={x_index} y={y_index}")
+
+        expected_prompt = _render_prompt_by_template(template, x_row, y_value)
+        expected_prompt_hash = compute_prompt_hash(expected_prompt)
+        expected_seed = derive_seed(base_seed, x_index, y_index)
+
+        actual_prompt_hash = record.get("prompt_hash")
+        if actual_prompt_hash != expected_prompt_hash:
+            raise ValueError(
+                "retry strict 校验失败(prompt_hash): "
+                f"x={x_index} y={y_index} expected={expected_prompt_hash} actual={actual_prompt_hash}"
+            )
+
+        actual_seed = _coerce_int_or_none(record.get("seed"))
+        if actual_seed != expected_seed:
+            raise ValueError(
+                "retry strict 校验失败(seed): "
+                f"x={x_index} y={y_index} expected={expected_seed} actual={record.get('seed')}"
+            )
+
+        actual_workflow_hash = _record_workflow_hash(record)
+        if actual_workflow_hash != workflow_hash:
+            raise ValueError(
+                "retry strict 校验失败(workflow_hash): "
+                f"x={x_index} y={y_index} expected={workflow_hash} actual={actual_workflow_hash}"
+            )
+
+
 def _configure_logging() -> None:
     root = logging.getLogger()
     if root.handlers:
@@ -557,6 +1075,8 @@ def _configure_logging() -> None:
 
 
 def _validate_args(args: argparse.Namespace) -> None:
+    retry_mode = _is_retry_mode(args)
+
     if args.request_timeout_s <= 0:
         raise ValueError("--request-timeout-s 必须 > 0")
     if args.job_timeout_s <= 0:
@@ -569,7 +1089,20 @@ def _validate_args(args: argparse.Namespace) -> None:
     if args.concurrency <= 0:
         raise ValueError("--concurrency 必须 > 0")
 
-    if not args.dry_run:
+    retry_error_codes = _parse_retry_error_codes(args.retry_error_code)
+    if retry_error_codes is not None and not retry_mode:
+        raise ValueError(
+            "--retry-error-code 仅可与 --retry-failed/--retry-incomplete 一起使用"
+        )
+
+    if retry_mode:
+        if not args.run_dir:
+            raise ValueError("retry 模式必须提供 --run-dir，且指向已有 run 目录")
+        run_dir = Path(args.run_dir)
+        if not run_dir.exists() or not run_dir.is_dir():
+            raise ValueError(f"retry 模式 --run-dir 不存在或不是目录: {run_dir}")
+
+    if not args.dry_run and not retry_mode:
         if not args.workflow_json:
             raise ValueError("非 dry-run 模式必须提供 --workflow-json")
 
@@ -1256,6 +1789,17 @@ def _effective_generation_params(
     }
 
 
+def _next_attempt(prev: dict[str, object] | None, *, increment: bool) -> int:
+    if prev is None:
+        return 1
+
+    raw_attempt = _coerce_int_or_none(prev.get("attempt"))
+    previous_attempt = raw_attempt if raw_attempt is not None and raw_attempt > 0 else 1
+    if increment:
+        return previous_attempt + 1
+    return previous_attempt
+
+
 def _build_base_metadata_record(
     *,
     status: str,
@@ -1268,6 +1812,7 @@ def _build_base_metadata_record(
     seed: int,
     generation_params: dict[str, object | None],
     workflow_hash: str,
+    attempt: int,
 ) -> dict[str, object]:
     return {
         "status": status,
@@ -1286,6 +1831,7 @@ def _build_base_metadata_record(
         "positive_prompt": positive_prompt,
         "prompt_hash": prompt_hash,
         "seed": seed,
+        "attempt": attempt,
         "generation_params": generation_params,
         "workflow_hash": workflow_hash,
         "comfyui_prompt_id": None,
@@ -1411,6 +1957,7 @@ def _worker_submit_and_wait(
             seed=plan.seed,
             generation_params=plan.generation_params,
             workflow_hash=plan.workflow_hash,
+            attempt=plan.attempt,
         )
         record["x_description"] = plan.x_description
         record["comfyui_prompt_id"] = prompt_id
@@ -1467,6 +2014,7 @@ def _worker_fetch_and_download(
             seed=plan.seed,
             generation_params=plan.generation_params,
             workflow_hash=plan.workflow_hash,
+            attempt=plan.attempt,
         )
         record["x_description"] = plan.x_description
         record["comfyui_prompt_id"] = prompt_id
@@ -1492,6 +2040,7 @@ def _worker_fetch_and_download(
             seed=plan.seed,
             generation_params=plan.generation_params,
             workflow_hash=plan.workflow_hash,
+            attempt=plan.attempt,
         )
         record["x_description"] = plan.x_description
         record["comfyui_prompt_id"] = prompt_id
