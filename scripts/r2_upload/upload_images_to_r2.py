@@ -5,12 +5,16 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import logging
 import os
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
+
+from tqdm import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 from .encoding_params import avif_params, webp_params
 from .manifest import build_public_manifest, build_run_manifest, manifest_object_key
@@ -51,6 +55,9 @@ _EXIT_CODES_BY_CATEGORY: dict[str, int] = {
     "remote": 8,
     "unexpected": 9,
 }
+
+
+LOG = logging.getLogger(__name__)
 
 
 class UploadScriptError(RuntimeError):
@@ -419,6 +426,7 @@ def _build_run_plan(
     *,
     category_override: Category | None,
     remaining_limit: int | None,
+    on_image_planned: Callable[[], None] | None = None,
 ) -> RunPlan:
     normalized_run_dir = normalize_run_dir(run_dir)
     run_json = _load_run_json(normalized_run_dir)
@@ -457,6 +465,8 @@ def _build_run_plan(
             images_rows.append(image_payload)
             image_uploads.extend(uploads)
             processed_images += 1
+            if on_image_planned is not None:
+                on_image_planned()
 
     db_payload: dict[str, object] = {
         "run_dir": run_dir_name,
@@ -572,19 +582,53 @@ def _build_plans(args: argparse.Namespace) -> list[RunPlan]:
     category_override = cast(Category | None, getattr(args, "category", None))
     limit_value = cast(int | None, getattr(args, "limit", None))
 
+    remaining_for_estimate = limit_value
+    estimated_images = 0
+    for run_dir in selected_run_dirs:
+        if remaining_for_estimate is not None and remaining_for_estimate <= 0:
+            break
+        estimated_for_run = _estimate_image_count_for_run(
+            run_dir,
+            remaining_limit=remaining_for_estimate,
+        )
+        estimated_images += estimated_for_run
+        if remaining_for_estimate is not None:
+            remaining_for_estimate = max(0, remaining_for_estimate - estimated_for_run)
+
+    LOG.info(
+        "building upload plans: run_count=%s estimated_images=%s limit=%s",
+        len(selected_run_dirs),
+        estimated_images,
+        limit_value,
+    )
+
     plans: list[RunPlan] = []
     remaining = limit_value
-    for run_dir in selected_run_dirs:
-        if remaining is not None and remaining <= 0:
-            break
-        plan = _build_run_plan(
-            run_dir,
-            category_override=category_override,
-            remaining_limit=remaining,
-        )
-        plans.append(plan)
-        if remaining is not None:
-            remaining = max(0, remaining - plan.processed_images)
+    with logging_redirect_tqdm():
+        with tqdm(
+            total=estimated_images,
+            desc="构建计划",
+            unit="image",
+            dynamic_ncols=True,
+        ) as pbar:
+
+            def _tick_image_progress() -> None:
+                pbar.update(1)
+
+            for run_dir in selected_run_dirs:
+                if remaining is not None and remaining <= 0:
+                    break
+                plan = _build_run_plan(
+                    run_dir,
+                    category_override=category_override,
+                    remaining_limit=remaining,
+                    on_image_planned=_tick_image_progress,
+                )
+                plans.append(plan)
+                if remaining is not None:
+                    remaining = max(0, remaining - plan.processed_images)
+
+    LOG.info("upload plans ready: planned_runs=%s", len(plans))
 
     return plans
 
@@ -625,30 +669,61 @@ def _execute(plans: list[RunPlan]) -> dict[str, object]:
     manifest_uploaded = 0
     processed_images = 0
 
-    for plan in plans:
-        processed_images += plan.processed_images
+    total_objects = sum(
+        len(plan.image_uploads) + len(plan.manifest_uploads) for plan in plans
+    )
+    LOG.info(
+        "start upload execution: run_count=%s object_count=%s",
+        len(plans),
+        total_objects,
+    )
 
-        for upload in plan.image_uploads:
-            if _upload_if_missing(
-                r2_client=r2_client,
-                bucket_names=bucket_names,
-                planned=upload,
-            ):
-                uploaded += 1
-            else:
-                skipped_existing += 1
+    with logging_redirect_tqdm():
+        with tqdm(
+            total=total_objects,
+            desc="上传进度",
+            unit="object",
+            dynamic_ncols=True,
+        ) as pbar:
+            for plan in plans:
+                processed_images += plan.processed_images
 
-        supabase_writer.upsert_upload_index(plan.upload_index_payload)
+                for upload in plan.image_uploads:
+                    if _upload_if_missing(
+                        r2_client=r2_client,
+                        bucket_names=bucket_names,
+                        planned=upload,
+                    ):
+                        uploaded += 1
+                    else:
+                        skipped_existing += 1
+                    pbar.update(1)
 
-        for manifest_upload in plan.manifest_uploads:
-            if _upload_if_missing(
-                r2_client=r2_client,
-                bucket_names=bucket_names,
-                planned=manifest_upload,
-            ):
-                manifest_uploaded += 1
-            else:
-                skipped_existing += 1
+                supabase_writer.upsert_upload_index(plan.upload_index_payload)
+
+                for manifest_upload in plan.manifest_uploads:
+                    if _upload_if_missing(
+                        r2_client=r2_client,
+                        bucket_names=bucket_names,
+                        planned=manifest_upload,
+                    ):
+                        manifest_uploaded += 1
+                    else:
+                        skipped_existing += 1
+                    pbar.update(1)
+
+                pbar.set_postfix(
+                    uploaded=uploaded,
+                    skipped=skipped_existing,
+                    refresh=False,
+                )
+
+    LOG.info(
+        "upload execution done: uploaded=%s skipped_existing=%s manifest_uploaded=%s",
+        uploaded,
+        skipped_existing,
+        manifest_uploaded,
+    )
 
     return {
         "mode": "execute",
@@ -662,11 +737,39 @@ def _execute(plans: list[RunPlan]) -> dict[str, object]:
     }
 
 
+def _estimate_image_count_for_run(run_dir: Path, *, remaining_limit: int | None) -> int:
+    normalized_run_dir = normalize_run_dir(run_dir)
+    metadata_records = _load_metadata_records(normalized_run_dir)
+    estimated_images = 0
+
+    for metadata_record in metadata_records:
+        if remaining_limit is not None and estimated_images >= remaining_limit:
+            break
+
+        image_paths = resolve_metadata_image_paths(normalized_run_dir, metadata_record)
+        if not image_paths:
+            continue
+
+        allowed = len(image_paths)
+        if remaining_limit is not None:
+            allowed = min(allowed, remaining_limit - estimated_images)
+        estimated_images += allowed
+
+    return estimated_images
+
+
 def _exit_code_for_exception(exc: Exception) -> int:
     category = getattr(exc, "category", None)
     if isinstance(category, str):
         return _EXIT_CODES_BY_CATEGORY.get(category, 1)
     return 1
+
+
+def _configure_logging() -> None:
+    root = logging.getLogger()
+    if root.handlers:
+        return
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -679,10 +782,12 @@ def main(argv: list[str] | None = None) -> int:
         return int(code) if isinstance(code, int) else 1
 
     try:
+        _configure_logging()
         plans = _build_plans(args)
         dry_run = bool(getattr(args, "dry_run", False))
 
         if dry_run:
+            LOG.info("dry-run mode: no network/database writes")
             print(_to_json_line(_dry_run_summary(plans)))
             return 0
 
