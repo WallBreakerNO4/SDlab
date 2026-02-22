@@ -80,16 +80,55 @@ class _FakeSupabaseWriter:
     def __init__(self) -> None:
         self.calls: int = 0
 
-    def upsert_upload_index(self, payload: dict[str, object]) -> None:
-        _ = payload
+    def upsert_upload_index(
+        self,
+        payload: dict[str, object],
+        *,
+        progress_callback: Callable[[], None] | None = None,
+    ) -> None:
         self.calls += 1
         if self.calls == 1:
             raise _FakeSupabaseError()
 
+        if progress_callback is None:
+            return
+
+        images_raw = payload.get("images")
+        images_list = images_raw if isinstance(images_raw, list) else []
+        total = 1 + len(images_list)
+        for image in images_list:
+            if not isinstance(image, dict):
+                continue
+            variants_raw = image.get("variants")
+            variants_list = variants_raw if isinstance(variants_raw, list) else []
+            total += len(variants_list)
+
+        for _ in range(total):
+            progress_callback()
+
 
 class _NoopSupabaseWriter:
-    def upsert_upload_index(self, payload: dict[str, object]) -> None:
-        _ = payload
+    def upsert_upload_index(
+        self,
+        payload: dict[str, object],
+        *,
+        progress_callback: Callable[[], None] | None = None,
+    ) -> None:
+        if progress_callback is None:
+            return
+
+        images_raw = payload.get("images")
+        images_list = images_raw if isinstance(images_raw, list) else []
+        total = 1 + len(images_list)
+        for image in images_list:
+            if not isinstance(image, dict):
+                continue
+            variants_raw = image.get("variants")
+            variants_list = variants_raw if isinstance(variants_raw, list) else []
+            total += len(variants_list)
+
+        for _ in range(total):
+            progress_callback()
 
 
 class _CapturingExecutor:

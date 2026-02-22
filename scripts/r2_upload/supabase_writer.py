@@ -319,22 +319,34 @@ class SupabaseWriter:
 
         return cls(client=client, dry_run=False)
 
-    def upsert_upload_index(self, payload: dict[str, object]) -> None:
+    def upsert_upload_index(
+        self,
+        payload: dict[str, object],
+        *,
+        progress_callback: Callable[[], None] | None = None,
+    ) -> None:
         run_dir = _required_str(payload, "run_dir")
         run_json = _required_json_object(payload, "run_json")
         images = _optional_object_list(payload.get("images"), field="images")
+
+        def _tick_progress() -> None:
+            if progress_callback is not None:
+                progress_callback()
 
         if self.dry_run:
             return
 
         run_id = self._upsert_run(run_dir, run_json)
+        _tick_progress()
         for image in images:
             image_id = self._upsert_image(run_id, image, run_dir=run_dir)
+            _tick_progress()
             variants = _optional_object_list(
                 image.get("variants"), field="images[].variants"
             )
             for variant in variants:
                 self._upsert_image_variant(image_id, variant, run_dir=run_dir)
+                _tick_progress()
 
     def _upsert_run(self, run_dir: str, run_json: Mapping[str, object]) -> str:
         safe_context = {
@@ -561,8 +573,14 @@ class SupabaseWriter:
         return self._client
 
 
-def upsert_upload_index(payload: dict[str, object]) -> None:
-    SupabaseWriter.from_env(dry_run=False).upsert_upload_index(payload)
+def upsert_upload_index(
+    payload: dict[str, object],
+    *,
+    progress_callback: Callable[[], None] | None = None,
+) -> None:
+    SupabaseWriter.from_env(dry_run=False).upsert_upload_index(
+        payload, progress_callback=progress_callback
+    )
 
 
 def _default_client_factory(
