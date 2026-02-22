@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
 
+from dotenv import find_dotenv, load_dotenv
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
@@ -22,7 +23,7 @@ from .path_safety import normalize_run_dir, resolve_metadata_image_paths
 from .r2_client import R2Client, UploadPlan
 from .r2_keys import bucket_for, cache_control_for, content_type_for, object_key
 from .supabase_writer import SupabaseWriter
-from .variants import plan_image_variants
+from .variants import inspect_image_metadata, plan_image_variants
 
 Category = Literal["normal", "advance", "nsfw"]
 BucketScope = Literal["public", "private"]
@@ -40,6 +41,12 @@ _IMAGE_VARIANTS = {
     "thumb_webp",
     "thumb_avif",
 }
+_DERIVED_IMAGE_VARIANTS: tuple[str, str, str, str] = (
+    "display_webp",
+    "display_avif",
+    "thumb_webp",
+    "thumb_avif",
+)
 
 # 退出码映射（稳定约定）：
 # - 0: 成功
@@ -76,7 +83,8 @@ class PlannedUpload:
     content_type: str
     cache_control: str
     byte_size: int
-    body_bytes: bytes
+    body_bytes: bytes | None = None
+    local_path: Path | None = None
 
     def to_safe_json(self) -> dict[str, object]:
         return {
@@ -86,6 +94,7 @@ class PlannedUpload:
             "content_type": self.content_type,
             "cache_control": self.cache_control,
             "byte_size": self.byte_size,
+            "source": "local_path" if self.local_path is not None else "body_bytes",
         }
 
 
@@ -93,6 +102,7 @@ class PlannedUpload:
 class RunPlan:
     run_dir: Path
     run_dir_name: str
+    intermediate_dir: Path
     processed_images: int
     upload_index_payload: dict[str, object]
     image_uploads: list[PlannedUpload]
@@ -143,6 +153,17 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _to_json_line(payload: Mapping[str, object]) -> str:
@@ -296,29 +317,83 @@ def _build_variant_upload(
     variant: str,
     bucket_scope: BucketScope,
     key: str,
-    body_bytes: bytes,
+    byte_size: int,
+    body_bytes: bytes | None = None,
+    local_path: Path | None = None,
 ) -> PlannedUpload:
+    if (body_bytes is None) == (local_path is None):
+        raise ValueError("exactly one upload source must be provided")
+
     return PlannedUpload(
         variant=variant,
         bucket_scope=bucket_scope,
         key=key,
         content_type=content_type_for(variant),
         cache_control=cache_control_for(bucket_scope),
-        byte_size=len(body_bytes),
+        byte_size=byte_size,
         body_bytes=body_bytes,
+        local_path=local_path,
     )
+
+
+def _variant_extension(variant: str) -> str:
+    if variant == "display_webp" or variant == "thumb_webp":
+        return ".webp"
+    if variant == "display_avif" or variant == "thumb_avif":
+        return ".avif"
+    if variant == "original_png":
+        return ".png"
+    return ".bin"
+
+
+def _write_intermediate_variant(
+    *,
+    run_intermediate_dir: Path,
+    original_sha256: str,
+    batch_index: int,
+    variant: str,
+    body_bytes: bytes,
+) -> tuple[Path, str]:
+    """Write variant to intermediate dir, return (path, sha256).
+
+    If file already exists, reuse it to avoid recompressing.
+    """
+    safe_variant = variant.replace("/", "_")
+    output_name = f"{original_sha256}-{batch_index:06d}-{safe_variant}{_variant_extension(variant)}"
+    output_path = run_intermediate_dir / output_name
+    if output_path.exists():
+        # Reuse cached file: read and compute sha256
+        cached_sha256 = _sha256_file(output_path)
+        return output_path, cached_sha256
+
+    # Write new file
+    output_path.write_bytes(body_bytes)
+    written_sha256 = _sha256_hex(body_bytes)
+    return output_path, written_sha256
+
+
+def _intermediate_variant_path(
+    *,
+    run_intermediate_dir: Path,
+    original_sha256: str,
+    batch_index: int,
+    variant: str,
+) -> Path:
+    safe_variant = variant.replace("/", "_")
+    output_name = f"{original_sha256}-{batch_index:06d}-{safe_variant}{_variant_extension(variant)}"
+    return run_intermediate_dir / output_name
 
 
 def _build_image_payload(
     *,
     run_dir_name: str,
+    run_intermediate_dir: Path,
     image_path: Path,
     metadata_record: dict[str, object],
     category: Category,
     batch_index: int,
 ) -> tuple[dict[str, object], list[PlannedUpload]]:
-    original_bytes = image_path.read_bytes()
-    original_sha256 = _sha256_hex(original_bytes)
+    original_sha256 = _sha256_file(image_path)
 
     uploads: list[PlannedUpload] = []
     variant_rows: list[dict[str, object]] = []
@@ -330,7 +405,8 @@ def _build_image_payload(
         variant=original_variant,
         bucket_scope=original_scope,
         key=original_key,
-        body_bytes=original_bytes,
+        byte_size=image_path.stat().st_size,
+        local_path=image_path,
     )
     uploads.append(original_upload)
     variant_rows.append(
@@ -345,63 +421,125 @@ def _build_image_payload(
         }
     )
 
-    derived_rows = plan_image_variants(image_path)
     blurhash_value: str | None = None
     width: int | None = None
     height: int | None = None
 
-    for row in derived_rows:
-        kind = row.get("kind")
-        if kind == "blurhash":
-            value = row.get("value")
-            if isinstance(value, str) and value:
-                blurhash_value = value
-            continue
-
-        if kind != "image":
-            continue
-
-        variant_raw = row.get("variant")
-        body_bytes = row.get("bytes")
-        row_width = row.get("width")
-        row_height = row.get("height")
-
-        if not isinstance(variant_raw, str) or variant_raw not in _IMAGE_VARIANTS:
-            continue
-        if not isinstance(body_bytes, bytes):
-            continue
-        if isinstance(row_width, int) and isinstance(row_height, int):
-            if width is None:
-                width = row_width
-            if height is None:
-                height = row_height
-
-        scope = bucket_for(category, variant_raw)
-        key = object_key(run_dir_name, original_sha256, variant_raw)
-        upload = _build_variant_upload(
-            variant=variant_raw,
-            bucket_scope=scope,
-            key=key,
-            body_bytes=body_bytes,
+    cached_variant_paths: dict[str, Path] = {
+        variant: _intermediate_variant_path(
+            run_intermediate_dir=run_intermediate_dir,
+            original_sha256=original_sha256,
+            batch_index=batch_index,
+            variant=variant,
         )
-        uploads.append(upload)
+        for variant in _DERIVED_IMAGE_VARIANTS
+    }
+    all_cached = all(path.exists() for path in cached_variant_paths.values())
 
-        variant_sha256 = _sha256_hex(body_bytes)
-        variant_payload: dict[str, object] = {
-            "variant": variant_raw,
-            "bucket": scope,
-            "r2_key": key,
-            "content_type": upload.content_type,
-            "cache_control": upload.cache_control,
-            "byte_size": upload.byte_size,
-            "sha256": variant_sha256,
-        }
-        if isinstance(row_width, int):
-            variant_payload["width"] = row_width
-        if isinstance(row_height, int):
-            variant_payload["height"] = row_height
-        variant_payload.update(_encoding_fields_for_variant(variant_raw))
-        variant_rows.append(variant_payload)
+    if all_cached:
+        metadata = inspect_image_metadata(image_path)
+        display_width = cast(int, metadata["display_width"])
+        display_height = cast(int, metadata["display_height"])
+        thumb_width = cast(int, metadata["thumb_width"])
+        thumb_height = cast(int, metadata["thumb_height"])
+        blurhash_candidate = metadata.get("blurhash")
+        if isinstance(blurhash_candidate, str) and blurhash_candidate:
+            blurhash_value = blurhash_candidate
+        width = display_width
+        height = display_height
+
+        for variant_raw in _DERIVED_IMAGE_VARIANTS:
+            intermediate_path = cached_variant_paths[variant_raw]
+            scope = bucket_for(category, variant_raw)
+            key = object_key(run_dir_name, original_sha256, variant_raw)
+            upload = _build_variant_upload(
+                variant=variant_raw,
+                bucket_scope=scope,
+                key=key,
+                byte_size=intermediate_path.stat().st_size,
+                local_path=intermediate_path,
+            )
+            uploads.append(upload)
+
+            row_width = display_width
+            row_height = display_height
+            if variant_raw in {"thumb_webp", "thumb_avif"}:
+                row_width = thumb_width
+                row_height = thumb_height
+
+            variant_payload: dict[str, object] = {
+                "variant": variant_raw,
+                "bucket": scope,
+                "r2_key": key,
+                "content_type": upload.content_type,
+                "cache_control": upload.cache_control,
+                "byte_size": upload.byte_size,
+                "sha256": _sha256_file(intermediate_path),
+                "width": row_width,
+                "height": row_height,
+            }
+            variant_payload.update(_encoding_fields_for_variant(variant_raw))
+            variant_rows.append(variant_payload)
+    else:
+        derived_rows = plan_image_variants(image_path)
+        for row in derived_rows:
+            kind = row.get("kind")
+            if kind == "blurhash":
+                value = row.get("value")
+                if isinstance(value, str) and value:
+                    blurhash_value = value
+                continue
+
+            if kind != "image":
+                continue
+
+            variant_raw = row.get("variant")
+            body_bytes = row.get("bytes")
+            row_width = row.get("width")
+            row_height = row.get("height")
+
+            if not isinstance(variant_raw, str) or variant_raw not in _IMAGE_VARIANTS:
+                continue
+            if not isinstance(body_bytes, bytes):
+                continue
+            if isinstance(row_width, int) and isinstance(row_height, int):
+                if width is None:
+                    width = row_width
+                if height is None:
+                    height = row_height
+
+            intermediate_path, variant_sha256 = _write_intermediate_variant(
+                run_intermediate_dir=run_intermediate_dir,
+                original_sha256=original_sha256,
+                batch_index=batch_index,
+                variant=variant_raw,
+                body_bytes=body_bytes,
+            )
+            scope = bucket_for(category, variant_raw)
+            key = object_key(run_dir_name, original_sha256, variant_raw)
+            upload = _build_variant_upload(
+                variant=variant_raw,
+                bucket_scope=scope,
+                key=key,
+                byte_size=intermediate_path.stat().st_size,
+                local_path=intermediate_path,
+            )
+            uploads.append(upload)
+            variant_payload: dict[str, object] = {
+                "variant": variant_raw,
+                "bucket": scope,
+                "r2_key": key,
+                "content_type": upload.content_type,
+                "cache_control": upload.cache_control,
+                "byte_size": upload.byte_size,
+                "sha256": variant_sha256,
+            }
+            if isinstance(row_width, int):
+                variant_payload["width"] = row_width
+            if isinstance(row_height, int):
+                variant_payload["height"] = row_height
+            variant_payload.update(_encoding_fields_for_variant(variant_raw))
+            variant_rows.append(variant_payload)
 
     image_payload: dict[str, object] = {
         "x_index": _int_with_default(metadata_record.get("x_index"), default=0),
@@ -424,6 +562,7 @@ def _build_image_payload(
 def _build_run_plan(
     run_dir: Path,
     *,
+    intermediate_root: Path,
     category_override: Category | None,
     remaining_limit: int | None,
     on_image_planned: Callable[[], None] | None = None,
@@ -432,6 +571,8 @@ def _build_run_plan(
     run_json = _load_run_json(normalized_run_dir)
     run_dir_name = _resolve_run_dir_name(normalized_run_dir, run_json)
     metadata_records = _load_metadata_records(normalized_run_dir)
+    run_intermediate_dir = (intermediate_root / run_dir_name).resolve()
+    run_intermediate_dir.mkdir(parents=True, exist_ok=True)
 
     images_rows: list[dict[str, object]] = []
     image_uploads: list[PlannedUpload] = []
@@ -457,6 +598,7 @@ def _build_run_plan(
 
             image_payload, uploads = _build_image_payload(
                 run_dir_name=run_dir_name,
+                run_intermediate_dir=run_intermediate_dir,
                 image_path=image_path,
                 metadata_record=metadata_record,
                 category=category,
@@ -514,6 +656,7 @@ def _build_run_plan(
     return RunPlan(
         run_dir=normalized_run_dir,
         run_dir_name=run_dir_name,
+        intermediate_dir=run_intermediate_dir,
         processed_images=processed_images,
         upload_index_payload=db_payload,
         image_uploads=image_uploads,
@@ -562,9 +705,21 @@ def _upload_if_missing(
             content_type=planned.content_type,
             cache_control=planned.cache_control,
             body_bytes=planned.body_bytes,
+            local_path=planned.local_path,
         )
     )
     return True
+
+
+def _resolve_intermediate_root(args: argparse.Namespace) -> Path:
+    env_value = os.getenv("R2_UPLOAD_INTERMEDIATE_DIR")
+    if isinstance(env_value, str) and env_value.strip():
+        root = Path(env_value.strip()).expanduser().resolve()
+    else:
+        run_root = Path(str(args.run_root)).resolve()
+        root = (run_root / "_r2_upload_intermediate").resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    return root
 
 
 def _validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
@@ -579,6 +734,7 @@ def _validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) ->
 
 def _build_plans(args: argparse.Namespace) -> list[RunPlan]:
     selected_run_dirs = _resolve_selected_run_dirs(args)
+    intermediate_root = _resolve_intermediate_root(args)
     category_override = cast(Category | None, getattr(args, "category", None))
     limit_value = cast(int | None, getattr(args, "limit", None))
 
@@ -596,10 +752,11 @@ def _build_plans(args: argparse.Namespace) -> list[RunPlan]:
             remaining_for_estimate = max(0, remaining_for_estimate - estimated_for_run)
 
     LOG.info(
-        "building upload plans: run_count=%s estimated_images=%s limit=%s",
+        "building upload plans: run_count=%s estimated_images=%s limit=%s intermediate_root=%s",
         len(selected_run_dirs),
         estimated_images,
         limit_value,
+        intermediate_root,
     )
 
     plans: list[RunPlan] = []
@@ -620,6 +777,7 @@ def _build_plans(args: argparse.Namespace) -> list[RunPlan]:
                     break
                 plan = _build_run_plan(
                     run_dir,
+                    intermediate_root=intermediate_root,
                     category_override=category_override,
                     remaining_limit=remaining,
                     on_image_planned=_tick_image_progress,
@@ -652,6 +810,7 @@ def _dry_run_summary(plans: list[RunPlan]) -> dict[str, object]:
         "mode": "dry_run",
         "run_count": len(plans),
         "run_dirs": [plan.run_dir_name for plan in plans],
+        "intermediate_dirs": [str(plan.intermediate_dir) for plan in plans],
         "processed_images": processed_images,
         "planned_variants": planned_variants,
         "planned_uploads": planned_uploads,
@@ -772,7 +931,14 @@ def _configure_logging() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
 
+def _autoload_dotenv() -> None:
+    dotenv_path = find_dotenv(filename=".env", usecwd=True)
+    if dotenv_path:
+        _ = load_dotenv(dotenv_path=dotenv_path, encoding="utf-8")
+
+
 def main(argv: list[str] | None = None) -> int:
+    _autoload_dotenv()
     parser = build_parser()
     try:
         args = parser.parse_args(argv)
