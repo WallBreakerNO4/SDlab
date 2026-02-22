@@ -16,6 +16,7 @@ from scripts.r2_upload.supabase_writer import (
     SupabaseConfigError,
     SupabaseRemoteError,
     SupabaseWriter,
+    _normalize_rows_for_postgrest,
 )
 
 
@@ -87,9 +88,19 @@ class _InMemorySupabaseClient:
     def row_count(self, table_name: str) -> int:
         return len(self._tables[table_name])
 
-    def _upsert(
-        self, table_name: str, row: dict[str, object], on_conflict: str
+    def _upsert_many(
+        self, table_name: str, rows: list[dict[str, object]], on_conflict: str
     ) -> object:
+        result_rows: list[dict[str, object]] = []
+        for row in rows:
+            result_rows.append(self._upsert_one(table_name, row, on_conflict))
+        if self.return_upsert_rows:
+            return result_rows
+        return []
+
+    def _upsert_one(
+        self, table_name: str, row: dict[str, object], on_conflict: str
+    ) -> dict[str, object]:
         key_columns = tuple(part.strip() for part in on_conflict.split(","))
         unique_key = tuple(row[column] for column in key_columns)
         table = self._tables[table_name]
@@ -110,9 +121,7 @@ class _InMemorySupabaseClient:
                 "row": dict(row),
             }
         )
-        if self.return_upsert_rows:
-            return [dict(merged)]
-        return []
+        return dict(merged)
 
     def _select(
         self,
@@ -142,21 +151,33 @@ class _InMemoryQuery:
         self._client = client
         self._table_name = table_name
         self._mode: str | None = None
-        self._upsert_row: dict[str, object] | None = None
+        self._upsert_rows: list[dict[str, object]] = []
         self._on_conflict = ""
         self._filters: list[tuple[str, object]] = []
         self._limit: int | None = None
 
     def upsert(self, json: object, *, on_conflict: str) -> "_InMemoryQuery":
-        if not isinstance(json, dict):
-            raise TypeError("upsert payload must be dict")
+        rows: list[dict[str, object]] = []
+        if isinstance(json, dict):
+            rows = [dict(cast(dict[str, object], json))]
+        elif isinstance(json, list):
+            for item in cast(list[object], json):
+                if not isinstance(item, dict):
+                    raise TypeError("upsert payload rows must be dict")
+                rows.append(dict(cast(dict[str, object], item)))
+        else:
+            raise TypeError("upsert payload must be dict or list")
+        if not rows:
+            raise TypeError("upsert payload must not be empty")
         self._mode = "upsert"
-        self._upsert_row = dict(cast(dict[str, object], json))
+        self._upsert_rows = rows
         self._on_conflict = on_conflict
         return self
 
     def select(self, columns: str) -> "_InMemoryQuery":
         _ = columns
+        if self._mode == "upsert":
+            return self
         self._mode = "select"
         return self
 
@@ -168,12 +189,16 @@ class _InMemoryQuery:
         self._limit = size
         return self
 
+    def returning(self, mode: str) -> "_InMemoryQuery":
+        _ = mode
+        return self
+
     def execute(self) -> _FakeResponse:
         if self._mode == "upsert":
-            assert self._upsert_row is not None
-            data = self._client._upsert(
+            assert self._upsert_rows
+            data = self._client._upsert_many(
                 self._table_name,
-                self._upsert_row,
+                self._upsert_rows,
                 self._on_conflict,
             )
             return _FakeResponse(data)
@@ -212,6 +237,10 @@ class _BoomQuery:
 
     def limit(self, size: int) -> "_BoomQuery":
         _ = size
+        return self
+
+    def returning(self, mode: str) -> "_BoomQuery":
+        _ = mode
         return self
 
     def execute(self) -> _FakeResponse:
@@ -337,3 +366,17 @@ def test_remote_error_wraps_without_secret_leak() -> None:
     assert exc.value.context["operation"] == "upsert"
     assert exc.value.context["remote_code"] == "23505"
     assert "SUPER_SECRET_TOKEN_123" not in str(exc.value)
+
+
+def test_normalize_rows_for_postgrest_fills_missing_keys_with_null() -> None:
+    rows = [
+        {"image_id": "img-1", "variant": "thumb_webp", "webp_quality": 82},
+        {"image_id": "img-1", "variant": "display_avif", "avif_quality": 20},
+    ]
+
+    normalized = _normalize_rows_for_postgrest(rows)
+
+    assert len(normalized) == 2
+    assert set(normalized[0].keys()) == set(normalized[1].keys())
+    assert normalized[0]["avif_quality"] is None
+    assert normalized[1]["webp_quality"] is None

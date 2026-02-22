@@ -1089,6 +1089,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     except Exception as exc:
         category = getattr(exc, "category", None)
+        error_code = getattr(exc, "code", None)
+        error_context = getattr(exc, "context", None)
         exit_code = _exit_code_for_exception(exc)
         error_payload = {
             "mode": "error",
@@ -1098,6 +1100,10 @@ def main(argv: list[str] | None = None) -> int:
         }
         if isinstance(category, str):
             error_payload["category"] = category
+        if isinstance(error_code, str) and error_code:
+            error_payload["code"] = error_code
+        if isinstance(error_context, dict):
+            error_payload["context"] = dict(error_context)
         print(_to_json_line(error_payload))
         return exit_code
 
