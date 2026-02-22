@@ -1,10 +1,10 @@
 # Agent Guide (sd-style-lab/images-script)
 
-**生成时间:** 2026-02-20T22:37:06+0800
-**Commit:** 1fd8fc8
+**生成时间:** 2026-02-22T19:05:00+0800
+**Commit:** d06bed8
 **分支:** main
 
-本文件面向在本仓库里自动写代码/改代码的 agent；子目录的 `AGENTS.md` 只覆盖该目录的“局部知识”，避免与根文件重复。
+本文件面向在本仓库里自动写代码/改代码的 agent；子目录的 `AGENTS.md` 只覆盖该目录的"局部知识"，避免与根文件重复。
 
 ## 概览
 
@@ -37,10 +37,12 @@
 │   └── AGENTS.md
 │   ├── cli/                  # 交互菜单与脚本入口注册
 │   │   └── AGENTS.md
+│   ├── generation/           # 核心 runner + ComfyUI 通信 + workflow patch
+│   │   └── AGENTS.md
 │   ├── other/                # CSV 转 JSON 的辅助转换脚本
 │   └── r2_upload/            # R2 上传脚本（外部集成边界）
 │       └── AGENTS.md
-├── tests/                    # pytest（偏“可观测输出”）
+├── tests/                    # pytest（偏"可观测输出"）
 │   └── AGENTS.md
 ├── data/                     # 输入资产（CSV + workflow JSON；只读）
 │   └── AGENTS.md
@@ -58,6 +60,7 @@
 | 目录 | 复杂度(0-20) | 理由 |
 | --- | ---: | --- |
 | `scripts/` | 20 | CLI runner + 并发 + 落盘合约（`run.json`/`metadata.jsonl`/images） |
+| `scripts/generation/` | 18 | 核心 runner + ComfyUI 通信 + workflow patch（8 Python 文件） |
 | `components/ui/` | 18 | primitives 体量大；`cva`/`cn()`/Radix 约定集中（含 `sidebar.tsx`） |
 | `lib/` | 14 | 解析 run 产物 + 路径安全（API/页面都依赖） |
 | `app/api/comfyui/` | 12 | Node runtime + allowlist + payload 收敛 + 安全回归 |
@@ -128,7 +131,7 @@ E2E_SERVER=start E2E_PORT=3001 pnpm test:e2e -- -g "task 16"
 - 不改/不提交：`.env*`、`.venv/`、`node_modules/`、`.next/`、`comfyui_api_outputs/`、`.sisyphus/`（均为环境/生成物）
 - 不要把运行输出（`run.json`/`metadata.jsonl`/图片）写进 `data/`（`data/` 只读资产）
 - `types/routes.d.ts`、`types/validator.ts` 为 Next.js 生成文件（文件头已写明），不要手改
-- 修 bug 不要顺手大重构；单测失败不要“删测/放宽断言”来过
+- 修 bug 不要顺手大重构；单测失败不要"删测/放宽断言"来过
 - 新增依赖或修改 `pyproject.toml`/`package.json`：除非用户明确要求，否则先停下来问
 
 ## 分层文档
