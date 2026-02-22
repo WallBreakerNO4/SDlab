@@ -219,3 +219,28 @@ def test_cli_dry_run_writes_intermediate_variants_to_env_dir(
     assert len(files) == 4
     suffixes = {item.suffix for item in files}
     assert suffixes == {".webp", ".avif"}
+
+
+def test_cli_dry_run_reuses_cached_variants_without_reencoding(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_dir = _write_run_fixture(tmp_path, run_name="run-20260221T160000Z")
+
+    first_exit = main(["--dry-run", "--run-dir", str(run_dir)])
+    assert first_exit == 0
+    _ = _read_stdout_json(capsys)
+
+    def _fail_reencode(_: Path) -> list[dict[str, object]]:
+        raise AssertionError("plan_image_variants should not run when cache exists")
+
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.plan_image_variants",
+        _fail_reencode,
+    )
+
+    second_exit = main(["--dry-run", "--run-dir", str(run_dir)])
+    assert second_exit == 0
+    payload = _read_stdout_json(capsys)
+    assert payload.get("processed_images") == 1

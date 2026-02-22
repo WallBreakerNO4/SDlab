@@ -70,6 +70,30 @@ def _compute_blurhash_from_thumb(thumb_image: Image.Image) -> tuple[str, int, in
     return (blurhash_encode(rows), semantic_rgb.width, semantic_rgb.height)
 
 
+def inspect_image_metadata(image_path: Path) -> dict[str, object]:
+    with Image.open(image_path) as opened_image:
+        _ = opened_image.load()
+        source = _coerce_upload_mode(opened_image)
+
+    display_width = source.width
+    display_height = source.height
+    thumb = cast(
+        Image.Image,
+        source.resize(
+            thumb_size(source.width, source.height),
+            Image.Resampling.LANCZOS,
+        ),
+    )
+    blurhash_value, _, _ = _compute_blurhash_from_thumb(thumb)
+    return {
+        "display_width": display_width,
+        "display_height": display_height,
+        "thumb_width": thumb.width,
+        "thumb_height": thumb.height,
+        "blurhash": blurhash_value,
+    }
+
+
 def plan_image_variants(image_path: Path) -> list[dict[str, object]]:
     with Image.open(image_path) as opened_image:
         _ = opened_image.load()
