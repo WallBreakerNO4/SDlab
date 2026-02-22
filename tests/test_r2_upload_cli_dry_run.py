@@ -196,3 +196,26 @@ def test_cli_run_dir_can_be_name_when_run_root_is_provided(
     assert exit_code == 0
     payload = _read_stdout_json(capsys)
     assert payload.get("run_dirs") == ["run-20260221T140000Z"]
+
+
+def test_cli_dry_run_writes_intermediate_variants_to_env_dir(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_dir = _write_run_fixture(tmp_path, run_name="run-20260221T150000Z")
+    intermediate_root = tmp_path / "custom-intermediate"
+    monkeypatch.setenv("R2_UPLOAD_INTERMEDIATE_DIR", str(intermediate_root))
+
+    exit_code = main(["--dry-run", "--run-dir", str(run_dir)])
+
+    assert exit_code == 0
+    payload = _read_stdout_json(capsys)
+
+    expected_run_intermediate = intermediate_root / "run-20260221T150000Z"
+    assert payload.get("intermediate_dirs") == [str(expected_run_intermediate)]
+
+    files = [item for item in expected_run_intermediate.iterdir() if item.is_file()]
+    assert len(files) == 4
+    suffixes = {item.suffix for item in files}
+    assert suffixes == {".webp", ".avif"}
