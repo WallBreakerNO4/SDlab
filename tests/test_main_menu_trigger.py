@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import builtins
 import importlib
+import os
 import sys
 from pathlib import Path
 
@@ -165,6 +166,7 @@ def test_main_menu_convert_uses_dotenv_default_csv(
         "Preview command: uv run python scripts/other/convert_y_csv_to_json.py from-dotenv.csv"
         in stdout_stream.getvalue()
     )
+    monkeypatch.delenv("CONVERT_Y_DEFAULT_CSV", raising=False)
 
 
 def test_main_menu_flag_non_tty_prints_reason_and_returns_2(
