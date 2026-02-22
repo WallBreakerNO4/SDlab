@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import sys
+from concurrent.futures import Future
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -85,6 +87,40 @@ class _FakeSupabaseWriter:
             raise _FakeSupabaseError()
 
 
+class _NoopSupabaseWriter:
+    def upsert_upload_index(self, payload: dict[str, object]) -> None:
+        _ = payload
+
+
+class _CapturingExecutor:
+    seen_max_workers: list[int] = []
+
+    def __init__(self, *, max_workers: int) -> None:
+        self.max_workers = max_workers
+        self.seen_max_workers.append(max_workers)
+
+    def __enter__(self) -> "_CapturingExecutor":
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        _ = (exc_type, exc, tb)
+
+    def submit(
+        self,
+        fn: Callable[..., object],
+        /,
+        *args: object,
+        **kwargs: object,
+    ) -> Future[object]:
+        future: Future[object] = Future()
+        try:
+            result = fn(*args, **kwargs)
+            future.set_result(result)
+        except Exception as exc:
+            future.set_exception(exc)
+        return future
+
+
 def _read_stdout_json(capsys: pytest.CaptureFixture[str]) -> dict[str, object]:
     output = capsys.readouterr().out.strip()
     assert output
@@ -140,3 +176,66 @@ def test_rerun_recovers_db_after_partial_failure_without_reupload(
     for object_ref in fake_r2.uploaded_keys:
         key_counts[object_ref] = key_counts.get(object_ref, 0) + 1
     assert all(count == 1 for count in key_counts.values())
+
+
+def test_execute_uses_r2_upload_concurrency_from_env(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_dir = _write_run_fixture(tmp_path, run_name="run-20260221T190000Z")
+
+    monkeypatch.setenv("R2_PUBLIC_BUCKET", "dummy-public")
+    monkeypatch.setenv("R2_PRIVATE_BUCKET", "dummy-private")
+    monkeypatch.setenv("R2_UPLOAD_CONCURRENCY", "4")
+
+    fake_r2 = _FakeR2Client()
+
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.R2Client.from_env",
+        classmethod(lambda cls, dry_run, **kwargs: fake_r2),
+    )
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.SupabaseWriter.from_env",
+        classmethod(lambda cls, dry_run, **kwargs: _NoopSupabaseWriter()),
+    )
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.ThreadPoolExecutor",
+        _CapturingExecutor,
+    )
+
+    exit_code = main(["--run-dir", str(run_dir)])
+    payload = _read_stdout_json(capsys)
+
+    assert exit_code == 0
+    assert payload.get("mode") == "execute"
+    assert 4 in _CapturingExecutor.seen_max_workers
+
+
+def test_execute_rejects_invalid_r2_upload_concurrency_env(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_dir = _write_run_fixture(tmp_path, run_name="run-20260221T200000Z")
+
+    monkeypatch.setenv("R2_PUBLIC_BUCKET", "dummy-public")
+    monkeypatch.setenv("R2_PRIVATE_BUCKET", "dummy-private")
+    monkeypatch.setenv("R2_UPLOAD_CONCURRENCY", "0")
+
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.R2Client.from_env",
+        classmethod(lambda cls, dry_run, **kwargs: _FakeR2Client()),
+    )
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.SupabaseWriter.from_env",
+        classmethod(lambda cls, dry_run, **kwargs: _NoopSupabaseWriter()),
+    )
+
+    exit_code = main(["--run-dir", str(run_dir)])
+    payload = _read_stdout_json(capsys)
+
+    assert exit_code == 3
+    assert payload.get("mode") == "error"
+    assert payload.get("category") == "config"
+    assert payload.get("exit_code") == 3

@@ -795,6 +795,18 @@ def _resolve_image_workers(args: argparse.Namespace) -> int:
     return cli_workers
 
 
+def _resolve_upload_concurrency() -> int:
+    env_concurrency = _parse_env_optional_int("R2_UPLOAD_CONCURRENCY")
+    if env_concurrency is None:
+        return 1
+    if env_concurrency < 1:
+        raise UploadScriptError(
+            "环境变量 R2_UPLOAD_CONCURRENCY 必须 >= 1",
+            category="config",
+        )
+    return env_concurrency
+
+
 def _validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     concurrency = int(getattr(args, "concurrency", 1))
     if concurrency < 1:
@@ -898,6 +910,7 @@ def _execute(plans: list[RunPlan]) -> dict[str, object]:
     bucket_names = _require_bucket_names()
     r2_client = R2Client.from_env(dry_run=False)
     supabase_writer = SupabaseWriter.from_env(dry_run=False)
+    upload_concurrency = _resolve_upload_concurrency()
 
     uploaded = 0
     skipped_existing = 0
@@ -908,9 +921,10 @@ def _execute(plans: list[RunPlan]) -> dict[str, object]:
         len(plan.image_uploads) + len(plan.manifest_uploads) for plan in plans
     )
     LOG.info(
-        "start upload execution: run_count=%s object_count=%s",
+        "start upload execution: run_count=%s object_count=%s upload_concurrency=%s",
         len(plans),
         total_objects,
+        upload_concurrency,
     )
 
     with logging_redirect_tqdm():
@@ -923,16 +937,22 @@ def _execute(plans: list[RunPlan]) -> dict[str, object]:
             for plan in plans:
                 processed_images += plan.processed_images
 
-                for upload in plan.image_uploads:
-                    if _upload_if_missing(
-                        r2_client=r2_client,
-                        bucket_names=bucket_names,
-                        planned=upload,
-                    ):
-                        uploaded += 1
-                    else:
-                        skipped_existing += 1
-                    pbar.update(1)
+                with ThreadPoolExecutor(max_workers=upload_concurrency) as pool:
+                    futures: list[Future[bool]] = [
+                        pool.submit(
+                            _upload_if_missing,
+                            r2_client=r2_client,
+                            bucket_names=bucket_names,
+                            planned=upload,
+                        )
+                        for upload in plan.image_uploads
+                    ]
+                    for future in as_completed(futures):
+                        if future.result():
+                            uploaded += 1
+                        else:
+                            skipped_existing += 1
+                        pbar.update(1)
 
                 supabase_writer.upsert_upload_index(plan.upload_index_payload)
 

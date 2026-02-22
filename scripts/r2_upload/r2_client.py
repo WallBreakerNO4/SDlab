@@ -275,7 +275,11 @@ class R2Client:
                 aws_access_key_id=access_key_id,
                 aws_secret_access_key=secret_access_key,
                 region_name="auto",
-                config=Config(signature_version="s3v4", retries={"max_attempts": 0}),
+                config=Config(
+                    signature_version="s3v4",
+                    retries={"max_attempts": 0},
+                    max_pool_connections=64,
+                ),
             ),
         )
         return cls(
