@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -109,6 +110,15 @@ class RunPlan:
     manifest_uploads: list[PlannedUpload]
 
 
+@dataclass(frozen=True)
+class PlannedImageTask:
+    index: int
+    image_path: Path
+    metadata_record: dict[str, object]
+    category: Category
+    batch_index: int
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Upload ComfyUI run artifacts to R2 + Supabase."
@@ -141,7 +151,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--concurrency",
         type=int,
         default=1,
-        help="Reserved concurrency option.",
+        help="Image planning worker count fallback when R2_IMAGE_WORKERS is unset.",
     )
     _ = parser.add_argument(
         "--limit",
@@ -467,7 +477,7 @@ def _build_image_payload(
                 row_width = thumb_width
                 row_height = thumb_height
 
-            variant_payload: dict[str, object] = {
+            cached_variant_payload: dict[str, object] = {
                 "variant": variant_raw,
                 "bucket": scope,
                 "r2_key": key,
@@ -478,8 +488,8 @@ def _build_image_payload(
                 "width": row_width,
                 "height": row_height,
             }
-            variant_payload.update(_encoding_fields_for_variant(variant_raw))
-            variant_rows.append(variant_payload)
+            cached_variant_payload.update(_encoding_fields_for_variant(variant_raw))
+            variant_rows.append(cached_variant_payload)
     else:
         derived_rows = plan_image_variants(image_path)
         for row in derived_rows:
@@ -525,7 +535,7 @@ def _build_image_payload(
                 local_path=intermediate_path,
             )
             uploads.append(upload)
-            variant_payload: dict[str, object] = {
+            derived_variant_payload: dict[str, object] = {
                 "variant": variant_raw,
                 "bucket": scope,
                 "r2_key": key,
@@ -535,11 +545,11 @@ def _build_image_payload(
                 "sha256": variant_sha256,
             }
             if isinstance(row_width, int):
-                variant_payload["width"] = row_width
+                derived_variant_payload["width"] = row_width
             if isinstance(row_height, int):
-                variant_payload["height"] = row_height
-            variant_payload.update(_encoding_fields_for_variant(variant_raw))
-            variant_rows.append(variant_payload)
+                derived_variant_payload["height"] = row_height
+            derived_variant_payload.update(_encoding_fields_for_variant(variant_raw))
+            variant_rows.append(derived_variant_payload)
 
     image_payload: dict[str, object] = {
         "x_index": _int_with_default(metadata_record.get("x_index"), default=0),
@@ -565,6 +575,7 @@ def _build_run_plan(
     intermediate_root: Path,
     category_override: Category | None,
     remaining_limit: int | None,
+    image_workers: int,
     on_image_planned: Callable[[], None] | None = None,
 ) -> RunPlan:
     normalized_run_dir = normalize_run_dir(run_dir)
@@ -574,8 +585,7 @@ def _build_run_plan(
     run_intermediate_dir = (intermediate_root / run_dir_name).resolve()
     run_intermediate_dir.mkdir(parents=True, exist_ok=True)
 
-    images_rows: list[dict[str, object]] = []
-    image_uploads: list[PlannedUpload] = []
+    image_tasks: list[PlannedImageTask] = []
     processed_images = 0
 
     for metadata_record in metadata_records:
@@ -595,20 +605,51 @@ def _build_run_plan(
         for offset, image_path in enumerate(image_paths):
             if remaining_limit is not None and processed_images >= remaining_limit:
                 break
-
-            image_payload, uploads = _build_image_payload(
-                run_dir_name=run_dir_name,
-                run_intermediate_dir=run_intermediate_dir,
-                image_path=image_path,
-                metadata_record=metadata_record,
-                category=category,
-                batch_index=base_batch + offset,
+            image_tasks.append(
+                PlannedImageTask(
+                    index=processed_images,
+                    image_path=image_path,
+                    metadata_record=metadata_record,
+                    category=category,
+                    batch_index=base_batch + offset,
+                )
             )
+            processed_images += 1
+
+    images_rows: list[dict[str, object]] = []
+    image_uploads: list[PlannedUpload] = []
+    if image_tasks:
+        ordered_results: list[tuple[dict[str, object], list[PlannedUpload]] | None] = [
+            None
+        ] * len(image_tasks)
+        with ThreadPoolExecutor(max_workers=image_workers) as pool:
+            future_to_task: dict[
+                Future[tuple[dict[str, object], list[PlannedUpload]]], PlannedImageTask
+            ] = {
+                pool.submit(
+                    _build_image_payload,
+                    run_dir_name=run_dir_name,
+                    run_intermediate_dir=run_intermediate_dir,
+                    image_path=task.image_path,
+                    metadata_record=task.metadata_record,
+                    category=task.category,
+                    batch_index=task.batch_index,
+                ): task
+                for task in image_tasks
+            }
+
+            for future in as_completed(future_to_task):
+                task = future_to_task[future]
+                ordered_results[task.index] = future.result()
+                if on_image_planned is not None:
+                    on_image_planned()
+
+        for item in ordered_results:
+            if item is None:
+                raise RuntimeError("missing planned image payload result")
+            image_payload, uploads = item
             images_rows.append(image_payload)
             image_uploads.extend(uploads)
-            processed_images += 1
-            if on_image_planned is not None:
-                on_image_planned()
 
     db_payload: dict[str, object] = {
         "run_dir": run_dir_name,
@@ -722,6 +763,38 @@ def _resolve_intermediate_root(args: argparse.Namespace) -> Path:
     return root
 
 
+def _parse_env_optional_int(name: str) -> int | None:
+    raw = os.getenv(name)
+    if raw is None:
+        return None
+    stripped = raw.strip()
+    if not stripped:
+        return None
+    try:
+        return int(stripped)
+    except ValueError as exc:
+        raise UploadScriptError(
+            f"环境变量 {name} 不是有效整数: {stripped}",
+            category="config",
+        ) from exc
+
+
+def _resolve_image_workers(args: argparse.Namespace) -> int:
+    env_workers = _parse_env_optional_int("R2_IMAGE_WORKERS")
+    if env_workers is not None:
+        if env_workers < 1:
+            raise UploadScriptError(
+                "环境变量 R2_IMAGE_WORKERS 必须 >= 1",
+                category="config",
+            )
+        return env_workers
+
+    cli_workers = int(getattr(args, "concurrency", 1))
+    if cli_workers < 1:
+        raise UploadScriptError("--concurrency 必须 >= 1", category="argument")
+    return cli_workers
+
+
 def _validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     concurrency = int(getattr(args, "concurrency", 1))
     if concurrency < 1:
@@ -735,6 +808,7 @@ def _validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) ->
 def _build_plans(args: argparse.Namespace) -> list[RunPlan]:
     selected_run_dirs = _resolve_selected_run_dirs(args)
     intermediate_root = _resolve_intermediate_root(args)
+    image_workers = _resolve_image_workers(args)
     category_override = cast(Category | None, getattr(args, "category", None))
     limit_value = cast(int | None, getattr(args, "limit", None))
 
@@ -752,11 +826,12 @@ def _build_plans(args: argparse.Namespace) -> list[RunPlan]:
             remaining_for_estimate = max(0, remaining_for_estimate - estimated_for_run)
 
     LOG.info(
-        "building upload plans: run_count=%s estimated_images=%s limit=%s intermediate_root=%s",
+        "building upload plans: run_count=%s estimated_images=%s limit=%s intermediate_root=%s image_workers=%s",
         len(selected_run_dirs),
         estimated_images,
         limit_value,
         intermediate_root,
+        image_workers,
     )
 
     plans: list[RunPlan] = []
@@ -780,6 +855,7 @@ def _build_plans(args: argparse.Namespace) -> list[RunPlan]:
                     intermediate_root=intermediate_root,
                     category_override=category_override,
                     remaining_limit=remaining,
+                    image_workers=image_workers,
                     on_image_planned=_tick_image_progress,
                 )
                 plans.append(plan)

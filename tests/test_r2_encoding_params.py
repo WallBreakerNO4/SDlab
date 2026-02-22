@@ -20,8 +20,8 @@ _KINDS: tuple[EncodingKind, EncodingKind] = ("display", "thumb")
 
 
 def test_webp_params_use_required_quality_and_method() -> None:
-    assert webp_params("display") == {"quality": 93, "method": 6}
-    assert webp_params("thumb") == {"quality": 82, "method": 6}
+    assert webp_params("display") == {"quality": 93, "method": 4}
+    assert webp_params("thumb") == {"quality": 82, "method": 0}
 
 
 def test_avif_params_keep_display_higher_quality_than_thumb() -> None:
@@ -38,7 +38,7 @@ def test_encoding_params_return_defensive_copies() -> None:
     params = webp_params("display")
     params["quality"] = 1
 
-    assert webp_params("display") == {"quality": 93, "method": 6}
+    assert webp_params("display") == {"quality": 93, "method": 4}
 
 
 @pytest.mark.parametrize("kind", _KINDS)

@@ -5,13 +5,13 @@ from __future__ import annotations
 """Central encoder params for R2 image variants.
 
 WebP:
-- display -> quality=93, method=6
-- thumb -> quality=82, method=6
+- display -> quality=93, method=4
+- thumb -> quality=82, method=0
 
 AVIF uses Pillow save args (quality/speed/subsampling), not CRF.
 Chosen values keep "display higher quality than thumb":
-- display -> quality=72, speed=6, subsampling="4:2:0"
-- thumb -> quality=58, speed=8, subsampling="4:2:0"
+- display -> quality=72, speed=8, subsampling="4:2:0"
+- thumb -> quality=58, speed=9, subsampling="4:2:0"
 """
 
 from typing import Final, Literal, cast
@@ -23,13 +23,13 @@ _ = pillow_avif
 EncodingKind = Literal["display", "thumb"]
 
 _WEBP_BY_KIND: Final[dict[EncodingKind, dict[str, object]]] = {
-    "display": {"quality": 93, "method": 6},
-    "thumb": {"quality": 82, "method": 6},
+    "display": {"quality": 93, "method": 4},
+    "thumb": {"quality": 82, "method": 0},
 }
 
 _AVIF_BY_KIND: Final[dict[EncodingKind, dict[str, object]]] = {
-    "display": {"quality": 72, "speed": 6, "subsampling": "4:2:0"},
-    "thumb": {"quality": 58, "speed": 8, "subsampling": "4:2:0"},
+    "display": {"quality": 72, "speed": 8, "subsampling": "4:2:0"},
+    "thumb": {"quality": 58, "speed": 9, "subsampling": "4:2:0"},
 }
 
 

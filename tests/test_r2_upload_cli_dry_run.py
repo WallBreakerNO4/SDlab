@@ -244,3 +244,35 @@ def test_cli_dry_run_reuses_cached_variants_without_reencoding(
     assert second_exit == 0
     payload = _read_stdout_json(capsys)
     assert payload.get("processed_images") == 1
+
+
+def test_cli_uses_r2_image_workers_from_env(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_dir = _write_run_fixture(tmp_path, run_name="run-20260221T170000Z")
+    monkeypatch.setenv("R2_IMAGE_WORKERS", "3")
+
+    exit_code = main(["--dry-run", "--run-dir", str(run_dir)])
+
+    assert exit_code == 0
+    payload = _read_stdout_json(capsys)
+    assert payload.get("processed_images") == 1
+
+
+def test_cli_rejects_invalid_r2_image_workers_env(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_dir = _write_run_fixture(tmp_path, run_name="run-20260221T180000Z")
+    monkeypatch.setenv("R2_IMAGE_WORKERS", "0")
+
+    exit_code = main(["--dry-run", "--run-dir", str(run_dir)])
+
+    assert exit_code == 3
+    payload = _read_stdout_json(capsys)
+    assert payload.get("mode") == "error"
+    assert payload.get("category") == "config"
+    assert payload.get("exit_code") == 3
