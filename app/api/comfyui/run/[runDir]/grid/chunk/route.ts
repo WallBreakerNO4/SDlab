@@ -192,7 +192,7 @@ export async function GET(
 
     const xIndexMap = buildVisibleXIndexMap(metaRow.x_columns)
     const cf = getCloudflareContext()
-    const cfEnv = (cf?.env ?? {}) as Record<string, string | undefined>
+    const cfEnv = (cf?.env ?? {}) as unknown as Record<string, string | undefined>
     const publicBaseUrl = normalizePublicBaseUrl(
       process.env.NEXT_PUBLIC_R2_PUBLIC_BASE_URL || cfEnv.NEXT_PUBLIC_R2_PUBLIC_BASE_URL
     )
