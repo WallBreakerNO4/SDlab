@@ -29,6 +29,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <div className="flex justify-end p-4">
+          <a href="/login" className="text-sm font-medium hover:underline">登录</a>
+        </div>
         {children}
       </body>
     </html>
