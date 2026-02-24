@@ -1,4 +1,5 @@
 import { isValidRunDir } from "@/lib/comfyui-types"
+import { getCloudflareContext } from "@opennextjs/cloudflare"
 import { createClient } from "@/lib/supabase/server"
 
 export const runtime = "nodejs"
@@ -135,13 +136,14 @@ function originalDownloadUrl(original: unknown): string | null {
   }
 
   const record = original as Record<string, unknown>
+  const bucket = typeof record.bucket === "string" ? record.bucket : null
   const variantId = typeof record.variant_id === "string" ? record.variant_id : null
 
-  if (!variantId) {
-    return null
+  if (bucket === "private" && variantId) {
+    return `/api/media/variant/${variantId}?download=1`
   }
 
-  return `/api/media/variant/${variantId}?download=1`
+  return null
 }
 
 export async function GET(
@@ -189,7 +191,11 @@ export async function GET(
     }
 
     const xIndexMap = buildVisibleXIndexMap(metaRow.x_columns)
-    const publicBaseUrl = normalizePublicBaseUrl(process.env.NEXT_PUBLIC_R2_PUBLIC_BASE_URL)
+    const cf = getCloudflareContext()
+    const cfEnv = (cf?.env ?? {}) as Record<string, string | undefined>
+    const publicBaseUrl = normalizePublicBaseUrl(
+      process.env.NEXT_PUBLIC_R2_PUBLIC_BASE_URL || cfEnv.NEXT_PUBLIC_R2_PUBLIC_BASE_URL
+    )
 
     const { data: chunkData, error: chunkError } = await supabase.rpc("get_run_grid_chunk", {
       target_run_dir: runDir,
