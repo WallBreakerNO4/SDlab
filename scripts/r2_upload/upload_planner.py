@@ -109,23 +109,15 @@ def _build_variant_upload(
     )
 
 
-def _build_image_payload(
+def _prepare_image_payload_inputs(
     *,
     run_dir_name: str,
     run_intermediate_dir: Path,
     image_path: Path,
-    metadata_record: dict[str, object],
     category: Category,
     batch_index: int,
-    plan_image_variants_fn: Callable[
-        [Path], list[dict[str, object]]
-    ] = plan_image_variants,
-    inspect_image_metadata_fn: Callable[
-        [Path], dict[str, object]
-    ] = inspect_image_metadata,
-) -> tuple[dict[str, object], list[PlannedUpload]]:
+) -> tuple[str, list[PlannedUpload], list[dict[str, object]], dict[str, Path], bool]:
     original_sha256 = _sha256_file(image_path)
-
     uploads: list[PlannedUpload] = []
     variant_rows: list[dict[str, object]] = []
 
@@ -152,10 +144,6 @@ def _build_image_payload(
         }
     )
 
-    blurhash_value: str | None = None
-    width: int | None = None
-    height: int | None = None
-
     cached_variant_paths: dict[str, Path] = {
         variant: _intermediate_variant_path(
             run_intermediate_dir=run_intermediate_dir,
@@ -166,6 +154,27 @@ def _build_image_payload(
         for variant in _DERIVED_IMAGE_VARIANTS
     }
     all_cached = all(path.exists() for path in cached_variant_paths.values())
+    return original_sha256, uploads, variant_rows, cached_variant_paths, all_cached
+
+
+def _collect_derived_variant_payloads(
+    *,
+    run_dir_name: str,
+    run_intermediate_dir: Path,
+    image_path: Path,
+    category: Category,
+    batch_index: int,
+    original_sha256: str,
+    uploads: list[PlannedUpload],
+    variant_rows: list[dict[str, object]],
+    cached_variant_paths: dict[str, Path],
+    all_cached: bool,
+    plan_image_variants_fn: Callable[[Path], list[dict[str, object]]],
+    inspect_image_metadata_fn: Callable[[Path], dict[str, object]],
+) -> tuple[int | None, int | None, str | None]:
+    blurhash_value: str | None = None
+    width: int | None = None
+    height: int | None = None
 
     if all_cached:
         metadata = inspect_image_metadata_fn(image_path)
@@ -211,67 +220,82 @@ def _build_image_payload(
             }
             cached_variant_payload.update(_encoding_fields_for_variant(variant_raw))
             variant_rows.append(cached_variant_payload)
-    else:
-        derived_rows = plan_image_variants_fn(image_path)
-        for row in derived_rows:
-            kind = row.get("kind")
-            if kind == "blurhash":
-                value = row.get("value")
-                if isinstance(value, str) and value:
-                    blurhash_value = value
-                continue
 
-            if kind != "image":
-                continue
+        return width, height, blurhash_value
 
-            variant_raw = row.get("variant")
-            body_bytes = row.get("bytes")
-            row_width = row.get("width")
-            row_height = row.get("height")
+    derived_rows = plan_image_variants_fn(image_path)
+    for row in derived_rows:
+        kind = row.get("kind")
+        if kind == "blurhash":
+            value = row.get("value")
+            if isinstance(value, str) and value:
+                blurhash_value = value
+            continue
 
-            if not isinstance(variant_raw, str) or variant_raw not in _IMAGE_VARIANTS:
-                continue
-            if not isinstance(body_bytes, bytes):
-                continue
-            if isinstance(row_width, int) and isinstance(row_height, int):
-                if width is None:
-                    width = row_width
-                if height is None:
-                    height = row_height
+        if kind != "image":
+            continue
 
-            intermediate_path, variant_sha256 = _write_intermediate_variant(
-                run_intermediate_dir=run_intermediate_dir,
-                original_sha256=original_sha256,
-                batch_index=batch_index,
-                variant=variant_raw,
-                body_bytes=body_bytes,
-            )
-            scope = bucket_for(category, variant_raw)
-            key = object_key(run_dir_name, original_sha256, variant_raw)
-            upload = _build_variant_upload(
-                variant=variant_raw,
-                bucket_scope=scope,
-                key=key,
-                byte_size=intermediate_path.stat().st_size,
-                local_path=intermediate_path,
-            )
-            uploads.append(upload)
-            derived_variant_payload: dict[str, object] = {
-                "variant": variant_raw,
-                "bucket": scope,
-                "r2_key": key,
-                "content_type": upload.content_type,
-                "cache_control": upload.cache_control,
-                "byte_size": upload.byte_size,
-                "sha256": variant_sha256,
-            }
-            if isinstance(row_width, int):
-                derived_variant_payload["width"] = row_width
-            if isinstance(row_height, int):
-                derived_variant_payload["height"] = row_height
-            derived_variant_payload.update(_encoding_fields_for_variant(variant_raw))
-            variant_rows.append(derived_variant_payload)
+        variant_raw = row.get("variant")
+        body_bytes = row.get("bytes")
+        row_width = row.get("width")
+        row_height = row.get("height")
 
+        if not isinstance(variant_raw, str) or variant_raw not in _IMAGE_VARIANTS:
+            continue
+        if not isinstance(body_bytes, bytes):
+            continue
+        if isinstance(row_width, int) and isinstance(row_height, int):
+            if width is None:
+                width = row_width
+            if height is None:
+                height = row_height
+
+        intermediate_path, variant_sha256 = _write_intermediate_variant(
+            run_intermediate_dir=run_intermediate_dir,
+            original_sha256=original_sha256,
+            batch_index=batch_index,
+            variant=variant_raw,
+            body_bytes=body_bytes,
+        )
+        scope = bucket_for(category, variant_raw)
+        key = object_key(run_dir_name, original_sha256, variant_raw)
+        upload = _build_variant_upload(
+            variant=variant_raw,
+            bucket_scope=scope,
+            key=key,
+            byte_size=intermediate_path.stat().st_size,
+            local_path=intermediate_path,
+        )
+        uploads.append(upload)
+        derived_variant_payload: dict[str, object] = {
+            "variant": variant_raw,
+            "bucket": scope,
+            "r2_key": key,
+            "content_type": upload.content_type,
+            "cache_control": upload.cache_control,
+            "byte_size": upload.byte_size,
+            "sha256": variant_sha256,
+        }
+        if isinstance(row_width, int):
+            derived_variant_payload["width"] = row_width
+        if isinstance(row_height, int):
+            derived_variant_payload["height"] = row_height
+        derived_variant_payload.update(_encoding_fields_for_variant(variant_raw))
+        variant_rows.append(derived_variant_payload)
+
+    return width, height, blurhash_value
+
+
+def _assemble_image_payload(
+    *,
+    metadata_record: dict[str, object],
+    category: Category,
+    batch_index: int,
+    variant_rows: list[dict[str, object]],
+    width: int | None,
+    height: int | None,
+    blurhash_value: str | None,
+) -> dict[str, object]:
     image_payload: dict[str, object] = {
         "x_index": _int_with_default(metadata_record.get("x_index"), default=0),
         "y_index": _int_with_default(metadata_record.get("y_index"), default=0),
@@ -286,7 +310,61 @@ def _build_image_payload(
         image_payload["height"] = height
     if blurhash_value is not None:
         image_payload["blurhash"] = blurhash_value
+    return image_payload
 
+
+def _build_image_payload(
+    *,
+    run_dir_name: str,
+    run_intermediate_dir: Path,
+    image_path: Path,
+    metadata_record: dict[str, object],
+    category: Category,
+    batch_index: int,
+    plan_image_variants_fn: Callable[
+        [Path], list[dict[str, object]]
+    ] = plan_image_variants,
+    inspect_image_metadata_fn: Callable[
+        [Path], dict[str, object]
+    ] = inspect_image_metadata,
+) -> tuple[dict[str, object], list[PlannedUpload]]:
+    (
+        original_sha256,
+        uploads,
+        variant_rows,
+        cached_variant_paths,
+        all_cached,
+    ) = _prepare_image_payload_inputs(
+        run_dir_name=run_dir_name,
+        run_intermediate_dir=run_intermediate_dir,
+        image_path=image_path,
+        category=category,
+        batch_index=batch_index,
+    )
+
+    width, height, blurhash_value = _collect_derived_variant_payloads(
+        run_dir_name=run_dir_name,
+        run_intermediate_dir=run_intermediate_dir,
+        image_path=image_path,
+        category=category,
+        batch_index=batch_index,
+        original_sha256=original_sha256,
+        uploads=uploads,
+        variant_rows=variant_rows,
+        cached_variant_paths=cached_variant_paths,
+        all_cached=all_cached,
+        plan_image_variants_fn=plan_image_variants_fn,
+        inspect_image_metadata_fn=inspect_image_metadata_fn,
+    )
+    image_payload = _assemble_image_payload(
+        metadata_record=metadata_record,
+        category=category,
+        batch_index=batch_index,
+        variant_rows=variant_rows,
+        width=width,
+        height=height,
+        blurhash_value=blurhash_value,
+    )
     return image_payload, uploads
 
 

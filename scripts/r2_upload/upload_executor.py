@@ -44,6 +44,58 @@ def _upload_if_missing(
     return True
 
 
+def _upload_image_variants_for_plan(
+    *,
+    plan: RunPlan,
+    upload_concurrency: int,
+    r2_client: R2Client,
+    bucket_names: dict[BucketScope, str],
+    image_pbar: tqdm,
+    thread_pool_cls: type[ThreadPoolExecutor],
+) -> tuple[int, int]:
+    uploaded = 0
+    skipped_existing = 0
+    with thread_pool_cls(max_workers=upload_concurrency) as pool:
+        futures: list[Future[bool]] = [
+            pool.submit(
+                _upload_if_missing,
+                r2_client=r2_client,
+                bucket_names=bucket_names,
+                planned=upload,
+            )
+            for upload in plan.image_uploads
+        ]
+        for future in as_completed(futures):
+            if future.result():
+                uploaded += 1
+            else:
+                skipped_existing += 1
+            image_pbar.update(1)
+    return uploaded, skipped_existing
+
+
+def _upload_manifests_for_plan(
+    *,
+    plan: RunPlan,
+    r2_client: R2Client,
+    bucket_names: dict[BucketScope, str],
+    manifest_pbar: tqdm,
+) -> tuple[int, int]:
+    manifest_uploaded = 0
+    skipped_existing = 0
+    for manifest_upload in plan.manifest_uploads:
+        if _upload_if_missing(
+            r2_client=r2_client,
+            bucket_names=bucket_names,
+            planned=manifest_upload,
+        ):
+            manifest_uploaded += 1
+        else:
+            skipped_existing += 1
+        manifest_pbar.update(1)
+    return manifest_uploaded, skipped_existing
+
+
 def _execute(
     plans: list[RunPlan],
     *,
@@ -111,38 +163,33 @@ def _execute(
                     for plan in plans:
                         processed_images += plan.processed_images
 
-                        with thread_pool_cls(max_workers=upload_concurrency) as pool:
-                            futures: list[Future[bool]] = [
-                                pool.submit(
-                                    _upload_if_missing,
-                                    r2_client=r2_client,
-                                    bucket_names=bucket_names,
-                                    planned=upload,
-                                )
-                                for upload in plan.image_uploads
-                            ]
-                            for future in as_completed(futures):
-                                if future.result():
-                                    uploaded += 1
-                                else:
-                                    skipped_existing += 1
-                                image_pbar.update(1)
+                        plan_uploaded, plan_skipped = _upload_image_variants_for_plan(
+                            plan=plan,
+                            upload_concurrency=upload_concurrency,
+                            r2_client=r2_client,
+                            bucket_names=bucket_names,
+                            image_pbar=image_pbar,
+                            thread_pool_cls=thread_pool_cls,
+                        )
+                        uploaded += plan_uploaded
+                        skipped_existing += plan_skipped
 
                         supabase_writer.upsert_upload_index(
                             plan.upload_index_payload,
                             progress_callback=_tick_db_progress,
                         )
 
-                        for manifest_upload in plan.manifest_uploads:
-                            if _upload_if_missing(
-                                r2_client=r2_client,
-                                bucket_names=bucket_names,
-                                planned=manifest_upload,
-                            ):
-                                manifest_uploaded += 1
-                            else:
-                                skipped_existing += 1
-                            manifest_pbar.update(1)
+                        (
+                            plan_manifest_uploaded,
+                            plan_manifest_skipped,
+                        ) = _upload_manifests_for_plan(
+                            plan=plan,
+                            r2_client=r2_client,
+                            bucket_names=bucket_names,
+                            manifest_pbar=manifest_pbar,
+                        )
+                        manifest_uploaded += plan_manifest_uploaded
+                        skipped_existing += plan_manifest_skipped
 
                     image_pbar.set_postfix(
                         uploaded=uploaded,
