@@ -596,15 +596,7 @@ def _validate_args(args: argparse.Namespace) -> None:
 
 
 def _append_negative_prompt(base: str | None, append: str | None) -> str:
-    """纯函数：拼接 base negative prompt 和 append negative prompt。
-
-    Args:
-        base: 基础负面提示词，None 视为空字符串
-        append: 追加负面提示词，None 视为空字符串
-
-    Returns:
-        拼接后的负面提示词
-    """
+    """纯函数：拼接 base negative prompt 和 append negative prompt。"""
     if base is None:
         base = ""
     if append is None:
@@ -632,31 +624,12 @@ def _append_negative_prompt(base: str | None, append: str | None) -> str:
     return base_stripped + delimiter + append_cleaned
 
 
-def _load_workflow_context(args: argparse.Namespace) -> WorkflowContext | None:
-    return _workflow_load_workflow_context(args)
-
-
-def _resolve_ksampler_id(workflow: WorkflowDict, requested: str | None) -> str:
-    return _workflow_resolve_ksampler_id(workflow, requested)
-
-
-def _format_node_title(workflow: WorkflowDict, node_id: str) -> str:
-    return _workflow_format_node_title(workflow, node_id)
-
-
-def _extract_workflow_defaults(
-    workflow: WorkflowDict,
-    ksampler_id: str,
-) -> dict[str, object | None]:
-    return _workflow_extract_workflow_defaults(workflow, ksampler_id)
-
-
-def _extract_ref_node_id(value: object, input_name: str) -> str:
-    return _workflow_extract_ref_node_id(value, input_name)
-
-
-def _record_workflow_hash(record: dict[str, object]) -> str | None:
-    return _workflow_record_workflow_hash(record)
+_load_workflow_context = _workflow_load_workflow_context
+_resolve_ksampler_id = _workflow_resolve_ksampler_id
+_format_node_title = _workflow_format_node_title
+_extract_workflow_defaults = _workflow_extract_workflow_defaults
+_extract_ref_node_id = _workflow_extract_ref_node_id
+_record_workflow_hash = _workflow_record_workflow_hash
 
 
 def _build_run_payload(
@@ -717,19 +690,9 @@ def _should_resume_skip(
     )
 
 
-def _extract_local_image_path(existing: dict[str, object] | None) -> str | None:
-    return _records_extract_local_image_path(existing)
-
-
-def _extract_local_image_paths(existing: dict[str, object] | None) -> list[str] | None:
-    return _records_extract_local_image_paths(existing)
-
-
-def _effective_negative_prompt(
-    args: argparse.Namespace,
-    workflow_context: WorkflowContext | None,
-) -> str | None:
-    return _records_effective_negative_prompt(args, workflow_context)
+_extract_local_image_path = _records_extract_local_image_path
+_extract_local_image_paths = _records_extract_local_image_paths
+_effective_negative_prompt = _records_effective_negative_prompt
 
 
 def _final_negative_prompt_for_x_row(
@@ -761,8 +724,7 @@ def _effective_generation_params(
     )
 
 
-def _next_attempt(prev: dict[str, object] | None, *, increment: bool) -> int:
-    return _records_next_attempt(prev, increment=increment)
+_next_attempt = _records_next_attempt
 
 
 def _build_base_metadata_record(
@@ -794,12 +756,8 @@ def _build_base_metadata_record(
     )
 
 
-def _collect_remote_images(history_item: dict[str, object]) -> list[dict[str, str]]:
-    return _coordinator_collect_remote_images(history_item)
-
-
-def _infer_image_extension(image: dict[str, str]) -> str:
-    return _coordinator_infer_image_extension(image)
+_collect_remote_images = _coordinator_collect_remote_images
+_infer_image_extension = _coordinator_infer_image_extension
 
 
 def _worker_submit_and_wait(
@@ -866,12 +824,8 @@ def _build_local_image_paths(
     )
 
 
-def _serialize_error(exc: Exception) -> dict[str, object]:
-    return _coordinator_serialize_error(exc)
-
-
-def _sha256_file(path: Path) -> str:
-    return _payload_sha256_file(path)
+_serialize_error = _coordinator_serialize_error
+_sha256_file = _payload_sha256_file
 
 
 def _coerce_int_or_none(value: object) -> int | None:
@@ -921,8 +875,7 @@ def _as_dict(value: object) -> dict[str, object]:
     raise ValueError("workflow 结构不符合预期，请使用 CLIPTextEncode 版 workflow")
 
 
-def _now_iso() -> str:
-    return _payload_now_iso()
+_now_iso = _payload_now_iso
 
 
 if __name__ == "__main__":
