@@ -3,8 +3,8 @@ from __future__ import annotations
 # pyright: reportPrivateUsage=false
 
 import hashlib
+import importlib
 import json
-import os
 from collections.abc import Callable, Mapping
 from typing import Protocol, cast
 
@@ -54,6 +54,19 @@ class SupabaseQueryLike(Protocol):
 
 class SupabaseClientLike(Protocol):
     def table(self, table_name: str) -> SupabaseQueryLike: ...
+
+
+class _SupabaseEnvModule(Protocol):
+    def require_env(self, name: str) -> str: ...
+
+    def optional_env_int(self, name: str, *, default: int) -> int: ...
+
+
+class _SupabaseNormalizeModule(Protocol):
+    def normalize_rows_for_postgrest(
+        self,
+        rows: list[dict[str, object]],
+    ) -> list[dict[str, object]]: ...
 
 
 ClientFactory = Callable[[str, str], SupabaseClientLike]
@@ -594,22 +607,27 @@ def _default_client_factory(
 
 
 def _require_env(name: str) -> str:
-    value = os.getenv(name)
-    if value is None or not value.strip():
+    try:
+        supabase_env = cast(
+            _SupabaseEnvModule,
+            cast(object, importlib.import_module("scripts.r2_upload.supabase_env")),
+        )
+        return supabase_env.require_env(name)
+    except ValueError:
         raise SupabaseConfigError(
             _MISSING_ENV_MESSAGE,
             code="missing_env",
             context={"missing_env": name},
         )
-    return value.strip()
 
 
 def _optional_env_int(name: str, *, default: int) -> int:
-    raw = os.getenv(name)
-    if raw is None or not raw.strip():
-        return default
     try:
-        return int(raw.strip())
+        supabase_env = cast(
+            _SupabaseEnvModule,
+            cast(object, importlib.import_module("scripts.r2_upload.supabase_env")),
+        )
+        return supabase_env.optional_env_int(name, default=default)
     except ValueError as exc:
         raise SupabaseConfigError(
             "invalid supabase configuration",
@@ -746,24 +764,14 @@ def _extract_rows_from_data(data: object) -> list[Mapping[str, object]]:
 def _normalize_rows_for_postgrest(
     rows: list[dict[str, object]],
 ) -> list[dict[str, object]]:
-    if not rows:
-        return []
-
-    ordered_keys: list[str] = []
-    seen: set[str] = set()
-    for row in rows:
-        for key in row.keys():
-            if key not in seen:
-                ordered_keys.append(key)
-                seen.add(key)
-
-    normalized: list[dict[str, object]] = []
-    for row in rows:
-        normalized_row: dict[str, object] = {}
-        for key in ordered_keys:
-            normalized_row[key] = row.get(key)
-        normalized.append(normalized_row)
-    return normalized
+    supabase_normalize = cast(
+        _SupabaseNormalizeModule,
+        cast(
+            object,
+            importlib.import_module("scripts.r2_upload.supabase_normalize"),
+        ),
+    )
+    return supabase_normalize.normalize_rows_for_postgrest(rows)
 
 
 def _extract_remote_code(exc: Exception) -> str | None:
