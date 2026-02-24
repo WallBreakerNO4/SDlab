@@ -246,6 +246,10 @@ __marimo__/
 /.next/
 /out/
 
+# OpenNext (Cloudflare)
+/.open-next/
+worker-configuration.d.ts
+
 # production
 /build
 

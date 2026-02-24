@@ -5,6 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv",
     "start": "next start",
     "lint": "eslint",
     "test:e2e": "sh -c 'if [ \"$1\" = \"--\" ]; then shift; fi; playwright test \"$@\"' --"
