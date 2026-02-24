@@ -1,7 +1,7 @@
 "use client"
 
 import { useVirtualizer } from "@tanstack/react-virtual"
-import Image from "next/image"
+import { Blurhash } from "react-blurhash"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
@@ -96,6 +96,7 @@ type SelectedCellPreview = {
   positivePrompt: string
   generationParams: RunGridCell["generation_params"]
   items: RunGridCellItem[]
+  blurhash: string | null
 }
 
 function getGridCell(
@@ -110,6 +111,51 @@ function getGridCell(
 
 function formatValue(value: string | number | null | undefined): string {
   return value === null || value === undefined || value === "" ? "-" : String(value)
+}
+
+function ImageWithBlurhash({
+  src,
+  alt,
+  blurhash,
+  className,
+  testId,
+}: {
+  src: string
+  alt: string
+  blurhash?: string | null
+  className?: string
+  testId?: string
+}) {
+  const [isLoaded, setIsLoaded] = useState(false)
+
+  return (
+    <>
+      {blurhash && (
+        <div
+          className={`absolute inset-0 z-0 flex items-center justify-center overflow-hidden rounded transition-opacity duration-300 ${isLoaded ? "opacity-0 pointer-events-none" : "opacity-100"}`}
+          aria-hidden="true"
+        >
+          <Blurhash
+            hash={blurhash}
+            width="100%"
+            height="100%"
+            resolutionX={32}
+            resolutionY={32}
+            punch={1}
+          />
+        </div>
+      )}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={alt}
+        className={`${className || ""} z-10 transition-opacity duration-300 ${!isLoaded && blurhash ? "opacity-0" : "opacity-100"}`}
+        data-testid={testId}
+        onLoad={() => setIsLoaded(true)}
+        loading="lazy"
+      />
+    </>
+  )
 }
 
 export function VirtualGrid({ runDir, meta }: VirtualGridProps) {
@@ -168,7 +214,6 @@ export function VirtualGrid({ runDir, meta }: VirtualGridProps) {
 
     const xCount = Math.max(1, meta.x_count)
     const available = scrollViewportWidth - LEFT_COLUMN_WIDTH
-
     if (available <= 0) {
       return CELL_MIN_WIDTH
     }
@@ -332,6 +377,7 @@ export function VirtualGrid({ runDir, meta }: VirtualGridProps) {
             : "（无 positive prompt）",
         generationParams: cell.generation_params,
         items: cell.items || [],
+        blurhash: cell.blurhash,
       })
       setCurrentImageIndex(0)
       setDialogOpen(true)
@@ -456,15 +502,12 @@ export function VirtualGrid({ runDir, meta }: VirtualGridProps) {
                           className="relative w-full rounded border"
                           style={{ height: previewHeight }}
                         >
-                          <Image
+                          <ImageWithBlurhash
                             alt={`${yLabel} × ${xLabel}`}
-                            className="object-contain"
-                            data-testid="run-grid-image"
-                            fill
-                            loading="lazy"
-                            sizes={`${Math.max(1, cellWidth)}px`}
+                            className="absolute inset-0 h-full w-full object-contain"
+                            testId="run-grid-image"
                             src={imageSrc}
-                            unoptimized
+                            blurhash={cell?.blurhash}
                           />
                         </div>
                       ) : (
@@ -530,13 +573,11 @@ export function VirtualGrid({ runDir, meta }: VirtualGridProps) {
             <div className="space-y-2">
               {currentImageSrc ? (
                 <div className="bg-muted/20 relative h-[62vh] w-full rounded border">
-                  <Image
+                  <ImageWithBlurhash
                     alt={selectedCell ? `${selectedCell.yLabel} × ${selectedCell.xLabel}` : "cell preview"}
-                    className="object-contain"
-                    fill
-                    sizes="100vw"
+                    className="absolute inset-0 h-full w-full object-contain"
                     src={currentImageSrc}
-                    unoptimized
+                    blurhash={selectedCell?.blurhash}
                   />
                 </div>
               ) : (
