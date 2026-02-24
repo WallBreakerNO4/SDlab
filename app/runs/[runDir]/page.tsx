@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
 import { useParams } from "next/navigation"
+import { useEffect, useMemo, useState } from "react"
 
 import {
   type RunGridCell,
@@ -35,8 +35,6 @@ type RunDetailSummary = {
 
 type RunDetailResponse = {
   run: RunDetailSummary
-  xLabels: string[]
-  yLabels: string[]
 }
 
 type LoadState = "loading" | "ready" | "not-found" | "error"
@@ -51,10 +49,6 @@ function isStringArray(value: unknown): value is string[] {
 
 function isRunDetailResponse(value: unknown): value is RunDetailResponse {
   if (!isRecord(value)) {
-    return false
-  }
-
-  if (!isStringArray(value.xLabels) || !isStringArray(value.yLabels)) {
     return false
   }
 
@@ -126,10 +120,12 @@ function formatCreatedAt(createdAt: string): string {
 }
 
 function SummarySkeleton() {
+  const keys = ["run_id", "created_at", "x*y", "total_cells"] as const
+
   return (
     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-      {Array.from({ length: 4 }).map((_, index) => (
-        <div key={index} className="border p-3">
+      {keys.map((key) => (
+        <div key={key} className="border p-3">
           <Skeleton className="mb-2 h-3 w-16" />
           <Skeleton className="h-4 w-full" />
         </div>
@@ -139,12 +135,15 @@ function SummarySkeleton() {
 }
 
 function GridSkeleton() {
+  const rowKeys = ["r1", "r2", "r3", "r4", "r5"] as const
+  const cellKeys = ["c1", "c2", "c3", "c4", "c5", "c6"] as const
+
   return (
     <div className="space-y-2">
-      {Array.from({ length: 5 }).map((_, index) => (
-        <div key={index} className="grid min-w-[960px] grid-cols-6 gap-2">
-          {Array.from({ length: 6 }).map((_, cellIndex) => (
-            <Skeleton key={cellIndex} className="h-32 w-full" />
+      {rowKeys.map((rowKey) => (
+        <div key={rowKey} className="grid min-w-[960px] grid-cols-6 gap-2">
+          {cellKeys.map((cellKey) => (
+            <Skeleton key={`${rowKey}-${cellKey}`} className="h-32 w-full" />
           ))}
         </div>
       ))}
