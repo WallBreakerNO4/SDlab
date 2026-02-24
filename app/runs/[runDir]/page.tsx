@@ -4,8 +4,7 @@ import { useParams } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 
 import {
-  type RunGridCell,
-  type RunGridData,
+  type RunGridMeta,
   VirtualGrid,
 } from "@/components/comfyui/virtual-grid"
 import { Button } from "@/components/ui/button"
@@ -65,46 +64,23 @@ function isRunDetailResponse(value: unknown): value is RunDetailResponse {
   )
 }
 
-function isGridCellStatus(value: unknown): value is RunGridCell["status"] {
-  return (
-    value === "success" ||
-    value === "failed" ||
-    value === "skipped" ||
-    value === "missing"
-  )
-}
-
-function isRunGridCell(value: unknown): value is RunGridCell {
+function isRunGridMeta(value: unknown): value is RunGridMeta {
   if (!isRecord(value)) {
     return false
   }
 
+  if (!isStringArray(value.yLabels)) {
+    return false
+  }
+
+  if (!Array.isArray(value.xColumns)) {
+    return false
+  }
+
   return (
-    isGridCellStatus(value.status) &&
-    typeof value.x_index === "number" &&
-    typeof value.y_index === "number" &&
-    (typeof value.local_image_path === "string" || value.local_image_path === null) &&
-    (typeof value.seed === "number" || value.seed === null) &&
-    (typeof value.prompt_hash === "string" || value.prompt_hash === null) &&
-    (typeof value.positive_prompt === "string" ||
-      value.positive_prompt === undefined)
+    typeof value.x_count === "number" &&
+    typeof value.y_count === "number"
   )
-}
-
-function isRunGridData(value: unknown): value is RunGridData {
-  if (!isRecord(value)) {
-    return false
-  }
-
-  if (!isStringArray(value.xLabels) || !isStringArray(value.yLabels)) {
-    return false
-  }
-
-  if (!isRecord(value.cells)) {
-    return false
-  }
-
-  return Object.values(value.cells).every(isRunGridCell)
 }
 
 function formatCreatedAt(createdAt: string): string {
@@ -156,7 +132,7 @@ export default function RunDetailPage() {
   const params = useParams<{ runDir: string | string[] }>()
   const [loadState, setLoadState] = useState<LoadState>("loading")
   const [detailData, setDetailData] = useState<RunDetailResponse | null>(null)
-  const [gridData, setGridData] = useState<RunGridData | null>(null)
+  const [gridMeta, setGridMeta] = useState<RunGridMeta | null>(null)
 
   const runDir = useMemo(() => {
     if (!params?.runDir) {
@@ -172,7 +148,7 @@ export default function RunDetailPage() {
     async function fetchRunDetail() {
       if (!runDir) {
         setDetailData(null)
-        setGridData(null)
+        setGridMeta(null)
         setLoadState("not-found")
         return
       }
@@ -184,14 +160,14 @@ export default function RunDetailPage() {
           fetch(`/api/comfyui/run/${encodeURIComponent(runDir)}`, {
             signal: abortController.signal,
           }),
-          fetch(`/api/comfyui/run/${encodeURIComponent(runDir)}/grid`, {
+          fetch(`/api/comfyui/run/${encodeURIComponent(runDir)}/grid/meta`, {
             signal: abortController.signal,
           }),
         ])
 
         if (detailResponse.status === 404 || gridResponse.status === 404) {
           setDetailData(null)
-          setGridData(null)
+          setGridMeta(null)
           setLoadState("not-found")
           return
         }
@@ -209,12 +185,12 @@ export default function RunDetailPage() {
           throw new Error("Unexpected run detail payload")
         }
 
-        if (!isRunGridData(gridPayload)) {
-          throw new Error("Unexpected run grid payload")
+        if (!isRunGridMeta(gridPayload)) {
+          throw new Error("Unexpected run grid meta payload")
         }
 
         setDetailData(detailPayload)
-        setGridData(gridPayload)
+        setGridMeta(gridPayload)
         setLoadState("ready")
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
@@ -222,7 +198,7 @@ export default function RunDetailPage() {
         }
 
         setDetailData(null)
-        setGridData(null)
+        setGridMeta(null)
         setLoadState("error")
       }
     }
@@ -236,9 +212,9 @@ export default function RunDetailPage() {
 
   const isLoading = loadState === "loading"
   const isReady =
-    loadState === "ready" && detailData !== null && gridData !== null
-  const xCount = isReady ? gridData.xLabels.length : 0
-  const yCount = isReady ? gridData.yLabels.length : 0
+    loadState === "ready" && detailData !== null && gridMeta !== null
+  const xCount = isReady ? gridMeta.x_count : 0
+  const yCount = isReady ? gridMeta.y_count : 0
 
   return (
     <main className="mx-auto flex h-dvh w-full max-w-none flex-col gap-3 overflow-hidden p-2 md:p-4">
@@ -335,7 +311,7 @@ export default function RunDetailPage() {
 
           {isReady ? (
             <div className="min-h-0 flex-1">
-              <VirtualGrid runDir={runDir} grid={gridData} />
+              <VirtualGrid runDir={runDir} meta={gridMeta} />
             </div>
           ) : null}
 

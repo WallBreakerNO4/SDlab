@@ -1,10 +1,8 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-
-import Image from "next/image"
-
 import { useVirtualizer } from "@tanstack/react-virtual"
+import Image from "next/image"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -17,33 +15,41 @@ import {
 
 type GridCellStatus = "success" | "failed" | "skipped" | "missing"
 
-export type RunGridCell = {
-  status: GridCellStatus
-  x_index: number
-  y_index: number
-  local_image_path: string | null
-  local_image_paths?: string[]
-  seed: number | null
-  prompt_hash: string | null
-  positive_prompt?: string | null
-  generation_params?: {
-    width: number | null
-    height: number | null
-    steps: number | null
-    cfg: number | null
-    sampler_name: string | null
-  }
+export type RunGridMeta = {
+  xColumns: Array<Record<string, unknown>>
+  yLabels: string[]
+  x_count: number
+  y_count: number
 }
 
-export type RunGridData = {
-  xLabels: string[]
-  yLabels: string[]
-  cells: Record<string, RunGridCell>
+export type RunGridCellItem = {
+  batch_index: number
+  thumb_src: string | null
+  display_src: string | null
+  original_download_url: string | null
+}
+
+export type RunGridCell = {
+  x: number
+  y: number
+  status: GridCellStatus
+  blurhash: string | null
+  seed: number | null
+  prompt_hash: string | null
+  positive_prompt: string | null
+  generation_params: {
+    width?: number | null
+    height?: number | null
+    steps?: number | null
+    cfg?: number | null
+    sampler_name?: string | null
+  }
+  items: RunGridCellItem[]
 }
 
 type VirtualGridProps = {
   runDir: string
-  grid: RunGridData
+  meta: RunGridMeta
 }
 
 const CELL_MIN_WIDTH = 184
@@ -89,7 +95,7 @@ type SelectedCellPreview = {
   seed: number | null
   positivePrompt: string
   generationParams: RunGridCell["generation_params"]
-  imagePaths: string[]
+  items: RunGridCellItem[]
 }
 
 function getGridCell(
@@ -100,45 +106,32 @@ function getGridCell(
   return cells[`${xIndex},${yIndex}`] ?? null
 }
 
-function toImageSrc(runDir: string, localImagePath: string): string {
-  const encodedPath = localImagePath
-    .split("/")
-    .filter((segment) => segment.length > 0)
-    .map((segment) => encodeURIComponent(segment))
-    .join("/")
 
-  return `/api/comfyui/image/${encodeURIComponent(runDir)}/${encodedPath}`
-}
-
-function getCellImagePaths(cell: RunGridCell): string[] {
-  const paths = Array.isArray(cell.local_image_paths)
-    ? cell.local_image_paths.filter((path) => path.length > 0)
-    : []
-
-  if (cell.local_image_path && cell.local_image_path.length > 0 && !paths.includes(cell.local_image_path)) {
-    return [cell.local_image_path, ...paths]
-  }
-
-  if (paths.length > 0) {
-    return paths
-  }
-
-  return cell.local_image_path && cell.local_image_path.length > 0
-    ? [cell.local_image_path]
-    : []
-}
 
 function formatValue(value: string | number | null | undefined): string {
   return value === null || value === undefined || value === "" ? "-" : String(value)
 }
 
-export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
+export function VirtualGrid({ runDir, meta }: VirtualGridProps) {
   const scrollElementRef = useRef<HTMLDivElement | null>(null)
   const [scrollViewportWidth, setScrollViewportWidth] = useState<number | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [selectedCell, setSelectedCell] = useState<SelectedCellPreview | null>(null)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [copiedField, setCopiedField] = useState<"prompt" | "seed" | null>(null)
+
+  const [cells, setCells] = useState<Record<string, RunGridCell>>({})
+  const [loadedRows, setLoadedRows] = useState<Map<number, boolean>>(new Map())
+  const loadedRowsRef = useRef<Map<number, boolean>>(new Map())
+  const inFlightRequests = useRef<Set<string>>(new Set())
+
+  const xHeaders = useMemo(() => {
+    return meta.xColumns.map((col, index) => {
+      const label = String(col.label ?? "")
+      const key = typeof col.original_x_index === "number" ? String(col.original_x_index) : String(index)
+      return { label, key, xIndex: index }
+    })
+  }, [meta.xColumns])
 
   useEffect(() => {
     const element = scrollElementRef.current
@@ -164,8 +157,8 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
   }, [])
 
   const preferredAspectRatio = useMemo(
-    () => getPreferredAspectRatio(grid.cells),
-    [grid.cells],
+    () => getPreferredAspectRatio(cells),
+    [cells],
   )
 
   const cellWidth = useMemo(() => {
@@ -173,7 +166,7 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
       return CELL_MIN_WIDTH
     }
 
-    const xCount = Math.max(1, grid.xLabels.length)
+    const xCount = Math.max(1, meta.x_count)
     const available = scrollViewportWidth - LEFT_COLUMN_WIDTH
 
     if (available <= 0) {
@@ -181,7 +174,7 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
     }
 
     return Math.max(CELL_MIN_WIDTH, Math.floor(available / xCount))
-  }, [grid.xLabels.length, scrollViewportWidth])
+  }, [meta.x_count, scrollViewportWidth])
 
   const previewHeight = useMemo(() => {
     const innerWidth = Math.max(1, cellWidth - CELL_PADDING_PX * 2)
@@ -194,27 +187,23 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
 
   // TanStack Virtual's hook returns functions that React Compiler can't memoize safely.
   // We intentionally keep virtualization here for performance.
-  // eslint-disable-next-line react-hooks/incompatible-library
   const rowVirtualizer = useVirtualizer({
-    count: grid.yLabels.length,
+    count: meta.y_count,
     getScrollElement: () => scrollElementRef.current,
     estimateSize: () => rowHeight,
     overscan: 4,
   })
 
   const gridTemplateColumns = useMemo(
-    () => `${LEFT_COLUMN_WIDTH}px repeat(${grid.xLabels.length}, ${cellWidth}px)`,
-    [cellWidth, grid.xLabels.length],
+    () => `${LEFT_COLUMN_WIDTH}px repeat(${meta.x_count}, ${cellWidth}px)`,
+    [cellWidth, meta.x_count],
   )
-  const gridMinWidth = LEFT_COLUMN_WIDTH + grid.xLabels.length * CELL_MIN_WIDTH
+  const gridMinWidth = LEFT_COLUMN_WIDTH + meta.x_count * CELL_MIN_WIDTH
   const virtualRows = rowVirtualizer.getVirtualItems()
   const isDevEnv = process.env.NODE_ENV !== "production"
-  const currentImagePath = selectedCell?.imagePaths[currentImageIndex] ?? null
-  const currentImageSrc =
-    currentImagePath && currentImagePath.length > 0
-      ? toImageSrc(runDir, currentImagePath)
-      : null
-  const totalImages = selectedCell?.imagePaths.length ?? 0
+  const currentItem = selectedCell?.items[currentImageIndex] ?? null
+  const currentImageSrc = currentItem?.display_src ?? currentItem?.thumb_src ?? null
+  const totalImages = selectedCell?.items.length ?? 0
   const sizeText =
     selectedCell?.generationParams?.width !== null &&
     selectedCell?.generationParams?.width !== undefined &&
@@ -231,13 +220,106 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
   }, [dialogOpen])
 
   useEffect(() => {
-    rowVirtualizer.measure()
+    if (rowHeight > 0) {
+      rowVirtualizer.measure()
+    }
   }, [rowHeight, rowVirtualizer])
+
+  useEffect(() => {
+    const _resetKey = `${runDir}:${meta.x_count}:${meta.y_count}`
+    if (_resetKey) {
+      setCells({})
+      setLoadedRows(new Map())
+      loadedRowsRef.current = new Map()
+      inFlightRequests.current.clear()
+    }
+  }, [runDir, meta])
+
+  useEffect(() => {
+    if (virtualRows.length === 0) return
+
+    const minVisible = virtualRows[0].index
+    const maxVisible = virtualRows[virtualRows.length - 1].index
+
+    const y_from = Math.max(0, minVisible - 4)
+    const y_to = Math.min(meta.y_count - 1, maxVisible + 4)
+
+    const rowsToFetch: number[] = []
+    for (let y = y_from; y <= y_to; y++) {
+      if (!loadedRowsRef.current.has(y)) {
+        rowsToFetch.push(y)
+      }
+    }
+
+    if (rowsToFetch.length === 0) return
+
+    const abortController = new AbortController()
+
+    const fetchChunks = async () => {
+      let current_from = y_from
+      while (current_from <= y_to) {
+        const current_to = Math.min(current_from + 29, y_to)
+        const reqKey = `${current_from}-${current_to}`
+
+        if (!inFlightRequests.current.has(reqKey)) {
+          let allLoaded = true
+          for (let y = current_from; y <= current_to; y++) {
+            if (!loadedRowsRef.current.has(y)) {
+              allLoaded = false
+              break
+            }
+          }
+
+          if (!allLoaded) {
+            inFlightRequests.current.add(reqKey)
+            try {
+              const res = await fetch(
+                `/api/comfyui/run/${encodeURIComponent(runDir)}/grid/chunk?y_from=${current_from}&y_to=${current_to}`,
+                { signal: abortController.signal }
+              )
+              if (res.ok) {
+                const data = (await res.json()) as { cells?: RunGridCell[] }
+                const fetchedCells = data?.cells
+                if (Array.isArray(fetchedCells)) {
+                  setCells((prev) => {
+                    const next = { ...prev }
+                    for (const cell of fetchedCells) {
+                      next[`${cell.x},${cell.y}`] = cell
+                    }
+                    return next
+                  })
+                  setLoadedRows((prev) => {
+                    const next = new Map(prev)
+                    for (let y = current_from; y <= current_to; y++) {
+                      next.set(y, true)
+                    }
+                    loadedRowsRef.current = next
+                    return next
+                  })
+                }
+              }
+            } catch (err) {
+              if (err instanceof DOMException && err.name === "AbortError") {
+                // ignore
+              }
+            } finally {
+              inFlightRequests.current.delete(reqKey)
+            }
+          }
+        }
+        current_from = current_to + 1
+      }
+    }
+
+    void fetchChunks()
+
+    return () => {
+      abortController.abort()
+    }
+  }, [virtualRows, meta.y_count, runDir])
 
   const openCellDialog = useCallback(
     (cell: RunGridCell, xIndex: number, yIndex: number, xLabel: string, yLabel: string) => {
-      const imagePaths = getCellImagePaths(cell)
-
       setSelectedCell({
         xIndex,
         yIndex,
@@ -249,7 +331,7 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
             ? cell.positive_prompt
             : "（无 positive prompt）",
         generationParams: cell.generation_params,
-        imagePaths,
+        items: cell.items || [],
       })
       setCurrentImageIndex(0)
       setDialogOpen(true)
@@ -278,7 +360,7 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
 
   const showNextImage = useCallback(() => {
     setCurrentImageIndex((index) => {
-      if (!selectedCell || index >= selectedCell.imagePaths.length - 1) {
+      if (!selectedCell || index >= selectedCell.items.length - 1) {
         return index
       }
 
@@ -290,7 +372,7 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
     <div
       className="flex h-full min-h-0 flex-col overflow-hidden border"
       data-testid="run-grid"
-      data-row-count={grid.yLabels.length}
+      data-row-count={meta.y_count}
       data-row-height={rowHeight}
     >
       {isDevEnv ? (
@@ -316,9 +398,9 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
               >
                 Y\X
               </div>
-              {grid.xLabels.map((xLabel, xIndex) => (
+              {xHeaders.map(({ label: xLabel, key, xIndex }) => (
                 <div
-                  key={`${xLabel}-${xIndex}`}
+                  key={key}
                   className="border-r px-3 py-2 text-xs font-semibold"
                 >
                   <p className="truncate">{`X${xIndex}`}</p>
@@ -333,7 +415,7 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
           <div className="relative" style={{ height: rowVirtualizer.getTotalSize() }}>
             {virtualRows.map((virtualRow) => {
               const yIndex = virtualRow.index
-              const yLabel = grid.yLabels[yIndex] ?? `Y${yIndex}`
+              const yLabel = meta.yLabels[yIndex] ?? `Y${yIndex}`
 
               return (
                 <div
@@ -359,17 +441,14 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
                       </div>
                     </div>
 
-                    {grid.xLabels.map((xLabel, xIndex) => {
-                      const cell = getGridCell(grid.cells, xIndex, yIndex)
-                      const status = cell?.status ?? "missing"
-                      const localImagePath =
-                        status === "success" ? cell?.local_image_path ?? null : null
-                      const imageSrc =
-                        localImagePath && localImagePath.length > 0
-                          ? toImageSrc(runDir, localImagePath)
-                          : null
+                    {xHeaders.map(({ label: xLabel, key, xIndex }) => {
+                      const isLoaded = loadedRows.has(yIndex)
+                      const cell = getGridCell(cells, xIndex, yIndex)
+                      const status = isLoaded ? (cell?.status ?? "missing") : "loading"
+                      const firstItem = cell?.items?.[0]
+                      const imageSrc = status === "success" ? (firstItem?.thumb_src ?? firstItem?.display_src ?? null) : null
                       const placeholderLabel =
-                        status === "success" ? "无图" : STATUS_LABELS[status]
+                        status === "success" ? "无图" : status === "loading" ? "加载中..." : STATUS_LABELS[status as GridCellStatus]
 
                       const canOpenDialog = status === "success" && cell !== null
                       const previewNode = imageSrc ? (
@@ -400,7 +479,7 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
 
                       return (
                         <div
-                          key={`${xIndex}-${yIndex}`}
+                          key={`${key}-${yIndex}`}
                           className="flex h-full flex-col gap-1 border-r p-2"
                         >
                           {canOpenDialog && cell ? (
@@ -556,9 +635,9 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
                   {copiedField === "seed" ? "已复制 seed" : "复制 seed"}
                 </Button>
 
-                {currentImageSrc ? (
+                {currentItem?.original_download_url ? (
                   <Button asChild size="sm" variant="outline">
-                    <a href={currentImageSrc} download>
+                    <a href={currentItem.original_download_url} download>
                       下载原图
                     </a>
                   </Button>
