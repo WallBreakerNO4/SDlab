@@ -142,178 +142,64 @@ def run_menu(
             io.write(f"{invalid_prefix}{selection.error}")
             continue
 
-        if selection.entry is not None and selection.entry.key == GENERATE_ENTRY_KEY:
-            extra_argv_result = _safe_read(io, "Extra argv (optional): ")
-            if extra_argv_result.exit_code is not None:
-                return extra_argv_result.exit_code
-            extra_argv_line = (extra_argv_result.value or "").strip()
-            try:
-                extra_argv = shlex.split(extra_argv_line)
-            except ValueError as exc:
-                io.write(f"{invalid_prefix}Invalid extra argv: {exc}")
-                continue
-
-            preview_command = _build_generate_preview_command(extra_argv)
-            io.write(f"Preview command: {preview_command}")
-
-            confirm_result = _safe_read(io, "Confirm execution? [Y/n]: ")
-            if confirm_result.exit_code is not None:
-                return confirm_result.exit_code
-            confirm = (confirm_result.value or "").strip().lower()
-            if confirm in {"", "y", "yes"}:
-                _run_selection_with_guard(
+        if selection.entry is not None:
+            key = selection.entry.key
+            if key == GENERATE_ENTRY_KEY:
+                res = _prompt_preview_confirm_and_run(
                     io,
                     selection,
-                    extra_argv,
+                    base_command=GENERATE_BASE_COMMAND,
                     success_prefix="Generation finished with exit code: ",
+                    cancel_message="Generation cancelled.",
+                    invalid_prefix=invalid_prefix,
                 )
-                continue
-            else:
-                if confirm not in {"n", "no"}:
-                    io.write("Invalid confirmation, cancelled.")
-                else:
-                    io.write("Generation cancelled.")
+                if res is not None:
+                    return res
                 continue
 
-        if selection.entry is not None and selection.entry.key == "convert_x_csv":
-            extra_argv_result = _safe_read(io, "Extra argv (optional): ")
-            if extra_argv_result.exit_code is not None:
-                return extra_argv_result.exit_code
-            extra_argv_line = (extra_argv_result.value or "").strip()
-            try:
-                extra_argv = shlex.split(extra_argv_line)
-            except ValueError as exc:
-                io.write(f"{invalid_prefix}Invalid extra argv: {exc}")
-                continue
-
-            effective_argv = _resolve_convert_argv(
-                extra_argv, _default_convert_x_argv()
-            )
-            if not extra_argv:
-                io.write(
-                    f"No extra argv provided, using default: {shlex.join(effective_argv)}"
-                )
-            preview_command = _build_convert_x_preview_command(effective_argv)
-            io.write(f"Preview command: {preview_command}")
-
-            confirm_result = _safe_read(io, "Confirm execution? [Y/n]: ")
-            if confirm_result.exit_code is not None:
-                return confirm_result.exit_code
-            confirm = (confirm_result.value or "").strip().lower()
-            if confirm in {"", "y", "yes"}:
-                _run_selection_with_guard(
+            if key == "convert_x_csv":
+                res = _prompt_preview_confirm_and_run(
                     io,
                     selection,
-                    effective_argv,
+                    base_command=CONVERT_X_BASE_COMMAND,
                     success_prefix="Convert finished with exit code: ",
+                    cancel_message="Convert cancelled.",
+                    invalid_prefix=invalid_prefix,
+                    default_argv=_default_convert_x_argv(),
                 )
-                continue
-            else:
-                if confirm not in {"n", "no"}:
-                    io.write("Invalid confirmation, cancelled.")
-                else:
-                    io.write("Convert cancelled.")
+                if res is not None:
+                    return res
                 continue
 
-        if selection.entry is not None and selection.entry.key == "convert_y_csv":
-            extra_argv_result = _safe_read(io, "Extra argv (optional): ")
-            if extra_argv_result.exit_code is not None:
-                return extra_argv_result.exit_code
-            extra_argv_line = (extra_argv_result.value or "").strip()
-            try:
-                extra_argv = shlex.split(extra_argv_line)
-            except ValueError as exc:
-                io.write(f"{invalid_prefix}Invalid extra argv: {exc}")
-                continue
-
-            effective_argv = _resolve_convert_argv(
-                extra_argv, _default_convert_y_argv()
-            )
-            if not extra_argv:
-                io.write(
-                    f"No extra argv provided, using default: {shlex.join(effective_argv)}"
-                )
-            preview_command = _build_convert_y_preview_command(effective_argv)
-            io.write(f"Preview command: {preview_command}")
-
-            confirm_result = _safe_read(io, "Confirm execution? [Y/n]: ")
-            if confirm_result.exit_code is not None:
-                return confirm_result.exit_code
-            confirm = (confirm_result.value or "").strip().lower()
-            if confirm in {"", "y", "yes"}:
-                _run_selection_with_guard(
+            if key == "convert_y_csv":
+                res = _prompt_preview_confirm_and_run(
                     io,
                     selection,
-                    effective_argv,
+                    base_command=CONVERT_Y_BASE_COMMAND,
                     success_prefix="Convert finished with exit code: ",
+                    cancel_message="Convert cancelled.",
+                    invalid_prefix=invalid_prefix,
+                    default_argv=_default_convert_y_argv(),
                 )
-                continue
-            else:
-                if confirm not in {"n", "no"}:
-                    io.write("Invalid confirmation, cancelled.")
-                else:
-                    io.write("Convert cancelled.")
+                if res is not None:
+                    return res
                 continue
 
-        if selection.entry is not None and selection.entry.key == "upload_r2":
-            extra_argv_result = _safe_read(io, "Extra argv (optional): ")
-            if extra_argv_result.exit_code is not None:
-                return extra_argv_result.exit_code
-            extra_argv_line = (extra_argv_result.value or "").strip()
-            try:
-                extra_argv = shlex.split(extra_argv_line)
-            except ValueError as exc:
-                io.write(f"{invalid_prefix}Invalid extra argv: {exc}")
-                continue
-
-            preview_command = _build_upload_r2_preview_command(extra_argv)
-            io.write(f"Preview command: {preview_command}")
-
-            confirm_result = _safe_read(io, "Confirm execution? [Y/n]: ")
-            if confirm_result.exit_code is not None:
-                return confirm_result.exit_code
-            confirm = (confirm_result.value or "").strip().lower()
-            if confirm in {"", "y", "yes"}:
-                _run_selection_with_guard(
+            if key == "upload_r2":
+                res = _prompt_preview_confirm_and_run(
                     io,
                     selection,
-                    extra_argv,
+                    base_command=UPLOAD_R2_BASE_COMMAND,
                     success_prefix="Upload finished with exit code: ",
+                    cancel_message="Upload cancelled.",
+                    invalid_prefix=invalid_prefix,
                 )
-                continue
-            else:
-                if confirm not in {"n", "no"}:
-                    io.write("Invalid confirmation, cancelled.")
-                else:
-                    io.write("Upload cancelled.")
+                if res is not None:
+                    return res
                 continue
 
         io.write(placeholder_message)
         return 0
-
-
-def _build_generate_preview_command(extra_argv: list[str]) -> str:
-    if not extra_argv:
-        return GENERATE_BASE_COMMAND
-    return f"{GENERATE_BASE_COMMAND} {shlex.join(extra_argv)}"
-
-
-def _build_convert_x_preview_command(extra_argv: list[str]) -> str:
-    if not extra_argv:
-        return CONVERT_X_BASE_COMMAND
-    return f"{CONVERT_X_BASE_COMMAND} {shlex.join(extra_argv)}"
-
-
-def _build_convert_y_preview_command(extra_argv: list[str]) -> str:
-    if not extra_argv:
-        return CONVERT_Y_BASE_COMMAND
-    return f"{CONVERT_Y_BASE_COMMAND} {shlex.join(extra_argv)}"
-
-
-def _build_upload_r2_preview_command(extra_argv: list[str]) -> str:
-    if not extra_argv:
-        return UPLOAD_R2_BASE_COMMAND
-    return f"{UPLOAD_R2_BASE_COMMAND} {shlex.join(extra_argv)}"
 
 
 def _resolve_convert_argv(
@@ -390,3 +276,55 @@ def run_selection(selection: MenuSelection, argv: list[str] | None = None) -> in
         raise ValueError(selection.error)
     main_func = load_entrypoint(selection.entry)
     return main_func(argv)
+
+
+def _prompt_preview_confirm_and_run(
+    io: MenuIO,
+    selection: MenuSelection,
+    *,
+    base_command: str,
+    success_prefix: str,
+    cancel_message: str,
+    invalid_prefix: str = "Invalid selection: ",
+    default_argv: tuple[str, ...] | None = None,
+) -> int | None:
+    extra_argv_result = _safe_read(io, "Extra argv (optional): ")
+    if extra_argv_result.exit_code is not None:
+        return extra_argv_result.exit_code
+
+    extra_argv_line = (extra_argv_result.value or "").strip()
+    try:
+        extra_argv = shlex.split(extra_argv_line)
+    except ValueError as exc:
+        io.write(f"{invalid_prefix}Invalid extra argv: {exc}")
+        return None
+
+    effective_argv = extra_argv
+    if default_argv is not None and not extra_argv:
+        effective_argv = list(default_argv)
+        io.write(f"No extra argv provided, using default: {shlex.join(effective_argv)}")
+
+    if not effective_argv:
+        preview_command = base_command
+    else:
+        preview_command = f"{base_command} {shlex.join(effective_argv)}"
+    io.write(f"Preview command: {preview_command}")
+
+    confirm_result = _safe_read(io, "Confirm execution? [Y/n]: ")
+    if confirm_result.exit_code is not None:
+        return confirm_result.exit_code
+
+    confirm = (confirm_result.value or "").strip().lower()
+    if confirm in {"", "y", "yes"}:
+        _run_selection_with_guard(
+            io,
+            selection,
+            effective_argv,
+            success_prefix=success_prefix,
+        )
+    else:
+        if confirm not in {"n", "no"}:
+            io.write("Invalid confirmation, cancelled.")
+        else:
+            io.write(cancel_message)
+    return None
