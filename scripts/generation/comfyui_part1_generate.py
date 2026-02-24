@@ -7,7 +7,6 @@ from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 import hashlib
 import json
 import logging
-import os
 import re
 import sys
 import uuid
@@ -15,10 +14,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from itertools import product
 from pathlib import Path
-from time import monotonic, sleep
 from typing import cast
 
-from dotenv import find_dotenv, load_dotenv
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
@@ -35,7 +32,6 @@ from scripts.generation.comfyui_client import (  # noqa: E402
     comfy_wait_prompt_done_with_fallback,
 )
 from scripts.generation.prompt_grid import (  # noqa: E402
-    X_INFO_TYPE_KEY,
     compute_prompt_hash,
     derive_seed,
     read_x_descriptions,
@@ -49,6 +45,47 @@ from scripts.generation.retry_failed_selection import (  # noqa: E402
 from scripts.generation.run_replay import (  # noqa: E402
     RunReplayConfig,
     load_run_replay_config,
+)
+from scripts.generation.runner_env import (  # noqa: E402
+    _autoload_dotenv,
+    _env_append_negative_prompt,
+    _env_bool,
+    _env_float,
+    _env_optional_float,
+    _env_optional_int,
+    _env_str,
+    _resolve_append_negative_prompt,
+)
+from scripts.generation.runner_selection import (  # noqa: E402
+    SelectedRow,
+    _extract_x_info_type,
+    _parse_indexes,
+    _select_rows,
+    _select_rows_by_fixed_indexes,
+)
+from scripts.generation.output_packager import (  # noqa: E402
+    RunArtifacts,
+    _MetadataWriter,
+    _ensure_newline_terminated,
+    _load_latest_metadata_records,
+    _load_latest_metadata_records_strict,
+    _metadata_writer,
+    _prepare_existing_run_artifacts,
+    _prepare_run_artifacts,
+)
+from scripts.generation.runner_coordinator import (  # noqa: E402
+    RunStats,
+    _CellPlan,
+    _DownloadRequest,
+    _GenOutcome,
+    _build_local_image_paths as _coordinator_build_local_image_paths,
+    _collect_remote_images as _coordinator_collect_remote_images,
+    _fetch_remote_images_with_retry as _coordinator_fetch_remote_images_with_retry,
+    _infer_image_extension as _coordinator_infer_image_extension,
+    _serialize_error as _coordinator_serialize_error,
+    _worker_fetch_and_download as _coordinator_worker_fetch_and_download,
+    _worker_submit_and_wait as _coordinator_worker_submit_and_wait,
+    run_generation,
 )
 from scripts.generation.workflow_patch import (  # noqa: E402
     WorkflowDict,
@@ -64,8 +101,6 @@ DEFAULT_WORKFLOW_JSON = "data/comfyui-flow/CKNOOBRF.json"
 DEFAULT_BASE_URL = "http://127.0.0.1:8188"
 DEFAULT_REQUEST_TIMEOUT_S = 30.0
 DEFAULT_JOB_TIMEOUT_S = 600.0
-DEFAULT_RUN_ROOT = "comfyui_api_outputs"
-
 LOG = logging.getLogger(__name__)
 
 ALLOWED_TEMPLATE_KEYS = {
@@ -81,12 +116,6 @@ TEMPLATE_TOKEN_RE = re.compile(r"\{([a-z_]+)\}")
 
 
 @dataclass(slots=True)
-class SelectedRow:
-    index: int
-    value: dict[str, str]
-
-
-@dataclass(slots=True)
 class WorkflowContext:
     workflow: WorkflowDict
     workflow_json_path: str
@@ -94,61 +123,6 @@ class WorkflowContext:
     selected_ksampler_id: str
     default_negative_prompt: str
     default_params: dict[str, object | None]
-
-
-@dataclass(slots=True)
-class RunArtifacts:
-    run_dir: Path
-    images_dir: Path
-    run_json_path: Path
-    metadata_path: Path
-
-
-@dataclass(slots=True)
-class RunStats:
-    success: int = 0
-    skipped: int = 0
-    failed: int = 0
-    resume_hit: int = 0
-
-
-@dataclass(slots=True)
-class _CellPlan:
-    x_index: int
-    y_index: int
-    x_row: dict[str, str]
-    y_value: str
-    positive_prompt: str
-    prompt_hash: str
-    seed: int
-    generation_params: dict[str, object | None]
-    workflow_hash: str
-    save_image_prefix: str
-    x_description: dict[str, str]
-    attempt: int = 1
-
-
-def _extract_x_info_type(x_row: dict[str, str]) -> str | None:
-    value = x_row.get(X_INFO_TYPE_KEY)
-    if isinstance(value, str):
-        stripped = value.strip()
-        if stripped:
-            return stripped
-    return None
-
-
-@dataclass(slots=True)
-class _DownloadRequest:
-    plan: _CellPlan
-    prompt_id: str
-    started_at: str
-    started_mono: float
-
-
-@dataclass(slots=True)
-class _GenOutcome:
-    record: dict[str, object] | None
-    download: _DownloadRequest | None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -350,7 +324,6 @@ def run(args: argparse.Namespace) -> int:
     latest_records = _load_latest_metadata_records(run_artifacts.metadata_path)
 
     stats = RunStats()
-    has_failed = False
 
     LOG.info(
         "开始运行: total_cells=%s dry_run=%s run_dir=%s",
@@ -367,210 +340,49 @@ def run(args: argparse.Namespace) -> int:
             dynamic_ncols=True,
         ) as pbar:
             with _metadata_writer(run_artifacts.metadata_path) as writer:
-                if not args.dry_run and workflow_context is None:
-                    raise ValueError("非 dry-run 模式必须提供可用 workflow")
-
-                cell_iter = product(x_selected, y_selected)
-                exhausted = False
-
-                gen_futures: set[Future] = set()
-                dl_futures: set[Future] = set()
-
-                def _write_record(record: dict[str, object]) -> None:
-                    nonlocal has_failed
-                    writer.append(record)
-
-                    x_index_obj = record.get("x_index")
-                    y_index_obj = record.get("y_index")
-                    if isinstance(x_index_obj, int) and isinstance(y_index_obj, int):
-                        latest_records[(x_index_obj, y_index_obj)] = record
-
-                    status = record.get("status")
-                    if status == "success":
-                        stats.success += 1
-                    elif status == "failed":
-                        stats.failed += 1
-                        has_failed = True
-                    elif status == "skipped":
-                        stats.skipped += 1
-                        if record.get("skip_reason") == "resume_hit":
-                            stats.resume_hit += 1
-
-                    pbar.set_postfix(
-                        success=stats.success,
-                        skipped=stats.skipped,
-                        failed=stats.failed,
-                        resume_hit=stats.resume_hit,
-                        refresh=False,
-                    )
-                    pbar.update(1)
-
-                def _get_x_description(x_index: int) -> dict[str, str]:
-                    if x_index < len(x_descriptions):
-                        return x_descriptions[x_index]
-                    return {"zh": "", "en": ""}
-
-                def _schedule_until_full(gen_pool: ThreadPoolExecutor) -> None:
-                    nonlocal exhausted
-                    while not exhausted and len(gen_futures) < args.concurrency:
-                        try:
-                            x_item, y_item = next(cell_iter)
-                        except StopIteration:
-                            exhausted = True
-                            return
-
-                        x_index = x_item.index
-                        y_index = y_item.index
-                        x_row = x_item.value
-                        y_value = y_item.value.get("y", "")
-
-                        positive_prompt = _render_prompt_by_template(
-                            args.template, x_row, y_value
-                        )
-                        prompt_hash = compute_prompt_hash(positive_prompt)
-                        seed = derive_seed(args.base_seed, x_index, y_index)
-
-                        resume_record = latest_records.get((x_index, y_index))
-                        skip_attempt = _next_attempt(resume_record, increment=False)
-                        if _should_resume_skip(
-                            existing=resume_record,
-                            run_dir=run_artifacts.run_dir,
-                            expected_prompt_hash=prompt_hash,
-                            expected_seed=seed,
-                            expected_workflow_hash=workflow_hash,
-                        ):
-                            record = _build_base_metadata_record(
-                                status="skipped",
-                                x_index=x_index,
-                                y_index=y_index,
-                                x_row=x_row,
-                                y_value=y_value,
-                                positive_prompt=positive_prompt,
-                                prompt_hash=prompt_hash,
-                                seed=seed,
-                                generation_params=_effective_generation_params(
-                                    args,
-                                    workflow_context,
-                                    x_row,
-                                    seed,
-                                ),
-                                workflow_hash=workflow_hash,
-                                attempt=skip_attempt,
-                            )
-                            record["skip_reason"] = "resume_hit"
-                            record["x_description"] = _get_x_description(x_index)
-                            record["local_image_path"] = _extract_local_image_path(
-                                resume_record
-                            )
-                            record["local_image_paths"] = _extract_local_image_paths(
-                                resume_record
-                            ) or (
-                                [record["local_image_path"]]
-                                if record.get("local_image_path")
-                                else None
-                            )
-                            _write_record(record)
-                            continue
-
-                        if args.dry_run:
-                            record = _build_base_metadata_record(
-                                status="skipped",
-                                x_index=x_index,
-                                y_index=y_index,
-                                x_row=x_row,
-                                y_value=y_value,
-                                positive_prompt=positive_prompt,
-                                prompt_hash=prompt_hash,
-                                seed=seed,
-                                generation_params=_effective_generation_params(
-                                    args,
-                                    workflow_context,
-                                    x_row,
-                                    seed,
-                                ),
-                                workflow_hash=workflow_hash,
-                                attempt=skip_attempt,
-                            )
-                            record["skip_reason"] = "dry_run"
-                            record["x_description"] = _get_x_description(x_index)
-                            _write_record(record)
-                            continue
-
-                        save_image_prefix = (
-                            f"{run_id}/x{x_index}-y{y_index}-s{seed}-{prompt_hash[:8]}"
-                        )
-                        x_desc = _get_x_description(x_index)
-                        plan = _CellPlan(
-                            x_index=x_index,
-                            y_index=y_index,
-                            x_row=x_row,
-                            y_value=y_value,
-                            positive_prompt=positive_prompt,
-                            prompt_hash=prompt_hash,
-                            seed=seed,
-                            generation_params=_effective_generation_params(
-                                args,
-                                workflow_context,
-                                x_row,
-                                seed,
-                            ),
-                            workflow_hash=workflow_hash,
-                            save_image_prefix=save_image_prefix,
-                            x_description=x_desc,
-                            attempt=_next_attempt(resume_record, increment=True),
-                        )
-
-                        future = gen_pool.submit(
-                            _worker_submit_and_wait,
-                            args,
-                            cast(WorkflowContext, workflow_context),
-                            plan,
-                        )
-                        gen_futures.add(future)
-
-                with ThreadPoolExecutor(max_workers=args.concurrency) as gen_pool:
-                    with ThreadPoolExecutor(max_workers=args.concurrency) as dl_pool:
-                        while True:
-                            _schedule_until_full(gen_pool)
-
-                            if exhausted and not gen_futures and not dl_futures:
-                                break
-
-                            if not gen_futures and not dl_futures:
-                                continue
-
-                            done, _ = wait(
-                                gen_futures | dl_futures,
-                                return_when=FIRST_COMPLETED,
-                            )
-
-                            for fut in done:
-                                if fut in gen_futures:
-                                    gen_futures.remove(fut)
-                                    outcome = cast(_GenOutcome, fut.result())
-                                    if outcome.record is not None:
-                                        _write_record(outcome.record)
-                                        continue
-                                    if outcome.download is not None:
-                                        dl_future = dl_pool.submit(
-                                            _worker_fetch_and_download,
-                                            args,
-                                            run_artifacts.run_dir,
-                                            outcome.download,
-                                        )
-                                        dl_futures.add(dl_future)
-                                        continue
-                                    raise RuntimeError(
-                                        "internal error: gen outcome missing record and download"
-                                    )
-
-                                if fut in dl_futures:
-                                    dl_futures.remove(fut)
-                                    record = cast(dict[str, object], fut.result())
-                                    _write_record(record)
-                                    continue
-
-                                raise RuntimeError("internal error: future not tracked")
+                has_failed = run_generation(
+                    args=args,
+                    x_selected=x_selected,
+                    y_selected=y_selected,
+                    x_descriptions=x_descriptions,
+                    latest_records=latest_records,
+                    run_dir=run_artifacts.run_dir,
+                    run_id=run_id,
+                    workflow_context=workflow_context,
+                    workflow_hash=workflow_hash,
+                    stats=stats,
+                    pbar=pbar,
+                    writer=writer,
+                    render_prompt=_render_prompt_by_template,
+                    compute_prompt_hash=compute_prompt_hash,
+                    derive_seed=derive_seed,
+                    effective_generation_params=_effective_generation_params,
+                    next_attempt=lambda prev, increment: _next_attempt(
+                        prev,
+                        increment=increment,
+                    ),
+                    should_resume_skip=lambda existing,
+                    expected_prompt_hash,
+                    expected_seed,
+                    expected_workflow_hash: _should_resume_skip(
+                        existing=existing,
+                        run_dir=run_artifacts.run_dir,
+                        expected_prompt_hash=expected_prompt_hash,
+                        expected_seed=expected_seed,
+                        expected_workflow_hash=expected_workflow_hash,
+                    ),
+                    build_base_metadata_record=_build_base_metadata_record,
+                    extract_local_image_path=_extract_local_image_path,
+                    extract_local_image_paths=_extract_local_image_paths,
+                    now_iso=_now_iso,
+                    patch_workflow=patch_workflow,
+                    workflow_overrides_factory=WorkflowOverrides,
+                    final_negative_prompt_for_x_row=_final_negative_prompt_for_x_row,
+                    submit_prompt=comfy_submit_prompt,
+                    wait_prompt_done_with_fallback=comfy_wait_prompt_done_with_fallback,
+                    get_history_item=comfy_get_history_item,
+                    download_image_to_path=comfy_download_image_to_path,
+                )
 
     print(
         "结果统计: "
@@ -860,22 +672,6 @@ def run_retry(args: argparse.Namespace) -> int:
     return 1 if has_failed else 0
 
 
-def _prepare_existing_run_artifacts(run_dir_arg: str | None) -> RunArtifacts:
-    if not run_dir_arg:
-        raise ValueError("retry 模式必须提供 --run-dir")
-
-    run_dir = Path(run_dir_arg)
-    if not run_dir.exists() or not run_dir.is_dir():
-        raise ValueError(f"retry 模式 --run-dir 不存在或不是目录: {run_dir}")
-
-    return RunArtifacts(
-        run_dir=run_dir,
-        images_dir=run_dir / "images",
-        run_json_path=run_dir / "run.json",
-        metadata_path=run_dir / "metadata.jsonl",
-    )
-
-
 def _apply_replay_config_to_args(
     args: argparse.Namespace,
     replay: RunReplayConfig,
@@ -902,22 +698,6 @@ def _apply_replay_config_to_args(
     args.y_indexes = ",".join(str(i) for i in replay.selection.y_indexes)
 
 
-def _select_rows_by_fixed_indexes(
-    *,
-    rows: list[dict[str, str]],
-    indexes: list[int],
-    axis_name: str,
-) -> list[SelectedRow]:
-    selected: list[SelectedRow] = []
-    for index in indexes:
-        if index < 0 or index >= len(rows):
-            raise ValueError(
-                f"run.json.selection.{axis_name}_indexes 包含越界索引: {index} (最大 {len(rows) - 1})"
-            )
-        selected.append(SelectedRow(index=index, value=rows[index]))
-    return selected
-
-
 def _parse_retry_error_codes(raw: str | None) -> set[str] | None:
     if raw is None:
         return None
@@ -926,41 +706,6 @@ def _parse_retry_error_codes(raw: str | None) -> set[str] | None:
     if not codes:
         raise ValueError("--retry-error-code 不能为空；可用逗号分隔多个错误码")
     return set(codes)
-
-
-def _load_latest_metadata_records_strict(
-    metadata_path: Path,
-) -> dict[tuple[int, int], dict[str, object]]:
-    latest: dict[tuple[int, int], dict[str, object]] = {}
-    if not metadata_path.exists():
-        return latest
-
-    with metadata_path.open("r", encoding="utf-8") as file:
-        for line_num, line in enumerate(file, start=1):
-            stripped = line.strip()
-            if not stripped:
-                continue
-
-            try:
-                payload = json.loads(stripped)
-            except json.JSONDecodeError as exc:
-                raise ValueError(
-                    f"metadata.jsonl:{line_num}: malformed JSON: {exc}"
-                ) from exc
-
-            if not isinstance(payload, dict):
-                raise ValueError(
-                    f"metadata.jsonl:{line_num}: line is not a JSON object"
-                )
-
-            x_index = _coerce_int_or_none(payload.get("x_index"))
-            y_index = _coerce_int_or_none(payload.get("y_index"))
-            if x_index is None or y_index is None:
-                continue
-
-            latest[(x_index, y_index)] = payload
-
-    return latest
 
 
 def _extract_retry_error_code(record: dict[str, object] | None) -> str | None:
@@ -1110,84 +855,6 @@ def _validate_args(args: argparse.Namespace) -> None:
         args.client_id = str(uuid.uuid4())
 
 
-def _prepare_run_artifacts(run_dir_arg: str | None) -> RunArtifacts:
-    if run_dir_arg:
-        run_dir = Path(run_dir_arg)
-    else:
-        run_root = Path(_env_str("COMFYUI_OUT_DIR") or DEFAULT_RUN_ROOT)
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        run_dir = run_root / f"run-{timestamp}"
-
-    run_dir.mkdir(parents=True, exist_ok=True)
-    return RunArtifacts(
-        run_dir=run_dir,
-        images_dir=run_dir / "images",
-        run_json_path=run_dir / "run.json",
-        metadata_path=run_dir / "metadata.jsonl",
-    )
-
-
-def _autoload_dotenv() -> None:
-    dotenv_path = find_dotenv(filename=".env", usecwd=True)
-    if dotenv_path:
-        load_dotenv(dotenv_path=dotenv_path, encoding="utf-8")
-        return
-    return
-
-
-def _env_str(name: str) -> str | None:
-    value = os.getenv(name)
-    if value is None:
-        return None
-    stripped = value.strip()
-    return stripped if stripped else None
-
-
-def _env_float(name: str, default: float) -> float:
-    raw = _env_str(name)
-    if raw is None:
-        return default
-    try:
-        return float(raw)
-    except ValueError as exc:
-        raise ValueError(f"环境变量 {name} 不是有效浮点数: {raw}") from exc
-
-
-def _env_optional_float(name: str) -> float | None:
-    raw = _env_str(name)
-    if raw is None:
-        return None
-    try:
-        return float(raw)
-    except ValueError as exc:
-        raise ValueError(f"环境变量 {name} 不是有效浮点数: {raw}") from exc
-
-
-def _env_optional_int(name: str) -> int | None:
-    raw = _env_str(name)
-    if raw is None:
-        return None
-    try:
-        return int(raw)
-    except ValueError as exc:
-        raise ValueError(f"环境变量 {name} 不是有效整数: {raw}") from exc
-
-
-def _env_bool(name: str, default: bool) -> bool:
-    raw = _env_str(name)
-    if raw is None:
-        return default
-
-    normalized = raw.strip().lower()
-    if normalized in {"1", "true", "yes", "y", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "n", "off"}:
-        return False
-    raise ValueError(
-        f"环境变量 {name} 不是有效布尔值: {raw} (可用: 1/0 true/false yes/no on/off)"
-    )
-
-
 def _append_negative_prompt(base: str | None, append: str | None) -> str:
     """纯函数：拼接 base negative prompt 和 append negative prompt。
 
@@ -1223,90 +890,6 @@ def _append_negative_prompt(base: str | None, append: str | None) -> str:
         delimiter = ", "
 
     return base_stripped + delimiter + append_cleaned
-
-
-def _resolve_append_negative_prompt(raw: str | None) -> str | None:
-    """纯解析器：根据原始环境变量值解析追加负面提示词。
-
-    Args:
-        raw: 从 os.getenv 获取的原始值
-
-    Returns:
-        - None: 表示禁用追加（raw 存在但为空字符串）
-        - str: 追加的负面提示词（raw 为 None 时返回默认值）
-    """
-    DEFAULT_APPEND = "nsfw, nipples, pussy, nude,"
-
-    if raw is None:
-        return DEFAULT_APPEND
-
-    stripped = raw.strip()
-    if not stripped:
-        return None
-
-    return stripped
-
-
-def _env_append_negative_prompt() -> str | None:
-    """读取 COMFYUI_APPEND_NEGATIVE_PROMPT 环境变量并解析。
-
-    Returns:
-        - None: 表示禁用追加（环境变量存在但为空）
-        - str: 追加的负面提示词（环境变量缺失时返回默认值）
-    """
-    raw = os.getenv("COMFYUI_APPEND_NEGATIVE_PROMPT")
-    return _resolve_append_negative_prompt(raw)
-
-
-def _select_rows(
-    rows: list[dict[str, str]],
-    limit: int | None,
-    indexes_raw: str | None,
-    axis_name: str,
-) -> list[SelectedRow]:
-    indexed_rows = [
-        SelectedRow(index=index, value=value) for index, value in enumerate(rows)
-    ]
-
-    indexes = _parse_indexes(indexes_raw, axis_name)
-    if indexes is not None:
-        selected: list[SelectedRow] = []
-        for index in indexes:
-            if index < 0 or index >= len(rows):
-                raise ValueError(
-                    f"--{axis_name}-indexes 包含越界索引: {index} (最大 {len(rows) - 1})"
-                )
-            selected.append(SelectedRow(index=index, value=rows[index]))
-        indexed_rows = selected
-
-    if limit is not None:
-        indexed_rows = indexed_rows[:limit]
-
-    return indexed_rows
-
-
-def _parse_indexes(raw: str | None, axis_name: str) -> list[int] | None:
-    if raw is None:
-        return None
-
-    tokens = [token.strip() for token in raw.split(",") if token.strip()]
-    if not tokens:
-        return []
-
-    parsed: list[int] = []
-    for token in tokens:
-        if not token.isdigit():
-            raise ValueError(f"--{axis_name}-indexes 仅支持非负整数列表: {raw}")
-        parsed.append(int(token))
-
-    unique: list[int] = []
-    seen: set[int] = set()
-    for value in parsed:
-        if value in seen:
-            continue
-        seen.add(value)
-        unique.append(value)
-    return unique
 
 
 def _load_workflow_context(args: argparse.Namespace) -> WorkflowContext | None:
@@ -1585,35 +1168,6 @@ def _render_prompt_by_template(
     return "".join(rendered)
 
 
-def _load_latest_metadata_records(
-    metadata_path: Path,
-) -> dict[tuple[int, int], dict[str, object]]:
-    latest: dict[tuple[int, int], dict[str, object]] = {}
-    if not metadata_path.exists():
-        return latest
-
-    with metadata_path.open("r", encoding="utf-8") as file:
-        for line in file:
-            stripped = line.strip()
-            if not stripped:
-                continue
-            try:
-                payload = json.loads(stripped)
-            except json.JSONDecodeError:
-                continue
-            if not isinstance(payload, dict):
-                continue
-
-            x_index = _coerce_int_or_none(payload.get("x_index"))
-            y_index = _coerce_int_or_none(payload.get("y_index"))
-            if x_index is None or y_index is None:
-                continue
-
-            latest[(x_index, y_index)] = payload
-
-    return latest
-
-
 def _should_resume_skip(
     existing: dict[str, object] | None,
     run_dir: Path,
@@ -1687,51 +1241,6 @@ def _extract_local_image_paths(existing: dict[str, object] | None) -> list[str] 
             continue
         paths.append(stripped)
     return paths if paths else None
-
-
-class _MetadataWriter:
-    def __init__(self, path: Path) -> None:
-        self.path = path
-        self.file = None
-
-    def __enter__(self) -> "_MetadataWriter":
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        _ensure_newline_terminated(self.path)
-        self.file = self.path.open("a", encoding="utf-8")
-        return self
-
-    def append(self, record: dict[str, object]) -> None:
-        if self.file is None:
-            raise RuntimeError("metadata writer is closed")
-        line = json.dumps(record, ensure_ascii=False)
-        self.file.write(line)
-        self.file.write("\n")
-        self.file.flush()
-        os.fsync(self.file.fileno())
-
-    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
-        if self.file is not None:
-            self.file.close()
-            self.file = None
-
-
-def _metadata_writer(path: Path) -> _MetadataWriter:
-    return _MetadataWriter(path)
-
-
-def _ensure_newline_terminated(path: Path) -> None:
-    if not path.exists() or path.stat().st_size == 0:
-        return
-
-    with path.open("rb+") as file:
-        file.seek(-1, os.SEEK_END)
-        last_byte = file.read(1)
-        if last_byte == b"\n":
-            return
-        file.seek(0, os.SEEK_END)
-        file.write(b"\n")
-        file.flush()
-        os.fsync(file.fileno())
 
 
 def _effective_negative_prompt(
@@ -1843,42 +1352,11 @@ def _build_base_metadata_record(
 
 
 def _collect_remote_images(history_item: dict[str, object]) -> list[dict[str, str]]:
-    outputs_obj = history_item.get("outputs")
-    if not isinstance(outputs_obj, dict):
-        return []
-
-    images: list[dict[str, str]] = []
-    for node_payload in outputs_obj.values():
-        if not isinstance(node_payload, dict):
-            continue
-        node_images = node_payload.get("images")
-        if not isinstance(node_images, list):
-            continue
-        for item in node_images:
-            if not isinstance(item, dict):
-                continue
-            filename = item.get("filename")
-            if not isinstance(filename, str) or not filename:
-                continue
-
-            image_payload: dict[str, str] = {"filename": filename}
-            subfolder = item.get("subfolder")
-            if isinstance(subfolder, str) and subfolder:
-                image_payload["subfolder"] = subfolder
-            image_type = item.get("type")
-            if isinstance(image_type, str) and image_type:
-                image_payload["type"] = image_type
-            images.append(image_payload)
-
-    return images
+    return _coordinator_collect_remote_images(history_item)
 
 
 def _infer_image_extension(image: dict[str, str]) -> str:
-    filename = image.get("filename", "")
-    suffix = Path(filename).suffix.lower()
-    if suffix:
-        return suffix
-    return ".png"
+    return _coordinator_infer_image_extension(image)
 
 
 def _worker_submit_and_wait(
@@ -1886,86 +1364,18 @@ def _worker_submit_and_wait(
     workflow_context: WorkflowContext,
     plan: _CellPlan,
 ) -> _GenOutcome:
-    started_at = _now_iso()
-    started_mono = monotonic()
-    prompt_id: str | None = None
-
-    try:
-        negative_prompt = _final_negative_prompt_for_x_row(
-            args,
-            workflow_context,
-            plan.x_row,
-        )
-        if negative_prompt is None:
-            raise ValueError("无法确定负面提示词")
-        workflow_overrides = WorkflowOverrides(
-            seed=plan.seed,
-            steps=args.steps,
-            cfg=args.cfg,
-            denoise=args.denoise,
-            sampler_name=args.sampler_name,
-            scheduler=args.scheduler,
-            width=args.width,
-            height=args.height,
-            batch_size=args.batch_size,
-        )
-        patched_workflow = patch_workflow(
-            workflow_context.workflow,
-            positive_prompt=plan.positive_prompt,
-            negative_prompt=negative_prompt,
-            overrides=workflow_overrides,
-            ksampler_node_id=workflow_context.selected_ksampler_id,
-            save_image_prefix=plan.save_image_prefix,
-        )
-
-        client_id = f"{args.client_id}-{uuid.uuid4().hex[:8]}"
-        prompt_id = comfy_submit_prompt(
-            base_url=args.base_url,
-            workflow=cast(dict[str, object], patched_workflow),
-            client_id=client_id,
-            request_timeout_s=args.request_timeout_s,
-        )
-        comfy_wait_prompt_done_with_fallback(
-            base_url=args.base_url,
-            client_id=client_id,
-            prompt_id=prompt_id,
-            request_timeout_s=args.request_timeout_s,
-            job_timeout_s=args.job_timeout_s,
-        )
-
-        return _GenOutcome(
-            record=None,
-            download=_DownloadRequest(
-                plan=plan,
-                prompt_id=prompt_id,
-                started_at=started_at,
-                started_mono=started_mono,
-            ),
-        )
-    except Exception as exc:
-        LOG.exception("生成失败: x=%s y=%s", plan.x_index, plan.y_index)
-        finished_at = _now_iso()
-        elapsed_ms = int((monotonic() - started_mono) * 1000)
-        record = _build_base_metadata_record(
-            status="failed",
-            x_index=plan.x_index,
-            y_index=plan.y_index,
-            x_row=plan.x_row,
-            y_value=plan.y_value,
-            positive_prompt=plan.positive_prompt,
-            prompt_hash=plan.prompt_hash,
-            seed=plan.seed,
-            generation_params=plan.generation_params,
-            workflow_hash=plan.workflow_hash,
-            attempt=plan.attempt,
-        )
-        record["x_description"] = plan.x_description
-        record["comfyui_prompt_id"] = prompt_id
-        record["started_at"] = started_at
-        record["finished_at"] = finished_at
-        record["elapsed_ms"] = elapsed_ms
-        record["error"] = _serialize_error(exc)
-        return _GenOutcome(record=record, download=None)
+    return _coordinator_worker_submit_and_wait(
+        args,
+        workflow_context,
+        plan,
+        patch_workflow,
+        WorkflowOverrides,
+        _final_negative_prompt_for_x_row,
+        comfy_submit_prompt,
+        comfy_wait_prompt_done_with_fallback,
+        _build_base_metadata_record,
+        _now_iso,
+    )
 
 
 def _worker_fetch_and_download(
@@ -1973,85 +1383,15 @@ def _worker_fetch_and_download(
     run_dir: Path,
     req: _DownloadRequest,
 ) -> dict[str, object]:
-    plan = req.plan
-    prompt_id = req.prompt_id
-    remote_images: list[dict[str, str]] | None = None
-    local_image_paths: list[str] | None = None
-
-    try:
-        remote_images = _fetch_remote_images_with_retry(
-            base_url=args.base_url,
-            prompt_id=prompt_id,
-            request_timeout_s=args.request_timeout_s,
-            job_timeout_s=args.job_timeout_s,
-        )
-        if not remote_images:
-            raise ValueError("history 未返回可下载图像")
-
-        local_image_paths = _build_local_image_paths(
-            x_index=plan.x_index,
-            y_index=plan.y_index,
-            remote_images=remote_images,
-        )
-        for image, local_path in zip(remote_images, local_image_paths, strict=True):
-            _ = comfy_download_image_to_path(
-                base_url=args.base_url,
-                image=cast(dict[str, object], image),
-                output_path=run_dir / local_path,
-                request_timeout_s=args.request_timeout_s,
-            )
-
-        finished_at = _now_iso()
-        elapsed_ms = int((monotonic() - req.started_mono) * 1000)
-        record = _build_base_metadata_record(
-            status="success",
-            x_index=plan.x_index,
-            y_index=plan.y_index,
-            x_row=plan.x_row,
-            y_value=plan.y_value,
-            positive_prompt=plan.positive_prompt,
-            prompt_hash=plan.prompt_hash,
-            seed=plan.seed,
-            generation_params=plan.generation_params,
-            workflow_hash=plan.workflow_hash,
-            attempt=plan.attempt,
-        )
-        record["x_description"] = plan.x_description
-        record["comfyui_prompt_id"] = prompt_id
-        record["remote_images"] = remote_images
-        record["local_image_paths"] = local_image_paths
-        record["local_image_path"] = local_image_paths[0] if local_image_paths else None
-        record["started_at"] = req.started_at
-        record["finished_at"] = finished_at
-        record["elapsed_ms"] = elapsed_ms
-        return record
-    except Exception as exc:
-        LOG.exception("下载失败: x=%s y=%s", plan.x_index, plan.y_index)
-        finished_at = _now_iso()
-        elapsed_ms = int((monotonic() - req.started_mono) * 1000)
-        record = _build_base_metadata_record(
-            status="failed",
-            x_index=plan.x_index,
-            y_index=plan.y_index,
-            x_row=plan.x_row,
-            y_value=plan.y_value,
-            positive_prompt=plan.positive_prompt,
-            prompt_hash=plan.prompt_hash,
-            seed=plan.seed,
-            generation_params=plan.generation_params,
-            workflow_hash=plan.workflow_hash,
-            attempt=plan.attempt,
-        )
-        record["x_description"] = plan.x_description
-        record["comfyui_prompt_id"] = prompt_id
-        record["remote_images"] = remote_images
-        record["local_image_paths"] = local_image_paths
-        record["local_image_path"] = local_image_paths[0] if local_image_paths else None
-        record["started_at"] = req.started_at
-        record["finished_at"] = finished_at
-        record["elapsed_ms"] = elapsed_ms
-        record["error"] = _serialize_error(exc)
-        return record
+    return _coordinator_worker_fetch_and_download(
+        args,
+        run_dir,
+        req,
+        comfy_get_history_item,
+        comfy_download_image_to_path,
+        _build_base_metadata_record,
+        _now_iso,
+    )
 
 
 def _fetch_remote_images_with_retry(
@@ -2061,20 +1401,13 @@ def _fetch_remote_images_with_retry(
     request_timeout_s: float,
     job_timeout_s: float,
 ) -> list[dict[str, str]]:
-    deadline = monotonic() + min(10.0, max(1.0, job_timeout_s))
-    while True:
-        history_item = comfy_get_history_item(
-            base_url=base_url,
-            prompt_id=prompt_id,
-            request_timeout_s=request_timeout_s,
-        )
-        images = _collect_remote_images(history_item)
-        if images:
-            return images
-
-        if monotonic() >= deadline:
-            return []
-        sleep(0.25)
+    return _coordinator_fetch_remote_images_with_retry(
+        base_url=base_url,
+        prompt_id=prompt_id,
+        request_timeout_s=request_timeout_s,
+        job_timeout_s=job_timeout_s,
+        get_history_item=comfy_get_history_item,
+    )
 
 
 def _build_local_image_paths(
@@ -2083,23 +1416,15 @@ def _build_local_image_paths(
     y_index: int,
     remote_images: list[dict[str, str]],
 ) -> list[str]:
-    paths: list[str] = []
-    for i, image in enumerate(remote_images):
-        ext = _infer_image_extension(image)
-        if i == 0:
-            paths.append(f"images/x{x_index}-y{y_index}{ext}")
-        else:
-            paths.append(f"images/x{x_index}-y{y_index}-{i}{ext}")
-    return paths
+    return _coordinator_build_local_image_paths(
+        x_index=x_index,
+        y_index=y_index,
+        remote_images=remote_images,
+    )
 
 
 def _serialize_error(exc: Exception) -> dict[str, object]:
-    if isinstance(exc, ComfyUIClientError):
-        return exc.as_metadata()
-    return {
-        "type": exc.__class__.__name__,
-        "message": str(exc),
-    }
+    return _coordinator_serialize_error(exc)
 
 
 def _sha256_file(path: Path) -> str:
