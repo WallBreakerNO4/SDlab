@@ -6,7 +6,7 @@ import hashlib
 import os
 import time
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Callable, Literal, Protocol, TypeVar, cast
 
 import boto3
@@ -222,6 +222,7 @@ class R2Client:
         *,
         s3_client: S3ClientLike | None,
         dry_run: bool,
+        local_dir: str | Path | None = None,
         max_retries: int = 2,
         retry_base_delay_s: float = 0.15,
         sleep_fn: Callable[[float], None] = time.sleep,
@@ -239,17 +240,26 @@ class R2Client:
                 context={"retry_base_delay_s": retry_base_delay_s},
             )
 
+        local_dir_path = _normalize_local_dir(local_dir)
+        self._local_dir: Path | None = local_dir_path
         self._s3_client: S3ClientLike | None = s3_client
         self.dry_run: bool = dry_run
         self.max_retries: int = max_retries
         self.retry_base_delay_s: float = retry_base_delay_s
         self._sleep: Callable[[float], None] = sleep_fn
 
+        if not self.dry_run and self._local_dir is None and self._s3_client is None:
+            raise R2ConfigError(
+                "r2 client is not initialized",
+                code="missing_client",
+            )
+
     @classmethod
     def from_env(
         cls,
         dry_run: bool,
         *,
+        local_dir: str | Path | None = None,
         max_retries: int = 2,
         retry_base_delay_s: float = 0.15,
         sleep_fn: Callable[[float], None] = time.sleep,
@@ -258,6 +268,18 @@ class R2Client:
             return cls(
                 s3_client=None,
                 dry_run=True,
+                local_dir=None,
+                max_retries=max_retries,
+                retry_base_delay_s=retry_base_delay_s,
+                sleep_fn=sleep_fn,
+            )
+
+        resolved_local_dir = _normalize_local_dir(_resolve_local_dir(local_dir))
+        if resolved_local_dir is not None:
+            return cls(
+                s3_client=None,
+                dry_run=False,
+                local_dir=resolved_local_dir,
                 max_retries=max_retries,
                 retry_base_delay_s=retry_base_delay_s,
                 sleep_fn=sleep_fn,
@@ -285,6 +307,7 @@ class R2Client:
         return cls(
             s3_client=client,
             dry_run=False,
+            local_dir=None,
             max_retries=max_retries,
             retry_base_delay_s=retry_base_delay_s,
             sleep_fn=sleep_fn,
@@ -301,6 +324,10 @@ class R2Client:
         _validate_bucket_name_and_key(bucket_name, key)
         if self.dry_run:
             return False
+
+        if self._local_dir is not None:
+            candidate = _local_object_path(self._local_dir, bucket_scope, key)
+            return candidate.is_file()
 
         client = self._require_client()
         object_ref = _safe_object_ref(bucket_scope, key)
@@ -323,9 +350,45 @@ class R2Client:
         _validate_bucket_scope(plan.bucket_scope)
         _validate_bucket_name_and_key(plan.bucket_name, plan.key)
         _validate_headers(plan.content_type, plan.cache_control)
-        body = _resolve_upload_body(plan)
+        _validate_upload_source(plan)
         if self.dry_run:
             return
+
+        if self._local_dir is not None:
+            dest = _local_object_path(self._local_dir, plan.bucket_scope, plan.key)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                if plan.local_path is not None:
+                    src = Path(plan.local_path)
+                    with src.open("rb") as src_handle:
+                        with dest.open("xb") as dest_handle:
+                            while True:
+                                chunk = src_handle.read(1024 * 1024)
+                                if not chunk:
+                                    break
+                                dest_handle.write(chunk)
+                    return
+
+                assert plan.body_bytes is not None
+                with dest.open("xb") as handle:
+                    handle.write(plan.body_bytes)
+                return
+            except FileExistsError:
+                return
+            except R2ClientError:
+                raise
+            except OSError as exc:
+                raise R2RemoteError(
+                    "r2 local dir write failed",
+                    code="local_write_failed",
+                    context={
+                        **_safe_local_dir_ref(self._local_dir),
+                        **_safe_object_ref(plan.bucket_scope, plan.key),
+                    },
+                    retryable=False,
+                ) from exc
+
+        body = _resolve_upload_body(plan)
 
         client = self._require_client()
         object_ref = _safe_object_ref(plan.bucket_scope, plan.key)
@@ -474,6 +537,70 @@ def _safe_object_ref(bucket_scope: BucketScope, key: str) -> dict[str, object]:
     }
 
 
+def _safe_local_dir_ref(local_dir: Path) -> dict[str, object]:
+    raw = str(local_dir)
+    return {
+        "local_dir_name": local_dir.name,
+        "local_dir_hash12": hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12],
+        "local_dir_depth": len(local_dir.parts),
+    }
+
+
+def _resolve_local_dir(value: str | Path | None) -> str | Path | None:
+    if value is not None:
+        return value
+    env_value = os.getenv("R2_LOCAL_DIR")
+    if env_value is None:
+        return None
+    stripped = env_value.strip()
+    return stripped if stripped else None
+
+
+def _normalize_local_dir(value: str | Path | None) -> Path | None:
+    if value is None:
+        return None
+    path = Path(value).expanduser()
+    try:
+        resolved = path.resolve()
+    except OSError as exc:
+        raise R2ConfigError(
+            "invalid r2 local dir configuration",
+            code="invalid_local_dir",
+            context={
+                "local_dir_name": path.name,
+                "local_dir_depth": len(path.parts),
+            },
+        ) from exc
+    if resolved.exists() and not resolved.is_dir():
+        raise R2ConfigError(
+            "invalid r2 local dir configuration",
+            code="invalid_local_dir",
+            context={
+                "local_dir_name": resolved.name,
+                "local_dir_depth": len(resolved.parts),
+            },
+        )
+    return resolved
+
+
+def _local_object_path(local_dir: Path, bucket_scope: BucketScope, key: str) -> Path:
+    candidate = PurePosixPath(key)
+    if candidate.is_absolute():
+        raise R2ArgumentError(
+            "invalid r2 object key",
+            code="invalid_key",
+            context={**_safe_object_ref(bucket_scope, key)},
+        )
+    for part in candidate.parts:
+        if part in {"", ".", ".."}:
+            raise R2ArgumentError(
+                "invalid r2 object key",
+                code="invalid_key",
+                context={**_safe_object_ref(bucket_scope, key)},
+            )
+    return local_dir / bucket_scope / Path(*candidate.parts)
+
+
 def _require_env(name: str) -> str:
     value = os.getenv(name)
     if value is None or not value.strip():
@@ -522,19 +649,9 @@ def _validate_headers(content_type: str, cache_control: str) -> None:
 
 
 def _resolve_upload_body(plan: UploadPlan) -> bytes:
-    has_bytes = plan.body_bytes is not None
-    has_local_path = plan.local_path is not None
-    if has_bytes == has_local_path:
-        raise R2ArgumentError(
-            "exactly one upload source must be provided",
-            code="invalid_upload_source",
-            context={
-                "has_body_bytes": has_bytes,
-                "has_local_path": has_local_path,
-            },
-        )
+    _validate_upload_source(plan)
 
-    if has_bytes:
+    if plan.body_bytes is not None:
         assert plan.body_bytes is not None
         return plan.body_bytes
 
@@ -548,6 +665,20 @@ def _resolve_upload_body(plan: UploadPlan) -> bytes:
             code="invalid_local_path",
             context={"path_name": path.name, "path_depth": len(path.parts)},
         ) from exc
+
+
+def _validate_upload_source(plan: UploadPlan) -> None:
+    has_bytes = plan.body_bytes is not None
+    has_local_path = plan.local_path is not None
+    if has_bytes == has_local_path:
+        raise R2ArgumentError(
+            "exactly one upload source must be provided",
+            code="invalid_upload_source",
+            context={
+                "has_body_bytes": has_bytes,
+                "has_local_path": has_local_path,
+            },
+        )
 
 
 def _is_not_found(exc: ClientError) -> bool:

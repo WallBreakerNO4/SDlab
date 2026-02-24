@@ -154,11 +154,52 @@ def build_parser() -> argparse.ArgumentParser:
         help="Image planning worker count fallback when R2_IMAGE_WORKERS is unset.",
     )
     _ = parser.add_argument(
+        "--local-r2-dir",
+        help=(
+            "启用本地 R2 目录模式（不连接真实 R2），将对象写入到本地目录。"
+            "也可通过环境变量 R2_LOCAL_DIR 设置。"
+        ),
+    )
+    _ = parser.add_argument(
         "--limit",
         type=int,
         help="Reserved limit for number of images.",
     )
     return parser
+
+
+def _resolve_local_r2_dir(args: argparse.Namespace) -> Path | None:
+    cli_value = getattr(args, "local_r2_dir", None)
+    raw = cli_value
+    if not isinstance(raw, str) or not raw.strip():
+        raw = os.getenv("R2_LOCAL_DIR")
+
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+
+    path = Path(raw.strip()).expanduser()
+    try:
+        resolved = path.resolve()
+    except OSError as exc:
+        raise UploadScriptError(
+            "R2_LOCAL_DIR 不是有效路径",
+            category="config",
+        ) from exc
+
+    if resolved.exists() and not resolved.is_dir():
+        raise UploadScriptError(
+            "R2_LOCAL_DIR 必须是目录",
+            category="config",
+        )
+
+    try:
+        resolved.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise UploadScriptError(
+            "R2_LOCAL_DIR 无法创建目录",
+            category="config",
+        ) from exc
+    return resolved
 
 
 def _sha256_hex(data: bytes) -> str:
@@ -906,9 +947,9 @@ def _dry_run_summary(plans: list[RunPlan]) -> dict[str, object]:
     }
 
 
-def _execute(plans: list[RunPlan]) -> dict[str, object]:
+def _execute(plans: list[RunPlan], *, local_r2_dir: Path | None) -> dict[str, object]:
     bucket_names = _require_bucket_names()
-    r2_client = R2Client.from_env(dry_run=False)
+    r2_client = R2Client.from_env(dry_run=False, local_dir=local_r2_dir)
     supabase_writer = SupabaseWriter.from_env(dry_run=False)
     upload_concurrency = _resolve_upload_concurrency()
 
@@ -1085,7 +1126,14 @@ def main(argv: list[str] | None = None) -> int:
             print(_to_json_line(_dry_run_summary(plans)))
             return 0
 
-        print(_to_json_line(_execute(plans)))
+        local_r2_dir = _resolve_local_r2_dir(args)
+        if local_r2_dir is not None:
+            LOG.info(
+                "已启用本地 R2 目录模式: local_dir_name=%s local_dir_depth=%s",
+                local_r2_dir.name,
+                len(local_r2_dir.parts),
+            )
+        print(_to_json_line(_execute(plans, local_r2_dir=local_r2_dir)))
         return 0
     except Exception as exc:
         category = getattr(exc, "category", None)
