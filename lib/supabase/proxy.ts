@@ -4,6 +4,16 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 export async function updateSession(request: NextRequest) {
+	function getRequiredEnv(
+		name: "NEXT_PUBLIC_SUPABASE_URL" | "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+	) {
+		const value = process.env[name];
+		if (!value) {
+			throw new Error(`Missing env: ${name}`);
+		}
+		return value;
+	}
+
 	let response = NextResponse.next({ request });
 
 	const url = getRequiredEnv("NEXT_PUBLIC_SUPABASE_URL");
@@ -15,29 +25,21 @@ export async function updateSession(request: NextRequest) {
 				return request.cookies.getAll();
 			},
 			setAll(cookiesToSet: Parameters<SetAllCookies>[0]) {
-				cookiesToSet.forEach(({ name, value }) => {
-					request.cookies.set(name, value);
-				});
+				try {
+					cookiesToSet.forEach(({ name, value }) => {
+						request.cookies.set(name, value);
+					});
 
-				response = NextResponse.next({ request });
+					response = NextResponse.next({ request });
 
-				cookiesToSet.forEach(({ name, value, options }) => {
-					response.cookies.set(name, value, options);
-				});
+					cookiesToSet.forEach(({ name, value, options }) => {
+						response.cookies.set(name, value, options);
+					});
+				} catch {}
 			},
 		},
 	});
 
 	await supabase.auth.getClaims();
 	return response;
-}
-
-function getRequiredEnv(
-	name: "NEXT_PUBLIC_SUPABASE_URL" | "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
-) {
-	const value = process.env[name];
-	if (!value) {
-		throw new Error(`Missing env: ${name}`);
-	}
-	return value;
 }
