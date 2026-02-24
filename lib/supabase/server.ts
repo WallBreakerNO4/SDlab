@@ -1,3 +1,4 @@
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 import type { SetAllCookies } from "@supabase/ssr";
 import { createServerClient as createSupabaseServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
@@ -6,11 +7,20 @@ export async function createClient() {
 	function getRequiredEnv(
 		name: "NEXT_PUBLIC_SUPABASE_URL" | "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
 	) {
-		const value = process.env[name];
-		if (!value) {
-			throw new Error(`Missing env: ${name}`);
-		}
-		return value;
+		const fromProcessEnv = process.env[name];
+		if (fromProcessEnv) return fromProcessEnv;
+
+		try {
+			const { env } = getCloudflareContext();
+			const fromCloudflareEnv = (env as unknown as Record<string, unknown>)[
+				name
+			];
+			if (typeof fromCloudflareEnv === "string" && fromCloudflareEnv) {
+				return fromCloudflareEnv;
+			}
+		} catch {}
+
+		throw new Error(`Missing env: ${name}`);
 	}
 
 	const cookieStore = await cookies();
