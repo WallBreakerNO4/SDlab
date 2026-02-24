@@ -3,14 +3,10 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import logging
-import re
 import sys
 import uuid
-from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 
 from tqdm import tqdm
@@ -34,7 +30,6 @@ from scripts.generation.prompt_grid import (  # noqa: E402
     read_x_descriptions,
     read_x_rows,
     read_y_rows,
-    render_positive_prompt,
 )
 from scripts.generation.retry_failed_selection import (  # noqa: E402
     select_failed_and_incomplete_cells,
@@ -54,10 +49,39 @@ from scripts.generation.runner_env import (  # noqa: E402
 )
 from scripts.generation.runner_selection import (  # noqa: E402
     SelectedRow,
-    _extract_x_info_type,
     _parse_indexes,
     _select_rows,
     _select_rows_by_fixed_indexes,
+)
+from scripts.generation.runner_prompt_template import (  # noqa: E402
+    ALLOWED_TEMPLATE_KEYS as _PROMPT_ALLOWED_TEMPLATE_KEYS,
+    TEMPLATE_TOKEN_RE as _PROMPT_TEMPLATE_TOKEN_RE,
+    _build_example_prompt as _prompt_build_example_prompt,
+    _render_prompt_by_template as _prompt_render_prompt_by_template,
+)
+from scripts.generation.runner_workflow_context import (  # noqa: E402
+    WorkflowContext as _RunnerWorkflowContext,
+    _extract_ref_node_id as _workflow_extract_ref_node_id,
+    _extract_workflow_defaults as _workflow_extract_workflow_defaults,
+    _format_node_title as _workflow_format_node_title,
+    _load_workflow_context as _workflow_load_workflow_context,
+    _record_workflow_hash as _workflow_record_workflow_hash,
+    _resolve_ksampler_id as _workflow_resolve_ksampler_id,
+)
+from scripts.generation.runner_records import (  # noqa: E402
+    _build_base_metadata_record as _records_build_base_metadata_record,
+    _effective_generation_params as _records_effective_generation_params,
+    _effective_negative_prompt as _records_effective_negative_prompt,
+    _extract_local_image_path as _records_extract_local_image_path,
+    _extract_local_image_paths as _records_extract_local_image_paths,
+    _final_negative_prompt_for_x_row as _records_final_negative_prompt_for_x_row,
+    _next_attempt as _records_next_attempt,
+    _should_resume_skip as _records_should_resume_skip,
+)
+from scripts.generation.runner_payload import (  # noqa: E402
+    _build_run_payload as _payload_build_run_payload,
+    _now_iso as _payload_now_iso,
+    _sha256_file as _payload_sha256_file,
 )
 from scripts.generation.output_packager import (  # noqa: E402
     RunArtifacts,
@@ -94,7 +118,6 @@ from scripts.generation.runner_retry import (  # noqa: E402
 from scripts.generation.workflow_patch import (  # noqa: E402
     WorkflowDict,
     WorkflowOverrides,
-    load_workflow,
     patch_workflow,
 )
 
@@ -107,26 +130,9 @@ DEFAULT_REQUEST_TIMEOUT_S = 30.0
 DEFAULT_JOB_TIMEOUT_S = 600.0
 LOG = logging.getLogger(__name__)
 
-ALLOWED_TEMPLATE_KEYS = {
-    "gender",
-    "characters",
-    "series",
-    "rating",
-    "y",
-    "general",
-    "quality",
-}
-TEMPLATE_TOKEN_RE = re.compile(r"\{([a-z_]+)\}")
-
-
-@dataclass(slots=True)
-class WorkflowContext:
-    workflow: WorkflowDict
-    workflow_json_path: str
-    workflow_hash: str
-    selected_ksampler_id: str
-    default_negative_prompt: str
-    default_params: dict[str, object | None]
+ALLOWED_TEMPLATE_KEYS = _PROMPT_ALLOWED_TEMPLATE_KEYS
+TEMPLATE_TOKEN_RE = _PROMPT_TEMPLATE_TOKEN_RE
+WorkflowContext = _RunnerWorkflowContext
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -627,143 +633,30 @@ def _append_negative_prompt(base: str | None, append: str | None) -> str:
 
 
 def _load_workflow_context(args: argparse.Namespace) -> WorkflowContext | None:
-    if args.dry_run:
-        return None
-
-    workflow_json_path = args.workflow_json
-    if not workflow_json_path:
-        raise ValueError("非 dry-run 模式缺少 workflow 路径")
-
-    workflow_path = Path(workflow_json_path)
-    if not workflow_path.exists() or not workflow_path.is_file():
-        raise ValueError(f"workflow 文件不存在: {workflow_json_path}")
-
-    workflow = load_workflow(workflow_path)
-    workflow_hash = _sha256_file(workflow_path)
-    selected_ksampler_id = _resolve_ksampler_id(workflow, args.ksampler_node_id)
-
-    defaults = _extract_workflow_defaults(workflow, selected_ksampler_id)
-    default_negative_prompt_obj = defaults.get("negative_prompt")
-    default_negative_prompt = (
-        default_negative_prompt_obj
-        if isinstance(default_negative_prompt_obj, str)
-        else ""
-    )
-
-    try:
-        _ = patch_workflow(
-            workflow,
-            positive_prompt="__workflow_validation_positive__",
-            negative_prompt=default_negative_prompt,
-            overrides=WorkflowOverrides(seed=0),
-            ksampler_node_id=selected_ksampler_id,
-        )
-    except Exception as exc:
-        raise ValueError(
-            "workflow 结构不符合 CLIPTextEncode 注入要求，请使用 CLIPTextEncode 版 workflow"
-        ) from exc
-
-    return WorkflowContext(
-        workflow=workflow,
-        workflow_json_path=str(workflow_path),
-        workflow_hash=workflow_hash,
-        selected_ksampler_id=selected_ksampler_id,
-        default_negative_prompt=default_negative_prompt,
-        default_params=defaults,
-    )
+    return _workflow_load_workflow_context(args)
 
 
 def _resolve_ksampler_id(workflow: WorkflowDict, requested: str | None) -> str:
-    candidates = [
-        node_id
-        for node_id, node in workflow.items()
-        if isinstance(node, dict) and node.get("class_type") == "KSampler"
-    ]
-
-    if not candidates:
-        raise ValueError("workflow 中未找到 KSampler")
-
-    if requested is not None:
-        node_id = str(requested)
-        if node_id not in workflow:
-            raise ValueError(f"KSampler 节点不存在: {node_id}")
-        node = workflow[node_id]
-        if node.get("class_type") != "KSampler":
-            class_type = node.get("class_type")
-            raise ValueError(f"节点 {node_id} 不是 KSampler (class_type={class_type})")
-        return node_id
-
-    if len(candidates) > 1:
-        details = ", ".join(
-            _format_node_title(workflow, node_id) for node_id in candidates
-        )
-        raise ValueError(
-            f"workflow 中存在多个 KSampler；请传入 --ksampler-node-id；可选: {details}"
-        )
-
-    return candidates[0]
+    return _workflow_resolve_ksampler_id(workflow, requested)
 
 
 def _format_node_title(workflow: WorkflowDict, node_id: str) -> str:
-    node = workflow.get(node_id, {})
-    meta_obj = node.get("_meta") if isinstance(node, dict) else None
-    if isinstance(meta_obj, dict):
-        title_obj = meta_obj.get("title")
-        if isinstance(title_obj, str) and title_obj:
-            return f"{node_id} ({title_obj})"
-    return f"{node_id} (<no title>)"
+    return _workflow_format_node_title(workflow, node_id)
 
 
 def _extract_workflow_defaults(
     workflow: WorkflowDict,
     ksampler_id: str,
 ) -> dict[str, object | None]:
-    node = workflow.get(ksampler_id)
-    if not isinstance(node, dict):
-        raise ValueError(f"KSampler 节点无效: {ksampler_id}")
-    node_inputs = _as_dict(node.get("inputs"))
-
-    negative_node_id = _extract_ref_node_id(node_inputs.get("negative"), "negative")
-    latent_node_id = _extract_ref_node_id(
-        node_inputs.get("latent_image"), "latent_image"
-    )
-
-    negative_node = _as_dict(workflow.get(negative_node_id))
-    if negative_node.get("class_type") != "CLIPTextEncode":
-        class_type = negative_node.get("class_type")
-        raise ValueError(f"负向节点必须是 CLIPTextEncode，当前为: {class_type}")
-    negative_inputs = _as_dict(negative_node.get("inputs"))
-    negative_prompt_obj = negative_inputs.get("text")
-    negative_prompt = (
-        negative_prompt_obj if isinstance(negative_prompt_obj, str) else None
-    )
-
-    latent_node = _as_dict(workflow.get(latent_node_id))
-    if latent_node.get("class_type") != "EmptyLatentImage":
-        class_type = latent_node.get("class_type")
-        raise ValueError(f"latent 节点必须是 EmptyLatentImage，当前为: {class_type}")
-    latent_inputs = _as_dict(latent_node.get("inputs"))
-
-    return {
-        "negative_prompt": negative_prompt,
-        "width": _coerce_int_or_none(latent_inputs.get("width")),
-        "height": _coerce_int_or_none(latent_inputs.get("height")),
-        "batch_size": _coerce_int_or_none(latent_inputs.get("batch_size")),
-        "steps": _coerce_int_or_none(node_inputs.get("steps")),
-        "cfg": _coerce_float_or_none(node_inputs.get("cfg")),
-        "denoise": _coerce_float_or_none(node_inputs.get("denoise")),
-        "sampler_name": _coerce_str_or_none(node_inputs.get("sampler_name")),
-        "scheduler": _coerce_str_or_none(node_inputs.get("scheduler")),
-    }
+    return _workflow_extract_workflow_defaults(workflow, ksampler_id)
 
 
 def _extract_ref_node_id(value: object, input_name: str) -> str:
-    if not isinstance(value, list) or not value:
-        raise ValueError(f"workflow 引用字段无效: inputs.{input_name}")
-    first = value[0]
-    if not isinstance(first, str) or not first:
-        raise ValueError(f"workflow 引用节点 ID 无效: inputs.{input_name}")
-    return first
+    return _workflow_extract_ref_node_id(value, input_name)
+
+
+def _record_workflow_hash(record: dict[str, object]) -> str | None:
+    return _workflow_record_workflow_hash(record)
 
 
 def _build_run_payload(
@@ -773,85 +666,13 @@ def _build_run_payload(
     y_selected: list[SelectedRow],
     workflow_context: WorkflowContext | None,
 ) -> dict[str, object]:
-    workflow_status = "loaded" if workflow_context is not None else "not_loaded"
-    workflow_json_path: str | None = (
-        workflow_context.workflow_json_path
-        if workflow_context is not None
-        else args.workflow_json
+    return _payload_build_run_payload(
+        args=args,
+        run_dir=run_dir,
+        x_selected=x_selected,
+        y_selected=y_selected,
+        workflow_context=workflow_context,
     )
-    workflow_hash = (
-        workflow_context.workflow_hash if workflow_context is not None else "not_loaded"
-    )
-
-    x_path = Path(args.x_json)
-    y_path = Path(args.y_json)
-
-    run_id = (
-        datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        + "-"
-        + uuid.uuid4().hex[:8]
-    )
-
-    x_descriptions = read_x_descriptions(args.x_json)
-
-    return {
-        "run_id": run_id,
-        "created_at": _now_iso(),
-        "dry_run": args.dry_run,
-        "run_dir": str(run_dir),
-        "x_json_path": str(x_path),
-        "y_json_path": str(y_path),
-        "x_json_sha256": _sha256_file(x_path),
-        "y_json_sha256": _sha256_file(y_path),
-        "template": args.template,
-        "base_seed": args.base_seed,
-        "seed_strategy": "sha256(base_seed:x_index:y_index)[:16] mod 18446744073709519872",
-        "workflow_json_path": workflow_json_path,
-        "workflow_json_sha256": workflow_hash,
-        "workflow_status": workflow_status,
-        "selected_ksampler_node_id": (
-            workflow_context.selected_ksampler_id
-            if workflow_context is not None
-            else None
-        ),
-        "comfyui_base_url": args.base_url,
-        "request_timeout_s": args.request_timeout_s,
-        "job_timeout_s": args.job_timeout_s,
-        "concurrency": args.concurrency,
-        "client_id": args.client_id,
-        "selection": {
-            "x_indexes": [item.index for item in x_selected],
-            "y_indexes": [item.index for item in y_selected],
-            "x_count": len(x_selected),
-            "y_count": len(y_selected),
-            "total_cells": len(x_selected) * len(y_selected),
-            "x_columns": [
-                {
-                    "x_index": item.index,
-                    "type": _extract_x_info_type(item.value),
-                    "description": x_descriptions[item.index]
-                    if item.index < len(x_descriptions)
-                    else {"zh": "", "en": ""},
-                }
-                for item in x_selected
-            ],
-            "x_limit": args.x_limit,
-            "y_limit": args.y_limit,
-            "x_indexes_raw": args.x_indexes,
-            "y_indexes_raw": args.y_indexes,
-        },
-        "generation_overrides": {
-            "negative_prompt": args.negative_prompt,
-            "width": args.width,
-            "height": args.height,
-            "batch_size": args.batch_size,
-            "steps": args.steps,
-            "cfg": args.cfg,
-            "denoise": args.denoise,
-            "sampler_name": args.sampler_name,
-            "scheduler": args.scheduler,
-        },
-    }
 
 
 def _build_example_prompt(
@@ -859,11 +680,12 @@ def _build_example_prompt(
     x_selected: list[SelectedRow],
     y_selected: list[SelectedRow],
 ) -> str:
-    if not x_selected or not y_selected:
-        return ""
-    first_x = x_selected[0].value
-    first_y = y_selected[0].value.get("y", "")
-    return _render_prompt_by_template(template, first_x, first_y)
+    return _prompt_build_example_prompt(
+        template,
+        x_selected,
+        y_selected,
+        render_prompt_by_template=_render_prompt_by_template,
+    )
 
 
 def _render_prompt_by_template(
@@ -871,35 +693,12 @@ def _render_prompt_by_template(
     x_row: dict[str, str],
     y_value: str,
 ) -> str:
-    if template == DEFAULT_TEMPLATE:
-        return render_positive_prompt(x_row, y_value)
-
-    key_map = {
-        "gender": x_row.get("gender", ""),
-        "characters": x_row.get("characters", ""),
-        "series": x_row.get("series", ""),
-        "rating": x_row.get("rating", ""),
-        "y": y_value,
-        "general": x_row.get("general", ""),
-        "quality": x_row.get("quality", ""),
-    }
-
-    stripped = TEMPLATE_TOKEN_RE.sub("", template)
-    if stripped.strip():
-        raise ValueError("--template 仅支持由占位符组成，例如 {gender}{y}{quality}")
-
-    rendered: list[str] = []
-    for match in TEMPLATE_TOKEN_RE.finditer(template):
-        key = match.group(1)
-        if key not in ALLOWED_TEMPLATE_KEYS:
-            raise ValueError(f"--template 包含未知占位符: {{{key}}}")
-        segment = key_map[key].strip()
-        if not segment:
-            continue
-        if not segment.endswith(","):
-            segment = f"{segment},"
-        rendered.append(segment)
-    return "".join(rendered)
+    return _prompt_render_prompt_by_template(
+        template,
+        x_row,
+        y_value,
+        default_template=DEFAULT_TEMPLATE,
+    )
 
 
 def _should_resume_skip(
@@ -909,83 +708,28 @@ def _should_resume_skip(
     expected_seed: int,
     expected_workflow_hash: str,
 ) -> bool:
-    if existing is None:
-        return False
-
-    status = existing.get("status")
-    if status not in {"success", "skipped"}:
-        return False
-
-    prompt_hash = existing.get("prompt_hash")
-    if prompt_hash != expected_prompt_hash:
-        return False
-
-    seed = _coerce_int_or_none(existing.get("seed"))
-    if seed != expected_seed:
-        return False
-
-    workflow_hash = existing.get("workflow_hash")
-    if not isinstance(workflow_hash, str) or not workflow_hash:
-        legacy_hash = existing.get("workflow_json_sha256")
-        workflow_hash = legacy_hash if isinstance(legacy_hash, str) else None
-    if workflow_hash != expected_workflow_hash:
-        return False
-
-    local_image_paths = _extract_local_image_paths(existing)
-    if local_image_paths is not None:
-        for local_image_path in local_image_paths:
-            image_path = Path(local_image_path)
-            if not image_path.is_absolute():
-                image_path = run_dir / image_path
-            if not (image_path.exists() and image_path.is_file()):
-                return False
-        return True
-
-    local_image_path = _extract_local_image_path(existing)
-    if local_image_path is None:
-        return False
-
-    image_path = Path(local_image_path)
-    if not image_path.is_absolute():
-        image_path = run_dir / image_path
-    return image_path.exists() and image_path.is_file()
+    return _records_should_resume_skip(
+        existing,
+        run_dir,
+        expected_prompt_hash,
+        expected_seed,
+        expected_workflow_hash,
+    )
 
 
 def _extract_local_image_path(existing: dict[str, object] | None) -> str | None:
-    if existing is None:
-        return None
-    local_image_path = existing.get("local_image_path")
-    if isinstance(local_image_path, str) and local_image_path.strip():
-        return local_image_path
-    return None
+    return _records_extract_local_image_path(existing)
 
 
 def _extract_local_image_paths(existing: dict[str, object] | None) -> list[str] | None:
-    if existing is None:
-        return None
-    value = existing.get("local_image_paths")
-    if not isinstance(value, list) or not value:
-        return None
-    paths: list[str] = []
-    for item in value:
-        if not isinstance(item, str):
-            return None
-        stripped = item.strip()
-        if not stripped:
-            continue
-        paths.append(stripped)
-    return paths if paths else None
+    return _records_extract_local_image_paths(existing)
 
 
 def _effective_negative_prompt(
     args: argparse.Namespace,
     workflow_context: WorkflowContext | None,
 ) -> str | None:
-    if args.negative_prompt is not None:
-        return args.negative_prompt
-    if workflow_context is None:
-        return None
-    return workflow_context.default_negative_prompt
+    return _records_effective_negative_prompt(args, workflow_context)
 
 
 def _final_negative_prompt_for_x_row(
@@ -993,14 +737,13 @@ def _final_negative_prompt_for_x_row(
     workflow_context: WorkflowContext | None,
     x_row: dict[str, str],
 ) -> str | None:
-    base_negative_prompt = _effective_negative_prompt(args, workflow_context)
-    if base_negative_prompt is None:
-        return None
-
-    if _extract_x_info_type(x_row) != "normal":
-        return base_negative_prompt
-
-    return _append_negative_prompt(base_negative_prompt, _env_append_negative_prompt())
+    return _records_final_negative_prompt_for_x_row(
+        args,
+        workflow_context,
+        x_row,
+        append_negative_prompt=_append_negative_prompt,
+        env_append_negative_prompt=_env_append_negative_prompt,
+    )
 
 
 def _effective_generation_params(
@@ -1009,38 +752,17 @@ def _effective_generation_params(
     x_row: dict[str, str],
     seed: int,
 ) -> dict[str, object | None]:
-    defaults = workflow_context.default_params if workflow_context is not None else {}
-
-    def pick(key: str, override: object | None) -> object | None:
-        if override is not None:
-            return override
-        return defaults.get(key)
-
-    negative_prompt = _final_negative_prompt_for_x_row(args, workflow_context, x_row)
-
-    return {
-        "seed": seed,
-        "negative_prompt": negative_prompt,
-        "width": pick("width", args.width),
-        "height": pick("height", args.height),
-        "batch_size": pick("batch_size", args.batch_size),
-        "steps": pick("steps", args.steps),
-        "cfg": pick("cfg", args.cfg),
-        "denoise": pick("denoise", args.denoise),
-        "sampler_name": pick("sampler_name", args.sampler_name),
-        "scheduler": pick("scheduler", args.scheduler),
-    }
+    return _records_effective_generation_params(
+        args,
+        workflow_context,
+        x_row,
+        seed,
+        final_negative_prompt_for_x_row=_final_negative_prompt_for_x_row,
+    )
 
 
 def _next_attempt(prev: dict[str, object] | None, *, increment: bool) -> int:
-    if prev is None:
-        return 1
-
-    raw_attempt = _coerce_int_or_none(prev.get("attempt"))
-    previous_attempt = raw_attempt if raw_attempt is not None and raw_attempt > 0 else 1
-    if increment:
-        return previous_attempt + 1
-    return previous_attempt
+    return _records_next_attempt(prev, increment=increment)
 
 
 def _build_base_metadata_record(
@@ -1057,32 +779,19 @@ def _build_base_metadata_record(
     workflow_hash: str,
     attempt: int,
 ) -> dict[str, object]:
-    return {
-        "status": status,
-        "x_index": x_index,
-        "y_index": y_index,
-        "x_fields": {
-            "gender": x_row.get("gender", ""),
-            "characters": x_row.get("characters", ""),
-            "series": x_row.get("series", ""),
-            "rating": x_row.get("rating", ""),
-            "general": x_row.get("general", ""),
-            "quality": x_row.get("quality", ""),
-        },
-        "x_info_type": _extract_x_info_type(x_row),
-        "y_value": y_value,
-        "positive_prompt": positive_prompt,
-        "prompt_hash": prompt_hash,
-        "seed": seed,
-        "attempt": attempt,
-        "generation_params": generation_params,
-        "workflow_hash": workflow_hash,
-        "comfyui_prompt_id": None,
-        "remote_images": None,
-        "local_image_path": None,
-        "local_image_paths": None,
-        "error": None,
-    }
+    return _records_build_base_metadata_record(
+        status=status,
+        x_index=x_index,
+        y_index=y_index,
+        x_row=x_row,
+        y_value=y_value,
+        positive_prompt=positive_prompt,
+        prompt_hash=prompt_hash,
+        seed=seed,
+        generation_params=generation_params,
+        workflow_hash=workflow_hash,
+        attempt=attempt,
+    )
 
 
 def _collect_remote_images(history_item: dict[str, object]) -> list[dict[str, str]]:
@@ -1162,14 +871,7 @@ def _serialize_error(exc: Exception) -> dict[str, object]:
 
 
 def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as file:
-        while True:
-            chunk = file.read(1024 * 1024)
-            if not chunk:
-                break
-            digest.update(chunk)
-    return digest.hexdigest()
+    return _payload_sha256_file(path)
 
 
 def _coerce_int_or_none(value: object) -> int | None:
@@ -1220,7 +922,7 @@ def _as_dict(value: object) -> dict[str, object]:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return _payload_now_iso()
 
 
 if __name__ == "__main__":
