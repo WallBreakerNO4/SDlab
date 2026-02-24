@@ -275,3 +275,11 @@ lib/**
 !lib/**/*.ts
 !lib/**/*.tsx
 !lib/AGENTS.md
+
+# Playwright
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
