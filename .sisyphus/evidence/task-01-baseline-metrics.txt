@@ -1,3 +1,0 @@
-scripts/generation/comfyui_part1_generate.py: 2168 lines, max indentation 12
-scripts/r2_upload/upload_images_to_r2.py: 1112 lines, max indentation 9
-scripts/r2_upload/supabase_writer.py: 1092 lines, max indentation 6
