@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterable
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from itertools import product
@@ -92,6 +93,10 @@ class GenerationCoordinator:
         wait_prompt_done_with_fallback: Callable[..., None],
         get_history_item: Callable[..., dict[str, object]],
         download_image_to_path: Callable[..., Path],
+        cell_pairs: Iterable[tuple[Any, Any]] | None = None,
+        save_image_prefix_builder: (
+            Callable[[str, int, int, int, str], str] | None
+        ) = None,
     ):
         self.args = args
         self.x_descriptions = x_descriptions
@@ -123,7 +128,11 @@ class GenerationCoordinator:
         self.get_history_item = get_history_item
         self.download_image_to_path = download_image_to_path
 
-        self.cell_iter = product(x_selected, y_selected)
+        if cell_pairs is None:
+            self.cell_iter = product(x_selected, y_selected)
+        else:
+            self.cell_iter = iter(cell_pairs)
+        self.save_image_prefix_builder = save_image_prefix_builder
         self.exhausted = False
         self.gen_futures: set[Future[Any]] = set()
         self.dl_futures: set[Future[Any]] = set()
@@ -265,9 +274,18 @@ class GenerationCoordinator:
                 self._write_record(record)
                 continue
 
-            save_image_prefix = (
-                f"{self.run_id}/x{x_index}-y{y_index}-s{seed}-{prompt_hash[:8]}"
-            )
+            if self.save_image_prefix_builder is not None:
+                save_image_prefix = self.save_image_prefix_builder(
+                    self.run_id,
+                    x_index,
+                    y_index,
+                    seed,
+                    prompt_hash,
+                )
+            else:
+                save_image_prefix = (
+                    f"{self.run_id}/x{x_index}-y{y_index}-s{seed}-{prompt_hash[:8]}"
+                )
             plan = _CellPlan(
                 x_index=x_index,
                 y_index=y_index,
@@ -373,6 +391,8 @@ def run_generation(
     wait_prompt_done_with_fallback: Callable[..., None],
     get_history_item: Callable[..., dict[str, object]],
     download_image_to_path: Callable[..., Path],
+    cell_pairs: Iterable[tuple[Any, Any]] | None = None,
+    save_image_prefix_builder: (Callable[[str, int, int, int, str], str] | None) = None,
 ) -> bool:
     return GenerationCoordinator(
         args=args,
@@ -404,6 +424,8 @@ def run_generation(
         wait_prompt_done_with_fallback=wait_prompt_done_with_fallback,
         get_history_item=get_history_item,
         download_image_to_path=download_image_to_path,
+        cell_pairs=cell_pairs,
+        save_image_prefix_builder=save_image_prefix_builder,
     ).run()
 
 
