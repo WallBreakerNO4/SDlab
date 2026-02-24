@@ -287,3 +287,6 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# Wrangler (Cloudflare)
+.wrangler/
