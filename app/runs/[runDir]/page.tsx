@@ -23,6 +23,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
+import { UserAuth } from "@/components/user-auth"
 
 type RunDetailSummary = {
   run_id: string
@@ -242,11 +243,14 @@ export default function RunDetailPage() {
   return (
     <main className="mx-auto flex h-dvh w-full max-w-none flex-col gap-3 overflow-hidden p-2 md:p-4">
       <Card>
-        <CardHeader>
-          <CardTitle>Run 结果页</CardTitle>
-          <CardDescription className="break-all">
-            run_dir: {runDir || "(invalid)"}
-          </CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between space-y-0">
+          <div className="space-y-1.5">
+            <CardTitle>Run 结果页</CardTitle>
+            <CardDescription className="break-all">
+              run_dir: {runDir || "(invalid)"}
+            </CardDescription>
+          </div>
+          <UserAuth />
         </CardHeader>
         <CardContent className="space-y-4">
           {isLoading ? (

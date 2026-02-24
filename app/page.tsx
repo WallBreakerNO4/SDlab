@@ -25,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { UserAuth } from "@/components/user-auth"
 
 type RunSummary = {
   run_dir: string
@@ -68,8 +69,8 @@ function formatCreatedAt(createdAt: string): string {
 function RunsSkeleton() {
   return (
     <div className="space-y-3">
-      {Array.from({ length: 3 }).map((_, index) => (
-        <div key={index} className="grid grid-cols-4 gap-2">
+      {["row-1", "row-2", "row-3"].map((skeletonId) => (
+        <div key={skeletonId} className="grid grid-cols-4 gap-2">
           <Skeleton className="h-8 w-full" />
           <Skeleton className="h-8 w-full" />
           <Skeleton className="h-8 w-full" />
@@ -130,11 +131,14 @@ export default function Page() {
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-4 p-4 md:p-8">
       <Card>
-        <CardHeader>
-          <CardTitle>ComfyUI Runs</CardTitle>
-          <CardDescription>
-            浏览历史运行记录，选择一个 run 进入网格详情页。
-          </CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between space-y-0">
+          <div className="space-y-1.5">
+            <CardTitle>ComfyUI Runs</CardTitle>
+            <CardDescription>
+              浏览历史运行记录，选择一个 run 进入网格详情页。
+            </CardDescription>
+          </div>
+          <UserAuth />
         </CardHeader>
         <CardContent className="space-y-4">
           {isLoading ? <RunsSkeleton /> : null}
