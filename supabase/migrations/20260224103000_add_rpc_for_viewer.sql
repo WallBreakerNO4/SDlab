@@ -68,6 +68,14 @@ as $$
     where i.batch_index = 0
     order by i.x_index asc, i.y_index asc
   ),
+  x_visible as (
+    select
+      xf.x_index,
+      xf.category,
+      xf.metadata,
+      row_number() over (order by xf.x_index) - 1 as visible_x_index
+    from x_first xf
+  ),
   y_first as (
     select distinct on (i.y_index)
       i.y_index,
@@ -88,29 +96,29 @@ as $$
       select coalesce(
         jsonb_agg(
           jsonb_build_object(
-            'visible_x_index', row_number() over (order by xf.x_index) - 1,
-            'original_x_index', xf.x_index,
-            'category', xf.category,
+            'visible_x_index', xv.visible_x_index,
+            'original_x_index', xv.x_index,
+            'category', xv.category,
             'label',
               coalesce(
                 nullif(trim(
                   concat_ws(' ',
-                    nullif(trim(xf.metadata #>> '{x_fields,quality}'), ''),
-                    nullif(trim(xf.metadata #>> '{x_fields,rating}'), ''),
-                    nullif(trim(xf.metadata #>> '{x_fields,gender}'), ''),
-                    nullif(trim(xf.metadata #>> '{x_fields,characters}'), ''),
-                    nullif(trim(xf.metadata #>> '{x_fields,series}'), ''),
-                    nullif(trim(xf.metadata #>> '{x_fields,general}'), '')
+                    nullif(trim(xv.metadata #>> '{x_fields,quality}'), ''),
+                    nullif(trim(xv.metadata #>> '{x_fields,rating}'), ''),
+                    nullif(trim(xv.metadata #>> '{x_fields,gender}'), ''),
+                    nullif(trim(xv.metadata #>> '{x_fields,characters}'), ''),
+                    nullif(trim(xv.metadata #>> '{x_fields,series}'), ''),
+                    nullif(trim(xv.metadata #>> '{x_fields,general}'), '')
                   )
                 ), ''),
-                'x' || xf.x_index::text
+                'x' || xv.x_index::text
               )
           )
-          order by xf.x_index
+          order by xv.x_index
         ),
         '[]'::jsonb
       )
-      from x_first xf
+      from x_visible xv
     ) as x_columns,
     (
       select array_agg(
@@ -124,7 +132,8 @@ as $$
       left join y_first yf on yf.y_index = yi
     ) as y_labels,
     (select count(*) from x_first) as x_count,
-    (select y_count from y_count_raw) as y_count;
+    (select y_count from y_count_raw) as y_count
+  from target t;
 $$;
 
 grant execute on function public.get_run_grid_meta(text) to anon, authenticated;
@@ -213,7 +222,7 @@ as $$
     max(pi.seed) filter (where pi.batch_index = 0) as seed,
     max(pi.prompt_hash) filter (where pi.batch_index = 0) as prompt_hash,
     max(pi.positive_prompt) filter (where pi.batch_index = 0) as positive_prompt,
-    max(pi.generation_params) filter (where pi.batch_index = 0) as generation_params,
+    (jsonb_agg(pi.generation_params) filter (where pi.batch_index = 0) -> 0) as generation_params,
     jsonb_agg(
       jsonb_build_object(
         'batch_index', pi.batch_index,
