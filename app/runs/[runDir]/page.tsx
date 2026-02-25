@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
 import { useParams } from "next/navigation"
 
+import { useEffect, useMemo, useState } from "react"
+
 import {
-  type RunGridCell,
-  type RunGridData,
+  type RunGridIndexData,
+  type RunGridXColumn,
   VirtualGrid,
 } from "@/components/comfyui/virtual-grid"
 import { Button } from "@/components/ui/button"
@@ -37,12 +38,14 @@ type RunDetailResponse = {
   run: RunDetailSummary
   xLabels: string[]
   yLabels: string[]
+  x_columns: RunGridXColumn[]
+  y_indexes: number[]
 }
 
 type LoadState = "loading" | "ready" | "not-found" | "error"
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 function isStringArray(value: unknown): value is string[] {
@@ -58,58 +61,50 @@ function isRunDetailResponse(value: unknown): value is RunDetailResponse {
     return false
   }
 
+  if (!Array.isArray(value.x_columns) || !Array.isArray(value.y_indexes)) {
+    return false
+  }
+
   if (!isRecord(value.run) || !isRecord(value.run.selection)) {
     return false
   }
 
+  const run = value.run
+  const selection = run.selection as Record<string, unknown>
+
   return (
-    typeof value.run.run_id === "string" &&
-    typeof value.run.created_at === "string" &&
-    typeof value.run.run_dir === "string" &&
-    typeof value.run.selection.total_cells === "number"
+    typeof run.run_id === "string" &&
+    typeof run.created_at === "string" &&
+    typeof run.run_dir === "string" &&
+    typeof selection.total_cells === "number"
   )
 }
 
-function isGridCellStatus(value: unknown): value is RunGridCell["status"] {
-  return (
-    value === "success" ||
-    value === "failed" ||
-    value === "skipped" ||
-    value === "missing"
-  )
-}
-
-function isRunGridCell(value: unknown): value is RunGridCell {
+function isRunGridIndexData(value: unknown): value is RunGridIndexData {
   if (!isRecord(value)) {
     return false
   }
 
-  return (
-    isGridCellStatus(value.status) &&
-    typeof value.x_index === "number" &&
-    typeof value.y_index === "number" &&
-    (typeof value.local_image_path === "string" || value.local_image_path === null) &&
-    (typeof value.seed === "number" || value.seed === null) &&
-    (typeof value.prompt_hash === "string" || value.prompt_hash === null) &&
-    (typeof value.positive_prompt === "string" ||
-      value.positive_prompt === undefined)
+  if (!Array.isArray(value.x_columns) || !Array.isArray(value.y_indexes)) {
+    return false
+  }
+
+  const x_columns = value.x_columns as unknown[]
+  const xColumnsOk = x_columns.every((col) => {
+    if (!isRecord(col)) return false
+    const type = col["type"]
+    const typeOk = typeof type === "string" || type === null
+    const desc = col["description"]
+    const descOk = desc === null || isRecord(desc)
+    return typeOk && descOk
+  })
+
+  const y_indexes = value.y_indexes as unknown[]
+  const yIndexesOk = y_indexes.every(
+    (item) => typeof item === "number" && Number.isFinite(item) && item >= 0,
   )
-}
 
-function isRunGridData(value: unknown): value is RunGridData {
-  if (!isRecord(value)) {
-    return false
-  }
-
-  if (!isStringArray(value.xLabels) || !isStringArray(value.yLabels)) {
-    return false
-  }
-
-  if (!isRecord(value.cells)) {
-    return false
-  }
-
-  return Object.values(value.cells).every(isRunGridCell)
+  return xColumnsOk && yIndexesOk
 }
 
 function formatCreatedAt(createdAt: string): string {
@@ -126,10 +121,11 @@ function formatCreatedAt(createdAt: string): string {
 }
 
 function SummarySkeleton() {
+  const keys = ["k1", "k2", "k3", "k4"]
   return (
     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-      {Array.from({ length: 4 }).map((_, index) => (
-        <div key={index} className="border p-3">
+      {keys.map((key) => (
+        <div key={key} className="border p-3">
           <Skeleton className="mb-2 h-3 w-16" />
           <Skeleton className="h-4 w-full" />
         </div>
@@ -139,12 +135,14 @@ function SummarySkeleton() {
 }
 
 function GridSkeleton() {
+  const rowKeys = ["r1", "r2", "r3", "r4", "r5"]
+  const cellKeys = ["c1", "c2", "c3", "c4", "c5", "c6"]
   return (
     <div className="space-y-2">
-      {Array.from({ length: 5 }).map((_, index) => (
-        <div key={index} className="grid min-w-[960px] grid-cols-6 gap-2">
-          {Array.from({ length: 6 }).map((_, cellIndex) => (
-            <Skeleton key={cellIndex} className="h-32 w-full" />
+      {rowKeys.map((rowKey) => (
+        <div key={rowKey} className="grid min-w-[960px] grid-cols-6 gap-2">
+          {cellKeys.map((cellKey) => (
+            <Skeleton key={`${rowKey}-${cellKey}`} className="h-32 w-full" />
           ))}
         </div>
       ))}
@@ -156,7 +154,7 @@ export default function RunDetailPage() {
   const params = useParams<{ runDir: string | string[] }>()
   const [loadState, setLoadState] = useState<LoadState>("loading")
   const [detailData, setDetailData] = useState<RunDetailResponse | null>(null)
-  const [gridData, setGridData] = useState<RunGridData | null>(null)
+  const [gridData, setGridData] = useState<RunGridIndexData | null>(null)
 
   const runDir = useMemo(() => {
     if (!params?.runDir) {
@@ -209,7 +207,7 @@ export default function RunDetailPage() {
           throw new Error("Unexpected run detail payload")
         }
 
-        if (!isRunGridData(gridPayload)) {
+        if (!isRunGridIndexData(gridPayload)) {
           throw new Error("Unexpected run grid payload")
         }
 
@@ -237,8 +235,8 @@ export default function RunDetailPage() {
   const isLoading = loadState === "loading"
   const isReady =
     loadState === "ready" && detailData !== null && gridData !== null
-  const xCount = isReady ? gridData.xLabels.length : 0
-  const yCount = isReady ? gridData.yLabels.length : 0
+  const xCount = isReady ? gridData.x_columns.length : 0
+  const yCount = isReady ? gridData.y_indexes.length : 0
 
   return (
     <main className="mx-auto flex h-dvh w-full max-w-none flex-col gap-3 overflow-hidden p-2 md:p-4">
