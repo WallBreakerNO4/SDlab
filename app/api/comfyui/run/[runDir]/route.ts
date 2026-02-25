@@ -53,7 +53,7 @@ export async function GET(
     const supabase = await createClient()
     const { data, error } = await supabase
       .from("runs")
-      .select("run_id, created_at, run_dir, run_json")
+      .select("id, created_at, run_dir, run_json")
       .eq("run_dir", runDir)
       .maybeSingle()
 
@@ -84,7 +84,7 @@ export async function GET(
 
     return Response.json({
       run: {
-        run_id: data.run_id,
+        run_id: data.id,
         created_at: data.created_at,
         run_dir: data.run_dir,
         selection: {
