@@ -1,4 +1,11 @@
 {
   "run_id": "run-20260221T160000Z",
-  "run_dir": "run-20260221T160000Z"
+  "run_dir": "run-20260221T160000Z",
+  "selection": {
+    "x_count": 1,
+    "y_count": 1,
+    "total_cells": 1,
+    "x_indexes": [0],
+    "y_indexes": [0]
+  }
 }
