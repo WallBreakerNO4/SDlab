@@ -1,5 +1,9 @@
 import { listRunSummaries } from "@/lib/comfyui-fs"
 import type { RunSummary } from "@/lib/comfyui-types"
+import {
+  createSupabaseServiceClient,
+  SupabaseServiceConfigError,
+} from "@/lib/supabase-server"
 
 export const runtime = "nodejs"
 
@@ -16,9 +20,18 @@ function normalizeRunSummaries(runs: RunSummary[]): RunSummary[] {
 
 export async function GET(): Promise<Response> {
   try {
+    createSupabaseServiceClient()
     const runs = await listRunSummaries()
     return Response.json(normalizeRunSummaries(runs))
-  } catch {
+  } catch (error: unknown) {
+    if (error instanceof SupabaseServiceConfigError) {
+      return Response.json(
+        { error: error.message },
+        {
+          status: 500,
+        },
+      )
+    }
     return Response.json([])
   }
 }
