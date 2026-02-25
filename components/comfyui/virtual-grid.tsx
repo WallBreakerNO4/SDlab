@@ -278,16 +278,16 @@ export function VirtualGrid({ runDir, meta }: VirtualGridProps) {
       loadedRowsRef.current = new Map()
       inFlightRequests.current.clear()
     }
-  }, [runDir, meta])
+  }, [runDir, meta.x_count, meta.y_count])
+
+  const hasVirtualRows = virtualRows.length > 0
+  const minVisible = hasVirtualRows ? virtualRows[0].index : 0
+  const maxVisible = hasVirtualRows ? virtualRows[virtualRows.length - 1].index : 0
+  const y_from = hasVirtualRows ? Math.max(0, minVisible - 4) : 0
+  const y_to = hasVirtualRows ? Math.min(meta.y_count - 1, maxVisible + 4) : 0
 
   useEffect(() => {
-    if (virtualRows.length === 0) return
-
-    const minVisible = virtualRows[0].index
-    const maxVisible = virtualRows[virtualRows.length - 1].index
-
-    const y_from = Math.max(0, minVisible - 4)
-    const y_to = Math.min(meta.y_count - 1, maxVisible + 4)
+    if (!hasVirtualRows) return
 
     const rowsToFetch: number[] = []
     for (let y = y_from; y <= y_to; y++) {
@@ -300,15 +300,19 @@ export function VirtualGrid({ runDir, meta }: VirtualGridProps) {
 
     const abortController = new AbortController()
 
+    const currentInFlight = inFlightRequests.current
+
     const fetchChunks = async () => {
       let current_from = y_from
       while (current_from <= y_to) {
-        const current_to = Math.min(current_from + 29, y_to)
-        const reqKey = `${current_from}-${current_to}`
+        if (abortController.signal.aborted) break
+        const chunkFrom = current_from
+        const chunkTo = Math.min(chunkFrom + 29, y_to)
+        const reqKey = `${chunkFrom}-${chunkTo}`
 
-        if (!inFlightRequests.current.has(reqKey)) {
+        if (!currentInFlight.has(reqKey)) {
           let allLoaded = true
-          for (let y = current_from; y <= current_to; y++) {
+          for (let y = chunkFrom; y <= chunkTo; y++) {
             if (!loadedRowsRef.current.has(y)) {
               allLoaded = false
               break
@@ -316,10 +320,10 @@ export function VirtualGrid({ runDir, meta }: VirtualGridProps) {
           }
 
           if (!allLoaded) {
-            inFlightRequests.current.add(reqKey)
+            currentInFlight.add(reqKey)
             try {
               const res = await fetch(
-                `/api/comfyui/run/${encodeURIComponent(runDir)}/grid/chunk?y_from=${current_from}&y_to=${current_to}`,
+                `/api/comfyui/run/${encodeURIComponent(runDir)}/grid/chunk?y_from=${chunkFrom}&y_to=${chunkTo}`,
                 { signal: abortController.signal }
               )
               if (res.ok) {
@@ -335,7 +339,7 @@ export function VirtualGrid({ runDir, meta }: VirtualGridProps) {
                   })
                   setLoadedRows((prev) => {
                     const next = new Map(prev)
-                    for (let y = current_from; y <= current_to; y++) {
+                    for (let y = chunkFrom; y <= chunkTo; y++) {
                       next.set(y, true)
                     }
                     loadedRowsRef.current = next
@@ -348,11 +352,11 @@ export function VirtualGrid({ runDir, meta }: VirtualGridProps) {
                 // ignore
               }
             } finally {
-              inFlightRequests.current.delete(reqKey)
+              currentInFlight.delete(reqKey)
             }
           }
         }
-        current_from = current_to + 1
+        current_from = chunkTo + 1
       }
     }
 
@@ -360,8 +364,9 @@ export function VirtualGrid({ runDir, meta }: VirtualGridProps) {
 
     return () => {
       abortController.abort()
+      currentInFlight.clear()
     }
-  }, [virtualRows, meta.y_count, runDir])
+  }, [hasVirtualRows, y_from, y_to, runDir])
 
   const openCellDialog = useCallback(
     (cell: RunGridCell, xIndex: number, yIndex: number, xLabel: string, yLabel: string) => {
