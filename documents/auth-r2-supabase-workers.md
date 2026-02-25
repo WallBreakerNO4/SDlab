@@ -121,7 +121,7 @@
 
 ### 部署 (Cloudflare Workers)
 - **预览**: `pnpm preview` (执行 OpenNext 构建并在本地 wrangler 预览)
-- **部署**: `pnpm deploy` (直接部署到 Cloudflare Workers)
+- **部署**: `pnpm run deploy` (直接部署到 Cloudflare Workers)
 - **类型生成**: `pnpm cf-typegen` (更新 `worker-configuration.d.ts`)
 
 ## 8. 新增依赖说明
