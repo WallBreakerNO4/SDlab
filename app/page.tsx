@@ -26,13 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 
-type RunSummary = {
-  run_dir: string
-  created_at: string
-  x_count: number
-  y_count: number
-  total_cells: number
-}
+import type { RunSummary } from "@/lib/comfyui-types"
 
 type LoadState = "loading" | "ready" | "error"
 
@@ -44,6 +38,7 @@ function isRunSummary(value: unknown): value is RunSummary {
   const run = value as Partial<RunSummary>
 
   return (
+    typeof run.run_id === "string" &&
     typeof run.run_dir === "string" &&
     typeof run.created_at === "string" &&
     typeof run.x_count === "number" &&
@@ -148,7 +143,7 @@ export default function Page() {
                 <EmptyDescription>
                   {loadState === "error"
                     ? "请稍后刷新重试。"
-                    : "当前还没有 run.json 可展示。"}
+                    : "暂无可用 runs，请确认数据源已配置。"}
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
