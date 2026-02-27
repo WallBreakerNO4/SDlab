@@ -1,6 +1,9 @@
-import { discoverRunDirs, loadRunGridIndex } from "@/lib/comfyui-fs"
-import { assertAllowedRunDir } from "@/lib/comfyui-path"
-import type { RunDir } from "@/lib/comfyui-types"
+import { isValidRunDir } from "@/lib/comfyui-types"
+import {
+  createSupabaseServiceClient,
+  SupabaseServiceConfigError,
+} from "@/lib/supabase-server"
+import type { JsonObject, JsonValue, SupabaseRunRow } from "@/lib/supabase-types"
 
 export const runtime = "nodejs"
 
@@ -8,22 +11,21 @@ type RouteContext = {
   params: Promise<{ runDir: string }>
 }
 
-function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
-  return typeof error === "object" && error !== null && "code" in error
+function asJsonObject(value: JsonValue): JsonObject | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null
+  }
+  return value as JsonObject
 }
 
-function isNotFoundError(error: unknown): boolean {
-  if (error instanceof Error) {
-    if (
-      error.message === "runDir must not be empty" ||
-      error.message === "Invalid runDir format" ||
-      error.message === "runDir is not in allowlist"
-    ) {
-      return true
-    }
-  }
+function getNonEmptyString(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
 
-  return isErrnoException(error) && error.code === "ENOENT"
+function getNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null
 }
 
 export async function GET(
@@ -32,18 +34,85 @@ export async function GET(
 ): Promise<Response> {
   try {
     const { runDir } = await context.params
-    const allowedRunDirs = new Set<RunDir>(await discoverRunDirs())
-    const safeRunDir = assertAllowedRunDir(runDir, allowedRunDirs)
-    const { runDetail, grid } = await loadRunGridIndex(safeRunDir)
+    if (!isValidRunDir(runDir)) {
+      return Response.json({ error: "Run not found" }, { status: 404 })
+    }
+
+    const supabase = createSupabaseServiceClient()
+    const { data, error } = await supabase
+      .from("runs")
+      .select("run_dir, created_at, run_json")
+      .eq("run_dir", runDir)
+      .maybeSingle()
+
+    if (error) {
+      return Response.json(
+        {
+          error: "Failed to load run detail",
+        },
+        { status: 500 },
+      )
+    }
+
+    const row = data as SupabaseRunRow | null
+    if (!row) {
+      return Response.json({ error: "Run not found" }, { status: 404 })
+    }
+
+    const runJson = asJsonObject(row.run_json)
+    const runId = runJson ? getNonEmptyString(runJson.run_id) : null
+    const selection = runJson ? asJsonObject(runJson.selection as JsonValue) : null
+
+    const xColumnsRaw = selection?.x_columns
+    const yIndexesRaw = selection?.y_indexes
+
+    const x_columns: JsonObject[] = Array.isArray(xColumnsRaw)
+      ? xColumnsRaw
+          .map((item) => asJsonObject(item as JsonValue))
+          .filter((item): item is JsonObject => item !== null)
+      : []
+
+    const y_indexes: number[] = Array.isArray(yIndexesRaw)
+      ? yIndexesRaw.filter((item): item is number => typeof item === "number")
+      : []
+
+    const totalCellsFromJson = getNumber(selection?.total_cells)
+    const total_cells = totalCellsFromJson ?? x_columns.length * y_indexes.length
+
+    if (!runId) {
+      return Response.json(
+        {
+          error: "Failed to load run detail",
+        },
+        { status: 500 },
+      )
+    }
+
+    const xLabels = x_columns.map((col, index) => {
+      const desc = asJsonObject(col.description as JsonValue)
+      const zh = desc ? getNonEmptyString(desc.zh) : null
+      return zh ?? `X${index}`
+    })
+
+    const yLabels = y_indexes.map((yIndex) => `Y${yIndex}`)
 
     return Response.json({
-      run: runDetail,
-      xLabels: grid.xLabels,
-      yLabels: grid.yLabels,
+      run: {
+        run_id: runId,
+        created_at: row.created_at,
+        run_dir: row.run_dir,
+        selection: {
+          total_cells,
+        },
+      },
+      xLabels,
+      yLabels,
+      x_columns,
+      y_indexes,
     })
   } catch (error) {
-    if (isNotFoundError(error)) {
-      return Response.json({ error: "Run not found" }, { status: 404 })
+    if (error instanceof SupabaseServiceConfigError) {
+      return Response.json({ error: error.message }, { status: 500 })
     }
 
     return Response.json(

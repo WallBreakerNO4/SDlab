@@ -1,6 +1,9 @@
-import { discoverRunDirs, loadRunGridIndex } from "@/lib/comfyui-fs"
-import { assertAllowedRunDir } from "@/lib/comfyui-path"
-import type { GridCell, GridCellKey, RunDir } from "@/lib/comfyui-types"
+import { isValidRunDir } from "@/lib/comfyui-types"
+import {
+  createSupabaseServiceClient,
+  SupabaseServiceConfigError,
+} from "@/lib/supabase-server"
+import type { JsonObject, JsonValue, SupabaseRunRow } from "@/lib/supabase-types"
 
 export const runtime = "nodejs"
 
@@ -8,71 +11,23 @@ type RouteContext = {
   params: Promise<{ runDir: string }>
 }
 
-type GridIndexCellPayload = {
-  status: GridCell["status"]
-  x_index: number
-  y_index: number
-  local_image_path: string | null
-  local_image_paths?: string[]
-  seed: number | null
-  prompt_hash: string | null
-  positive_prompt?: string
-  generation_params?: {
-    width: number | null
-    height: number | null
-    steps: number | null
-    cfg: number | null
-    sampler_name: string | null
+function asJsonObject(value: JsonValue): JsonObject | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null
   }
+  return value as JsonObject
 }
 
-function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
-  return typeof error === "object" && error !== null && "code" in error
+function getNonEmptyString(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
 }
 
-function isNotFoundError(error: unknown): boolean {
-  if (error instanceof Error) {
-    if (
-      error.message === "runDir must not be empty" ||
-      error.message === "Invalid runDir format" ||
-      error.message === "runDir is not in allowlist"
-    ) {
-      return true
-    }
-  }
-
-  return isErrnoException(error) && error.code === "ENOENT"
-}
-
-function toGridIndexCellPayload(cell: GridCell): GridIndexCellPayload {
-  const payload: GridIndexCellPayload = {
-    status: cell.status,
-    x_index: cell.x_index,
-    y_index: cell.y_index,
-    local_image_path: cell.local_image_path,
-    seed: cell.seed,
-    prompt_hash: cell.prompt_hash,
-  }
-
-  if (cell.positive_prompt) {
-    payload.positive_prompt = cell.positive_prompt
-  }
-
-  if (Array.isArray(cell.local_image_paths) && cell.local_image_paths.length > 0) {
-    payload.local_image_paths = cell.local_image_paths
-  }
-
-  if (cell.generation_params) {
-    payload.generation_params = {
-      width: cell.generation_params.width,
-      height: cell.generation_params.height,
-      steps: cell.generation_params.steps,
-      cfg: cell.generation_params.cfg,
-      sampler_name: cell.generation_params.sampler_name,
-    }
-  }
-
-  return payload
+function pickXColumn(raw: JsonObject): { type: string | null; description: JsonObject | null } {
+  const type = getNonEmptyString(raw.type)
+  const description = asJsonObject(raw.description as JsonValue)
+  return { type, description }
 }
 
 export async function GET(
@@ -81,27 +36,71 @@ export async function GET(
 ): Promise<Response> {
   try {
     const { runDir } = await context.params
-    const allowedRunDirs = new Set<RunDir>(await discoverRunDirs())
-    const safeRunDir = assertAllowedRunDir(runDir, allowedRunDirs)
-    const { grid } = await loadRunGridIndex(safeRunDir)
+    if (!isValidRunDir(runDir)) {
+      return Response.json({ error: "Run not found" }, { status: 404 })
+    }
 
-    const cells = Object.fromEntries(
-      Object.entries(grid.cells).map(([key, cell]) => [
-        key as GridCellKey,
-        toGridIndexCellPayload(cell),
-      ]),
-    )
+    const supabase = createSupabaseServiceClient()
+    const { data, error } = await supabase
+      .from("runs")
+      .select("run_dir, run_json")
+      .eq("run_dir", runDir)
+      .maybeSingle()
+
+    if (error) {
+      return Response.json(
+        {
+          error: "Failed to load run grid",
+        },
+        { status: 500 },
+      )
+    }
+
+    const row = data as SupabaseRunRow | null
+    if (!row) {
+      return Response.json({ error: "Run not found" }, { status: 404 })
+    }
+
+    const runJson = asJsonObject(row.run_json)
+    const selection = runJson ? asJsonObject(runJson.selection as JsonValue) : null
+    if (!selection) {
+      return Response.json(
+        {
+          error: "Failed to load run grid",
+        },
+        { status: 500 },
+      )
+    }
+
+    const xColumnsRaw = selection.x_columns
+    const yIndexesRaw = selection.y_indexes
+
+    const x_columns = Array.isArray(xColumnsRaw)
+      ? xColumnsRaw
+          .map((item) => asJsonObject(item as JsonValue))
+          .filter((item): item is JsonObject => item !== null)
+          .map(pickXColumn)
+      : []
+
+    const y_indexes: number[] = Array.isArray(yIndexesRaw)
+      ? yIndexesRaw.filter(
+          (item): item is number => typeof item === "number" && Number.isFinite(item),
+        )
+      : []
+
+    const x_count = x_columns.length
+    const y_count = y_indexes.length
 
     return Response.json({
-      xLabels: grid.xLabels,
-      yLabels: grid.yLabels,
-      x_count: grid.x_count,
-      y_count: grid.y_count,
-      cells,
+      x_columns,
+      y_indexes,
+      x_count,
+      y_count,
+      cells: {},
     })
   } catch (error) {
-    if (isNotFoundError(error)) {
-      return Response.json({ error: "Run not found" }, { status: 404 })
+    if (error instanceof SupabaseServiceConfigError) {
+      return Response.json({ error: error.message }, { status: 500 })
     }
 
     return Response.json(
