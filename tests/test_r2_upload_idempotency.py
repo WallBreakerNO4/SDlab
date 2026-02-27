@@ -42,7 +42,7 @@ def _write_run_fixture(root: Path, *, run_name: str) -> Path:
                 "x_index": 0,
                 "y_index": 0,
                 "local_image_path": "images/x0-y0.png",
-                "category": "normal",
+                "x_info_type": "normal",
             },
             ensure_ascii=False,
         )
