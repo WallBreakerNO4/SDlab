@@ -1,4 +1,13 @@
-import { test, expect } from "@playwright/test"
+import { expect, test } from "@playwright/test";
+
+const hasSupabaseConfig = Boolean(
+  process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY,
+);
+
+test.skip(
+  !hasSupabaseConfig,
+  "缺少 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY，跳过数据相关用例",
+);
 
 test("task 10: placeholder appears before image load", async ({ page }) => {
   // We need a runDir that has images. Let's use the API to find one or just mock it.
