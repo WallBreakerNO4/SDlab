@@ -404,7 +404,7 @@ def _build_run_plan(
 
         base_batch = _int_with_default(metadata_record.get("batch_index"), default=0)
         category = _normalize_category(
-            metadata_record.get("category"), category_override
+            metadata_record.get("x_info_type"), category_override
         )
 
         for offset, image_path in enumerate(image_paths):
