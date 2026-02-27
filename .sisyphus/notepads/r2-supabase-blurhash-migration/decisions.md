@@ -1,2 +1,0 @@
-- Decided on a dual-bucket R2 architecture (public vs private) to balance performance and security.
-- Private images are served via a streaming proxy at `/api/r2/private/*` to ensure they are not directly exposed.
