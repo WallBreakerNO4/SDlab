@@ -64,7 +64,7 @@ def _clear_bucket(bucket_name: str) -> int:
 
         delete_resp = s3.delete_objects(
             Bucket=bucket_name,
-            Delete={"Objects": objects, "Quiet": True},
+            Delete={"Objects": objects, "Quiet": False},
         )
 
         deleted_items = delete_resp.get("Deleted", [])
