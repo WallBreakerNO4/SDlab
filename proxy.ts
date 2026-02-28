@@ -8,7 +8,7 @@ import { createServerClient } from '@supabase/ssr'
  * that module uses `server-only` + `next/headers` which are unavailable in
  * Edge middleware. We create the client inline instead.
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
