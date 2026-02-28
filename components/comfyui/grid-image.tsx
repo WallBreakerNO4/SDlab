@@ -7,7 +7,7 @@ import { BlurhashCanvas } from "./blurhash-canvas"
 import { type VariantUrls } from "./virtual-grid"
 
 type GridImageProps = {
-  thumbVariants: VariantUrls
+  thumbVariants: VariantUrls | null
   blurhash: string | null
   alt: string
   /** When true, show only the blurhash with a lock overlay instead of the real image. */
@@ -69,10 +69,10 @@ export function GridImage({ thumbVariants, blurhash, alt, locked, onLockedClick 
         />
       )}
       <picture>
-        {thumbVariants.avif ? (
+        {thumbVariants?.avif ? (
           <source srcSet={thumbVariants.avif} type="image/avif" />
         ) : null}
-        {thumbVariants.webp ? (
+        {thumbVariants?.webp ? (
           <source srcSet={thumbVariants.webp} type="image/webp" />
         ) : null}
         <img
@@ -84,7 +84,7 @@ export function GridImage({ thumbVariants, blurhash, alt, locked, onLockedClick 
           data-testid="run-grid-image"
           loading="lazy"
           decoding="async"
-          src={thumbVariants.webp ?? thumbVariants.avif ?? ""}
+          src={thumbVariants?.webp ?? thumbVariants?.avif ?? ""}
           onLoad={() => setIsLoaded(true)}
         />
       </picture>

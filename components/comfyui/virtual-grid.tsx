@@ -638,7 +638,10 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
                       const canOpenDialog = !!rowCell && rowCell.items.length > 0
                       const isLocked = !user && representativeItem?.category !== "normal"
 
-                      const previewNode = thumbVariants ? (
+                      const hasBlurhash = !!representativeItem?.blurhash
+                      const showImage = thumbVariants || (isLocked && hasBlurhash)
+
+                      const previewNode = showImage ? (
                         <div className="w-full rounded border" style={{ height: previewHeight }}>
                           <GridImage
                             thumbVariants={thumbVariants}
