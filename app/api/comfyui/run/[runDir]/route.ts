@@ -1,8 +1,5 @@
 import { isValidRunDir } from "@/lib/comfyui-types"
-import {
-  createSupabaseServiceClient,
-  SupabaseServiceConfigError,
-} from "@/lib/supabase-server"
+import { createSupabaseAuthClient } from "@/lib/supabase-auth"
 import type { JsonObject, JsonValue, SupabaseRunRow } from "@/lib/supabase-types"
 
 export const runtime = "nodejs"
@@ -38,7 +35,7 @@ export async function GET(
       return Response.json({ error: "Run not found" }, { status: 404 })
     }
 
-    const supabase = createSupabaseServiceClient()
+    const supabase = await createSupabaseAuthClient()
     const { data, error } = await supabase
       .from("runs")
       .select("run_dir, created_at, run_json")
@@ -110,11 +107,7 @@ export async function GET(
       x_columns,
       y_indexes,
     })
-  } catch (error) {
-    if (error instanceof SupabaseServiceConfigError) {
-      return Response.json({ error: error.message }, { status: 500 })
-    }
-
+  } catch {
     return Response.json(
       {
         error: "Failed to load run detail",

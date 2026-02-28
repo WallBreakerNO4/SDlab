@@ -283,3 +283,5 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+/.open-next
+/.wrangler

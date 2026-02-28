@@ -1,0 +1,39 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sd-style-lab",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-02-28",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "global_fetch_strictly_public"
+  ],
+  // 静态资源（OpenNext 构建产物）
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  // Worker 自引用（Next.js 内部路由需要）
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "sd-style-lab"
+    }
+  ],
+  // R2 存储桶绑定（私有代理通过 binding 直接访问，无需 S3 签名凭证）
+  "r2_buckets": [
+    {
+      "binding": "R2_PUBLIC_BUCKET",
+      "bucket_name": "sdslab-public"
+    },
+    {
+      "binding": "R2_PRIVATE_BUCKET",
+      "bucket_name": "sdslab-private"
+    }
+  ],
+  // 所有环境变量均为非敏感（无需 wrangler secret）
+  "vars": {
+    "NEXT_PUBLIC_SUPABASE_URL": "https://pdrckkktaduhivesfmct.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_nir1DNGHiT6QTekTi_iRHQ_JGlgbegd",
+    "R2_PUBLIC_BASE_URL": "https://images.sdlab.wall-breaker-no4.xyz"
+  }
+}

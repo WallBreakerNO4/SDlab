@@ -1,8 +1,5 @@
 import type { RunSummary } from "@/lib/comfyui-types"
-import {
-  createSupabaseServiceClient,
-  SupabaseServiceConfigError,
-} from "@/lib/supabase-server"
+import { createSupabaseAuthClient } from "@/lib/supabase-auth"
 import type { JsonObject, JsonValue, SupabaseRunRow } from "@/lib/supabase-types"
 
 
@@ -35,7 +32,7 @@ function getArrayLength(value: unknown): number | null {
 
 export async function GET(): Promise<Response> {
   try {
-    const supabase = createSupabaseServiceClient()
+    const supabase = await createSupabaseAuthClient()
     const { data, error } = await supabase
       .from("runs")
       .select("run_dir, created_at, run_json")
@@ -81,15 +78,7 @@ export async function GET(): Promise<Response> {
     })
 
     return Response.json(runs)
-  } catch (error: unknown) {
-    if (error instanceof SupabaseServiceConfigError) {
-      return Response.json(
-        { error: error.message },
-        {
-          status: 500,
-        },
-      )
-    }
+  } catch {
 
     return Response.json(
       {

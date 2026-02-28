@@ -1,9 +1,6 @@
 import { isValidRunDir } from "@/lib/comfyui-types"
 import { privateObjectUrl, publicObjectUrl } from "@/lib/r2-url"
-import {
-  createSupabaseServiceClient,
-  SupabaseServiceConfigError,
-} from "@/lib/supabase-server"
+import { createSupabaseAuthClient } from "@/lib/supabase-auth"
 import type {
   ImageCategory,
   ImageVariantName,
@@ -137,7 +134,7 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
       return Response.json({ error: "Invalid y_index" }, { status: 400 })
     }
 
-    const supabase = createSupabaseServiceClient()
+    const supabase = await createSupabaseAuthClient()
 
     const { data: runRow, error: runError } = await supabase
       .from("runs")
@@ -227,11 +224,7 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
       }))
 
     return Response.json({ run_dir: runDir, y_index: yIndex, cells })
-  } catch (error) {
-    if (error instanceof SupabaseServiceConfigError) {
-      return Response.json({ error: error.message }, { status: 500 })
-    }
-
+  } catch {
     return Response.json({ error: "Failed to load run row" }, { status: 500 })
   }
 }

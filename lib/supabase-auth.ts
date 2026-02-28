@@ -4,14 +4,13 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
 /**
- * Server-side Supabase client for authentication purposes.
+ * Server-side Supabase client with cookie-based session handling.
  *
- * Uses the **anon key** (not service role) so that requests are subject to RLS.
- * Cookie-based session handling allows `getUser()` to validate the current
- * visitor's JWT.
+ * Uses the **anon key** so that requests are subject to RLS.
+ * When no user session exists, queries run as the `anon` role.
+ * When a user is logged in (cookie JWT), queries run as `authenticated`.
  *
- * NOTE: This is separate from `supabase-server.ts` which uses the service role
- * key to bypass RLS for backend data access.
+ * Used by both API routes (data queries) and the R2 private proxy (auth check).
  */
 export async function createSupabaseAuthClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
