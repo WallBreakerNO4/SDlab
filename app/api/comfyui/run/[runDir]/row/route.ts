@@ -58,6 +58,7 @@ type RowItem = {
   height: number | null
   blurhash: string | null
   meta: RowMeta
+  original: string | null
   thumb: VariantUrls | null
   display: VariantUrls | null
 }
@@ -176,8 +177,12 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
       const variants = Array.isArray(image.image_variants) ? image.image_variants : []
 
       const urlsAcc = { thumb: {} as VariantUrls, display: {} as VariantUrls }
+      let originalUrl: string | null = null
       for (const v of variants) {
-        if (v.variant === "original_png") continue
+        if (v.variant === "original_png") {
+          originalUrl = urlFromVariant(v.bucket, v.r2_key)
+          continue
+        }
 
         if (
           v.variant !== "thumb_webp" &&
@@ -201,6 +206,7 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
         height: image.height,
         blurhash: image.blurhash,
         meta,
+        original: originalUrl,
         thumb: Object.keys(urlsAcc.thumb).length > 0 ? urlsAcc.thumb : null,
         display: Object.keys(urlsAcc.display).length > 0 ? urlsAcc.display : null,
       }

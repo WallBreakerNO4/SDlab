@@ -32,6 +32,7 @@ type RowItem = {
   height: number | null
   blurhash: string | null
   meta: RowMeta
+  original: string | null
   thumb: VariantUrls | null
   display: VariantUrls | null
 }
@@ -138,6 +139,7 @@ type SelectedCellPreview = {
     batchIndex: number
     width: number | null
     height: number | null
+    original: string | null
     thumb: VariantUrls | null
     display: VariantUrls | null
   }>
@@ -206,6 +208,7 @@ function normalizeRowPayload(raw: unknown, requestedYIndex: number): RowPayload 
                     height: getFiniteNumber(item.height),
                     blurhash: getNonEmptyString(item.blurhash),
                     meta,
+                    original: getNonEmptyString(item.original),
                     thumb: parseVariantUrls(item.thumb),
                     display: parseVariantUrls(item.display),
                   }
@@ -330,6 +333,11 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
     if (!currentItem) return null
     return pickBestVariants(currentItem.display, currentItem.thumb)
   }, [currentItem])
+  const currentDownloadUrl =
+    currentItem?.original ??
+    currentDisplayVariants?.webp ??
+    currentDisplayVariants?.avif ??
+    null
   const sizeText =
     currentItem &&
     typeof currentItem.width === "number" &&
@@ -462,6 +470,7 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
           batchIndex: item.batch_index,
           width: item.width,
           height: item.height,
+          original: item.original,
           thumb: item.thumb,
           display: item.display,
         }))
@@ -801,9 +810,9 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
                   {copiedField === "seed" ? "已复制 seed" : "复制 seed"}
                 </Button>
 
-                {currentDisplayVariants ? (
+                {currentDownloadUrl ? (
                   <Button asChild size="sm" variant="outline">
-                    <a href={currentDisplayVariants.webp ?? currentDisplayVariants.avif ?? "#"} download>
+                    <a href={currentDownloadUrl} download>
                       下载图片
                     </a>
                   </Button>

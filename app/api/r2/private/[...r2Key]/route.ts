@@ -72,19 +72,16 @@ function validatePrivateImageKey(r2Key: string): void {
     throw new Error("not_found")
   }
 
-  const lower = r2Key.toLowerCase()
-  if (lower.includes("original_png") || lower.endsWith(".png")) {
-    throw new Error("not_found")
-  }
-
   const fileName = r2Key.split("/").at(-1) ?? ""
   const fileLower = fileName.toLowerCase()
+
+  const isOriginalPng = fileLower.startsWith("original_png") && fileLower.endsWith(".png")
 
   const isAllowedVariant =
     (fileLower.startsWith("display_") || fileLower.startsWith("thumb_")) &&
     (fileLower.endsWith(".avif") || fileLower.endsWith(".webp"))
 
-  if (!isAllowedVariant) {
+  if (!isOriginalPng && !isAllowedVariant) {
     throw new Error("not_found")
   }
 }
