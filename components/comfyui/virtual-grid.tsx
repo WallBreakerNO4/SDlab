@@ -13,6 +13,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { GridImage } from "./grid-image"
+import { useAuth } from "@/components/auth-provider"
+import { AuthLoginDialog } from "@/components/auth-login-dialog"
 
 export type VariantUrls = {
   webp?: string
@@ -28,6 +30,7 @@ type RowMeta = {
 
 type RowItem = {
   batch_index: number
+  category: string | null
   width: number | null
   height: number | null
   blurhash: string | null
@@ -204,6 +207,7 @@ function normalizeRowPayload(raw: unknown, requestedYIndex: number): RowPayload 
                   const meta = parseRowMeta(item.meta)
                   return {
                     batch_index: batchIndex,
+                    category: getNonEmptyString(item.category),
                     width: getFiniteNumber(item.width),
                     height: getFiniteNumber(item.height),
                     blurhash: getNonEmptyString(item.blurhash),
@@ -246,6 +250,8 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
   const rowCacheRef = useRef<Map<number, CachedRow>>(new Map())
   const rowRequestsRef = useRef<Map<number, AbortController>>(new Map())
   const [rowCacheVersion, setRowCacheVersion] = useState(0)
+  const { user } = useAuth()
+  const [loginDialogOpen, setLoginDialogOpen] = useState(false)
 
   useEffect(() => {
     const element = scrollElementRef.current
@@ -630,6 +636,7 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
                               : "加载中"
 
                       const canOpenDialog = !!rowCell && rowCell.items.length > 0
+                      const isLocked = !user && representativeItem?.category !== "normal"
 
                       const previewNode = thumbVariants ? (
                         <div className="w-full rounded border" style={{ height: previewHeight }}>
@@ -637,6 +644,8 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
                             thumbVariants={thumbVariants}
                             blurhash={representativeItem?.blurhash ?? null}
                             alt={`${yLabel} × ${xLabel}`}
+                            locked={isLocked}
+                            onLockedClick={() => setLoginDialogOpen(true)}
                           />
                         </div>
                       ) : (
@@ -654,7 +663,7 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
                           key={`${xKey}-${yIndex}`}
                           className="flex h-full flex-col gap-1 border-r p-2"
                         >
-                          {canOpenDialog ? (
+                          {canOpenDialog && !isLocked ? (
                             <button
                               type="button"
                               aria-label={`打开单元格 X${xIndex} Y${yIndex} 预览`}
@@ -669,7 +678,6 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
                           ) : (
                             previewNode
                           )}
-
                           <div className="space-y-0.5 text-[10px] leading-tight">
                             <p className="truncate font-medium">{`X${xIndex} · Y${yIndex}`}</p>
                             {seed !== null && seed !== undefined ? (
@@ -826,6 +834,8 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AuthLoginDialog open={loginDialogOpen} onOpenChange={setLoginDialogOpen} />
     </div>
   )
 }

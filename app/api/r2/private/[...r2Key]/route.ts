@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 
 import { AwsClient } from "aws4fetch"
+import { createSupabaseAuthClient } from "@/lib/supabase-auth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -105,6 +106,17 @@ function getR2Config(): {
 }
 
 async function proxyPrivateObject(request: Request, context: RouteContext): Promise<Response> {
+  // --- Auth check: private images require authenticated user ---
+  try {
+    const supabase = await createSupabaseAuthClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return jsonError(401, "Authentication required")
+    }
+  } catch {
+    return jsonError(401, "Authentication required")
+  }
+
   const { r2Key: rawSegments } = await context.params
 
   let decodedSegments: string[]
