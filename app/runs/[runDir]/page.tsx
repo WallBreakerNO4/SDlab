@@ -9,14 +9,22 @@ import {
   type RunGridXColumn,
   VirtualGrid,
 } from "@/components/comfyui/virtual-grid"
-import { Button } from "@/components/ui/button"
+import Link from "next/link"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb"
+import { HugeiconsIcon } from "@hugeicons/react"
+import {
+  FileIcon,
+  Clock01Icon,
+  GridIcon,
+  Image01Icon,
+} from "@hugeicons/core-free-icons"
 import {
   Empty,
   EmptyDescription,
@@ -239,93 +247,70 @@ export default function RunDetailPage() {
   const yCount = isReady ? gridData.y_indexes.length : 0
 
   return (
-    <main className="mx-auto flex h-dvh w-full max-w-none flex-col gap-3 overflow-hidden p-2 md:p-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Run 结果页</CardTitle>
-          <CardDescription className="break-all">
-            run_dir: {runDir || "(invalid)"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {isLoading ? (
-            <div data-testid="run-detail-loading">
-              <SummarySkeleton />
-            </div>
-          ) : null}
+    <main className="mx-auto flex h-full w-full max-w-none flex-col gap-2 overflow-hidden p-2">
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href="/">首页</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{runDir || "(无效路径)"}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+      {isLoading ? (
+        <div data-testid="run-detail-loading">
+          <SummarySkeleton />
+        </div>
+      ) : null}
 
-          {loadState === "not-found" ? (
-            <Empty data-testid="run-not-found">
-              <EmptyHeader>
-                <EmptyTitle>未找到 run</EmptyTitle>
-                <EmptyDescription>
-                  无法加载 {runDir || "该路径"}，请确认 runDir 是否存在。
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          ) : null}
+      {loadState === "not-found" ? (
+        <Empty data-testid="run-not-found">
+          <EmptyHeader>
+            <EmptyTitle>未找到 run</EmptyTitle>
+            <EmptyDescription>
+              无法加载 {runDir || "该路径"}，请确认 runDir 是否存在。
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      ) : null}
 
-          {loadState === "error" ? (
-            <Empty data-testid="run-error">
-              <EmptyHeader>
-                <EmptyTitle>加载失败</EmptyTitle>
-                <EmptyDescription>
-                  请求 run 详情失败，请稍后刷新重试。
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          ) : null}
+      {loadState === "error" ? (
+        <Empty data-testid="run-error">
+          <EmptyHeader>
+            <EmptyTitle>加载失败</EmptyTitle>
+            <EmptyDescription>
+              请求 run 详情失败，请稍后刷新重试。
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      ) : null}
 
-          {isReady ? (
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="border p-3">
-                <div className="text-muted-foreground text-xs">run_id</div>
-                <div className="break-all text-xs font-medium">{detailData.run.run_id}</div>
-              </div>
-              <div className="border p-3">
-                <div className="text-muted-foreground text-xs">created_at</div>
-                <div className="text-xs font-medium">
-                  {formatCreatedAt(detailData.run.created_at)}
-                </div>
-              </div>
-              <div className="border p-3">
-                <div className="text-muted-foreground text-xs">x*y</div>
-                <div className="text-xs font-medium">{`${xCount}*${yCount}`}</div>
-              </div>
-              <div className="border p-3">
-                <div className="text-muted-foreground text-xs">total_cells</div>
-                <div className="text-xs font-medium">
-                  {detailData.run.selection.total_cells}
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="space-y-2" data-testid="run-toolbar">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="outline" disabled={!isReady}>
-                按状态筛选（预留）
-              </Button>
-              <Button size="sm" variant="outline" disabled={!isReady}>
-                仅看失败（预留）
-              </Button>
-              <Button size="sm" variant="outline" disabled={!isReady}>
-                重置视图（预留）
-              </Button>
-            </div>
-            <p className="text-muted-foreground text-xs">
-              工具栏仅提供骨架，后续任务接入网格交互与预览。
-            </p>
+      {isReady ? (
+        <div className="animate-fade-in-up flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+          <div className="text-muted-foreground flex items-center gap-1">
+            <HugeiconsIcon icon={FileIcon} className="size-3.5" strokeWidth={2} />
+            <span className="font-medium">{detailData.run.run_id}</span>
           </div>
-        </CardContent>
-      </Card>
+          <div className="text-muted-foreground flex items-center gap-1">
+            <HugeiconsIcon icon={Clock01Icon} className="size-3.5" strokeWidth={2} />
+            <span>{formatCreatedAt(detailData.run.created_at)}</span>
+          </div>
+          <div className="text-muted-foreground flex items-center gap-1">
+            <HugeiconsIcon icon={GridIcon} className="size-3.5" strokeWidth={2} />
+            <span>{`${xCount}×${yCount}`}</span>
+          </div>
+          <div className="text-muted-foreground flex items-center gap-1">
+            <HugeiconsIcon icon={Image01Icon} className="size-3.5" strokeWidth={2} />
+            <span>{`${detailData.run.selection.total_cells} 张`}</span>
+          </div>
+        </div>
+      ) : null}
 
-      <Card className="flex min-h-0 flex-1 flex-col">
-        <CardHeader>
-          <CardTitle>Grid 结果</CardTitle>
-          <CardDescription>按 Y 轴行虚拟化渲染，支持 sticky 表头与左列。</CardDescription>
-        </CardHeader>
-        <CardContent className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col">
           {isLoading ? <GridSkeleton /> : null}
 
           {isReady ? (
@@ -344,8 +329,7 @@ export default function RunDetailPage() {
               </EmptyHeader>
             </Empty>
           ) : null}
-        </CardContent>
-      </Card>
+      </div>
     </main>
   )
 }

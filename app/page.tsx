@@ -3,28 +3,10 @@
 import Link from "next/link"
 import { useEffect, useState } from "react"
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from "@/components/ui/empty"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent } from "@/components/ui/card"
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 
 import type { RunSummary } from "@/lib/comfyui-types"
 
@@ -62,15 +44,34 @@ function formatCreatedAt(createdAt: string): string {
 
 function RunsSkeleton() {
   return (
-    <div className="space-y-3">
-      {Array.from({ length: 3 }).map((_, index) => (
-        <div key={index} className="grid grid-cols-4 gap-2">
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-full" />
-        </div>
-      ))}
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <Card className="h-[120px]">
+        <CardContent className="flex h-full flex-col justify-center space-y-4 pt-6">
+          <Skeleton className="h-6 w-3/4" />
+          <div className="flex gap-2">
+            <Skeleton className="h-5 w-16" />
+            <Skeleton className="h-5 w-16" />
+          </div>
+        </CardContent>
+      </Card>
+      <Card className="h-[120px]">
+        <CardContent className="flex h-full flex-col justify-center space-y-4 pt-6">
+          <Skeleton className="h-6 w-3/4" />
+          <div className="flex gap-2">
+            <Skeleton className="h-5 w-16" />
+            <Skeleton className="h-5 w-16" />
+          </div>
+        </CardContent>
+      </Card>
+      <Card className="h-[120px]">
+        <CardContent className="flex h-full flex-col justify-center space-y-4 pt-6">
+          <Skeleton className="h-6 w-3/4" />
+          <div className="flex gap-2">
+            <Skeleton className="h-5 w-16" />
+            <Skeleton className="h-5 w-16" />
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
@@ -123,92 +124,68 @@ export default function Page() {
   const isEmpty = !isLoading && runs.length === 0
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-4 p-4 md:p-8">
-      <Card>
-        <CardHeader>
-          <CardTitle>ComfyUI Runs</CardTitle>
-          <CardDescription>
-            浏览历史运行记录，选择一个 run 进入网格详情页。
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {isLoading ? <RunsSkeleton /> : null}
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-8 overflow-auto p-4 md:p-8">
+      <div className="animate-fade-in-up space-y-4 text-center">
+        <h1 className="bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-4xl font-bold tracking-tight text-transparent md:text-5xl">
+          AI 图像风格实验室
+        </h1>
+        <p className="text-muted-foreground text-xl">
+          探索 Stable Diffusion 风格组合，发现无限创意可能
+        </p>
+      </div>
 
-          {isEmpty ? (
-            <Empty>
-              <EmptyHeader>
-                <EmptyTitle>
-                  {loadState === "error" ? "加载失败" : "暂无可用 runs"}
-                </EmptyTitle>
-                <EmptyDescription>
-                  {loadState === "error"
-                    ? "请稍后刷新重试。"
-                    : "暂无可用 runs，请确认数据源已配置。"}
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          ) : null}
+      <div className="space-y-8">
+        {isLoading ? <RunsSkeleton /> : null}
 
-          {!isLoading && runs.length > 0 ? (
-            <>
-              <div className="space-y-3 md:hidden">
-                {runs.map((run) => (
-                  <Card key={run.run_dir} size="sm">
-                    <CardContent className="space-y-2">
-                      <div className="text-sm font-medium">{run.run_dir}</div>
-                      <div className="text-muted-foreground text-xs">
+        {isEmpty ? (
+          <Empty>
+            <EmptyHeader>
+              <EmptyTitle>
+                {loadState === "error" ? "加载失败" : "暂无可用 runs"}
+              </EmptyTitle>
+              <EmptyDescription>
+                {loadState === "error"
+                  ? "请稍后刷新重试。"
+                  : "暂无可用 runs，请确认数据源已配置。"}
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : null}
+
+        {!isLoading && runs.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {runs.map((run, index) => (
+              <Link
+                key={run.run_dir}
+                href={`/runs/${encodeURIComponent(run.run_dir)}`}
+                className="animate-fade-in-up block"
+                style={{
+                  animationFillMode: "forwards",
+                  opacity: 0,
+                  animationDelay: `${index * 80}ms`,
+                }}
+              >
+                <Card className="hover:border-primary/20 transition-all duration-200 hover:shadow-lg">
+                  <CardContent className="flex flex-col justify-center space-y-4 pt-6">
+                    <div className="space-y-1.5">
+                      <div className="text-lg font-bold leading-none tracking-tight">
+                        {run.run_dir}
+                      </div>
+                      <div className="text-muted-foreground text-sm">
                         {formatCreatedAt(run.created_at)}
                       </div>
-                      <div className="text-xs">{`${run.x_count}*${run.y_count}`}</div>
-                      <div className="text-xs">total: {run.total_cells}</div>
-                      <Link
-                        href={`/runs/${encodeURIComponent(run.run_dir)}`}
-                        aria-label={run.run_dir}
-                        className="text-primary text-xs underline-offset-4 hover:underline"
-                      >
-                        查看详情
-                      </Link>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-
-              <div className="hidden md:block">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>run_dir</TableHead>
-                      <TableHead>created_at</TableHead>
-                      <TableHead>x_count*y_count</TableHead>
-                      <TableHead>total_cells</TableHead>
-                      <TableHead className="text-right">详情</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {runs.map((run) => (
-                      <TableRow key={run.run_dir}>
-                        <TableCell className="font-medium">{run.run_dir}</TableCell>
-                        <TableCell>{formatCreatedAt(run.created_at)}</TableCell>
-                        <TableCell>{`${run.x_count}*${run.y_count}`}</TableCell>
-                        <TableCell>{run.total_cells}</TableCell>
-                        <TableCell className="text-right">
-                          <Link
-                            href={`/runs/${encodeURIComponent(run.run_dir)}`}
-                            aria-label={run.run_dir}
-                            className="text-primary underline-offset-4 hover:underline"
-                          >
-                            打开
-                          </Link>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </>
-          ) : null}
-        </CardContent>
-      </Card>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge>{`${run.x_count}×${run.y_count}`}</Badge>
+                      <Badge variant="secondary">{`${run.total_cells} 张`}</Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        ) : null}
+      </div>
     </main>
   )
 }

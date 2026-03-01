@@ -534,14 +534,14 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col overflow-hidden border"
+      className="flex h-full min-h-0 flex-col overflow-hidden border rounded-sm"
       data-testid="run-grid"
       data-row-count={grid.y_indexes.length}
       data-row-height={rowHeight}
     >
       {isDevEnv ? (
         <div
-          className="text-muted-foreground border-b px-3 py-1 text-[10px]"
+          className="text-muted-foreground border-b bg-muted/30 px-3 py-1 text-[10px]"
           data-testid="run-grid-dev-debug"
         >
           {`dev: rendered rows ${virtualRows.length}, img cap target < ${DEV_IMAGE_DOM_CAP_NOTE}`}
@@ -557,7 +557,7 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
           <div className="bg-background/95 sticky top-0 z-30 border-b backdrop-blur supports-[backdrop-filter]:bg-background/80">
             <div className="grid" style={{ gridTemplateColumns }}>
               <div
-                className="bg-background sticky left-0 z-40 border-r px-3 py-2 text-xs font-semibold"
+                className="bg-background/95 sticky left-0 z-40 border-r px-3 py-2 text-xs font-semibold backdrop-blur supports-[backdrop-filter]:bg-background/80"
                 data-testid="run-grid-corner"
               >
                 Y\X
@@ -598,7 +598,7 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
                 >
                   <div className="grid h-full" style={{ gridTemplateColumns }}>
                     <div
-                      className="bg-background sticky left-0 z-20 flex h-full border-r px-3 py-2 text-xs"
+                      className="bg-background/95 sticky left-0 z-20 flex h-full border-r px-3 py-2 text-xs backdrop-blur supports-[backdrop-filter]:bg-background/80"
                       data-testid="run-grid-y-label"
                     >
                       <div>
@@ -664,7 +664,7 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
                       return (
                         <div
                           key={`${xKey}-${yIndex}`}
-                          className="flex h-full flex-col gap-1 border-r p-2"
+                          className="flex h-full flex-col gap-1 border-r p-2 transition-colors hover:bg-muted/30"
                         >
                           {canOpenDialog && !isLocked ? (
                             <button
@@ -700,7 +700,7 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent
-          className="max-h-[90vh] overflow-auto p-4 sm:max-w-4xl"
+          className="max-h-[90vh] overflow-auto p-4 sm:max-w-4xl sm:p-6"
           data-testid="cell-dialog"
         >
           <DialogHeader>
@@ -713,7 +713,7 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
             <div className="space-y-2">
               {currentDisplayVariants ? (
-                <div className="bg-muted/20 h-[62vh] w-full rounded border">
+                <div className="bg-muted/20 h-[62vh] w-full rounded-sm border">
                   <picture>
                     {currentDisplayVariants.avif ? (
                       <source srcSet={currentDisplayVariants.avif} type="image/avif" />
