@@ -87,9 +87,11 @@ export async function GET(
     const x_count = x_columns.length
     const y_count = y_indexes.length
 
-    // Fetch all blurhash + basic metadata for the entire run in one query.
+    // Fetch all blurhash + basic metadata for the entire run.
     // This allows the frontend to show blurhash placeholders instantly
     // without waiting for per-row API calls.
+    // PostgREST enforces max_rows (default 1000), so we paginate to
+    // guarantee we retrieve every image in the run.
     type BlurhashRow = {
       x_index: number
       y_index: number
@@ -100,16 +102,37 @@ export async function GET(
       blurhash: string | null
     }
 
-    const { data: blurhashData, error: blurhashError } = await supabase
-      .from("images")
-      .select("x_index,y_index,batch_index,category,width,height,blurhash")
-      .eq("run_id", row.id)
-      .order("y_index", { ascending: true })
-      .order("x_index", { ascending: true })
-      .order("batch_index", { ascending: true })
+    const PAGE_SIZE = 1000
+    const allBlurhashRows: BlurhashRow[] = []
+    let pageOffset = 0
+    let hasMore = true
 
-    // blurhash is best-effort: if the query fails, return grid without it
-    const blurhash_cells: BlurhashRow[] = blurhashError ? [] : ((blurhashData ?? []) as BlurhashRow[])
+    while (hasMore) {
+      const { data: pageData, error: pageError } = await supabase
+        .from("images")
+        .select("x_index,y_index,batch_index,category,width,height,blurhash")
+        .eq("run_id", row.id)
+        .order("y_index", { ascending: true })
+        .order("x_index", { ascending: true })
+        .order("batch_index", { ascending: true })
+        .range(pageOffset, pageOffset + PAGE_SIZE - 1)
+
+      if (pageError) {
+        // blurhash is best-effort: stop pagination on error
+        break
+      }
+
+      const rows = (pageData ?? []) as BlurhashRow[]
+      allBlurhashRows.push(...rows)
+
+      if (rows.length < PAGE_SIZE) {
+        hasMore = false
+      } else {
+        pageOffset += PAGE_SIZE
+      }
+    }
+
+    const blurhash_cells = allBlurhashRows
 
     return Response.json({
       x_columns,

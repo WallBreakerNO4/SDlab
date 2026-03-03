@@ -659,10 +659,22 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                         ? pickBestVariants(representativeItem.thumb, representativeItem.display)
                         : null
 
-                      // When the row hasn't loaded yet, use pre-loaded blurhash from the grid-level map.
-                      const preloadedBlurhash = blurhashMap.get(`${xIndex}:${yIndex}`)
-                      const effectiveBlurhash = representativeItem?.blurhash ?? preloadedBlurhash?.blurhash ?? null
-                      const effectiveCategory = representativeItem?.category ?? preloadedBlurhash?.category ?? null
+                      // Always use pre-loaded blurhash from the grid-level map as the
+                      // primary source — it's available before any row API call completes.
+                      // Fall back to the row-level data only if the map has no entry.
+                      const preloadedCell = blurhashMap.get(`${xIndex}:${yIndex}`)
+                      const effectiveBlurhash = preloadedCell?.blurhash ?? representativeItem?.blurhash ?? null
+                      const effectiveCategory = preloadedCell?.category ?? representativeItem?.category ?? null
+                      const effectiveWidth = preloadedCell?.width ?? representativeItem?.width ?? null
+                      const effectiveHeight = preloadedCell?.height ?? representativeItem?.height ?? null
+
+                      const canOpenDialog = !!rowCell && rowCell.items.length > 0
+                      const isLocked = !user && effectiveCategory !== null && effectiveCategory !== "normal"
+
+                      const hasBlurhash = !!effectiveBlurhash
+                      // Show the image component whenever we have real thumbs OR a blurhash
+                      // (locked or not, row loaded or not).
+                      const showImage = !!thumbVariants || hasBlurhash
 
                       const placeholderLabel =
                         rowEntry && rowEntry.status === "error"
@@ -670,12 +682,6 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                           : rowEntry
                               ? "缺失"
                               : "加载中"
-
-                      const canOpenDialog = !!rowCell && rowCell.items.length > 0
-                      const isLocked = !user && effectiveCategory !== null && effectiveCategory !== "normal"
-
-                      const hasBlurhash = !!effectiveBlurhash
-                      const showImage = thumbVariants || (isLocked && hasBlurhash) || (!rowEntry && hasBlurhash)
 
                       const previewNode = showImage ? (
                         <div className="w-full rounded border" style={{ height: previewHeight }}>
