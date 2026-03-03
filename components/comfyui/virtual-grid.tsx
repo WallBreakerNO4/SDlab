@@ -57,14 +57,27 @@ export type RunGridXColumn = {
   description: Record<string, unknown> | null
 }
 
+export type BlurhashCell = {
+  x_index: number
+  y_index: number
+  batch_index: number
+  category: string
+  width: number | null
+  height: number | null
+  blurhash: string | null
+}
+
 export type RunGridIndexData = {
   x_columns: RunGridXColumn[]
   y_indexes: number[]
+  blurhash_cells: BlurhashCell[]
 }
 
 type VirtualGridProps = {
   runDir: string
   grid: RunGridIndexData
+  /** Pre-loaded blurhash lookup: key = "x_index:y_index" → first matching BlurhashCell */
+  blurhashMap: Map<string, BlurhashCell>
 }
 
 const CELL_MIN_WIDTH = 184
@@ -240,7 +253,7 @@ function formatValue(value: string | number | null | undefined): string {
   return value === null || value === undefined || value === "" ? "-" : String(value)
 }
 
-export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
+export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
   const scrollElementRef = useRef<HTMLDivElement | null>(null)
   const [scrollViewportWidth, setScrollViewportWidth] = useState<number | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -289,8 +302,26 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
 
   const preferredAspectRatio = useMemo(() => {
     void rowCacheVersion
-    return getPreferredAspectRatioFromCache(rowCacheRef.current.values())
-  }, [rowCacheVersion])
+    // Try row cache first
+    const fromCache = getPreferredAspectRatioFromCache(rowCacheRef.current.values())
+    if (fromCache !== 1) return fromCache
+    // Fall back to pre-loaded blurhash cells for instant aspect ratio
+    for (const cell of blurhashMap.values()) {
+      const w = cell.width
+      const h = cell.height
+      if (
+        typeof w === "number" &&
+        typeof h === "number" &&
+        Number.isFinite(w) &&
+        Number.isFinite(h) &&
+        w > 0 &&
+        h > 0
+      ) {
+        return h / w
+      }
+    }
+    return 1
+  }, [rowCacheVersion, blurhashMap])
 
   const cellWidth = useMemo(() => {
     if (!scrollViewportWidth || scrollViewportWidth <= 0) {
@@ -628,6 +659,11 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
                         ? pickBestVariants(representativeItem.thumb, representativeItem.display)
                         : null
 
+                      // When the row hasn't loaded yet, use pre-loaded blurhash from the grid-level map.
+                      const preloadedBlurhash = blurhashMap.get(`${xIndex}:${yIndex}`)
+                      const effectiveBlurhash = representativeItem?.blurhash ?? preloadedBlurhash?.blurhash ?? null
+                      const effectiveCategory = representativeItem?.category ?? preloadedBlurhash?.category ?? null
+
                       const placeholderLabel =
                         rowEntry && rowEntry.status === "error"
                           ? "加载失败"
@@ -636,16 +672,16 @@ export function VirtualGrid({ runDir, grid }: VirtualGridProps) {
                               : "加载中"
 
                       const canOpenDialog = !!rowCell && rowCell.items.length > 0
-                      const isLocked = !user && representativeItem?.category !== "normal"
+                      const isLocked = !user && effectiveCategory !== null && effectiveCategory !== "normal"
 
-                      const hasBlurhash = !!representativeItem?.blurhash
-                      const showImage = thumbVariants || (isLocked && hasBlurhash)
+                      const hasBlurhash = !!effectiveBlurhash
+                      const showImage = thumbVariants || (isLocked && hasBlurhash) || (!rowEntry && hasBlurhash)
 
                       const previewNode = showImage ? (
                         <div className="w-full rounded border" style={{ height: previewHeight }}>
                           <GridImage
                             thumbVariants={thumbVariants}
-                            blurhash={representativeItem?.blurhash ?? null}
+                            blurhash={effectiveBlurhash}
                             alt={`${yLabel} × ${xLabel}`}
                             locked={isLocked}
                             onLockedClick={() => setLoginDialogOpen(true)}

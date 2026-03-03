@@ -1,6 +1,6 @@
 import { isValidRunDir } from "@/lib/comfyui-types"
 import { createSupabaseAuthClient } from "@/lib/supabase-auth"
-import type { JsonObject, JsonValue, SupabaseRunRow } from "@/lib/supabase-types"
+import type { ImageCategory, JsonObject, JsonValue, SupabaseRunRow } from "@/lib/supabase-types"
 
 export const runtime = "nodejs"
 
@@ -40,10 +40,9 @@ export async function GET(
     const supabase = await createSupabaseAuthClient()
     const { data, error } = await supabase
       .from("runs")
-      .select("run_dir, run_json")
+      .select("id, run_dir, run_json")
       .eq("run_dir", runDir)
       .maybeSingle()
-
     if (error) {
       return Response.json(
         {
@@ -53,7 +52,7 @@ export async function GET(
       )
     }
 
-    const row = data as SupabaseRunRow | null
+    const row = data as (SupabaseRunRow & { id: string }) | null
     if (!row) {
       return Response.json({ error: "Run not found" }, { status: 404 })
     }
@@ -88,12 +87,37 @@ export async function GET(
     const x_count = x_columns.length
     const y_count = y_indexes.length
 
+    // Fetch all blurhash + basic metadata for the entire run in one query.
+    // This allows the frontend to show blurhash placeholders instantly
+    // without waiting for per-row API calls.
+    type BlurhashRow = {
+      x_index: number
+      y_index: number
+      batch_index: number
+      category: ImageCategory
+      width: number | null
+      height: number | null
+      blurhash: string | null
+    }
+
+    const { data: blurhashData, error: blurhashError } = await supabase
+      .from("images")
+      .select("x_index,y_index,batch_index,category,width,height,blurhash")
+      .eq("run_id", row.id)
+      .order("y_index", { ascending: true })
+      .order("x_index", { ascending: true })
+      .order("batch_index", { ascending: true })
+
+    // blurhash is best-effort: if the query fails, return grid without it
+    const blurhash_cells: BlurhashRow[] = blurhashError ? [] : ((blurhashData ?? []) as BlurhashRow[])
+
     return Response.json({
       x_columns,
       y_indexes,
       x_count,
       y_count,
       cells: {},
+      blurhash_cells,
     })
   } catch {
     return Response.json(

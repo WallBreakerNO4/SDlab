@@ -5,6 +5,7 @@ import { useParams } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 
 import {
+  type BlurhashCell,
   type RunGridIndexData,
   type RunGridXColumn,
   VirtualGrid,
@@ -112,7 +113,10 @@ function isRunGridIndexData(value: unknown): value is RunGridIndexData {
     (item) => typeof item === "number" && Number.isFinite(item) && item >= 0,
   )
 
-  return xColumnsOk && yIndexesOk
+  // blurhash_cells is optional (best-effort), so we don't fail if missing
+  const hasBlurhashCells = Array.isArray(value.blurhash_cells)
+
+  return xColumnsOk && yIndexesOk && (hasBlurhashCells || !value.blurhash_cells)
 }
 
 function formatCreatedAt(createdAt: string): string {
@@ -246,6 +250,18 @@ export default function RunDetailPage() {
   const xCount = isReady ? gridData.x_columns.length : 0
   const yCount = isReady ? gridData.y_indexes.length : 0
 
+  const blurhashMap = useMemo(() => {
+    const map = new Map<string, BlurhashCell>()
+    if (!gridData?.blurhash_cells) return map
+    for (const cell of gridData.blurhash_cells) {
+      const key = `${cell.x_index}:${cell.y_index}`
+      // Keep only the first item per (x, y) — the representative
+      if (!map.has(key)) {
+        map.set(key, cell)
+      }
+    }
+    return map
+  }, [gridData])
   return (
     <main className="mx-auto flex h-full w-full max-w-none flex-col gap-2 overflow-hidden p-2">
       <Breadcrumb>
@@ -315,7 +331,7 @@ export default function RunDetailPage() {
 
           {isReady ? (
             <div className="min-h-0 flex-1">
-              <VirtualGrid runDir={runDir} grid={gridData} />
+              <VirtualGrid runDir={runDir} grid={gridData} blurhashMap={blurhashMap} />
             </div>
           ) : null}
 
