@@ -399,17 +399,17 @@ secret = "env(SUPABASE_AUTH_EXTERNAL_GITHUB_SECRET)"
 redirect_uri = ""
 url = ""
 
-# Google OAuth — placeholder (not yet configured)
+# Google OAuth
 [auth.external.google]
-enabled = false
+enabled = true
 client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
 secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
 redirect_uri = ""
 url = ""
 
-# Microsoft (Azure) OAuth — placeholder (not yet configured)
+# Microsoft (Azure) OAuth
 [auth.external.azure]
-enabled = false
+enabled = true
 client_id = "env(SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_ID)"
 secret = "env(SUPABASE_AUTH_EXTERNAL_AZURE_SECRET)"
 redirect_uri = ""

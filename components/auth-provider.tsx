@@ -78,9 +78,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [supabase])
 
   const signInWithGoogle = useCallback(async () => {
-    // Placeholder — Google OAuth not yet configured
-    console.warn("[auth] Google OAuth is not yet configured")
-  }, [])
+    if (!supabase) return
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    })
+  }, [supabase])
 
   const signInWithMicrosoft = useCallback(async () => {
     if (!supabase) return
