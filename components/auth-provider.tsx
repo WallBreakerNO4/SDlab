@@ -83,9 +83,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const signInWithMicrosoft = useCallback(async () => {
-    // Placeholder — Microsoft OAuth not yet configured
-    console.warn("[auth] Microsoft OAuth is not yet configured")
-  }, [])
+    if (!supabase) return
+    await supabase.auth.signInWithOAuth({
+      provider: "azure",
+      options: {
+        scopes: "email",
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    })
+  }, [supabase])
 
   const signOut = useCallback(async () => {
     if (!supabase) return
