@@ -305,7 +305,7 @@ Wave 2: 生成链路与下游收口（payload 快照、replay/retry、negative p
 
   **Commit**: NO | Message: `fix(generation): 兼容新旧 run.json 的 replay 与 retry` | Files: `scripts/generation/run_replay.py`, `scripts/generation/runner_retry.py`, `tests/test_run_replay.py`, `tests/test_retry_incomplete_integration.py`, `tests/test_idempotent_retry_failed.py`
 
-- [ ] 6. 将 negative prompt 追加与生图覆盖参数彻底迁移到 config 驱动
+- [x] 6. 将 negative prompt 追加与生图覆盖参数彻底迁移到 config 驱动
 
   **What to do**: 在生成执行链路中新增 `args.append_negative_prompt`，并让 `scripts/generation/runner_records.py`、`scripts/generation/comfyui_part1_generate.py`、相关 helper 全部改为使用 namespace/config 值，而不是 `COMFYUI_APPEND_NEGATIVE_PROMPT`。保持现有业务规则：仅当 `x_info_type == "normal"` 时拼接 append negative prompt；其他类型保持 base negative prompt。`generation_overrides` 与 `config_snapshot.generation` 必须都包含 `append_negative_prompt`；`metadata.jsonl` 的 `generation_params["negative_prompt"]` 继续记录最终生效字符串。deprecated env 路径只负责报错，不再参与结果计算。
   **Must NOT do**: 不要改变 `x_info_type` 判定规则；不要把最终拼接逻辑挪到 CLI 菜单层。

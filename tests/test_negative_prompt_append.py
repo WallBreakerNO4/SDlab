@@ -303,3 +303,29 @@ def test_negative_prompt_append_uses_config_value_with_override_base(
     assert outcome.record is None
     assert outcome.download is not None
     assert captured_negative_prompts == ["manual override, custom append,"]
+
+
+def test_final_negative_prompt_for_x_row_uses_args_append_and_ignores_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = _import_runner_module()
+    args = _build_worker_args(
+        negative_prompt=None,
+        append_negative_prompt="config-append,",
+    )
+    workflow_context = _build_worker_context(runner, default_negative_prompt="lowres,")
+    monkeypatch.setenv("COMFYUI_APPEND_NEGATIVE_PROMPT", "from-env,")
+
+    normal_prompt = runner._final_negative_prompt_for_x_row(
+        args,
+        workflow_context,
+        {X_INFO_TYPE_KEY: "normal"},
+    )
+    lora_prompt = runner._final_negative_prompt_for_x_row(
+        args,
+        workflow_context,
+        {X_INFO_TYPE_KEY: "lora"},
+    )
+
+    assert normal_prompt == "lowres, config-append,"
+    assert lora_prompt == "lowres,"

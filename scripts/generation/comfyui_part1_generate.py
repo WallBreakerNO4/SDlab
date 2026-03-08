@@ -40,11 +40,9 @@ from scripts.generation.run_replay import (  # noqa: E402
 )
 from scripts.generation.runner_env import (  # noqa: E402
     _autoload_dotenv,
-    _env_append_negative_prompt,
     _env_float,
     _env_optional_int,
     _env_str,
-    _resolve_append_negative_prompt,
 )
 from scripts.generation.runner_selection import (  # noqa: E402
     SelectedRow,
@@ -725,7 +723,6 @@ def _final_negative_prompt_for_x_row(
         workflow_context,
         x_row,
         append_negative_prompt=_append_negative_prompt,
-        env_append_negative_prompt=_env_append_negative_prompt,
     )
 
 

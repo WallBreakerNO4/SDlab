@@ -345,6 +345,61 @@ def test_dry_run_uses_config_append_negative_prompt(
     assert generation_params["negative_prompt"] == "neg, app,"
 
 
+def test_run_dry_run_ignores_env_append_negative_prompt_in_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = _import_runner_module()
+    _clear_deprecated_business_env(monkeypatch)
+    x_path, y_path = _write_json_inputs(tmp_path, x_info_type="normal")
+    run_dir = tmp_path / "run-ignore-env-append"
+    run_dir.mkdir()
+    monkeypatch.setenv("COMFYUI_APPEND_NEGATIVE_PROMPT", "from-env,")
+
+    args = SimpleNamespace(
+        config=None,
+        dry_run=True,
+        retry_failed=False,
+        retry_incomplete=False,
+        retry_error_code=None,
+        run_dir=str(run_dir),
+        client_id="test-client",
+        base_url="http://127.0.0.1:8188",
+        request_timeout_s=1.0,
+        job_timeout_s=2.0,
+        concurrency=1,
+        x_json=str(x_path),
+        y_json=str(y_path),
+        template="{gender}{characters}{series}{rating}{y}{general}{quality}",
+        base_seed=123,
+        workflow_json=None,
+        ksampler_node_id="3",
+        negative_prompt="neg,",
+        append_negative_prompt="app,",
+        width=832,
+        height=1216,
+        batch_size=1,
+        steps=28,
+        cfg=5.5,
+        denoise=1.0,
+        sampler_name="euler",
+        scheduler="normal",
+        x_limit=1,
+        y_limit=1,
+        x_indexes="0",
+        y_indexes="0",
+    )
+
+    exit_code = runner.run(args)
+
+    assert exit_code == 0
+    metadata_records = _read_valid_jsonl(run_dir / "metadata.jsonl")
+    assert len(metadata_records) == 1
+    generation_params = metadata_records[0].get("generation_params")
+    assert isinstance(generation_params, dict)
+    assert generation_params["negative_prompt"] == "neg, app,"
+
+
 def test_dry_run_run_json_snapshot_stays_compact(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

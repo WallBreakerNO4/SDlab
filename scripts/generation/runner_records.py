@@ -165,14 +165,16 @@ def _final_negative_prompt_for_x_row(
     x_row: dict[str, str],
     *,
     append_negative_prompt: Callable[[str | None, str | None], str],
-    env_append_negative_prompt: Callable[[], str | None],
 ) -> str | None:
     base_negative_prompt = _effective_negative_prompt(args, workflow_context)
     if base_negative_prompt is None:
         return None
     if _extract_x_info_type(x_row) != "normal":
         return base_negative_prompt
-    return append_negative_prompt(base_negative_prompt, env_append_negative_prompt())
+    return append_negative_prompt(
+        base_negative_prompt,
+        getattr(args, "append_negative_prompt", None),
+    )
 
 
 def _image_exists(run_dir: Path, local_image_path: str) -> bool:
