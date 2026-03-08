@@ -392,7 +392,10 @@ Wave 2: 生成链路与下游收口（payload 快照、replay/retry、negative p
   **Commit**: NO | Message: `chore(generation): 补齐示例配置与下游兼容回归` | Files: `data/runs/example.yaml`, `.env.example`, `scripts/r2_upload/upload_io.py`, `scripts/r2_upload/upload_discovery.py`, `scripts/r2_upload/upload_planner.py`, `scripts/r2_upload/supabase_writer.py`, `tests/test_r2_upload_cli_contract.py`, `tests/test_r2_upload_cli_dry_run.py`
 
 ## Final Verification Wave (4 parallel agents, ALL must APPROVE)
-- [ ] F1. Plan Compliance Audit - oracle
+- [x] F1. Plan Compliance Audit - oracle
+- [x] F2. Code Quality Review - unspecified-high
+- [x] F3. Real Manual QA - unspecified-high (+ playwright if UI)
+- [x] F4. Scope Fidelity Check - deep
 - [ ] F2. Code Quality Review - unspecified-high
 - [ ] F3. Real Manual QA - unspecified-high (+ playwright if UI)
 - [ ] F4. Scope Fidelity Check - deep

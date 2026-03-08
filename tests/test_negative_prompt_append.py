@@ -43,7 +43,7 @@ class _WorkflowContextFactory(Protocol):
         workflow_json_path: str,
         workflow_hash: str,
         selected_ksampler_id: str,
-        default_negative_prompt: str,
+        default_negative_prompt: str | None,
         default_params: dict[str, object],
     ) -> object: ...
 
@@ -173,7 +173,7 @@ def _build_worker_args(
 
 
 def _build_worker_context(
-    runner: _RunnerModule, default_negative_prompt: str
+    runner: _RunnerModule, default_negative_prompt: str | None
 ) -> object:
     return runner.WorkflowContext(
         workflow={},
@@ -329,3 +329,34 @@ def test_final_negative_prompt_for_x_row_uses_args_append_and_ignores_env(
 
     assert normal_prompt == "lowres, config-append,"
     assert lora_prompt == "lowres,"
+
+def test_final_negative_prompt_for_x_row_append_only_normal() -> None:
+    runner = _import_runner_module()
+    args = _build_worker_args(
+        negative_prompt=None,
+        append_negative_prompt="only-append,",
+    )
+    # 即使 workflow_context 缺失或默认值为 None
+    workflow_context = _build_worker_context(runner, default_negative_prompt=None)
+
+    normal_prompt = runner._final_negative_prompt_for_x_row(
+        args,
+        workflow_context,
+        {X_INFO_TYPE_KEY: "normal"},
+    )
+    assert normal_prompt == "only-append,"
+
+def test_final_negative_prompt_for_x_row_append_only_non_normal_returns_none() -> None:
+    runner = _import_runner_module()
+    args = _build_worker_args(
+        negative_prompt=None,
+        append_negative_prompt="only-append,",
+    )
+    workflow_context = _build_worker_context(runner, default_negative_prompt=None)
+
+    lora_prompt = runner._final_negative_prompt_for_x_row(
+        args,
+        workflow_context,
+        {X_INFO_TYPE_KEY: "lora"},
+    )
+    assert lora_prompt is None

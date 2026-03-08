@@ -167,13 +167,16 @@ def _final_negative_prompt_for_x_row(
     append_negative_prompt: Callable[[str | None, str | None], str],
 ) -> str | None:
     base_negative_prompt = _effective_negative_prompt(args, workflow_context)
-    if base_negative_prompt is None:
-        return None
     if _extract_x_info_type(x_row) != "normal":
         return base_negative_prompt
+
+    append_val = getattr(args, "append_negative_prompt", None)
+    if base_negative_prompt is None and not append_val:
+        return None
+
     return append_negative_prompt(
         base_negative_prompt,
-        getattr(args, "append_negative_prompt", None),
+        append_val,
     )
 
 

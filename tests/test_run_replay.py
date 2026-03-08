@@ -204,3 +204,48 @@ def test_load_run_replay_config_sha_mismatch(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="x_json_sha256 校验失败"):
         load_run_replay_config(run_dir)
+
+
+def test_load_run_replay_config_workflow_sha_mismatch_when_workflow_readable(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "run-workflow-sha"
+    run_dir.mkdir()
+    x_path = tmp_path / "x.json"
+    y_path = tmp_path / "y.json"
+    workflow_path = tmp_path / "workflow.json"
+    x_path.write_text('[{"x":1}]', encoding="utf-8")
+    y_path.write_text('[{"y":"style"}]', encoding="utf-8")
+    workflow_path.write_text('{"3":{"inputs":{}}}', encoding="utf-8")
+
+    payload = _base_run_payload(x_path, y_path)
+    payload["workflow_json_path"] = str(workflow_path)
+    payload["workflow_json_sha256"] = "deadbeef"
+    (run_dir / "run.json").write_text(
+        json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+    )
+
+    with pytest.raises(ValueError, match="workflow_json_sha256 校验失败"):
+        load_run_replay_config(run_dir)
+
+
+def test_load_run_replay_config_allows_workflow_sha_when_workflow_unreadable(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "run-workflow-missing"
+    run_dir.mkdir()
+    x_path = tmp_path / "x.json"
+    y_path = tmp_path / "y.json"
+    missing_workflow_path = tmp_path / "missing-workflow.json"
+    x_path.write_text('[{"x":1}]', encoding="utf-8")
+    y_path.write_text('[{"y":"style"}]', encoding="utf-8")
+
+    payload = _base_run_payload(x_path, y_path)
+    payload["workflow_json_path"] = str(missing_workflow_path)
+    payload["workflow_json_sha256"] = "deadbeef"
+    (run_dir / "run.json").write_text(
+        json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+    )
+
+    config = load_run_replay_config(run_dir)
+    assert config.workflow_json_path == str(missing_workflow_path)
