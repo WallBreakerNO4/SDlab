@@ -263,7 +263,7 @@ Wave 2: 生成链路与下游收口（payload 快照、replay/retry、negative p
 
   **Commit**: NO | Message: `feat(generation): 为 run.json 增加配置与模型快照` | Files: `scripts/generation/runner_payload.py`, `tests/test_runner_dry_run.py`, `tests/test_run_replay.py`
 
-- [ ] 5. 更新 replay/retry 桥接，兼容新旧 `run.json`
+#WB|- [x] 5. 更新 replay/retry 桥接，兼容新旧 `run.json`
 
   **What to do**: 扩展 `scripts/generation/run_replay.py` 的 `RunReplayConfig` 与解析逻辑，使其继续要求 legacy replay 核心字段，同时新增可选支持 `generation_overrides.append_negative_prompt` 与 `config_snapshot.workflow.ksampler_node_id`。若新字段不存在（旧 run），保持兼容；若存在，则回放时必须写回 argparse namespace。更新 `scripts/generation/runner_retry.py:_apply_replay_config_to_args()`，确保 replay 会恢复 `append_negative_prompt` 与 `ksampler_node_id`。不要改变当前 strict retry 校验的 `prompt_hash` / `seed` / `workflow_hash` 语义。
   **Must NOT do**: 不要要求旧 run.json 必须补齐新字段；不要借机扩大 replay 的行为范围到新建网站/数据库逻辑。

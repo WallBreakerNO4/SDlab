@@ -13,6 +13,7 @@ T = TypeVar("T")
 @dataclass(slots=True)
 class ReplayGenerationOverrides:
     negative_prompt: str | None
+    append_negative_prompt: str | None
     width: int | None
     height: int | None
     batch_size: int | None
@@ -40,6 +41,7 @@ class RunReplayConfig:
     selection: ReplaySelection
     x_json_sha256: str
     y_json_sha256: str
+    ksampler_node_id: str | None
 
 
 def load_run_replay_config(
@@ -57,6 +59,7 @@ def load_run_replay_config(
     workflow_json_path = _require_optional_str(payload, "workflow_json_path")
     x_json_sha256 = _require_str(payload, "x_json_sha256")
     y_json_sha256 = _require_str(payload, "y_json_sha256")
+    ksampler_node_id = _parse_optional_ksampler_node_id(payload)
 
     generation_overrides = _parse_generation_overrides(
         _require_dict(payload, "generation_overrides")
@@ -85,6 +88,7 @@ def load_run_replay_config(
         selection=selection,
         x_json_sha256=x_json_sha256,
         y_json_sha256=y_json_sha256,
+        ksampler_node_id=ksampler_node_id,
     )
 
 
@@ -146,6 +150,7 @@ def _parse_generation_overrides(
 ) -> ReplayGenerationOverrides:
     return ReplayGenerationOverrides(
         negative_prompt=_require_optional_typed(payload, "negative_prompt", str),
+        append_negative_prompt=_optional_typed(payload, "append_negative_prompt", str),
         width=_require_optional_int(payload, "width"),
         height=_require_optional_int(payload, "height"),
         batch_size=_require_optional_int(payload, "batch_size"),
@@ -154,6 +159,33 @@ def _parse_generation_overrides(
         denoise=_require_optional_float(payload, "denoise"),
         sampler_name=_require_optional_typed(payload, "sampler_name", str),
         scheduler=_require_optional_typed(payload, "scheduler", str),
+    )
+
+
+def _parse_optional_ksampler_node_id(payload: dict[str, object]) -> str | None:
+    config_snapshot_obj = payload.get("config_snapshot")
+    if config_snapshot_obj is None:
+        return None
+
+    config_snapshot = _as_object_dict(
+        config_snapshot_obj,
+        field_name="config_snapshot",
+    )
+
+    workflow_obj = config_snapshot.get("workflow")
+    if workflow_obj is None:
+        return None
+
+    workflow = _as_object_dict(
+        workflow_obj,
+        field_name="config_snapshot.workflow",
+    )
+
+    return _optional_typed(
+        workflow,
+        "ksampler_node_id",
+        str,
+        field_prefix="config_snapshot.workflow",
     )
 
 
@@ -177,6 +209,26 @@ def _require_optional_typed(
         type_name = expected_type.__name__
         raise ValueError(
             f"run.json 字段类型错误: generation_overrides.{key} 需为 {type_name} 或 null"
+        )
+    return value
+
+
+def _optional_typed(
+    payload: dict[str, object],
+    key: str,
+    expected_type: type[T],
+    *,
+    field_prefix: str = "generation_overrides",
+) -> T | None:
+    if key not in payload:
+        return None
+    value = payload[key]
+    if value is None:
+        return None
+    if not isinstance(value, expected_type):
+        type_name = expected_type.__name__
+        raise ValueError(
+            f"run.json 字段类型错误: {field_prefix}.{key} 需为 {type_name} 或 null"
         )
     return value
 

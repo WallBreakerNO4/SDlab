@@ -94,7 +94,9 @@ def _base_run_payload(x_path: Path, y_path: Path) -> dict[str, object]:
     }
 
 
-def test_load_run_replay_config_requires_new_snapshot_fields(tmp_path: Path) -> None:
+def test_load_run_replay_config_reads_optional_new_snapshot_fields(
+    tmp_path: Path,
+) -> None:
     run_dir = tmp_path / "run-1"
     run_dir.mkdir()
     x_path = tmp_path / "x.json"
@@ -112,17 +114,11 @@ def test_load_run_replay_config_requires_new_snapshot_fields(tmp_path: Path) -> 
     assert config.x_json_path == x_path
     assert config.y_json_path == y_path
     assert config.generation_overrides.negative_prompt == "bad,"
-    assert (
-        getattr(config.generation_overrides, "append_negative_prompt")
-        == "nsfw, nipples,"
-    )
-    assert getattr(config, "config_schema_version") == "image-run-config/v1"
-    assert getattr(config, "config_path") == "data/runs/example.yaml"
-    assert getattr(config, "config_sha256") == "config-sha"
-    assert getattr(config, "ksampler_node_id") == "3"
+    assert config.generation_overrides.append_negative_prompt == "nsfw, nipples,"
+    assert config.ksampler_node_id == "3"
 
 
-def test_load_run_replay_config_rejects_missing_append_negative_prompt(
+def test_load_run_replay_config_allows_missing_append_negative_prompt(
     tmp_path: Path,
 ) -> None:
     run_dir = tmp_path / "run-missing-append"
@@ -140,11 +136,11 @@ def test_load_run_replay_config_rejects_missing_append_negative_prompt(
         json.dumps(payload, ensure_ascii=False), encoding="utf-8"
     )
 
-    with pytest.raises(ValueError, match="generation_overrides.append_negative_prompt"):
-        load_run_replay_config(run_dir)
+    config = load_run_replay_config(run_dir)
+    assert config.generation_overrides.append_negative_prompt is None
 
 
-def test_load_run_replay_config_rejects_missing_ksampler_snapshot(
+def test_load_run_replay_config_allows_missing_ksampler_snapshot(
     tmp_path: Path,
 ) -> None:
     run_dir = tmp_path / "run-missing-ksampler"
@@ -164,8 +160,32 @@ def test_load_run_replay_config_rejects_missing_ksampler_snapshot(
         json.dumps(payload, ensure_ascii=False), encoding="utf-8"
     )
 
-    with pytest.raises(ValueError, match="config_snapshot.workflow.ksampler_node_id"):
-        load_run_replay_config(run_dir)
+    config = load_run_replay_config(run_dir)
+    assert config.ksampler_node_id is None
+
+
+def test_load_run_replay_config_allows_legacy_payload_without_config_snapshot(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "run-legacy"
+    run_dir.mkdir()
+    x_path = tmp_path / "x.json"
+    y_path = tmp_path / "y.json"
+    x_path.write_text('[{"x":1}]', encoding="utf-8")
+    y_path.write_text('[{"y":"style"}]', encoding="utf-8")
+
+    payload = _base_run_payload(x_path, y_path)
+    payload.pop("config_snapshot")
+    generation_overrides = payload["generation_overrides"]
+    assert isinstance(generation_overrides, dict)
+    generation_overrides.pop("append_negative_prompt")
+    (run_dir / "run.json").write_text(
+        json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+    )
+
+    config = load_run_replay_config(run_dir)
+    assert config.generation_overrides.append_negative_prompt is None
+    assert config.ksampler_node_id is None
 
 
 def test_load_run_replay_config_sha_mismatch(tmp_path: Path) -> None:

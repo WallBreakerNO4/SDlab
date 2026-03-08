@@ -15,8 +15,10 @@ def _apply_replay_config_to_args(
     args.template = replay.template
     args.base_seed = replay.base_seed
     args.workflow_json = replay.workflow_json_path
+    args.ksampler_node_id = replay.ksampler_node_id
 
     args.negative_prompt = replay.generation_overrides.negative_prompt
+    args.append_negative_prompt = replay.generation_overrides.append_negative_prompt
     args.width = replay.generation_overrides.width
     args.height = replay.generation_overrides.height
     args.batch_size = replay.generation_overrides.batch_size

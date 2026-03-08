@@ -107,6 +107,7 @@ def _write_run_json(run_dir: Path, x_json: Path, y_json: Path) -> None:
         "y_json_sha256": _sha256_file(y_json),
         "generation_overrides": {
             "negative_prompt": None,
+            "append_negative_prompt": "nsfw, nipples,",
             "width": None,
             "height": None,
             "batch_size": None,
@@ -119,6 +120,11 @@ def _write_run_json(run_dir: Path, x_json: Path, y_json: Path) -> None:
         "selection": {
             "x_indexes": [0],
             "y_indexes": [0, 1, 2],
+        },
+        "config_snapshot": {
+            "workflow": {
+                "ksampler_node_id": "7",
+            }
         },
     }
     (run_dir / "run.json").write_text(
@@ -141,17 +147,28 @@ def _stub_generation(
     monkeypatch: pytest.MonkeyPatch,
     submit_counter: dict[str, int],
     workflow_hash: str,
+    seen_args: dict[str, object],
 ) -> None:
     monkeypatch.setattr(
         runner,
         "_load_workflow_context",
-        lambda args: runner.WorkflowContext(
-            workflow={},
-            workflow_json_path=str(args.workflow_json),
-            workflow_hash=workflow_hash,
-            selected_ksampler_id="3",
-            default_negative_prompt="neg,",
-            default_params={},
+        lambda args: (
+            seen_args.update(
+                {
+                    "append_negative_prompt": getattr(
+                        args, "append_negative_prompt", None
+                    ),
+                    "ksampler_node_id": getattr(args, "ksampler_node_id", None),
+                }
+            )
+            or runner.WorkflowContext(
+                workflow={},
+                workflow_json_path=str(args.workflow_json),
+                workflow_hash=workflow_hash,
+                selected_ksampler_id="7",
+                default_negative_prompt="neg,",
+                default_params={},
+            )
         ),
     )
     monkeypatch.setattr(runner, "patch_workflow", lambda *args, **kwargs: {"3": {}})
@@ -253,7 +270,8 @@ def test_retry_incomplete_integration_is_idempotent_and_covers_missing_cases(
         )
 
     submit_counter = {"count": 0}
-    _stub_generation(monkeypatch, submit_counter, workflow_hash)
+    seen_args: dict[str, object] = {}
+    _stub_generation(monkeypatch, submit_counter, workflow_hash, seen_args)
 
     first_exit = runner.main(["--retry-incomplete", "--run-dir", str(run_dir)])
     first_output = capsys.readouterr()
@@ -262,6 +280,8 @@ def test_retry_incomplete_integration_is_idempotent_and_covers_missing_cases(
     assert "参数错误" not in first_output.err
     assert "运行失败" not in first_output.err
     assert submit_counter["count"] == 3
+    assert seen_args["append_negative_prompt"] == "nsfw, nipples,"
+    assert seen_args["ksampler_node_id"] == "7"
 
     records_after_first = _read_jsonl(run_dir / "metadata.jsonl")
     assert len(records_after_first) == 5
