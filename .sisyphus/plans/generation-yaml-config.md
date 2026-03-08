@@ -221,7 +221,7 @@ Wave 2: 生成链路与下游收口（payload 快照、replay/retry、negative p
 
   **Commit**: NO | Message: `refactor(generation): 收敛为 config 驱动的 fresh run 入口` | Files: `scripts/generation/comfyui_part1_generate.py`, `scripts/generation/runner_env.py`, `main.py`, `tests/test_main_entrypoint.py`, `tests/test_runner_dry_run.py`
 
-- [ ] 4. 扩展 `run.json` 快照，兼容 replay 并承载模型展示元数据
+- [x] 4. 扩展 `run.json` 快照，兼容 replay 并承载模型展示元数据
 
   **What to do**: 更新 `scripts/generation/runner_payload.py` 与相关测试，保留现有 legacy top-level 字段：`x_json_path`、`y_json_path`、`x_json_sha256`、`y_json_sha256`、`template`、`base_seed`、`workflow_json_path`、`workflow_json_sha256`、`selection`、`generation_overrides`；同时新增以下 top-level 字段，命名固定：`config_schema_version`、`config_path`、`config_sha256`、`model`、`config_snapshot`。其中 `model` 仅包含紧凑展示字段：`key`、`name`、`family`、`links`、`description`、`tags`。`config_snapshot` 固定包含：`prompts`（`x_path`、`y_path`、`x_sha256`、`y_sha256`）、`workflow`（`path`、`sha256`、`ksampler_node_id`）、`generation`（`template`、`base_seed`、`negative_prompt`、`append_negative_prompt`、`width`、`height`、`batch_size`、`steps`、`cfg`、`denoise`、`sampler_name`、`scheduler`）、`selection`（`x_limit`、`y_limit`、`x_indexes`、`y_indexes`）。同步将 `generation_overrides` 扩展加入 `append_negative_prompt`，但不要移除旧键。禁止把 prompt 正文、workflow JSON 原文或大体积模型对象内嵌进 `run.json`。
   **Must NOT do**: 不要改变 `run_dir`、`selection.x_columns`、`comfyui_base_url` 等既有字段语义；不要让新增快照替代 legacy replay 字段。

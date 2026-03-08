@@ -252,6 +252,15 @@ def _apply_fresh_run_config(args: argparse.Namespace) -> None:
 
     config = load_runner_config(args.config, repo_root=Path.cwd())
 
+    args.config_schema_version = config.schema_version
+    args.config_path = config.config_path
+    args.config_sha256 = config.config_sha256
+    args.config_model = config.model
+    args.config_prompts = config.prompts
+    args.config_workflow = config.workflow
+    args.config_generation = config.generation
+    args.config_selection = config.selection
+
     args.x_json = config.prompts.x.path
     args.y_json = config.prompts.y.path
     args.template = config.generation.template

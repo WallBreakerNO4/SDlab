@@ -376,5 +376,7 @@ def test_dry_run_run_json_snapshot_stays_compact(
     run_payload = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
     snapshot = run_payload["config_snapshot"]
     assert "items" not in snapshot["prompts"]
+    assert "raw" not in snapshot["prompts"]
+    assert "json" not in snapshot["workflow"]
     assert "workflow" not in run_payload["model"]
     assert "prompt_items" not in run_payload["model"]
