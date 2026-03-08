@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
+import yaml
 import sys
 from pathlib import Path
 
@@ -28,7 +28,7 @@ DESCRIPTION_ZH_COLUMN = "description_zh"
 DESCRIPTION_EN_COLUMN = "description_en"
 
 
-def convert_csv_to_json(
+def convert_csv_to_yaml(
     csv_path: Path,
     out_path: Path,
     *,
@@ -66,21 +66,22 @@ def convert_csv_to_json(
     payload = {"schema": schema, "items": items}
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        yaml.dump(payload, allow_unicode=True, default_flow_style=False, sort_keys=False),
+        encoding="utf-8",
     )
     return len(items)
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Convert prompt X CSV file to JSON asset."
+        description="Convert prompt X CSV file to YAML asset."
     )
     parser.add_argument("csv_path", type=Path)
     parser.add_argument(
         "--out",
         type=Path,
         default=None,
-        help="Output JSON path (default: next to CSV with .json)",
+        help="Output YAML path (default: next to CSV with .yaml)",
     )
     parser.add_argument(
         "--schema",
@@ -104,9 +105,9 @@ def main(argv: list[str] | None = None) -> int:
 
     out_path: Path = args.out
     if out_path is None:
-        out_path = args.csv_path.with_suffix(".json")
+        out_path = args.csv_path.with_suffix(".yaml")
 
-    count = convert_csv_to_json(
+    count = convert_csv_to_yaml(
         args.csv_path,
         out_path,
         schema=args.schema,

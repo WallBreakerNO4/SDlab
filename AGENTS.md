@@ -115,7 +115,7 @@ uv sync --no-dev
 uv sync --frozen
 
 uv run python main.py --help
-uv run python main.py --dry-run --x-json data/prompts/X/common_prompts.json --y-json data/prompts/Y/300_NAI_Styles_Table-test.json --base-seed 123
+uv run python main.py --dry-run --x-json data/prompts/X/common_prompts.yaml --y-json data/prompts/Y/300_NAI_Styles_Table-test.yaml --base-seed 123
 uv run python main.py --dry-run --run-dir .sisyphus/evidence/part1-dryrun
 
 uv run pytest -q

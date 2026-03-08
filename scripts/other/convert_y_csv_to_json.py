@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
+import yaml
 import math
 from pathlib import Path
 
@@ -85,7 +85,7 @@ def parse_weighted_tags(prompt: str) -> list[dict[str, object]]:
     return items
 
 
-def convert_csv_to_json(
+def convert_csv_to_yaml(
     csv_path: Path,
     out_path: Path,
     *,
@@ -125,14 +125,15 @@ def convert_csv_to_json(
     payload = {"schema": schema, "items": items}
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        yaml.dump(payload, allow_unicode=True, default_flow_style=False, sort_keys=False),
+        encoding="utf-8",
     )
     return len(items)
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Convert prompt Y CSV files to JSON assets."
+        description="Convert prompt Y CSV files to YAML assets."
     )
     parser.add_argument(
         "csv_paths",
@@ -177,8 +178,8 @@ def main(argv: list[str] | None = None) -> int:
         if not csv_path.exists():
             raise FileNotFoundError(csv_path)
         out_dir: Path = csv_path.parent if args.out_dir is None else args.out_dir
-        out_path = out_dir / (csv_path.stem + ".json")
-        count = convert_csv_to_json(
+        out_path = out_dir / (csv_path.stem + ".yaml")
+        count = convert_csv_to_yaml(
             csv_path,
             out_path,
             schema=args.schema,

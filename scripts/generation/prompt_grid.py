@@ -1,5 +1,5 @@
 import hashlib
-import json
+import yaml
 import re
 from collections.abc import Mapping
 from pathlib import Path
@@ -62,7 +62,7 @@ def _render_weighted_tags(tags: object) -> str:
 def read_x_rows(path: str | Path) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
 
-    payload_obj = cast(object, json.loads(Path(path).read_text(encoding="utf-8")))
+    payload_obj = cast(object, yaml.safe_load(Path(path).read_text(encoding="utf-8")))
     if not isinstance(payload_obj, dict):
         return rows
 
@@ -98,7 +98,7 @@ def read_x_rows(path: str | Path) -> list[dict[str, str]]:
 def read_x_descriptions(path: str | Path) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
 
-    payload_obj = cast(object, json.loads(Path(path).read_text(encoding="utf-8")))
+    payload_obj = cast(object, yaml.safe_load(Path(path).read_text(encoding="utf-8")))
     if not isinstance(payload_obj, dict):
         return rows
 
@@ -139,7 +139,7 @@ def read_y_rows(
 
     _ = artists_column
 
-    payload_obj = cast(object, json.loads(Path(path).read_text(encoding="utf-8")))
+    payload_obj = cast(object, yaml.safe_load(Path(path).read_text(encoding="utf-8")))
     if not isinstance(payload_obj, dict):
         return rows
 
