@@ -220,6 +220,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        _validate_runtime_args(args)
         if _is_retry_mode(args):
             return run_retry(args)
         _apply_fresh_run_config(args)
@@ -281,6 +282,16 @@ def _apply_fresh_run_config(args: argparse.Namespace) -> None:
         if config.selection.y_indexes is not None
         else None
     )
+
+
+def _validate_runtime_args(args: argparse.Namespace) -> None:
+    retry_mode = _is_retry_mode(args)
+
+    retry_error_codes = _parse_retry_error_codes(args.retry_error_code)
+    if retry_error_codes is not None and not retry_mode:
+        raise ValueError(
+            "--retry-error-code 仅可与 --retry-failed/--retry-incomplete 一起使用"
+        )
 
 
 def run(args: argparse.Namespace) -> int:
@@ -564,9 +575,11 @@ def _validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--request-timeout-s 必须 > 0")
     if args.job_timeout_s <= 0:
         raise ValueError("--job-timeout-s 必须 > 0")
-    if args.x_limit is not None and args.x_limit < 0:
+    x_limit = getattr(args, "x_limit", None)
+    if x_limit is not None and x_limit < 0:
         raise ValueError("--x-limit 不能小于 0")
-    if args.y_limit is not None and args.y_limit < 0:
+    y_limit = getattr(args, "y_limit", None)
+    if y_limit is not None and y_limit < 0:
         raise ValueError("--y-limit 不能小于 0")
 
     if args.concurrency <= 0:
@@ -586,7 +599,7 @@ def _validate_args(args: argparse.Namespace) -> None:
             raise ValueError(f"retry 模式 --run-dir 不存在或不是目录: {run_dir}")
 
     if not args.dry_run and not retry_mode:
-        if not args.workflow_json:
+        if not getattr(args, "workflow_json", None):
             raise ValueError("非 dry-run 模式必须提供 --workflow-json")
 
     if not args.client_id:

@@ -179,7 +179,7 @@ Wave 2: 生成链路与下游收口（payload 快照、replay/retry、negative p
 
   **Commit**: NO | Message: `feat(generation): 增加 YAML 运行配置加载器` | Files: `scripts/generation/runner_config.py`, `tests/test_runner_config.py`
 
-- [ ] 3. 重构 CLI 与运行时分层，只保留 runtime 入口在 parser/env
+- [x] 3. 重构 CLI 与运行时分层，只保留 runtime 入口在 parser/env
 
   **What to do**: 将 fresh run 改为必须提供 `--config`。`build_parser()` 对外只保留运行控制与环境层参数：`--config`、`--run-dir`、`--dry-run`、`--retry-failed`、`--retry-incomplete`、`--retry-error-code`、`--base-url`、`--request-timeout-s`、`--job-timeout-s`、`--concurrency`、`--client-id`。业务字段不再作为 public CLI 参数，也不再由 env 默认值直接注入；而是由配置加载器在 fresh run 之前写入内部 namespace 字段（沿用现有字段名 `x_json`、`y_json`、`template`、`base_seed`、`workflow_json`、`ksampler_node_id`、`negative_prompt`、`append_negative_prompt`、`width`、`height`、`batch_size`、`steps`、`cfg`、`denoise`、`sampler_name`、`scheduler`、`x_limit`、`y_limit`、`x_indexes`、`y_indexes`），以减少下游 runner 改动。保留 `.env` autoload 仅用于 5 个约定的 runtime env。定义 deprecated 业务 env 名单；fresh run 使用 `--config` 时若检测到这些变量被设置，直接报错并列出变量名。retry/replay 路径不需要 `--config`，继续由 `run.json` 回放填充内部字段。
   **Must NOT do**: 不要把 `dry_run`、`retry_*`、`run_dir`、`client_id` 塞进 YAML；不要让 deprecated 业务 env 与 YAML 同时生效。
