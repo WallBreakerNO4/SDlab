@@ -396,9 +396,6 @@ Wave 2: 生成链路与下游收口（payload 快照、replay/retry、negative p
 - [x] F2. Code Quality Review - unspecified-high
 - [x] F3. Real Manual QA - unspecified-high (+ playwright if UI)
 - [x] F4. Scope Fidelity Check - deep
-- [ ] F2. Code Quality Review - unspecified-high
-- [ ] F3. Real Manual QA - unspecified-high (+ playwright if UI)
-- [ ] F4. Scope Fidelity Check - deep
 
 ## Commit Strategy
 - 单主提交，完成后提交：`feat(generation): 支持基于 YAML 的运行配置`
