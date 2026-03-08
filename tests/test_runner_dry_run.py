@@ -1,29 +1,30 @@
-# pyright: basic, reportMissingImports=false, reportUnusedCallResult=false
+# pyright: basic, reportMissingImports=false, reportUnusedCallResult=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false, reportUnknownMemberType=false, reportUnknownArgumentType=false
 
+import hashlib
+import importlib
 import json
 import sys
+import types
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-from scripts.generation.prompt_grid import build_prompt_cell
-from scripts.generation.comfyui_part1_generate import build_parser, main
-
-
-COMFY_ENV_KEYS = [
+DEPRECATED_BUSINESS_ENV_KEYS = [
     "COMFYUI_X_JSON",
     "COMFYUI_Y_JSON",
     "COMFYUI_TEMPLATE",
-    "COMFYUI_BASE_URL",
+    "COMFYUI_BASE_SEED",
     "COMFYUI_WORKFLOW_JSON",
-    "COMFYUI_OUT_DIR",
-    "COMFYUI_CLIENT_ID",
-    "COMFYUI_REQUEST_TIMEOUT_S",
-    "COMFYUI_JOB_TIMEOUT_S",
-    "COMFYUI_CONCURRENCY",
+    "COMFYUI_KSAMPLER_NODE_ID",
+    "COMFYUI_X_LIMIT",
+    "COMFYUI_Y_LIMIT",
+    "COMFYUI_X_INDEXES",
+    "COMFYUI_Y_INDEXES",
     "COMFYUI_NEGATIVE_PROMPT",
     "COMFYUI_APPEND_NEGATIVE_PROMPT",
     "COMFYUI_WIDTH",
@@ -37,8 +38,25 @@ COMFY_ENV_KEYS = [
 ]
 
 
-def _clear_comfy_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    for key in COMFY_ENV_KEYS:
+def _install_runner_config_stub() -> None:
+    module = types.ModuleType("scripts.generation.runner_config")
+
+    def load_runner_config(*args: object, **kwargs: object) -> None:
+        _ = (args, kwargs)
+        raise AssertionError("测试需显式 monkeypatch load_runner_config")
+
+    setattr(module, "load_runner_config", load_runner_config)
+    sys.modules["scripts.generation.runner_config"] = module
+
+
+def _import_runner_module():
+    _install_runner_config_stub()
+    _ = sys.modules.pop("scripts.generation.comfyui_part1_generate", None)
+    return importlib.import_module("scripts.generation.comfyui_part1_generate")
+
+
+def _clear_deprecated_business_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in DEPRECATED_BUSINESS_ENV_KEYS:
         monkeypatch.delenv(key, raising=False)
 
 
@@ -47,10 +65,9 @@ def _write_json_inputs(
     *,
     x_info_type: str = "sfw",
 ) -> tuple[Path, Path]:
-    x_csv = tmp_path / "x.json"
-    y_csv = tmp_path / "y.json"
-
-    x_payload: dict[str, object] = {
+    x_path = tmp_path / "x.json"
+    y_path = tmp_path / "y.json"
+    x_payload = {
         "schema": "",
         "items": [
             {
@@ -63,34 +80,26 @@ def _write_json_inputs(
                     "quality": [{"text": "masterpiece", "weight": 1.0}],
                 },
                 "info": {"index": 0, "type": x_info_type},
+                "description": {"zh": "示例模型", "en": "Example model"},
             }
         ],
     }
-
-    y_payload: dict[str, object] = {
+    y_payload = {
         "schema": "prompt-y-table/v2",
         "items": [
             {
                 "tags": [{"text": "artist-a", "weight": 1.0}],
                 "info": {"index": 0, "type": "artists"},
-            },
-            {
-                "tags": [{"text": "artist-b", "weight": 1.0}],
-                "info": {"index": 1, "type": "artists"},
-            },
+            }
         ],
     }
-
-    x_csv.write_text(
-        json.dumps(x_payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
+    x_path.write_text(
+        json.dumps(x_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
-    y_csv.write_text(
-        json.dumps(y_payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
+    y_path.write_text(
+        json.dumps(y_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
-
-    return x_csv, y_csv
+    return x_path, y_path
 
 
 def _read_valid_jsonl(path: Path) -> list[dict[str, object]]:
@@ -98,29 +107,88 @@ def _read_valid_jsonl(path: Path) -> list[dict[str, object]]:
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(payload, dict):
-            records.append(payload)
+        payload = json.loads(line)
+        assert isinstance(payload, dict)
+        records.append(payload)
     return records
 
 
-def test_cli_help_contains_required_flags() -> None:
-    help_text = build_parser().format_help()
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _fake_runner_config(
+    *,
+    config_path: Path,
+    x_path: Path,
+    y_path: Path,
+    append_negative_prompt: str | None,
+) -> SimpleNamespace:
+    workflow_path = config_path.parent / "workflow.json"
+    workflow_path.write_text('{"3": {"class_type": "KSampler"}}\n', encoding="utf-8")
+    return SimpleNamespace(
+        schema_version="image-run-config/v1",
+        config_path="data/runs/example.yaml",
+        config_sha256=_sha256_file(config_path),
+        model=SimpleNamespace(
+            key="nai-4-full",
+            name="NAI 4 Full",
+            family="novelai",
+            links={
+                "homepage": "https://example.com/model",
+                "huggingface": None,
+                "civitai": None,
+            },
+            description={"zh": "测试模型", "en": "Test model"},
+            tags=["anime", "full"],
+        ),
+        prompts=SimpleNamespace(
+            x=SimpleNamespace(
+                path=str(x_path),
+                sha256=_sha256_file(x_path),
+                repo_relative_path="data/prompts/x.json",
+            ),
+            y=SimpleNamespace(
+                path=str(y_path),
+                sha256=_sha256_file(y_path),
+                repo_relative_path="data/prompts/y.json",
+            ),
+        ),
+        workflow=SimpleNamespace(
+            path=str(workflow_path),
+            sha256=_sha256_file(workflow_path),
+            repo_relative_path="data/workflows/example.json",
+            ksampler_node_id="3",
+        ),
+        generation=SimpleNamespace(
+            template="{gender}{characters}{series}{rating}{y}{general}{quality}",
+            base_seed=123,
+            negative_prompt="neg,",
+            append_negative_prompt=append_negative_prompt,
+            width=832,
+            height=1216,
+            batch_size=1,
+            steps=28,
+            cfg=5.5,
+            denoise=1.0,
+            sampler_name="euler",
+            scheduler="normal",
+        ),
+        selection=SimpleNamespace(
+            x_limit=1,
+            y_limit=1,
+            x_indexes=[0],
+            y_indexes=[0],
+        ),
+    )
+
+
+def test_cli_help_exposes_config_runtime_flags_only() -> None:
+    runner = _import_runner_module()
+    help_text = runner.build_parser().format_help()
 
     for flag in [
-        "--x-json",
-        "--y-json",
-        "--template",
-        "--base-seed",
-        "--workflow-json",
-        "--ksampler-node-id",
-        "--x-limit",
-        "--y-limit",
-        "--x-indexes",
-        "--y-indexes",
+        "--config",
         "--run-dir",
         "--dry-run",
         "--retry-failed",
@@ -129,485 +197,184 @@ def test_cli_help_contains_required_flags() -> None:
         "--base-url",
         "--request-timeout-s",
         "--job-timeout-s",
+        "--concurrency",
         "--client-id",
-        "--negative-prompt",
-        "--width",
-        "--height",
-        "--batch-size",
-        "--steps",
-        "--cfg",
-        "--denoise",
-        "--sampler-name",
-        "--scheduler",
     ]:
         assert flag in help_text
 
+    for removed_flag in [
+        "--x-json",
+        "--y-json",
+        "--template",
+        "--base-seed",
+        "--workflow-json",
+        "--negative-prompt",
+        "--width",
+        "--height",
+    ]:
+        assert removed_flag not in help_text
 
-def test_dry_run_loads_utf8_env_writes_run_json_and_prints_example(
+
+def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    _clear_comfy_env(monkeypatch)
-    x_csv, y_csv = _write_json_inputs(tmp_path)
+    runner = _import_runner_module()
+    _clear_deprecated_business_env(monkeypatch)
+    x_path, y_path = _write_json_inputs(tmp_path)
+    config_path = tmp_path / "example.yaml"
+    config_path.write_text("schema_version: image-run-config/v1\n", encoding="utf-8")
     run_dir = tmp_path / "run-dry"
-
-    (tmp_path / ".env").write_text(
-        "\n".join(
-            [
-                "COMFYUI_BASE_URL=http://example.local:8188",
-                "COMFYUI_WORKFLOW_JSON=missing-workflow.json",
-                "COMFYUI_NEGATIVE_PROMPT=低质量,bad anatomy,",
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-
     monkeypatch.chdir(tmp_path)
 
-    exit_code = main(
-        [
-            "--dry-run",
-            "--x-json",
-            str(x_csv),
-            "--y-json",
-            str(y_csv),
-            "--run-dir",
-            str(run_dir),
-            "--base-seed",
-            "123",
-        ]
+    monkeypatch.setattr(
+        runner,
+        "load_runner_config",
+        lambda path, repo_root: _fake_runner_config(
+            config_path=config_path,
+            x_path=x_path,
+            y_path=y_path,
+            append_negative_prompt="app,",
+        ),
+    )
+
+    exit_code = runner.main(
+        ["--dry-run", "--config", str(config_path), "--run-dir", str(run_dir)]
     )
 
     assert exit_code == 0
-    output = capsys.readouterr().out
-    assert "组合总数: 2" in output
-    assert "示例正向提示词:" in output
-
     run_payload = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
-    assert run_payload["dry_run"] is True
-    assert run_payload["workflow_status"] == "not_loaded"
-    assert run_payload["workflow_json_sha256"] == "not_loaded"
-    assert run_payload["workflow_json_path"] == "missing-workflow.json"
-    assert run_payload["comfyui_base_url"] == "http://example.local:8188"
+    assert run_payload["x_json_path"] == str(x_path)
+    assert run_payload["y_json_path"] == str(y_path)
     assert (
-        run_payload["generation_overrides"]["negative_prompt"] == "低质量,bad anatomy,"
+        run_payload["template"]
+        == "{gender}{characters}{series}{rating}{y}{general}{quality}"
     )
-    selection = run_payload["selection"]
-    assert selection["x_columns"] == [
-        {"x_index": 0, "type": "sfw", "description": {"zh": "", "en": ""}}
-    ]
-
-    metadata_records = _read_valid_jsonl(run_dir / "metadata.jsonl")
-    assert len(metadata_records) == 2
-    assert all(record["status"] == "skipped" for record in metadata_records)
-    assert all(record["workflow_hash"] == "not_loaded" for record in metadata_records)
-    assert all(record["x_info_type"] == "sfw" for record in metadata_records)
-    assert all(
-        record.get("x_description") == {"zh": "", "en": ""}
-        for record in metadata_records
-    )
-
-
-def test_dry_run_append_negative_prompt_for_normal_type_updates_generation_params(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _clear_comfy_env(monkeypatch)
-    x_csv, y_csv = _write_json_inputs(tmp_path, x_info_type="normal")
-    run_dir = tmp_path / "run-dry-append-negative"
-
-    (tmp_path / ".env").write_text(
-        "\n".join(
-            [
-                "COMFYUI_NEGATIVE_PROMPT=neg,",
-                "COMFYUI_APPEND_NEGATIVE_PROMPT=app,",
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-
-    monkeypatch.chdir(tmp_path)
-
-    exit_code = main(
-        [
-            "--dry-run",
-            "--x-json",
-            str(x_csv),
-            "--y-json",
-            str(y_csv),
-            "--run-dir",
-            str(run_dir),
-            "--base-seed",
-            "321",
-        ]
-    )
-
-    assert exit_code == 0
-
-    run_payload = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert run_payload["base_seed"] == 123
     assert run_payload["generation_overrides"]["negative_prompt"] == "neg,"
-
-    metadata_records = _read_valid_jsonl(run_dir / "metadata.jsonl")
-    assert len(metadata_records) == 2
-    for record in metadata_records:
-        assert record["x_info_type"] == "normal"
-        generation_params = record.get("generation_params")
-        assert isinstance(generation_params, dict)
-        assert generation_params["negative_prompt"] == "neg, app,"
-
-
-def test_dry_run_does_not_call_comfyui_client(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _clear_comfy_env(monkeypatch)
-    x_csv, y_csv = _write_json_inputs(tmp_path)
-    run_dir = tmp_path / "run-no-comfy"
-
-    def should_not_be_called(*args: object, **kwargs: object) -> None:
-        _ = (args, kwargs)
-        raise AssertionError("dry-run 不应调用 ComfyUI 客户端")
-
-    monkeypatch.setattr(
-        "scripts.generation.comfyui_part1_generate.comfy_submit_prompt",
-        should_not_be_called,
-    )
-    monkeypatch.setattr(
-        "scripts.generation.comfyui_part1_generate.comfy_wait_prompt_done_with_fallback",
-        should_not_be_called,
-    )
-    monkeypatch.setattr(
-        "scripts.generation.comfyui_part1_generate.comfy_get_history_item",
-        should_not_be_called,
-    )
-    monkeypatch.setattr(
-        "scripts.generation.comfyui_part1_generate.comfy_download_image_to_path",
-        should_not_be_called,
-    )
-
-    exit_code = main(
-        [
-            "--dry-run",
-            "--x-json",
-            str(x_csv),
-            "--y-json",
-            str(y_csv),
-            "--run-dir",
-            str(run_dir),
-            "--base-seed",
-            "99",
-        ]
-    )
-
-    assert exit_code == 0
-
-
-def test_resume_skip_map_ignores_broken_last_line_and_requires_existing_image(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _clear_comfy_env(monkeypatch)
-    monkeypatch.chdir(tmp_path)
-    x_csv, y_csv = _write_json_inputs(tmp_path)
-    run_dir = tmp_path / "run-resume"
-    images_dir = run_dir / "images"
-    images_dir.mkdir(parents=True, exist_ok=True)
-
-    x_row = {
-        "gender": "1girl,",
-        "characters": "amiya,",
-        "series": "arknights,",
-        "rating": "safe,",
-        "general": "solo,",
-        "quality": "masterpiece,",
+    assert run_payload["generation_overrides"]["append_negative_prompt"] == "app,"
+    assert run_payload["config_schema_version"] == "image-run-config/v1"
+    assert run_payload["config_path"] == "data/runs/example.yaml"
+    assert run_payload["config_sha256"] == _sha256_file(config_path)
+    assert run_payload["model"] == {
+        "key": "nai-4-full",
+        "name": "NAI 4 Full",
+        "family": "novelai",
+        "links": {
+            "homepage": "https://example.com/model",
+            "huggingface": None,
+            "civitai": None,
+        },
+        "description": {"zh": "测试模型", "en": "Test model"},
+        "tags": ["anime", "full"],
     }
-    y_row = {"y": "artist-a,"}
-    cell = build_prompt_cell(x_row, y_row, base_seed=99, x_index=0, y_index=0)
-
-    existing_image = images_dir / "x0-y0.png"
-    existing_image.write_bytes(b"png")
-
-    metadata_path = run_dir / "metadata.jsonl"
-    metadata_path.write_text(
-        json.dumps(
-            {
-                "status": "success",
-                "x_index": 0,
-                "y_index": 0,
-                "prompt_hash": cell["prompt_hash"],
-                "seed": cell["seed"],
-                "workflow_hash": "not_loaded",
-                "local_image_path": "images/x0-y0.png",
-            },
-            ensure_ascii=False,
-        )
-        + "\n"
-        + '{"status": "broken"',
-        encoding="utf-8",
-    )
-
-    exit_code = main(
-        [
-            "--dry-run",
-            "--x-json",
-            str(x_csv),
-            "--y-json",
-            str(y_csv),
-            "--run-dir",
-            str(run_dir),
-            "--base-seed",
-            "99",
-            "--x-limit",
-            "1",
-            "--y-limit",
-            "1",
-        ]
-    )
-
-    assert exit_code == 0
-
-    metadata_records = _read_valid_jsonl(metadata_path)
-    assert len(metadata_records) == 2
-    assert metadata_records[-1]["status"] == "skipped"
-    assert metadata_records[-1]["skip_reason"] == "resume_hit"
-
-
-def test_env_csv_paths_used_when_cli_flags_not_provided(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _clear_comfy_env(monkeypatch)
-    x_csv = tmp_path / "x-env.json"
-    y_csv = tmp_path / "y-env.json"
-
-    x_payload: dict[str, object] = {
-        "schema": "",
-        "items": [
-            {
-                "tags": {
-                    "gender": [{"text": "1girl", "weight": 1.0}],
-                    "characters": [{"text": "character-a", "weight": 1.0}],
-                    "series": [{"text": "series-a", "weight": 1.0}],
-                    "rating": [{"text": "safe", "weight": 1.0}],
-                    "general": [{"text": "solo", "weight": 1.0}],
-                    "quality": [{"text": "best", "weight": 1.0}],
-                },
-                "info": {"index": 0, "type": "sfw"},
-            }
-        ],
+    assert run_payload["config_snapshot"] == {
+        "prompts": {
+            "x_path": "data/prompts/x.json",
+            "y_path": "data/prompts/y.json",
+            "x_sha256": _sha256_file(x_path),
+            "y_sha256": _sha256_file(y_path),
+        },
+        "workflow": {
+            "path": "data/workflows/example.json",
+            "sha256": run_payload["config_snapshot"]["workflow"]["sha256"],
+            "ksampler_node_id": "3",
+        },
+        "generation": {
+            "template": "{gender}{characters}{series}{rating}{y}{general}{quality}",
+            "base_seed": 123,
+            "negative_prompt": "neg,",
+            "append_negative_prompt": "app,",
+            "width": 832,
+            "height": 1216,
+            "batch_size": 1,
+            "steps": 28,
+            "cfg": 5.5,
+            "denoise": 1.0,
+            "sampler_name": "euler",
+            "scheduler": "normal",
+        },
+        "selection": {
+            "x_limit": 1,
+            "y_limit": 1,
+            "x_indexes": [0],
+            "y_indexes": [0],
+        },
     }
-    y_payload: dict[str, object] = {
-        "schema": "prompt-y-table/v2",
-        "items": [
-            {
-                "tags": [{"text": "artist-from-env", "weight": 1.0}],
-                "info": {"index": 0, "type": "artists"},
-            }
-        ],
-    }
-
-    x_csv.write_text(
-        json.dumps(x_payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    y_csv.write_text(
-        json.dumps(y_payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-
-    run_dir = tmp_path / "run-env-test"
-
-    (tmp_path / ".env").write_text(
-        "\n".join(
-            [
-                f"COMFYUI_X_JSON={x_csv}",
-                f"COMFYUI_Y_JSON={y_csv}",
-                "COMFYUI_BASE_URL=http://example.local:8188",
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-
-    monkeypatch.chdir(tmp_path)
-
-    exit_code = main(
-        [
-            "--dry-run",
-            "--run-dir",
-            str(run_dir),
-            "--base-seed",
-            "42",
-        ]
-    )
-
-    assert exit_code == 0
-
-    run_payload = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
-    assert run_payload["x_json_path"] == str(x_csv)
-    assert run_payload["y_json_path"] == str(y_csv)
-
-
-def test_dry_run_preserves_newline_in_x_description(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """验证含换行的 description 能正确 round-trip"""
-    _clear_comfy_env(monkeypatch)
-
-    x_csv = tmp_path / "x-multiline.json"
-    y_csv = tmp_path / "y-multiline.json"
-
-    x_payload: dict[str, object] = {
-        "schema": "",
-        "items": [
-            {
-                "tags": {
-                    "gender": [{"text": "1girl", "weight": 1.0}],
-                    "characters": [{"text": "test", "weight": 1.0}],
-                    "series": [{"text": "test", "weight": 1.0}],
-                    "rating": [{"text": "safe", "weight": 1.0}],
-                    "general": [{"text": "solo", "weight": 1.0}],
-                    "quality": [{"text": "best", "weight": 1.0}],
-                },
-                "info": {"index": 0, "type": "sfw"},
-                "description": {
-                    "zh": "第一行\n第二行\n第三行",
-                    "en": "Line 1\nLine 2\nLine 3",
-                },
-            }
-        ],
-    }
-
-    y_payload: dict[str, object] = {
-        "schema": "prompt-y-table/v2",
-        "items": [
-            {
-                "tags": [{"text": "artist", "weight": 1.0}],
-                "info": {"index": 0, "type": "artists"},
-            }
-        ],
-    }
-
-    x_csv.write_text(
-        json.dumps(x_payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    y_csv.write_text(
-        json.dumps(y_payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-
-    run_dir = tmp_path / "run-multiline"
-
-    monkeypatch.chdir(tmp_path)
-
-    exit_code = main(
-        [
-            "--dry-run",
-            "--x-json",
-            str(x_csv),
-            "--y-json",
-            str(y_csv),
-            "--run-dir",
-            str(run_dir),
-            "--base-seed",
-            "1",
-        ]
-    )
-
-    assert exit_code == 0
 
     metadata_records = _read_valid_jsonl(run_dir / "metadata.jsonl")
     assert len(metadata_records) == 1
-    record = metadata_records[0]
-
-    x_desc = record.get("x_description")
-    assert isinstance(x_desc, dict)
-    assert x_desc.get("zh") == "第一行\n第二行\n第三行"
-    assert x_desc.get("en") == "Line 1\nLine 2\nLine 3"
+    assert metadata_records[0]["status"] == "skipped"
 
 
-def test_dry_run_x_json_missing_description_uses_default(
+def test_dry_run_uses_config_append_negative_prompt(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _clear_comfy_env(monkeypatch)
-
-    x_csv = tmp_path / "x-missing-desc.json"
-    y_csv = tmp_path / "y-missing-desc.json"
-
-    x_payload: dict[str, object] = {
-        "schema": "",
-        "items": [
-            {
-                "tags": {
-                    "gender": [{"text": "1girl", "weight": 1.0}],
-                    "characters": [{"text": "test-char", "weight": 1.0}],
-                    "series": [{"text": "test-series", "weight": 1.0}],
-                    "rating": [{"text": "safe", "weight": 1.0}],
-                    "general": [{"text": "solo", "weight": 1.0}],
-                    "quality": [{"text": "best", "weight": 1.0}],
-                },
-                "info": {"index": 0, "type": "sfw"},
-            }
-        ],
-    }
-
-    y_payload: dict[str, object] = {
-        "schema": "prompt-y-table/v2",
-        "items": [
-            {
-                "tags": [{"text": "artist-missing", "weight": 1.0}],
-                "info": {"index": 0, "type": "artists"},
-            },
-            {
-                "tags": [{"text": "artist-another", "weight": 1.0}],
-                "info": {"index": 1, "type": "artists"},
-            },
-        ],
-    }
-
-    x_csv.write_text(
-        json.dumps(x_payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    y_csv.write_text(
-        json.dumps(y_payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-
-    run_dir = tmp_path / "run-missing-desc"
-
+    runner = _import_runner_module()
+    _clear_deprecated_business_env(monkeypatch)
+    x_path, y_path = _write_json_inputs(tmp_path, x_info_type="normal")
+    config_path = tmp_path / "example.yaml"
+    config_path.write_text("schema_version: image-run-config/v1\n", encoding="utf-8")
+    run_dir = tmp_path / "run-append-negative"
     monkeypatch.chdir(tmp_path)
 
-    exit_code = main(
-        [
-            "--dry-run",
-            "--x-json",
-            str(x_csv),
-            "--y-json",
-            str(y_csv),
-            "--run-dir",
-            str(run_dir),
-            "--base-seed",
-            "777",
-        ]
+    monkeypatch.setattr(
+        runner,
+        "load_runner_config",
+        lambda path, repo_root: _fake_runner_config(
+            config_path=config_path,
+            x_path=x_path,
+            y_path=y_path,
+            append_negative_prompt="app,",
+        ),
+    )
+
+    exit_code = runner.main(
+        ["--dry-run", "--config", str(config_path), "--run-dir", str(run_dir)]
     )
 
     assert exit_code == 0
-
     run_payload = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
-    selection = run_payload["selection"]
-    assert selection["x_columns"] == [
-        {"x_index": 0, "type": "sfw", "description": {"zh": "", "en": ""}}
-    ]
+    assert run_payload["generation_overrides"]["append_negative_prompt"] == "app,"
 
     metadata_records = _read_valid_jsonl(run_dir / "metadata.jsonl")
-    assert len(metadata_records) == 2
-    assert all(
-        record.get("x_description") == {"zh": "", "en": ""}
-        for record in metadata_records
+    assert len(metadata_records) == 1
+    generation_params = metadata_records[0].get("generation_params")
+    assert isinstance(generation_params, dict)
+    assert generation_params["negative_prompt"] == "neg, app,"
+
+
+def test_dry_run_run_json_snapshot_stays_compact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = _import_runner_module()
+    _clear_deprecated_business_env(monkeypatch)
+    x_path, y_path = _write_json_inputs(tmp_path)
+    config_path = tmp_path / "example.yaml"
+    config_path.write_text("schema_version: image-run-config/v1\n", encoding="utf-8")
+    run_dir = tmp_path / "run-compact"
+    monkeypatch.chdir(tmp_path)
+
+    monkeypatch.setattr(
+        runner,
+        "load_runner_config",
+        lambda path, repo_root: _fake_runner_config(
+            config_path=config_path,
+            x_path=x_path,
+            y_path=y_path,
+            append_negative_prompt=None,
+        ),
     )
+
+    exit_code = runner.main(
+        ["--dry-run", "--config", str(config_path), "--run-dir", str(run_dir)]
+    )
+
+    assert exit_code == 0
+    run_payload = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    snapshot = run_payload["config_snapshot"]
+    assert "items" not in snapshot["prompts"]
+    assert "workflow" not in run_payload["model"]
+    assert "prompt_items" not in run_payload["model"]

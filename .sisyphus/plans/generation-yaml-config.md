@@ -96,7 +96,7 @@ Wave 2: 生成链路与下游收口（payload 快照、replay/retry、negative p
 > Implementation + Test = ONE task. Never separate.
 > EVERY task MUST have: Agent Profile + Parallelization + QA Scenarios.
 
-- [ ] 1. 先写 YAML 配置与入口契约测试
+- [x] 1. 先写 YAML 配置与入口契约测试
 
   **What to do**: 先新增失败测试，锁定新行为。创建 `tests/test_runner_config.py`，并更新 `tests/test_runner_dry_run.py`、`tests/test_main_entrypoint.py`、`tests/test_run_replay.py`、`tests/test_negative_prompt_append.py` 的契约断言。测试必须覆盖：fresh run 必须传 `--config`、repo-relative 路径解析、未知 key / 错误 `schema_version` 硬失败、deprecated 业务 env 不得覆盖 YAML、`run.json` 必须保留 legacy replay 字段并新增 config/model 快照字段、`append_negative_prompt` 来自 config 而不是 env。
   **Must NOT do**: 不要先改实现再补测试；不要依赖人工打开 `run.json` 目视检查。
