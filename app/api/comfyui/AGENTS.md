@@ -2,30 +2,30 @@
 
 ## 概览
 
-- App Router route handlers：主要从 Supabase 读取数据（runs/images/variants），本地文件读取作降级。不调用 Python。
+- 这里只有 JSON API：`runs`、`run detail`、`grid`、`row`。数据直接来自 Supabase，返回前已按前端消费形态收敛。
 
 ## 去哪儿看
 
 | 场景 | 位置 | 备注 |
 | --- | --- | --- |
-| runs 列表 | `runs/route.ts` | Supabase 查询，返回最小化 summaries |
-| run 详情 | `run/[runDir]/route.ts` | 校验 runDir；返回 `{ run, xLabels, yLabels }` |
-| grid 索引 | `run/[runDir]/grid/route.ts` | cells 经 payload 收敛（适配虚拟网格） |
-| row 级图片查询 | `run/[runDir]/row/route.ts` | 按行查询，支持分页/筛选 |
-| 图片代理（本地降级） | `image/[runDir]/[...imagePath]/route.ts` | 路径安全链 + stream + cache-control |
+| runs 列表 | `runs/route.ts` | 读取 `runs` 表并收敛 summary |
+| run 详情 | `run/[runDir]/route.ts` | 返回 run 基础信息 + x/y labels + `x_columns`/`y_indexes` |
+| grid 索引 | `run/[runDir]/grid/route.ts` | 返回 `blurhash_cells`，按页规避 PostgREST `max_rows` |
+| row 级图片查询 | `run/[runDir]/row/route.ts` | 返回每个 cell 的 display/thumb/original URL |
 
 ## 约定（本目录特有）
 
-- 运行时：每个 `route.ts` 必须保持 `export const runtime = "nodejs"`
-- 数据源：优先 Supabase（`lib/supabase-server.ts`）；仅在 Supabase 不可用时降级到本地文件
-- 校验顺序：runDir → `assertAllowedRunDir()`；图片额外 `assertSafeRelativeImagePath()` → `resolvePathUnderRoot()`
-- 错误响应：404 仅用于"不存在/非法输入"；500 用固定短文案；不泄露绝对路径/stack/Traceback
-- Payload 收敛：对外只返回前端渲染所需字段；不要把原始解析对象全量透传
-- 缓存：图片 route 设置 `Cache-Control: public, max-age=86400`；JSON route 不强行缓存
+- 每个 `route.ts` 保持 `export const runtime = "nodejs"`。
+- 服务端查询统一走 `createSupabaseAuthClient()`；使用 publishable key + cookie session，受 RLS 约束。
+- `runDir` 入口先用 `isValidRunDir()` 判形态；非法值直接 404，不继续查库。
+- 对外 payload 只保留前端渲染需要的字段；不要透传原始 `run_json` / `metadata` 大对象。
+- `grid/route.ts` 需要分页拉 `images`，否则会撞 PostgREST 默认 `max_rows`。
+- `row/route.ts` 负责把 `image_variants` 映射成 display/thumb/original URL；公开/私有 URL 都通过 `lib/r2-url.ts`。
+- `catch` 分支只返回固定短文案，避免暴露数据库、路径、环境细节。
 
 ## 反模式
 
-- 不要在 route 里直接 `path.join(root, userInput)` 读取文件；必须先走 `lib/comfyui-path.ts` 校验
-- 不要把异常 message 原样返回（尤其包含本机路径/环境信息）
-- 不要把这些 route 迁到 Edge runtime
-- 不要在 route 中直接 `createClient()`；使用 `lib/supabase-server.ts` 统一客户端
+- 不要把这些 route 迁到 Edge runtime。
+- 不要在 route 中直接创建裸 `createServerClient()` 或绕过 `lib/supabase-auth.ts`。
+- 不要把异常 message、SQL 错误或本机路径原样回传给客户端。
+- 不要为图方便把前端所需字段之外的整包数据库对象直接返回。
