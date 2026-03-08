@@ -30,11 +30,38 @@ class _WorkflowConfig(Protocol):
     path: str
     repo_relative_path: str
     sha256: str
+    ksampler_node_id: str | None
+
+
+class _GenerationConfig(Protocol):
+    template: str
+    base_seed: int
+    negative_prompt: str | None
+    append_negative_prompt: str | None
+    width: int | None
+    height: int | None
+    batch_size: int | None
+    steps: int | None
+    cfg: float | None
+    denoise: float | None
+    sampler_name: str | None
+    scheduler: str | None
+
+
+class _SelectionConfig(Protocol):
+    x_limit: int | None
+    y_limit: int | None
+    x_indexes: list[int] | None
+    y_indexes: list[int] | None
 
 
 class _ModelConfig(Protocol):
     key: str
+    name: str
+    family: str
     links: dict[str, str | None]
+    description: dict[str, str]
+    tags: list[str]
 
 
 class _RunnerConfig(Protocol):
@@ -44,6 +71,8 @@ class _RunnerConfig(Protocol):
     prompts: _PromptsConfig
     workflow: _WorkflowConfig
     model: _ModelConfig
+    generation: _GenerationConfig
+    selection: _SelectionConfig
 
 
 class _RunnerConfigModule(Protocol):
@@ -109,6 +138,52 @@ def _write_assets(repo_root: Path) -> tuple[Path, Path, Path]:
     return x_path, y_path, workflow_path
 
 
+def _valid_config_text(*, schema_version: str = "image-run-config/v1") -> str:
+    return "\n".join(
+        [
+            f"schema_version: {schema_version}",
+            "model:",
+            "  key: nai-4-full",
+            "  name: NAI 4 Full",
+            "  family: novelai",
+            "  links:",
+            "    homepage: https://example.com/model",
+            "    huggingface: null",
+            "    civitai: null",
+            "  description:",
+            "    zh: 测试模型",
+            "    en: Test model",
+            "  tags:",
+            "    - anime",
+            "prompts:",
+            "  x_path: data/prompts/x.json",
+            "  y_path: data/prompts/y.yaml",
+            "workflow:",
+            "  path: data/workflows/example.json",
+            "  ksampler_node_id: '3'",
+            "generation:",
+            "  template: '{gender}{y}{quality}'",
+            "  base_seed: 123",
+            "  negative_prompt: bad,",
+            "  append_negative_prompt: nsfw, nipples,",
+            "  width: 832",
+            "  height: 1216",
+            "  batch_size: 1",
+            "  steps: 28",
+            "  cfg: 5.5",
+            "  denoise: 1.0",
+            "  sampler_name: euler",
+            "  scheduler: normal",
+            "selection:",
+            "  x_limit: 1",
+            "  y_limit: 2",
+            "  x_indexes: [0]",
+            "  y_indexes: [1]",
+            "",
+        ]
+    )
+
+
 def test_load_runner_config_happy_path_resolves_repo_relative_paths_and_hashes(
     tmp_path: Path,
 ) -> None:
@@ -116,52 +191,7 @@ def test_load_runner_config_happy_path_resolves_repo_relative_paths_and_hashes(
     x_path, y_path, workflow_path = _write_assets(tmp_path)
     config_path = tmp_path / "data/runs/example.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(
-        "\n".join(
-            [
-                "schema_version: image-run-config/v1",
-                "model:",
-                "  key: nai-4-full",
-                "  name: NAI 4 Full",
-                "  family: novelai",
-                "  links:",
-                "    homepage: https://example.com/model",
-                "    huggingface: null",
-                "    civitai: null",
-                "  description:",
-                "    zh: 测试模型",
-                "    en: Test model",
-                "  tags:",
-                "    - anime",
-                "prompts:",
-                "  x_path: data/prompts/x.json",
-                "  y_path: data/prompts/y.yaml",
-                "workflow:",
-                "  path: data/workflows/example.json",
-                "  ksampler_node_id: '3'",
-                "generation:",
-                "  template: '{gender}{y}{quality}'",
-                "  base_seed: 123",
-                "  negative_prompt: bad,",
-                "  append_negative_prompt: nsfw, nipples,",
-                "  width: 832",
-                "  height: 1216",
-                "  batch_size: 1",
-                "  steps: 28",
-                "  cfg: 5.5",
-                "  denoise: 1.0",
-                "  sampler_name: euler",
-                "  scheduler: normal",
-                "selection:",
-                "  x_limit: 1",
-                "  y_limit: 2",
-                "  x_indexes: [0]",
-                "  y_indexes: [1]",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
+    config_path.write_text(_valid_config_text(), encoding="utf-8")
 
     config = module.load_runner_config(str(config_path), repo_root=tmp_path)
 
@@ -177,12 +207,33 @@ def test_load_runner_config_happy_path_resolves_repo_relative_paths_and_hashes(
     assert Path(config.workflow.path) == workflow_path
     assert config.workflow.repo_relative_path == "data/workflows/example.json"
     assert config.workflow.sha256 == _sha256_file(workflow_path)
+    assert config.workflow.ksampler_node_id == "3"
     assert config.model.key == "nai-4-full"
+    assert config.model.name == "NAI 4 Full"
+    assert config.model.family == "novelai"
     assert config.model.links == {
         "homepage": "https://example.com/model",
         "huggingface": None,
         "civitai": None,
     }
+    assert config.model.description == {"zh": "测试模型", "en": "Test model"}
+    assert config.model.tags == ["anime"]
+    assert config.generation.template == "{gender}{y}{quality}"
+    assert config.generation.base_seed == 123
+    assert config.generation.negative_prompt == "bad,"
+    assert config.generation.append_negative_prompt == "nsfw, nipples,"
+    assert config.generation.width == 832
+    assert config.generation.height == 1216
+    assert config.generation.batch_size == 1
+    assert config.generation.steps == 28
+    assert config.generation.cfg == 5.5
+    assert config.generation.denoise == 1.0
+    assert config.generation.sampler_name == "euler"
+    assert config.generation.scheduler == "normal"
+    assert config.selection.x_limit == 1
+    assert config.selection.y_limit == 2
+    assert config.selection.x_indexes == [0]
+    assert config.selection.y_indexes == [1]
 
 
 def test_load_runner_config_rejects_unknown_key(tmp_path: Path) -> None:
@@ -205,8 +256,7 @@ def test_load_runner_config_rejects_invalid_schema_version(tmp_path: Path) -> No
     config_path = tmp_path / "data/runs/example.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
-        "schema_version: image-run-config/v999\n",
-        encoding="utf-8",
+        _valid_config_text(schema_version="image-run-config/v999"), encoding="utf-8"
     )
 
     with pytest.raises(ValueError, match="schema_version"):
@@ -266,6 +316,36 @@ def test_load_runner_config_rejects_repo_external_path(tmp_path: Path) -> None:
     )
 
     with pytest.raises(ValueError, match="repo-relative"):
+        module.load_runner_config(str(config_path), repo_root=tmp_path)
+
+
+def test_load_runner_config_rejects_absolute_asset_path_inside_repo(
+    tmp_path: Path,
+) -> None:
+    module = _import_runner_config_module()
+    x_path, _y_path, _workflow_path = _write_assets(tmp_path)
+    config_path = tmp_path / "data/runs/example.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        _valid_config_text().replace("data/prompts/x.json", str(x_path)),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="repo-relative"):
+        module.load_runner_config(str(config_path), repo_root=tmp_path)
+
+
+def test_load_runner_config_rejects_empty_model_key(tmp_path: Path) -> None:
+    module = _import_runner_config_module()
+    _ = _write_assets(tmp_path)
+    config_path = tmp_path / "data/runs/example.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        _valid_config_text().replace("  key: nai-4-full", "  key: ''"),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="model.key"):
         module.load_runner_config(str(config_path), repo_root=tmp_path)
 
 

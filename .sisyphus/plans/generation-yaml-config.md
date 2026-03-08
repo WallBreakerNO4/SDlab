@@ -137,7 +137,7 @@ Wave 2: 生成链路与下游收口（payload 快照、replay/retry、negative p
 
   **Commit**: NO | Message: `test(generation): 锁定 YAML 配置迁移契约` | Files: `tests/test_runner_config.py`, `tests/test_runner_dry_run.py`, `tests/test_main_entrypoint.py`, `tests/test_run_replay.py`, `tests/test_negative_prompt_append.py`
 
-- [ ] 2. 新增统一的 YAML 配置 schema、加载与路径校验层
+- [x] 2. 新增统一的 YAML 配置 schema、加载与路径校验层
 
   **What to do**: 新增独立配置模块，负责读取 `--config` 指向的 YAML，并输出强类型/结构化配置对象。Schema 固定为：`schema_version: image-run-config/v1`；`model` 节点含 `key`、`name`、`family`、`links`、`description`、`tags`，其中 `key`/`name`/`family` 为必填非空字符串，`links` 固定键为 `homepage`/`huggingface`/`civitai`（值可为 `null`），`description` 固定键为 `zh`/`en`（允许空字符串），`tags` 为字符串列表；`prompts` 节点含 `x_path`、`y_path`，均为必填 repo-relative 路径；`workflow` 节点含 `path`、`ksampler_node_id`，其中 `path` 为必填 repo-relative `.json` 路径、`ksampler_node_id` 可为 `null`；`generation` 节点含 `template`、`base_seed`、`negative_prompt`、`append_negative_prompt`、`width`、`height`、`batch_size`、`steps`、`cfg`、`denoise`、`sampler_name`、`scheduler`，其中 `template`、`base_seed`、`append_negative_prompt` 为必填键，`append_negative_prompt: null` 表示显式禁用追加，其余键可为 `null`；`selection` 节点含 `x_limit`、`y_limit`、`x_indexes`、`y_indexes`，键必须存在但值可为 `null`。路径只接受仓库内相对路径；prompt 资产允许 `.yaml`/`.yml`/`.json`，workflow 只接受 `.json`，且 fresh run（包括 dry-run）必须验证这些文件存在。加载器必须同时给出 repo-relative 原始引用、解析后的 `Path`、文件 sha256；未知 key、缺失必填、错误 schema version 直接报错。
   **Must NOT do**: 不要把 prompt 文件正文或 workflow JSON 原文读进配置快照；不要接受绝对路径或仓库外路径。
