@@ -21,11 +21,73 @@ def _write_png(path: Path, *, size: tuple[int, int] = (8, 6)) -> None:
     image.save(path, format="PNG")
 
 
+def _extended_run_json(
+    *, run_dir: Path, run_dir_value: str | None = None
+) -> dict[str, object]:
+    return {
+        "run_id": "test-run-id",
+        "run_dir": run_dir_value if run_dir_value is not None else str(run_dir),
+        "dry_run": False,
+        "config_schema_version": "image-run-config/v1",
+        "config_path": "data/runs/example.yaml",
+        "config_sha256": "deadbeef" * 8,
+        "model": {
+            "key": "chenkinnoob-xl-rf",
+            "name": "ChenkinNoob XL Rectified Flow",
+            "family": "stable-diffusion-xl",
+            "links": {
+                "homepage": None,
+                "huggingface": None,
+                "civitai": None,
+            },
+            "description": {
+                "zh": "示例配置",
+                "en": "Example config",
+            },
+            "tags": ["example", "sdxl"],
+        },
+        "config_snapshot": {
+            "prompts": {
+                "x_path": "data/prompts/X/common_prompts.yaml",
+                "y_path": "data/prompts/Y/300_NAI_Styles_Table-test.yaml",
+                "x_sha256": "a" * 64,
+                "y_sha256": "b" * 64,
+            },
+            "workflow": {
+                "path": "data/comfyui-flow/CKNOOBRF.json",
+                "sha256": "c" * 64,
+                "ksampler_node_id": "6",
+            },
+            "generation": {
+                "template": "{gender}{characters}{series}{rating}{y}{general}{quality}",
+                "base_seed": 123,
+                "negative_prompt": None,
+                "append_negative_prompt": "nsfw, nipples, pussy, nude,",
+                "width": 1024,
+                "height": 1536,
+                "batch_size": 1,
+                "steps": 28,
+                "cfg": 3.5,
+                "denoise": 1.0,
+                "sampler_name": "euler",
+                "scheduler": "simple",
+            },
+            "selection": {
+                "x_limit": None,
+                "y_limit": None,
+                "x_indexes": None,
+                "y_indexes": None,
+            },
+        },
+    }
+
+
 def _write_run_fixture(
     root: Path,
     *,
     run_name: str,
     use_multi_paths: bool = False,
+    run_json_run_dir: str | None = None,
 ) -> Path:
     run_dir = root / run_name
     images_dir = run_dir / "images"
@@ -53,11 +115,7 @@ def _write_run_fixture(
 
     (run_dir / "run.json").write_text(
         json.dumps(
-            {
-                "run_id": "test-run-id",
-                "run_dir": str(run_dir),
-                "dry_run": False,
-            },
+            _extended_run_json(run_dir=run_dir, run_dir_value=run_json_run_dir),
             ensure_ascii=False,
         ),
         encoding="utf-8",
@@ -196,6 +254,32 @@ def test_cli_run_dir_can_be_name_when_run_root_is_provided(
     assert exit_code == 0
     payload = _read_stdout_json(capsys)
     assert payload.get("run_dirs") == ["run-20260221T140000Z"]
+
+
+def test_cli_dry_run_accepts_extended_run_json_with_run_dir_fallback(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_root = tmp_path / "outputs"
+    run_dir = _write_run_fixture(
+        run_root,
+        run_name="custom-folder-name",
+        run_json_run_dir="comfyui_api_outputs/run-20260221T190000Z",
+    )
+
+    exit_code = main(["--dry-run", "--run-dir", str(run_dir)])
+
+    assert exit_code == 0
+    payload = _read_stdout_json(capsys)
+    assert payload.get("run_dirs") == ["run-20260221T190000Z"]
+    planned_uploads = payload.get("planned_uploads")
+    assert isinstance(planned_uploads, list)
+    assert planned_uploads
+    assert all(
+        "run-20260221T190000Z" in str(item.get("key"))
+        for item in planned_uploads
+        if isinstance(item, dict)
+    )
 
 
 def test_cli_dry_run_writes_intermediate_variants_to_env_dir(

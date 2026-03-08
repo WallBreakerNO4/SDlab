@@ -1,0 +1,40 @@
+schema_version: image-run-config/v1
+model:
+  key: chenkinnoob-xl-rf
+  name: ChenkinNoob XL Rectified Flow
+  family: stable-diffusion-xl
+  links:
+    homepage: null
+    huggingface: null
+    civitai: null
+  description:
+    zh: 使用仓库内置 ComfyUI workflow 与示例 prompts 的可运行配置
+    en: Runnable example config using the repository workflow and sample prompts
+  tags:
+    - sdxl
+    - rectified-flow
+    - example
+prompts:
+  x_path: data/prompts/X/common_prompts.yaml
+  y_path: data/prompts/Y/300_NAI_Styles_Table-test.yaml
+workflow:
+  path: data/comfyui-flow/CKNOOBRF.json
+  ksampler_node_id: "6"
+generation:
+  template: "{gender}{characters}{series}{rating}{y}{general}{quality}"
+  base_seed: 123
+  negative_prompt: null
+  append_negative_prompt: "nsfw, nipples, pussy, nude,"
+  width: 1024
+  height: 1536
+  batch_size: 1
+  steps: 28
+  cfg: 3.5
+  denoise: 1.0
+  sampler_name: euler
+  scheduler: simple
+selection:
+  x_limit: null
+  y_limit: null
+  x_indexes: null
+  y_indexes: null

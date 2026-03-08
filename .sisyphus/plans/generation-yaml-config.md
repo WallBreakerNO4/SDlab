@@ -346,7 +346,7 @@ Wave 2: 生成链路与下游收口（payload 快照、replay/retry、negative p
 
   **Commit**: NO | Message: `refactor(generation): 将 negative prompt 追加迁入 YAML 配置` | Files: `scripts/generation/runner_records.py`, `scripts/generation/comfyui_part1_generate.py`, `scripts/generation/runner_env.py`, `tests/test_negative_prompt_append.py`, `tests/test_runner_dry_run.py`
 
-- [ ] 7. 收口下游兼容、示例配置与全量回归
+- [x] 7. 收口下游兼容、示例配置与全量回归
 
   **What to do**: 补齐不直接属于生成主链、但会被本次改动波及的内容。新增一个可运行的示例配置文件，固定路径为 `data/runs/example.yaml`，内容必须展示完整 schema、引用现有 prompt/workflow 资产，并包含模型展示元数据；该文件既是未来手工编辑模板，也是测试可复用 fixture。同时在实现中把“推荐存放位置”统一写死为 `data/runs/`，作为 git-tracked 输入资产目录，而不是运行输出目录。更新 `.env.example`，只保留 5 个 runtime env，并标明 fresh run 业务参数改由 `--config` 提供。检查 `scripts/r2_upload/upload_io.py`、`scripts/r2_upload/upload_discovery.py`、`scripts/r2_upload/upload_planner.py`、`scripts/r2_upload/supabase_writer.py` 是否需要最小兼容调整；若无需改实现，也必须补测试证明扩展后的 `run.json` 不会破坏上传链路。
   **Must NOT do**: 不要新增网站页面或数据库表；不要让示例 config 偏离最终 schema。
