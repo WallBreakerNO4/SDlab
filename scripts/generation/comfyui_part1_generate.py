@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 import uuid
 from pathlib import Path
@@ -40,9 +41,7 @@ from scripts.generation.run_replay import (  # noqa: E402
 from scripts.generation.runner_env import (  # noqa: E402
     _autoload_dotenv,
     _env_append_negative_prompt,
-    _env_bool,
     _env_float,
-    _env_optional_float,
     _env_optional_int,
     _env_str,
     _resolve_append_negative_prompt,
@@ -115,6 +114,7 @@ from scripts.generation.runner_retry import (  # noqa: E402
     _parse_retry_error_codes,
     _validate_retry_failed_cells_consistency,
 )
+from scripts.generation.runner_config import load_runner_config  # noqa: E402
 from scripts.generation.workflow_patch import (  # noqa: E402
     WorkflowDict,
     WorkflowOverrides,
@@ -130,6 +130,29 @@ DEFAULT_REQUEST_TIMEOUT_S = 30.0
 DEFAULT_JOB_TIMEOUT_S = 600.0
 LOG = logging.getLogger(__name__)
 
+_DEPRECATED_BUSINESS_ENV_KEYS = (
+    "COMFYUI_X_JSON",
+    "COMFYUI_Y_JSON",
+    "COMFYUI_TEMPLATE",
+    "COMFYUI_BASE_SEED",
+    "COMFYUI_WORKFLOW_JSON",
+    "COMFYUI_KSAMPLER_NODE_ID",
+    "COMFYUI_X_LIMIT",
+    "COMFYUI_Y_LIMIT",
+    "COMFYUI_X_INDEXES",
+    "COMFYUI_Y_INDEXES",
+    "COMFYUI_NEGATIVE_PROMPT",
+    "COMFYUI_APPEND_NEGATIVE_PROMPT",
+    "COMFYUI_WIDTH",
+    "COMFYUI_HEIGHT",
+    "COMFYUI_BATCH_SIZE",
+    "COMFYUI_STEPS",
+    "COMFYUI_CFG",
+    "COMFYUI_DENOISE",
+    "COMFYUI_SAMPLER_NAME",
+    "COMFYUI_SCHEDULER",
+)
+
 ALLOWED_TEMPLATE_KEYS = _PROMPT_ALLOWED_TEMPLATE_KEYS
 TEMPLATE_TOKEN_RE = _PROMPT_TEMPLATE_TOKEN_RE
 WorkflowContext = _RunnerWorkflowContext
@@ -140,71 +163,26 @@ def build_parser() -> argparse.ArgumentParser:
         description="遍历 X/Y prompts 网格，调用 ComfyUI 生图并落盘 metadata。"
     )
 
-    parser.add_argument(
-        "--x-json", default=_env_str("COMFYUI_X_JSON") or DEFAULT_X_JSON
-    )
-    parser.add_argument(
-        "--y-json", default=_env_str("COMFYUI_Y_JSON") or DEFAULT_Y_JSON
-    )
-    parser.add_argument(
-        "--template",
-        default=_env_str("COMFYUI_TEMPLATE") or DEFAULT_TEMPLATE,
-    )
-    parser.add_argument(
-        "--base-seed",
-        type=int,
-        default=_env_optional_int("COMFYUI_BASE_SEED") or 0,
-    )
-    parser.add_argument(
-        "--workflow-json",
-        default=_env_str("COMFYUI_WORKFLOW_JSON") or DEFAULT_WORKFLOW_JSON,
-    )
-    parser.add_argument(
-        "--ksampler-node-id",
-        default=_env_str("COMFYUI_KSAMPLER_NODE_ID"),
-    )
-
-    parser.add_argument(
-        "--x-limit",
-        type=int,
-        default=_env_optional_int("COMFYUI_X_LIMIT"),
-    )
-    parser.add_argument(
-        "--y-limit",
-        type=int,
-        default=_env_optional_int("COMFYUI_Y_LIMIT"),
-    )
-    parser.add_argument(
-        "--x-indexes",
-        default=_env_str("COMFYUI_X_INDEXES"),
-    )
-    parser.add_argument(
-        "--y-indexes",
-        default=_env_str("COMFYUI_Y_INDEXES"),
-    )
-
-    parser.add_argument(
-        "--run-dir",
-        default=_env_str("COMFYUI_RUN_DIR"),
-    )
+    parser.add_argument("--config")
+    parser.add_argument("--run-dir")
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        default=_env_bool("COMFYUI_DRY_RUN", default=False),
+        default=False,
     )
     parser.add_argument(
         "--retry-failed",
         action="store_true",
-        default=_env_bool("COMFYUI_RETRY_FAILED", default=False),
+        default=False,
     )
     parser.add_argument(
         "--retry-incomplete",
         action="store_true",
-        default=_env_bool("COMFYUI_RETRY_INCOMPLETE", default=False),
+        default=False,
     )
     parser.add_argument(
         "--retry-error-code",
-        default=_env_str("COMFYUI_RETRY_ERROR_CODE"),
+        default=None,
     )
 
     parser.add_argument(
@@ -226,29 +204,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=_env_optional_int("COMFYUI_CONCURRENCY") or 1,
     )
-    parser.add_argument("--client-id", default=_env_str("COMFYUI_CLIENT_ID"))
-
-    parser.add_argument(
-        "--negative-prompt",
-        default=_env_str("COMFYUI_NEGATIVE_PROMPT"),
-    )
-    parser.add_argument("--width", type=int, default=_env_optional_int("COMFYUI_WIDTH"))
-    parser.add_argument(
-        "--height", type=int, default=_env_optional_int("COMFYUI_HEIGHT")
-    )
-    parser.add_argument(
-        "--batch-size", type=int, default=_env_optional_int("COMFYUI_BATCH_SIZE")
-    )
-    parser.add_argument("--steps", type=int, default=_env_optional_int("COMFYUI_STEPS"))
-    parser.add_argument("--cfg", type=float, default=_env_optional_float("COMFYUI_CFG"))
-    parser.add_argument(
-        "--denoise", type=float, default=_env_optional_float("COMFYUI_DENOISE")
-    )
-    parser.add_argument(
-        "--sampler-name",
-        default=_env_str("COMFYUI_SAMPLER_NAME"),
-    )
-    parser.add_argument("--scheduler", default=_env_str("COMFYUI_SCHEDULER"))
+    parser.add_argument("--client-id")
 
     return parser
 
@@ -266,6 +222,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if _is_retry_mode(args):
             return run_retry(args)
+        _apply_fresh_run_config(args)
         return run(args)
     except ValueError as exc:
         print(f"参数错误: {exc}", file=sys.stderr)
@@ -277,6 +234,53 @@ def main(argv: list[str] | None = None) -> int:
 
 def _is_retry_mode(args: argparse.Namespace) -> bool:
     return bool(args.retry_failed or args.retry_incomplete)
+
+
+def _apply_fresh_run_config(args: argparse.Namespace) -> None:
+    if not args.config:
+        raise ValueError("fresh-run 模式必须提供 --config")
+
+    deprecated_env = sorted(
+        key
+        for key in _DEPRECATED_BUSINESS_ENV_KEYS
+        if os.getenv(key) is not None and (os.getenv(key) or "").strip() != ""
+    )
+    if deprecated_env:
+        keys = ", ".join(deprecated_env)
+        raise ValueError(f"使用 --config 时不允许设置已弃用业务环境变量: {keys}")
+
+    config = load_runner_config(args.config, repo_root=Path.cwd())
+
+    args.x_json = config.prompts.x.path
+    args.y_json = config.prompts.y.path
+    args.template = config.generation.template
+    args.base_seed = config.generation.base_seed
+    args.workflow_json = config.workflow.path
+    args.ksampler_node_id = config.workflow.ksampler_node_id
+
+    args.negative_prompt = config.generation.negative_prompt
+    args.append_negative_prompt = config.generation.append_negative_prompt
+    args.width = config.generation.width
+    args.height = config.generation.height
+    args.batch_size = config.generation.batch_size
+    args.steps = config.generation.steps
+    args.cfg = config.generation.cfg
+    args.denoise = config.generation.denoise
+    args.sampler_name = config.generation.sampler_name
+    args.scheduler = config.generation.scheduler
+
+    args.x_limit = config.selection.x_limit
+    args.y_limit = config.selection.y_limit
+    args.x_indexes = (
+        ",".join(str(item) for item in config.selection.x_indexes)
+        if config.selection.x_indexes is not None
+        else None
+    )
+    args.y_indexes = (
+        ",".join(str(item) for item in config.selection.y_indexes)
+        if config.selection.y_indexes is not None
+        else None
+    )
 
 
 def run(args: argparse.Namespace) -> int:
@@ -371,15 +375,14 @@ def run(args: argparse.Namespace) -> int:
                         prev,
                         increment=increment,
                     ),
-                    should_resume_skip=lambda existing,
-                    expected_prompt_hash,
-                    expected_seed,
-                    expected_workflow_hash: _should_resume_skip(
-                        existing=existing,
-                        run_dir=run_artifacts.run_dir,
-                        expected_prompt_hash=expected_prompt_hash,
-                        expected_seed=expected_seed,
-                        expected_workflow_hash=expected_workflow_hash,
+                    should_resume_skip=lambda existing, expected_prompt_hash, expected_seed, expected_workflow_hash: (
+                        _should_resume_skip(
+                            existing=existing,
+                            run_dir=run_artifacts.run_dir,
+                            expected_prompt_hash=expected_prompt_hash,
+                            expected_seed=expected_seed,
+                            expected_workflow_hash=expected_workflow_hash,
+                        )
                     ),
                     build_base_metadata_record=_build_base_metadata_record,
                     extract_local_image_path=_extract_local_image_path,
@@ -517,10 +520,9 @@ def run_retry(args: argparse.Namespace) -> int:
                         prev,
                         increment=increment,
                     ),
-                    should_resume_skip=lambda existing,
-                    expected_prompt_hash,
-                    expected_seed,
-                    expected_workflow_hash: False,
+                    should_resume_skip=lambda existing, expected_prompt_hash, expected_seed, expected_workflow_hash: (
+                        False
+                    ),
                     build_base_metadata_record=_build_base_metadata_record,
                     extract_local_image_path=_extract_local_image_path,
                     extract_local_image_paths=_extract_local_image_paths,
@@ -533,11 +535,7 @@ def run_retry(args: argparse.Namespace) -> int:
                     get_history_item=comfy_get_history_item,
                     download_image_to_path=comfy_download_image_to_path,
                     cell_pairs=cell_pairs,
-                    save_image_prefix_builder=lambda run_id,
-                    x_index,
-                    y_index,
-                    seed,
-                    prompt_hash: (
+                    save_image_prefix_builder=lambda run_id, x_index, y_index, seed, prompt_hash: (
                         f"{run_artifacts.run_dir.name}/"
                         f"retry-x{x_index}-y{y_index}-s{seed}-{prompt_hash[:8]}"
                     ),
