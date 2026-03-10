@@ -53,11 +53,11 @@ alter table public.runs enable row level security;
 alter table public.images enable row level security;
 alter table public.image_variants enable row level security;
 
-create policy anon_select_normal_images
+create policy anon_select_all_images
   on public.images
   for select
   to anon
-  using (category = 'normal');
+  using (true);
 
 create policy authenticated_select_all_images
   on public.images
@@ -65,19 +65,11 @@ create policy authenticated_select_all_images
   to authenticated
   using (true);
 
-create policy anon_select_public_variants_for_normal_images
+create policy anon_select_public_variants
   on public.image_variants
   for select
   to anon
-  using (
-    bucket = 'public'
-    and exists (
-      select 1
-      from public.images
-      where images.id = image_variants.image_id
-        and images.category = 'normal'
-    )
-  );
+  using (bucket = 'public');
 
 create policy authenticated_select_all_image_variants
   on public.image_variants
@@ -85,18 +77,11 @@ create policy authenticated_select_all_image_variants
   to authenticated
   using (true);
 
-create policy anon_select_runs_with_normal_images
+create policy anon_select_all_runs
   on public.runs
   for select
   to anon
-  using (
-    exists (
-      select 1
-      from public.images
-      where images.run_id = runs.id
-        and images.category = 'normal'
-    )
-  );
+  using (true);
 
 create policy authenticated_select_all_runs
   on public.runs
