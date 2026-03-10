@@ -83,10 +83,13 @@ def _clear_bucket(bucket_name: str) -> int:
     return deleted_total
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    _ = argv
     try:
         _autoload_dotenv()
-        bucket_name = input("请输入要清空的 R2 桶名: ").strip()
+        bucket_name = os.getenv("SDSLAB_R2_CLEAR_BUCKET_NAME", "").strip()
+        if not bucket_name:
+            bucket_name = input("请输入要清空的 R2 桶名: ").strip()
         if not bucket_name:
             print("错误: 桶名不能为空")
             return 2
