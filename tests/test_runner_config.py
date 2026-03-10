@@ -61,7 +61,6 @@ class _ModelConfig(Protocol):
     family: str
     links: dict[str, str | None]
     description: dict[str, str]
-    tags: list[str]
 
 
 class _RunnerConfig(Protocol):
@@ -153,8 +152,6 @@ def _valid_config_text(*, schema_version: str = "image-run-config/v1") -> str:
             "  description:",
             "    zh: 测试模型",
             "    en: Test model",
-            "  tags:",
-            "    - anime",
             "prompts:",
             "  x_path: data/prompts/x.json",
             "  y_path: data/prompts/y.yaml",
@@ -217,7 +214,6 @@ def test_load_runner_config_happy_path_resolves_repo_relative_paths_and_hashes(
         "civitai": None,
     }
     assert config.model.description == {"zh": "测试模型", "en": "Test model"}
-    assert config.model.tags == ["anime"]
     assert config.generation.template == "{gender}{y}{quality}"
     assert config.generation.base_seed == 123
     assert config.generation.negative_prompt == "bad,"
@@ -284,7 +280,6 @@ def test_load_runner_config_rejects_repo_external_path(tmp_path: Path) -> None:
                 "  description:",
                 "    zh: ''",
                 "    en: ''",
-                "  tags: []",
                 "prompts:",
                 f"  x_path: {outside}",
                 "  y_path: data/prompts/y.yaml",
@@ -387,7 +382,6 @@ def test_load_runner_config_exposes_compact_model_snapshot_only(tmp_path: Path) 
                 "  description:",
                 "    zh: 测试",
                 "    en: Test",
-                "  tags: [anime]",
                 "prompts:",
                 "  x_path: data/prompts/x.json",
                 "  y_path: data/prompts/y.yaml",

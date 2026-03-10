@@ -56,7 +56,6 @@ def _base_run_payload(x_path: Path, y_path: Path) -> dict[str, object]:
                 "civitai": None,
             },
             "description": {"zh": "测试模型", "en": "Test model"},
-            "tags": ["anime", "full"],
         },
         "config_snapshot": {
             "prompts": {

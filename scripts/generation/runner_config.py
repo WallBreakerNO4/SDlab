@@ -19,7 +19,7 @@ _ROOT_KEYS = {
     "generation",
     "selection",
 }
-_MODEL_KEYS = {"key", "name", "family", "links", "description", "tags"}
+_MODEL_KEYS = {"key", "name", "family", "links", "description"}
 _MODEL_LINK_KEYS = {"homepage", "huggingface", "civitai"}
 _MODEL_DESCRIPTION_KEYS = {"zh", "en"}
 _PROMPTS_KEYS = {"x_path", "y_path"}
@@ -57,7 +57,6 @@ class ModelConfig:
     family: str
     links: dict[str, str | None]
     description: dict[str, str]
-    tags: list[str]
 
 
 @dataclass(frozen=True)
@@ -188,17 +187,6 @@ def _optional_int_list(value: object, field_name: str) -> list[int] | None:
     return items
 
 
-def _require_str_list(value: object, field_name: str) -> list[str]:
-    if not isinstance(value, list):
-        raise ValueError(f"字段 {field_name} 必须是字符串数组")
-
-    items: list[str] = []
-    values = cast(list[object], value)
-    for index, item in enumerate(values):
-        items.append(_require_str(item, f"{field_name}[{index}]"))
-    return items
-
-
 def _resolve_repo_path(
     raw_path: object,
     *,
@@ -266,7 +254,6 @@ def _load_model(payload: object) -> ModelConfig:
         family=_require_non_empty_str(mapping["family"], "model.family"),
         links=links,
         description=description,
-        tags=_require_str_list(mapping["tags"], "model.tags"),
     )
 
 

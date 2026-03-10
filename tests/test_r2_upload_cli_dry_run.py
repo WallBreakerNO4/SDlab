@@ -44,7 +44,6 @@ def _extended_run_json(
                 "zh": "示例配置",
                 "en": "Example config",
             },
-            "tags": ["example", "sdxl"],
         },
         "config_snapshot": {
             "prompts": {

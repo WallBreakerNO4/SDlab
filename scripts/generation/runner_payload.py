@@ -114,7 +114,6 @@ def _build_model_snapshot(args: argparse.Namespace) -> dict[str, object] | None:
         "family": model.family,
         "links": dict(model.links),
         "description": dict(model.description),
-        "tags": list(model.tags),
     }
 
 

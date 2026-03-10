@@ -140,7 +140,6 @@ def _fake_runner_config(
                 "civitai": None,
             },
             description={"zh": "测试模型", "en": "Test model"},
-            tags=["anime", "full"],
         ),
         prompts=SimpleNamespace(
             x=SimpleNamespace(
@@ -266,7 +265,6 @@ def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
             "civitai": None,
         },
         "description": {"zh": "测试模型", "en": "Test model"},
-        "tags": ["anime", "full"],
     }
     assert run_payload["config_snapshot"] == {
         "prompts": {
