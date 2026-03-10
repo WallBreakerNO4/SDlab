@@ -35,7 +35,7 @@ export async function GET(): Promise<Response> {
     const supabase = await createSupabaseAuthClient()
     const { data, error } = await supabase
       .from("runs")
-      .select("run_dir, created_at, run_json")
+      .select("run_id, run_dir, created_at, x_count, y_count, total_cells, run_json")
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -68,12 +68,12 @@ export async function GET(): Promise<Response> {
         getNonNegativeInteger(selection?.total_cells) ?? x_count * y_count
 
       return {
-        run_id: runIdFromJson ?? row.run_dir,
+        run_id: getNonEmptyString(row.run_id) ?? runIdFromJson ?? row.run_dir,
         created_at: row.created_at,
         run_dir: row.run_dir,
-        x_count,
-        y_count,
-        total_cells,
+        x_count: getNonNegativeInteger(row.x_count) ?? x_count,
+        y_count: getNonNegativeInteger(row.y_count) ?? y_count,
+        total_cells: getNonNegativeInteger(row.total_cells) ?? total_cells,
       }
     })
 

@@ -4,8 +4,6 @@ import { createSupabaseAuthClient } from "@/lib/supabase-auth"
 import type {
   ImageCategory,
   ImageVariantName,
-  JsonObject,
-  JsonValue,
   R2Bucket,
 } from "@/lib/supabase-types"
 
@@ -32,7 +30,10 @@ type DbImageRow = {
   width: number | null
   height: number | null
   blurhash: string | null
-  metadata: JsonValue
+  seed: number | string | null
+  prompt_hash: string | null
+  positive_prompt: string | null
+  y_value: string | null
   image_variants: DbImageVariantRow[] | null
 }
 
@@ -66,21 +67,10 @@ type RowCell = {
   items: RowItem[]
 }
 
-function asJsonObject(value: JsonValue): JsonObject | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return null
-  }
-  return value as JsonObject
-}
-
 function getNonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") return null
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : null
-}
-
-function getFiniteNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null
 }
 
 function parseNonNegativeInt(raw: string | null): number | null {
@@ -92,17 +82,21 @@ function parseNonNegativeInt(raw: string | null): number | null {
   return n
 }
 
-function buildMeta(metadata: JsonValue): RowMeta {
-  const obj = asJsonObject(metadata)
-  if (!obj) {
-    return { seed: null, prompt_hash: null, positive_prompt: null, y_value: null }
+function parseSeed(value: number | string | null): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string" && /^-?\d+$/.test(value.trim())) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
   }
+  return null
+}
 
+function buildMeta(image: DbImageRow): RowMeta {
   return {
-    seed: getFiniteNumber(obj.seed),
-    prompt_hash: getNonEmptyString(obj.prompt_hash),
-    positive_prompt: getNonEmptyString(obj.positive_prompt),
-    y_value: getNonEmptyString(obj.y_value),
+    seed: parseSeed(image.seed),
+    prompt_hash: getNonEmptyString(image.prompt_hash),
+    positive_prompt: getNonEmptyString(image.positive_prompt),
+    y_value: getNonEmptyString(image.y_value),
   }
 }
 
@@ -155,7 +149,7 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
     const { data: imagesData, error: imagesError } = await supabase
       .from("images")
       .select(
-        "x_index,y_index,batch_index,category,width,height,blurhash,metadata,image_variants(variant,bucket,r2_key,content_type,width,height)",
+        "x_index,y_index,batch_index,category,width,height,blurhash,seed,prompt_hash,positive_prompt,y_value,image_variants(variant,bucket,r2_key,content_type,width,height)",
       )
       .eq("run_id", runId)
       .eq("y_index", yIndex)
@@ -194,7 +188,7 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
         applyVariantUrl(urlsAcc, v.variant, urlValue)
       }
 
-      const meta = buildMeta(image.metadata)
+      const meta = buildMeta(image)
 
       const item: RowItem = {
         batch_index: image.batch_index,

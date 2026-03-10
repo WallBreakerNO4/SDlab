@@ -40,7 +40,7 @@ export async function GET(
     const supabase = await createSupabaseAuthClient()
     const { data, error } = await supabase
       .from("runs")
-      .select("id, run_dir, run_json")
+      .select("id, run_dir, x_columns, y_indexes, run_json")
       .eq("run_dir", runDir)
       .maybeSingle()
     if (error) {
@@ -68,8 +68,8 @@ export async function GET(
       )
     }
 
-    const xColumnsRaw = selection.x_columns
-    const yIndexesRaw = selection.y_indexes
+    const xColumnsRaw = Array.isArray(row.x_columns) ? row.x_columns : selection.x_columns
+    const yIndexesRaw = Array.isArray(row.y_indexes) ? row.y_indexes : selection.y_indexes
 
     const x_columns = Array.isArray(xColumnsRaw)
       ? xColumnsRaw

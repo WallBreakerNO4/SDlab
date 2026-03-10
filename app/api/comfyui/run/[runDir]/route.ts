@@ -38,7 +38,7 @@ export async function GET(
     const supabase = await createSupabaseAuthClient()
     const { data, error } = await supabase
       .from("runs")
-      .select("run_dir, created_at, run_json")
+      .select("run_id, run_dir, created_at, x_columns, y_indexes, x_count, y_count, total_cells, run_json")
       .eq("run_dir", runDir)
       .maybeSingle()
 
@@ -57,11 +57,11 @@ export async function GET(
     }
 
     const runJson = asJsonObject(row.run_json)
-    const runId = runJson ? getNonEmptyString(runJson.run_id) : null
+    const runId = getNonEmptyString(row.run_id) ?? (runJson ? getNonEmptyString(runJson.run_id) : null)
     const selection = runJson ? asJsonObject(runJson.selection as JsonValue) : null
 
-    const xColumnsRaw = selection?.x_columns
-    const yIndexesRaw = selection?.y_indexes
+    const xColumnsRaw = Array.isArray(row.x_columns) ? row.x_columns : selection?.x_columns
+    const yIndexesRaw = Array.isArray(row.y_indexes) ? row.y_indexes : selection?.y_indexes
 
     const x_columns: JsonObject[] = Array.isArray(xColumnsRaw)
       ? xColumnsRaw
@@ -73,8 +73,9 @@ export async function GET(
       ? yIndexesRaw.filter((item): item is number => typeof item === "number")
       : []
 
+    const totalCellsFromRow = getNumber(row.total_cells)
     const totalCellsFromJson = getNumber(selection?.total_cells)
-    const total_cells = totalCellsFromJson ?? x_columns.length * y_indexes.length
+    const total_cells = totalCellsFromRow ?? totalCellsFromJson ?? x_columns.length * y_indexes.length
 
     if (!runId) {
       return Response.json(
