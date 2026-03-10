@@ -3,7 +3,6 @@ import { privateObjectUrl, publicObjectUrl } from "@/lib/r2-url"
 import { createSupabaseAuthClient } from "@/lib/supabase-auth"
 import type {
   ImageCategory,
-  ImageVariantName,
   R2Bucket,
 } from "@/lib/supabase-types"
 
@@ -13,16 +12,8 @@ type RouteContext = {
   params: Promise<{ runDir: string }>
 }
 
-type DbImageVariantRow = {
-  variant: ImageVariantName
-  bucket: R2Bucket
-  r2_key: string
-  content_type: string
-  width: number | null
-  height: number | null
-}
-
 type DbImageRow = {
+  run_dir: string
   x_index: number
   y_index: number
   batch_index: number
@@ -34,7 +25,16 @@ type DbImageRow = {
   prompt_hash: string | null
   positive_prompt: string | null
   y_value: string | null
-  image_variants: DbImageVariantRow[] | null
+  original_bucket: R2Bucket | null
+  original_r2_key: string | null
+  thumb_webp_bucket: R2Bucket | null
+  thumb_webp_r2_key: string | null
+  thumb_avif_bucket: R2Bucket | null
+  thumb_avif_r2_key: string | null
+  display_webp_bucket: R2Bucket | null
+  display_webp_r2_key: string | null
+  display_avif_bucket: R2Bucket | null
+  display_avif_r2_key: string | null
 }
 
 type RowMeta = {
@@ -104,15 +104,9 @@ function urlFromVariant(bucket: R2Bucket, r2Key: string): string {
   return bucket === "public" ? publicObjectUrl(r2Key) : privateObjectUrl(r2Key)
 }
 
-function applyVariantUrl(
-  acc: { thumb: VariantUrls; display: VariantUrls },
-  variant: ImageVariantName,
-  url: string,
-): void {
-  if (variant === "thumb_webp") acc.thumb.webp = url
-  if (variant === "thumb_avif") acc.thumb.avif = url
-  if (variant === "display_webp") acc.display.webp = url
-  if (variant === "display_avif") acc.display.avif = url
+function nullableUrl(bucket: R2Bucket | null, r2Key: string | null): string | null {
+  if (!bucket || !r2Key) return null
+  return urlFromVariant(bucket, r2Key)
 }
 
 export async function GET(request: Request, context: RouteContext): Promise<Response> {
@@ -130,28 +124,12 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
 
     const supabase = await createSupabaseAuthClient()
 
-    const { data: runRow, error: runError } = await supabase
-      .from("runs")
-      .select("id")
-      .eq("run_dir", runDir)
-      .maybeSingle()
-
-    if (runError) {
-      return Response.json({ error: "Failed to load run row" }, { status: 500 })
-    }
-
-    const rawRunId = (runRow as { id?: unknown } | null)?.id
-    const runId = typeof rawRunId === "string" ? rawRunId : null
-    if (!runId) {
-      return Response.json({ error: "Run not found" }, { status: 404 })
-    }
-
     const { data: imagesData, error: imagesError } = await supabase
-      .from("images")
+      .from("comfyui_row_items")
       .select(
-        "x_index,y_index,batch_index,category,width,height,blurhash,seed,prompt_hash,positive_prompt,y_value,image_variants(variant,bucket,r2_key,content_type,width,height)",
+        "run_dir,x_index,y_index,batch_index,category,width,height,blurhash,seed,prompt_hash,positive_prompt,y_value,original_bucket,original_r2_key,thumb_webp_bucket,thumb_webp_r2_key,thumb_avif_bucket,thumb_avif_r2_key,display_webp_bucket,display_webp_r2_key,display_avif_bucket,display_avif_r2_key",
       )
-      .eq("run_id", runId)
+      .eq("run_dir", runDir)
       .eq("y_index", yIndex)
       .order("x_index", { ascending: true })
       .order("batch_index", { ascending: true })
@@ -161,34 +139,41 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
     }
 
     const images = (imagesData ?? []) as DbImageRow[]
+    if (images.length === 0) {
+      const { data: runRow, error: runError } = await supabase
+        .from("runs")
+        .select("run_dir")
+        .eq("run_dir", runDir)
+        .maybeSingle()
+
+      if (runError) {
+        return Response.json({ error: "Failed to load run row" }, { status: 500 })
+      }
+
+      if (!runRow) {
+        return Response.json({ error: "Run not found" }, { status: 404 })
+      }
+
+      return Response.json({ run_dir: runDir, y_index: yIndex, cells: [] })
+    }
 
     const byXIndex = new Map<number, RowCell>()
 
     for (const image of images) {
-      const variants = Array.isArray(image.image_variants) ? image.image_variants : []
-
-      const urlsAcc = { thumb: {} as VariantUrls, display: {} as VariantUrls }
-      let originalUrl: string | null = null
-      for (const v of variants) {
-        if (v.variant === "original_png") {
-          originalUrl = urlFromVariant(v.bucket, v.r2_key)
-          continue
-        }
-
-        if (
-          v.variant !== "thumb_webp" &&
-          v.variant !== "thumb_avif" &&
-          v.variant !== "display_webp" &&
-          v.variant !== "display_avif"
-        ) {
-          continue
-        }
-
-        const urlValue = urlFromVariant(v.bucket, v.r2_key)
-        applyVariantUrl(urlsAcc, v.variant, urlValue)
-      }
-
       const meta = buildMeta(image)
+
+      const thumb: VariantUrls = {}
+      const display: VariantUrls = {}
+
+      const thumbWebp = nullableUrl(image.thumb_webp_bucket, image.thumb_webp_r2_key)
+      const thumbAvif = nullableUrl(image.thumb_avif_bucket, image.thumb_avif_r2_key)
+      const displayWebp = nullableUrl(image.display_webp_bucket, image.display_webp_r2_key)
+      const displayAvif = nullableUrl(image.display_avif_bucket, image.display_avif_r2_key)
+
+      if (thumbWebp) thumb.webp = thumbWebp
+      if (thumbAvif) thumb.avif = thumbAvif
+      if (displayWebp) display.webp = displayWebp
+      if (displayAvif) display.avif = displayAvif
 
       const item: RowItem = {
         batch_index: image.batch_index,
@@ -197,9 +182,9 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
         height: image.height,
         blurhash: image.blurhash,
         meta,
-        original: originalUrl,
-        thumb: Object.keys(urlsAcc.thumb).length > 0 ? urlsAcc.thumb : null,
-        display: Object.keys(urlsAcc.display).length > 0 ? urlsAcc.display : null,
+        original: nullableUrl(image.original_bucket, image.original_r2_key),
+        thumb: Object.keys(thumb).length > 0 ? thumb : null,
+        display: Object.keys(display).length > 0 ? display : null,
       }
 
       const existing = byXIndex.get(image.x_index)
