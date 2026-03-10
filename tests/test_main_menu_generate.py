@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import sys
 from pathlib import Path
 
@@ -13,32 +14,54 @@ from scripts.cli.io import MenuIO
 from scripts.cli.menu import run_menu
 
 
-def _build_menu_io(
-    steps: list[str],
-    events: list[tuple[str, object]],
-) -> MenuIO:
-    iterator = iter(steps)
+class _FakePrompt:
+    def __init__(self, value: object) -> None:
+        self._value = value
 
-    def _input(_prompt: str = "") -> str:
-        return next(iterator)
-
-    def _print(message: str) -> None:
-        events.append(("print", message))
-
-    return MenuIO(input_func=_input, print_func=_print)
+    def ask(self) -> object:
+        if isinstance(self._value, BaseException):
+            raise self._value
+        return self._value
 
 
-def _printed_messages(events: list[tuple[str, object]]) -> list[str]:
-    messages: list[str] = []
-    for kind, payload in events:
-        if kind != "print":
-            continue
-        if isinstance(payload, str):
-            messages.append(payload)
-    return messages
+@dataclass
+class _FakeChoice:
+    title: str
+    value: str
 
 
-def test_menu_generate_cancel_does_not_call_main(
+class _FakeQuestionary:
+    Choice = _FakeChoice
+
+    def __init__(
+        self,
+        *,
+        selects: list[object] | None = None,
+        texts: list[object] | None = None,
+        confirms: list[object] | None = None,
+    ) -> None:
+        self._selects = iter(selects or [])
+        self._texts = iter(texts or [])
+        self._confirms = iter(confirms or [])
+
+    def select(self, _message: str, *, choices: list[_FakeChoice]) -> _FakePrompt:
+        _ = choices
+        return _FakePrompt(next(self._selects))
+
+    def text(self, _message: str, *, default: str = "") -> _FakePrompt:
+        _ = default
+        return _FakePrompt(next(self._texts))
+
+    def confirm(self, _message: str, *, default: bool) -> _FakePrompt:
+        _ = default
+        return _FakePrompt(next(self._confirms))
+
+
+def _build_menu_io(outputs: list[str]) -> MenuIO:
+    return MenuIO(print_func=outputs.append)
+
+
+def test_generate_basic_flow_uses_selected_config(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[list[str] | None] = []
@@ -51,23 +74,26 @@ def test_menu_generate_cancel_does_not_call_main(
         "scripts.generation.comfyui_part1_generate.main",
         _fake_generate_main,
     )
+    fake_questionary = _FakeQuestionary(
+        selects=["generate", "data/runs/example.yaml", "__exit__"],
+        confirms=[False, True],
+    )
+    monkeypatch.setattr("scripts.cli.menu._load_questionary", lambda: fake_questionary)
 
-    events: list[tuple[str, object]] = []
-    io = _build_menu_io(["1", "", "n", "q"], events)
-
-    exit_code = run_menu(io)
+    outputs: list[str] = []
+    exit_code = run_menu(_build_menu_io(outputs))
 
     assert exit_code == 0
-    assert calls == []
-    printed = _printed_messages(events)
-    assert (
-        "Preview command: uv run python scripts/generation/comfyui_part1_generate.py"
-        in printed
+    assert calls == [["--config", "data/runs/example.yaml"]]
+    assert any(
+        "预览命令: uv run python scripts/generation/comfyui_part1_generate.py --config data/runs/example.yaml"
+        in output
+        for output in outputs
     )
-    assert "Generation cancelled." in printed
+    assert "生图完成，退出码: 0" in outputs
 
 
-def test_menu_generate_confirm_calls_main_once_with_shlex_args(
+def test_generate_advanced_flow_maps_original_cli_args(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[list[str] | None] = []
@@ -80,111 +106,45 @@ def test_menu_generate_confirm_calls_main_once_with_shlex_args(
         "scripts.generation.comfyui_part1_generate.main",
         _fake_generate_main,
     )
+    fake_questionary = _FakeQuestionary(
+        selects=["generate", "data/runs/test.yaml", "__exit__"],
+        texts=[
+            "custom-run",
+            "TEMP,AUTH",
+            "http://127.0.0.1:8188",
+            "12",
+            "180",
+            "3",
+            "client-123",
+        ],
+        confirms=[True, True, True, False, True],
+    )
+    monkeypatch.setattr("scripts.cli.menu._load_questionary", lambda: fake_questionary)
 
-    events: list[tuple[str, object]] = []
-    io = _build_menu_io(["generate_grid", "--dry-run --x-limit 2", "yes", "q"], events)
-
-    exit_code = run_menu(io)
+    outputs: list[str] = []
+    exit_code = run_menu(_build_menu_io(outputs))
 
     assert exit_code == 0
-    assert calls == [["--dry-run", "--x-limit", "2"]]
-    printed = _printed_messages(events)
-    assert (
-        "Preview command: uv run python scripts/generation/comfyui_part1_generate.py --dry-run --x-limit 2"
-        in printed
-    )
-    assert "Generation finished with exit code: 7" in printed
-
-
-def test_menu_generate_preview_is_printed_before_execution(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    events: list[tuple[str, object]] = []
-
-    def _fake_generate_main(argv: list[str] | None = None) -> int:
-        events.append(("call", argv))
-        return 0
-
-    monkeypatch.setattr(
-        "scripts.generation.comfyui_part1_generate.main",
-        _fake_generate_main,
-    )
-
-    io = _build_menu_io(["1", "--dry-run", "y", "q"], events)
-
-    exit_code = run_menu(io)
-
-    assert exit_code == 0
-    preview_index = next(
-        index
-        for index, event in enumerate(events)
-        if event
-        == (
-            "print",
-            "Preview command: uv run python scripts/generation/comfyui_part1_generate.py --dry-run",
-        )
-    )
-    call_index = next(index for index, event in enumerate(events) if event[0] == "call")
-    assert preview_index < call_index
-
-
-def test_menu_generate_empty_confirm_calls_main_with_default_yes(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Test that empty confirm (default YES) executes the script."""
-    calls: list[list[str] | None] = []
-
-    def _fake_generate_main(argv: list[str] | None = None) -> int:
-        calls.append(argv)
-        return 0
-
-    monkeypatch.setattr(
-        "scripts.generation.comfyui_part1_generate.main",
-        _fake_generate_main,
-    )
-
-    events: list[tuple[str, object]] = []
-    # Empty string for confirm triggers default YES
-    io = _build_menu_io(["generate_grid", "", "", "q"], events)
-
-    exit_code = run_menu(io)
-
-    assert exit_code == 0
-    assert calls == [[]]
-    printed = _printed_messages(events)
-    assert (
-        "Preview command: uv run python scripts/generation/comfyui_part1_generate.py"
-        in printed
-    )
-    assert "Generation finished with exit code: 0" in printed
-
-
-def test_menu_generate_unknown_confirm_cancels_safely(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Test that unknown confirm input (e.g., 'maybe') cancels and does not call main."""
-    calls: list[list[str] | None] = []
-
-    def _fake_generate_main(argv: list[str] | None = None) -> int:
-        calls.append(argv)
-        return 0
-
-    monkeypatch.setattr(
-        "scripts.generation.comfyui_part1_generate.main",
-        _fake_generate_main,
-    )
-
-    events: list[tuple[str, object]] = []
-    # Unknown input 'maybe' for confirm should cancel
-    io = _build_menu_io(["generate_grid", "", "maybe", "q"], events)
-
-    exit_code = run_menu(io)
-
-    assert exit_code == 0
-    assert calls == []
-    printed = _printed_messages(events)
-    assert (
-        "Preview command: uv run python scripts/generation/comfyui_part1_generate.py"
-        in printed
-    )
-    assert "Invalid confirmation, cancelled." in printed
+    assert calls == [
+        [
+            "--config",
+            "data/runs/test.yaml",
+            "--dry-run",
+            "--run-dir",
+            "custom-run",
+            "--retry-failed",
+            "--retry-error-code",
+            "TEMP,AUTH",
+            "--base-url",
+            "http://127.0.0.1:8188",
+            "--request-timeout-s",
+            "12",
+            "--job-timeout-s",
+            "180",
+            "--concurrency",
+            "3",
+            "--client-id",
+            "client-123",
+        ]
+    ]
+    assert "生图完成，退出码: 7" in outputs

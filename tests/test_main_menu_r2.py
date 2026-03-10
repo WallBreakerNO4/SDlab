@@ -1,137 +1,152 @@
-"""Test R2 upload menu integration."""
-
 from __future__ import annotations
 
+from dataclasses import dataclass
 import sys
 from pathlib import Path
-from typing import override
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from scripts.cli.io import MenuIO
 from scripts.cli.menu import run_menu
+from scripts.cli.registry import iter_entries
 
 
-class DummyMenuIO(MenuIO):
-    """Simple in-memory MenuIO for testing."""
+class _FakePrompt:
+    def __init__(self, value: object) -> None:
+        self._value = value
 
-    inputs: list[str]
-    outputs: list[str]
-    input_index: int
-
-    def __init__(self, inputs: list[str]) -> None:
-        super().__init__()
-        self.inputs = list(inputs)
-        self.outputs = []
-        self.input_index = 0
-
-    @override
-    def read(self, prompt: str = "") -> str:
-        if self.input_index >= len(self.inputs):
-            raise EOFError()
-        value = self.inputs[self.input_index]
-        self.input_index += 1
-        return value
-
-    @override
-    def write(self, message: str) -> None:
-        self.outputs.append(message)
+    def ask(self) -> object:
+        return self._value
 
 
-def test_r2_upload_menu_entry_is_selectable() -> None:
-    """Test that R2 upload entry appears in menu and can be selected."""
-    from scripts.cli.registry import iter_entries
+@dataclass
+class _FakeChoice:
+    title: str
+    value: str
 
+
+class _FakeQuestionary:
+    Choice = _FakeChoice
+
+    def __init__(
+        self, *, selects: list[object], texts: list[object], confirms: list[object]
+    ) -> None:
+        self._selects = iter(selects)
+        self._texts = iter(texts)
+        self._confirms = iter(confirms)
+
+    def select(self, _message: str, *, choices: list[_FakeChoice]) -> _FakePrompt:
+        _ = choices
+        return _FakePrompt(next(self._selects))
+
+    def text(self, _message: str, *, default: str = "") -> _FakePrompt:
+        _ = default
+        return _FakePrompt(next(self._texts))
+
+    def confirm(self, _message: str, *, default: bool) -> _FakePrompt:
+        _ = default
+        return _FakePrompt(next(self._confirms))
+
+
+def test_r2_upload_menu_entry_exists() -> None:
     entries = list(iter_entries(include_disabled=True))
-    r2_entry = next((e for e in entries if e.key == "upload_r2"), None)
+    entry = next((item for item in entries if item.key == "upload_r2"), None)
 
-    assert r2_entry is not None, "R2 upload entry should exist"
-    assert r2_entry.label == "Upload images to R2"
-    assert r2_entry.entrypoint == "scripts.r2_upload.upload_images_to_r2:main"
-    assert r2_entry.enabled is True, "R2 upload should be enabled"
+    assert entry is not None
+    assert entry.label == "上传到 R2"
+    assert entry.entrypoint == "scripts.r2_upload.upload_images_to_r2:main"
 
 
-def test_r2_upload_prompts_extra_argv_and_shows_preview() -> None:
-    """Test that selecting R2 upload prompts for extra argv and shows preview command."""
-    io = DummyMenuIO(["4", "--help", "n", "q"])
-    exit_code = run_menu(io)
+def test_upload_basic_flow_uses_selected_run_dir(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "comfyui_api_outputs" / "run-a").mkdir(parents=True)
+    calls: list[list[str] | None] = []
+
+    def _fake_upload_main(argv: list[str] | None = None) -> int:
+        calls.append(argv)
+        return 0
+
+    monkeypatch.setattr("scripts.r2_upload.upload_images_to_r2.main", _fake_upload_main)
+    fake_questionary = _FakeQuestionary(
+        selects=["upload", "run-a", "__exit__"],
+        texts=[],
+        confirms=[False, True],
+    )
+    monkeypatch.setattr("scripts.cli.menu._load_questionary", lambda: fake_questionary)
+
+    outputs: list[str] = []
+    exit_code = run_menu(MenuIO(print_func=outputs.append))
 
     assert exit_code == 0
-    assert len(io.outputs) > 0
-
-    preview_command = "uv run python scripts/r2_upload/upload_images_to_r2.py --help"
+    assert calls == [["--run-dir", "run-a"]]
     assert any(
-        "Preview command:" in output and preview_command in output
-        for output in io.outputs
-    ), f"Should show preview command with extra argv: {preview_command}"
-
-
-def test_r2_upload_selection_by_key_with_extra_argv() -> None:
-    """Test that R2 upload can be selected by key with extra argv."""
-    io = DummyMenuIO(["upload_r2", "--run-dir .sisyphus/test", "n", "q"])
-    exit_code = run_menu(io)
-
-    assert exit_code == 0
-
-    preview_command = "uv run python scripts/r2_upload/upload_images_to_r2.py --run-dir .sisyphus/test"
-    assert any(
-        "Preview command:" in output and preview_command in output
-        for output in io.outputs
-    ), "Should show preview command when selecting by key"
-
-
-def test_r2_upload_with_empty_extra_argv() -> None:
-    """Test that R2 upload works with empty extra argv."""
-    io = DummyMenuIO(["4", "", "n", "q"])
-    exit_code = run_menu(io)
-
-    assert exit_code == 0
-
-    preview_command = "uv run python scripts/r2_upload/upload_images_to_r2.py"
-    assert any(
-        "Preview command:" in output and preview_command in output
-        for output in io.outputs
-    ), "Should show base command with no extra argv"
-
-
-def test_r2_upload_invalid_extra_argv_returns_to_menu() -> None:
-    """Test that invalid extra argv shows error and returns to menu."""
-    io = DummyMenuIO(["4", "'unclosed", "q"])
-    exit_code = run_menu(io)
-
-    assert exit_code == 0
-
-    assert any(
-        "Invalid selection: Invalid extra argv" in output for output in io.outputs
-    ), "Should show error for invalid extra argv"
-
-
-def test_r2_upload_returns_to_menu_loop_after_cancel() -> None:
-    """Test that after R2 upload cancellation, menu continues to work."""
-    inputs = ["4", "--help", "n", "2", "n", "q"]
-    io = DummyMenuIO(inputs)
-    exit_code = run_menu(io)
-
-    assert exit_code == 0
-
-    menu_lines_count = sum(1 for output in io.outputs if "Available scripts:" in output)
-    assert menu_lines_count >= 2, (
-        "Menu should be displayed multiple times (after R2, after convert_x)"
+        "预览命令: uv run python scripts/r2_upload/upload_images_to_r2.py --run-dir run-a"
+        in output
+        for output in outputs
     )
 
 
-def test_r2_upload_extra_argv_with_spaces() -> None:
-    """Test that extra argv with spaces are properly parsed via shlex."""
-    io = DummyMenuIO(["4", '--run-dir ".sisyphus/some path"', "n", "q"])
-    exit_code = run_menu(io)
+def test_upload_advanced_flow_collects_optional_args(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "comfyui_api_outputs" / "run-b").mkdir(parents=True)
+    calls: list[list[str] | None] = []
+
+    def _fake_upload_main(argv: list[str] | None = None) -> int:
+        calls.append(argv)
+        return 5
+
+    monkeypatch.setattr("scripts.r2_upload.upload_images_to_r2.main", _fake_upload_main)
+    fake_questionary = _FakeQuestionary(
+        selects=["upload", "run-b", "advance", "__exit__"],
+        texts=["custom-root", "4", "12"],
+        confirms=[True, True, True],
+    )
+    monkeypatch.setattr("scripts.cli.menu._load_questionary", lambda: fake_questionary)
+
+    outputs: list[str] = []
+    exit_code = run_menu(MenuIO(print_func=outputs.append))
 
     assert exit_code == 0
+    assert calls == [
+        [
+            "--run-dir",
+            "run-b",
+            "--run-root",
+            "custom-root",
+            "--dry-run",
+            "--category",
+            "advance",
+            "--concurrency",
+            "4",
+            "--limit",
+            "12",
+        ]
+    ]
+    assert "上传完成，退出码: 5" in outputs
 
-    assert any("Preview command:" in output for output in io.outputs), (
-        "Should show preview command"
+
+def test_upload_without_run_dirs_prints_hint(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    fake_questionary = _FakeQuestionary(
+        selects=["upload", "__exit__"], texts=[], confirms=[]
     )
-    assert any(
-        "Preview command:" in output and ".sisyphus/some path" in output
-        for output in io.outputs
-    ), "Should preserve spaces in extra argv through preview command"
+    monkeypatch.setattr("scripts.cli.menu._load_questionary", lambda: fake_questionary)
+
+    outputs: list[str] = []
+    exit_code = run_menu(MenuIO(print_func=outputs.append))
+
+    assert exit_code == 0
+    assert "未找到可上传的生成结果目录（comfyui_api_outputs/）。" in outputs
