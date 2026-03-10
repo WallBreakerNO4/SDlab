@@ -212,7 +212,8 @@ class SupabaseWriter:
 
         if self.dry_run:
             return
-        run_id = self._upsert_run(run_dir, run_json)
+        run_row = self._build_run_row(payload, run_dir=run_dir, run_json=run_json)
+        run_id = self._upsert_run(run_row, run_dir=run_dir)
         _tick_progress()
         image_rows: list[dict[str, object]] = []
         image_contexts: list[dict[str, object]] = []
@@ -251,18 +252,70 @@ class SupabaseWriter:
                 _tick_progress()
         self._upsert_variants_batch(variant_rows)
 
-    def _upsert_run(self, run_dir: str, run_json: Mapping[str, object]) -> str:
+    def _build_run_row(
+        self,
+        payload: Mapping[str, object],
+        *,
+        run_dir: str,
+        run_json: Mapping[str, object],
+    ) -> dict[str, object]:
+        selection = _extract_selection(run_json)
+        x_columns = _optional_object_list_field(payload, "x_columns")
+        if not x_columns and selection is not None:
+            x_columns = optional_object_list(
+                selection.get("x_columns"), field="run_json.selection.x_columns"
+            )
+
+        y_indexes = _optional_int_list(payload.get("y_indexes"))
+        if not y_indexes and selection is not None:
+            y_indexes = _optional_int_list(selection.get("y_indexes"))
+
+        x_count = _optional_int_field(payload, "x_count")
+        if x_count is None and selection is not None:
+            x_count = optional_int(
+                selection.get("x_count"), field="run_json.selection.x_count"
+            )
+        if x_count is None:
+            x_count = len(x_columns)
+
+        y_count = _optional_int_field(payload, "y_count")
+        if y_count is None and selection is not None:
+            y_count = optional_int(
+                selection.get("y_count"), field="run_json.selection.y_count"
+            )
+        if y_count is None:
+            y_count = len(y_indexes)
+
+        total_cells = _optional_int_field(payload, "total_cells")
+        if total_cells is None and selection is not None:
+            total_cells = optional_int(
+                selection.get("total_cells"), field="run_json.selection.total_cells"
+            )
+        if total_cells is None:
+            total_cells = x_count * y_count
+
+        row: dict[str, object] = {
+            "run_dir": run_dir,
+            "run_json": dict(run_json),
+            "run_id": _optional_required_string(payload.get("run_id"))
+            or _optional_required_string(run_json.get("run_id"))
+            or run_dir,
+            "x_columns": x_columns,
+            "y_indexes": y_indexes,
+            "x_count": x_count,
+            "y_count": y_count,
+            "total_cells": total_cells,
+        }
+        return row
+
+    def _upsert_run(self, row: Mapping[str, object], *, run_dir: str) -> str:
         safe_context = {
             "run_dir_hash12": hash12(run_dir),
             "run_dir_len": len(run_dir),
         }
-        row = {
-            "run_dir": run_dir,
-            "run_json": dict(run_json),
-        }
         data = self._execute_upsert(
             table_name="runs",
-            row_or_rows=row,
+            row_or_rows=dict(row),
             on_conflict="run_dir",
             select_columns="id",
             returning_mode="representation",
@@ -308,6 +361,30 @@ class SupabaseWriter:
             "category": category,
             "metadata": dict(metadata),
         }
+        seed = _optional_int_field(image, "seed")
+        if seed is None:
+            seed = optional_int(metadata.get("seed"), field="metadata.seed")
+        if seed is not None:
+            row["seed"] = seed
+
+        prompt_hash = _optional_required_string(
+            image.get("prompt_hash")
+        ) or _optional_required_string(metadata.get("prompt_hash"))
+        if prompt_hash is not None:
+            row["prompt_hash"] = prompt_hash
+
+        positive_prompt = _optional_required_string(
+            image.get("positive_prompt")
+        ) or _optional_required_string(metadata.get("positive_prompt"))
+        if positive_prompt is not None:
+            row["positive_prompt"] = positive_prompt
+
+        y_value = _optional_required_string(
+            image.get("y_value")
+        ) or _optional_required_string(metadata.get("y_value"))
+        if y_value is not None:
+            row["y_value"] = y_value
+
         width = optional_int(image.get("width"), field="width")
         height = optional_int(image.get("height"), field="height")
         blurhash = optional_str(image.get("blurhash"), field="blurhash")
@@ -597,3 +674,44 @@ def _to_argument_error(exc: PayloadValidationError) -> SupabaseArgumentError:
         code="invalid_payload",
         context={"field": exc.field, "expected": exc.expected},
     )
+
+
+def _extract_selection(run_json: Mapping[str, object]) -> Mapping[str, object] | None:
+    direct = run_json.get("selection")
+    if isinstance(direct, Mapping):
+        return cast(Mapping[str, object], direct)
+
+    config_snapshot = run_json.get("config_snapshot")
+    if isinstance(config_snapshot, Mapping):
+        config_snapshot_map = cast(Mapping[str, object], config_snapshot)
+        selection = config_snapshot_map.get("selection")
+        if isinstance(selection, Mapping):
+            return cast(Mapping[str, object], selection)
+    return None
+
+
+def _optional_required_string(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    trimmed = value.strip()
+    return trimmed if trimmed else None
+
+
+def _optional_int_list(value: object) -> list[int]:
+    if not isinstance(value, list):
+        return []
+    result: list[int] = []
+    for item in cast(list[object], value):
+        if isinstance(item, int) and not isinstance(item, bool):
+            result.append(item)
+    return result
+
+
+def _optional_int_field(obj: Mapping[str, object], key: str) -> int | None:
+    return optional_int(obj.get(key), field=key)
+
+
+def _optional_object_list_field(
+    obj: Mapping[str, object], key: str
+) -> list[Mapping[str, object]]:
+    return optional_object_list(obj.get(key), field=key)

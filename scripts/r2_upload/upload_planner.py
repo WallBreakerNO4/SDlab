@@ -47,6 +47,105 @@ def _int_with_default(value: object, *, default: int = 0) -> int:
     return default
 
 
+def _non_empty_str(value: object) -> str | None:
+    if isinstance(value, str):
+        trimmed = value.strip()
+        if trimmed:
+            return trimmed
+    return None
+
+
+def _json_object(value: object) -> dict[str, object] | None:
+    if isinstance(value, dict):
+        return cast(dict[str, object], value)
+    return None
+
+
+def _json_object_list(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    return [cast(dict[str, object], item) for item in value if isinstance(item, dict)]
+
+
+def _int_list(value: object) -> list[int]:
+    if not isinstance(value, list):
+        return []
+    return [
+        item for item in value if isinstance(item, int) and not isinstance(item, bool)
+    ]
+
+
+def _selection_from_run_json(run_json: dict[str, object]) -> dict[str, object] | None:
+    direct = _json_object(run_json.get("selection"))
+    if direct is not None:
+        return direct
+
+    config_snapshot = _json_object(run_json.get("config_snapshot"))
+    if config_snapshot is None:
+        return None
+
+    return _json_object(config_snapshot.get("selection"))
+
+
+def _build_run_db_fields(
+    run_json: dict[str, object], *, run_dir_name: str
+) -> dict[str, object]:
+    selection = _selection_from_run_json(run_json)
+    x_columns = _json_object_list(selection.get("x_columns") if selection else None)
+    y_indexes = _int_list(selection.get("y_indexes") if selection else None)
+
+    x_count_raw = selection.get("x_count") if selection else None
+    y_count_raw = selection.get("y_count") if selection else None
+    total_cells_raw = selection.get("total_cells") if selection else None
+
+    x_count = (
+        x_count_raw
+        if isinstance(x_count_raw, int) and not isinstance(x_count_raw, bool)
+        else len(x_columns)
+    )
+    y_count = (
+        y_count_raw
+        if isinstance(y_count_raw, int) and not isinstance(y_count_raw, bool)
+        else len(y_indexes)
+    )
+    total_cells = (
+        total_cells_raw
+        if isinstance(total_cells_raw, int) and not isinstance(total_cells_raw, bool)
+        else x_count * y_count
+    )
+
+    return {
+        "run_id": _non_empty_str(run_json.get("run_id")) or run_dir_name,
+        "x_columns": x_columns,
+        "y_indexes": y_indexes,
+        "x_count": x_count,
+        "y_count": y_count,
+        "total_cells": total_cells,
+    }
+
+
+def _build_image_db_fields(metadata_record: dict[str, object]) -> dict[str, object]:
+    fields: dict[str, object] = {}
+
+    seed = metadata_record.get("seed")
+    if isinstance(seed, int) and not isinstance(seed, bool):
+        fields["seed"] = seed
+
+    prompt_hash = _non_empty_str(metadata_record.get("prompt_hash"))
+    if prompt_hash is not None:
+        fields["prompt_hash"] = prompt_hash
+
+    positive_prompt = _non_empty_str(metadata_record.get("positive_prompt"))
+    if positive_prompt is not None:
+        fields["positive_prompt"] = positive_prompt
+
+    y_value = _non_empty_str(metadata_record.get("y_value"))
+    if y_value is not None:
+        fields["y_value"] = y_value
+
+    return fields
+
+
 def _normalize_category(raw_value: object, override: Category | None) -> Category:
     if override is not None:
         return override
@@ -304,6 +403,7 @@ def _assemble_image_payload(
         "metadata": dict(metadata_record),
         "variants": variant_rows,
     }
+    image_payload.update(_build_image_db_fields(metadata_record))
     if width is not None:
         image_payload["width"] = width
     if height is not None:
@@ -463,6 +563,7 @@ def _build_run_plan(
         "run_json": run_json,
         "images": images_rows,
     }
+    db_payload.update(_build_run_db_fields(run_json, run_dir_name=run_dir_name))
 
     private_manifest = build_run_manifest(db_payload)
     public_manifest = build_public_manifest(private_manifest)

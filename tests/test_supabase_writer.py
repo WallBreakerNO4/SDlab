@@ -328,6 +328,54 @@ def test_upsert_upload_index_is_idempotent() -> None:
     assert "image_id,variant" in on_conflicts
 
 
+def test_upsert_upload_index_extracts_structured_columns() -> None:
+    client = _InMemorySupabaseClient(return_upsert_rows=True)
+    writer = SupabaseWriter(client=client, dry_run=False)
+    payload = {
+        "run_dir": "run-20260221T080000Z",
+        "run_json": {
+            "run_id": "structured-run-id",
+            "selection": {
+                "x_columns": [{"type": "quality", "description": {"zh": "高质量"}}],
+                "y_indexes": [0, 1],
+            },
+        },
+        "images": [
+            {
+                "x_index": 0,
+                "y_index": 1,
+                "batch_index": 0,
+                "category": "normal",
+                "metadata": {
+                    "seed": 42,
+                    "prompt_hash": "hash-1",
+                    "positive_prompt": "hello",
+                    "y_value": "Y1",
+                },
+                "variants": [],
+            }
+        ],
+    }
+
+    writer.upsert_upload_index(cast(dict[str, object], payload))
+
+    run_row = next(iter(client._tables["runs"].values()))
+    assert run_row["run_id"] == "structured-run-id"
+    assert run_row["x_count"] == 1
+    assert run_row["y_count"] == 2
+    assert run_row["total_cells"] == 2
+    assert run_row["y_indexes"] == [0, 1]
+    assert run_row["x_columns"] == [
+        {"type": "quality", "description": {"zh": "高质量"}}
+    ]
+
+    image_row = next(iter(client._tables["images"].values()))
+    assert image_row["seed"] == 42
+    assert image_row["prompt_hash"] == "hash-1"
+    assert image_row["positive_prompt"] == "hello"
+    assert image_row["y_value"] == "Y1"
+
+
 def test_upsert_upload_index_fallbacks_to_select_for_ids() -> None:
     client = _InMemorySupabaseClient(return_upsert_rows=False)
     writer = SupabaseWriter(client=client, dry_run=False)
