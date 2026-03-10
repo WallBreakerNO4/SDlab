@@ -16,8 +16,14 @@ export type ImageVariantName =
 export type R2Bucket = 'public' | 'private'
 
 export interface SupabaseRunRow {
+  run_id?: string | null
   run_dir: string
   created_at: string
+  x_columns?: JsonValue[] | null
+  y_indexes?: number[] | null
+  x_count?: number | null
+  y_count?: number | null
+  total_cells?: number | null
   run_json: JsonValue
 }
 
@@ -27,6 +33,10 @@ export interface SupabaseImageRow {
   batch_index: number
   category: ImageCategory
   blurhash: string | null
+  seed?: number | string | null
+  prompt_hash?: string | null
+  positive_prompt?: string | null
+  y_value?: string | null
   metadata: JsonObject
 }
 
