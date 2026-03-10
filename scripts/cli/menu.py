@@ -1,330 +1,462 @@
 from __future__ import annotations
 
+import argparse
 from collections.abc import Sequence
 from dataclasses import dataclass
+import importlib
 import os
+from pathlib import Path
 import shlex
+from typing import Any, cast
+
+from scripts.generation.comfyui_part1_generate import (
+    build_parser as build_generate_parser,
+)
+from scripts.r2_upload.upload_images_to_r2 import build_parser as build_upload_parser
 
 from .io import MenuIO
-from .registry import MenuEntry, iter_entries, load_entrypoint
+from .registry import ScriptMain, get_entry, load_entrypoint
 
-QUIT_TOKENS = frozenset({"q", "quit", "exit"})
-GENERATE_ENTRY_KEY = "generate_grid"
-GENERATE_BASE_COMMAND = "uv run python scripts/generation/comfyui_part1_generate.py"
-CONVERT_X_BASE_COMMAND = "uv run python scripts/other/convert_x_csv_to_json.py"
-CONVERT_Y_BASE_COMMAND = "uv run python scripts/other/convert_y_csv_to_json.py"
-UPLOAD_R2_BASE_COMMAND = "uv run python scripts/r2_upload/upload_images_to_r2.py"
+DATA_RUNS_DIR = Path("data/runs")
+UPLOAD_RUN_ROOT = Path("comfyui_api_outputs")
 DEFAULT_CONVERT_X_CSV = "data/prompts/X/common_prompts.csv"
 DEFAULT_CONVERT_Y_CSV = "data/prompts/Y/300_NAI_Styles_Table-test.csv"
 CONVERT_X_DEFAULT_ENV = "CONVERT_X_DEFAULT_CSV"
 CONVERT_Y_DEFAULT_ENV = "CONVERT_Y_DEFAULT_CSV"
 
-
-@dataclass(frozen=True, slots=True)
-class MenuSelection:
-    raw: str
-    entry: MenuEntry | None
-    should_exit: bool
-    error: str | None = None
+GENERATE_BASE_COMMAND = "uv run python scripts/generation/comfyui_part1_generate.py"
+UPLOAD_BASE_COMMAND = "uv run python scripts/r2_upload/upload_images_to_r2.py"
+CONVERT_X_BASE_COMMAND = "uv run python scripts/other/convert_x_csv_to_json.py"
+CONVERT_Y_BASE_COMMAND = "uv run python scripts/other/convert_y_csv_to_json.py"
+CLEAR_R2_BASE_COMMAND = "uv run python scripts/r2_upload/clear_bucket.py"
 
 
 @dataclass(frozen=True, slots=True)
-class ReadResult:
-    value: str | None = None
-    exit_code: int | None = None
+class MenuChoice:
+    value: str
+    title: str
 
 
-def _default_entries() -> tuple[MenuEntry, ...]:
-    return tuple(iter_entries(include_disabled=True))
+@dataclass(frozen=True, slots=True)
+class ExecutionPlan:
+    entry_key: str
+    argv: list[str]
+    base_command: str
+    success_prefix: str
+    cancel_message: str
+
+    @property
+    def preview_command(self) -> str:
+        if not self.argv:
+            return self.base_command
+        return f"{self.base_command} {shlex.join(self.argv)}"
 
 
-def build_menu_lines(entries: Sequence[MenuEntry] | None = None) -> tuple[str, ...]:
-    menu_entries = tuple(entries) if entries is not None else _default_entries()
-    lines = ["Available scripts:"]
-    for index, entry in enumerate(menu_entries, start=1):
-        suffix = "" if entry.enabled else " (disabled)"
-        lines.append(f"{index}. {entry.label} [{entry.key}]{suffix}")
-    lines.append("q. Quit")
-    return tuple(lines)
+class MenuAbort(Exception):
+    def __init__(self, exit_code: int) -> None:
+        super().__init__(exit_code)
+        self.exit_code = exit_code
 
 
-def select_entry(
-    raw_choice: str,
-    entries: Sequence[MenuEntry] | None = None,
-) -> MenuSelection:
-    menu_entries = tuple(entries) if entries is not None else _default_entries()
-    choice = raw_choice.strip()
+class QuestionaryMenuBackend:
+    def __init__(self, io: MenuIO) -> None:
+        self._io = io
 
-    if not choice:
-        return MenuSelection(
-            raw=choice, entry=None, should_exit=False, error="Empty choice"
-        )
+    def select(
+        self,
+        message: str,
+        choices: Sequence[MenuChoice],
+        *,
+        allow_back: bool = False,
+        allow_exit: bool = False,
+    ) -> str:
+        questionary = _load_questionary()
+        rendered = [
+            questionary.Choice(title=choice.title, value=choice.value)
+            for choice in choices
+        ]
+        if allow_back:
+            rendered.append(questionary.Choice(title="返回上一级", value="__back__"))
+        if allow_exit:
+            rendered.append(questionary.Choice(title="退出", value="__exit__"))
+        try:
+            result = questionary.select(message, choices=rendered).ask()
+        except KeyboardInterrupt as exc:
+            raise MenuAbort(130) from exc
+        if result is None:
+            raise MenuAbort(0)
+        return str(result)
 
-    lowered = choice.lower()
-    if lowered in QUIT_TOKENS:
-        return MenuSelection(raw=choice, entry=None, should_exit=True)
+    def text(self, message: str, *, default: str = "") -> str:
+        questionary = _load_questionary()
+        try:
+            result = questionary.text(message, default=default).ask()
+        except KeyboardInterrupt as exc:
+            raise MenuAbort(130) from exc
+        if result is None:
+            raise MenuAbort(0)
+        return str(result).strip()
 
-    if choice.isdigit():
-        index = int(choice) - 1
-        if 0 <= index < len(menu_entries):
-            entry = menu_entries[index]
-        else:
-            return MenuSelection(
-                raw=choice,
-                entry=None,
-                should_exit=False,
-                error="Choice out of range",
+    def confirm(self, message: str, *, default: bool) -> bool:
+        questionary = _load_questionary()
+        try:
+            result = questionary.confirm(message, default=default).ask()
+        except KeyboardInterrupt as exc:
+            raise MenuAbort(130) from exc
+        if result is None:
+            raise MenuAbort(0)
+        return bool(result)
+
+    def write(self, message: str) -> None:
+        self._io.write(message)
+
+
+def run_menu(io: MenuIO) -> int:
+    backend = QuestionaryMenuBackend(io)
+    backend.write("")
+    backend.write("脚本菜单：生图 / 上传 / 其他")
+    backend.write("生图会先选择 data/runs/ 下的配置；上传会先选择生成结果。")
+    backend.write("")
+
+    try:
+        while True:
+            selected = backend.select(
+                "主菜单",
+                [
+                    MenuChoice("generate", "生图"),
+                    MenuChoice("upload", "上传"),
+                    MenuChoice("other", "其他"),
+                ],
+                allow_exit=True,
             )
-    else:
-        matched = next((item for item in menu_entries if item.key == choice), None)
-        if matched is None:
-            return MenuSelection(
-                raw=choice,
-                entry=None,
-                should_exit=False,
-                error="Unknown choice",
-            )
-        entry = matched
-
-    if not entry.enabled:
-        return MenuSelection(
-            raw=choice,
-            entry=entry,
-            should_exit=False,
-            error="Entry disabled",
-        )
-
-    return MenuSelection(raw=choice, entry=entry, should_exit=False)
-
-
-def prompt_once(
-    io: MenuIO,
-    entries: Sequence[MenuEntry] | None = None,
-    *,
-    prompt: str = "Select an option: ",
-) -> MenuSelection:
-    menu_entries = tuple(entries) if entries is not None else _default_entries()
-    for line in build_menu_lines(menu_entries):
-        io.write(line)
-    raw_choice = io.read(prompt)
-    return select_entry(raw_choice, menu_entries)
-
-
-def run_menu(
-    io: MenuIO,
-    entries: Sequence[MenuEntry] | None = None,
-    *,
-    prompt: str = "Select an option: ",
-    invalid_prefix: str = "Invalid selection: ",
-    placeholder_message: str = "该选项即将支持，后续实现。",
-) -> int:
-    menu_entries = tuple(entries) if entries is not None else _default_entries()
-
-    io.write("")
-    io.write("提示：无参+TTY 自动进入菜单；带参时透传到生图脚本。")
-    io.write("提示：使用 --menu 强制进入菜单；非 TTY 会拒绝并提示。")
-    io.write("提示：选择脚本后会打印可复制命令模板，并二次确认。")
-    io.write("")
-
-    while True:
-        for line in build_menu_lines(menu_entries):
-            io.write(line)
-
-        choice_result = _safe_read(io, prompt)
-        if choice_result.exit_code is not None:
-            return choice_result.exit_code
-        raw_choice = choice_result.value or ""
-
-        selection = select_entry(raw_choice, menu_entries)
-        if selection.should_exit:
-            return 0
-        if selection.error is not None:
-            io.write(f"{invalid_prefix}{selection.error}")
-            continue
-
-        if selection.entry is not None:
-            key = selection.entry.key
-            if key == GENERATE_ENTRY_KEY:
-                res = _prompt_preview_confirm_and_run(
-                    io,
-                    selection,
-                    base_command=GENERATE_BASE_COMMAND,
-                    success_prefix="Generation finished with exit code: ",
-                    cancel_message="Generation cancelled.",
-                    invalid_prefix=invalid_prefix,
-                )
-                if res is not None:
-                    return res
+            if selected == "__exit__":
+                return 0
+            if selected == "generate":
+                _handle_generate(backend)
                 continue
-
-            if key == "convert_x_csv":
-                res = _prompt_preview_confirm_and_run(
-                    io,
-                    selection,
-                    base_command=CONVERT_X_BASE_COMMAND,
-                    success_prefix="Convert finished with exit code: ",
-                    cancel_message="Convert cancelled.",
-                    invalid_prefix=invalid_prefix,
-                    default_argv=_default_convert_x_argv(),
-                )
-                if res is not None:
-                    return res
+            if selected == "upload":
+                _handle_upload(backend)
                 continue
-
-            if key == "convert_y_csv":
-                res = _prompt_preview_confirm_and_run(
-                    io,
-                    selection,
-                    base_command=CONVERT_Y_BASE_COMMAND,
-                    success_prefix="Convert finished with exit code: ",
-                    cancel_message="Convert cancelled.",
-                    invalid_prefix=invalid_prefix,
-                    default_argv=_default_convert_y_argv(),
-                )
-                if res is not None:
-                    return res
+            if selected == "other":
+                _handle_other(backend)
                 continue
-
-            if key == "upload_r2":
-                res = _prompt_preview_confirm_and_run(
-                    io,
-                    selection,
-                    base_command=UPLOAD_R2_BASE_COMMAND,
-                    success_prefix="Upload finished with exit code: ",
-                    cancel_message="Upload cancelled.",
-                    invalid_prefix=invalid_prefix,
-                )
-                if res is not None:
-                    return res
-                continue
-
-        io.write(placeholder_message)
         return 0
+    except MenuAbort as exc:
+        return exc.exit_code
 
 
-def _resolve_convert_argv(
-    extra_argv: list[str], defaults: tuple[str, ...]
-) -> list[str]:
-    if extra_argv:
-        return extra_argv
-    return list(defaults)
+def _load_questionary() -> Any:
+    return cast(Any, importlib.import_module("questionary"))
 
 
-def _default_convert_x_argv() -> tuple[str, ...]:
-    return _default_convert_argv(CONVERT_X_DEFAULT_ENV, DEFAULT_CONVERT_X_CSV)
+def _handle_generate(backend: QuestionaryMenuBackend) -> None:
+    config_files = _list_config_files()
+    if not config_files:
+        backend.write("未找到 data/runs/ 下的运行配置。")
+        return
+
+    selected = backend.select(
+        "选择运行配置",
+        [MenuChoice(path.as_posix(), path.name) for path in config_files],
+        allow_back=True,
+    )
+    if selected == "__back__":
+        return
+
+    argv = ["--config", selected]
+    if backend.confirm("是否开启高级参数？", default=False):
+        argv.extend(_prompt_generate_advanced_args(backend))
+
+    _confirm_and_execute(
+        backend,
+        ExecutionPlan(
+            entry_key="generate_grid",
+            argv=argv,
+            base_command=GENERATE_BASE_COMMAND,
+            success_prefix="生图完成，退出码: ",
+            cancel_message="已取消生图。",
+        ),
+    )
 
 
-def _default_convert_y_argv() -> tuple[str, ...]:
-    return _default_convert_argv(CONVERT_Y_DEFAULT_ENV, DEFAULT_CONVERT_Y_CSV)
+def _handle_upload(backend: QuestionaryMenuBackend) -> None:
+    run_dirs = _list_run_dirs(UPLOAD_RUN_ROOT)
+    if not run_dirs:
+        backend.write("未找到可上传的生成结果目录（comfyui_api_outputs/）。")
+        return
+
+    selected = backend.select(
+        "选择要上传的生成结果",
+        [MenuChoice(path.name, path.name) for path in run_dirs],
+        allow_back=True,
+    )
+    if selected == "__back__":
+        return
+
+    argv = ["--run-dir", selected]
+    if backend.confirm("是否开启高级参数？", default=False):
+        argv.extend(_prompt_upload_advanced_args(backend))
+
+    _confirm_and_execute(
+        backend,
+        ExecutionPlan(
+            entry_key="upload_r2",
+            argv=argv,
+            base_command=UPLOAD_BASE_COMMAND,
+            success_prefix="上传完成，退出码: ",
+            cancel_message="已取消上传。",
+        ),
+    )
 
 
-def _default_convert_argv(env_name: str, fallback_csv: str) -> tuple[str, ...]:
+def _handle_other(backend: QuestionaryMenuBackend) -> None:
+    selected = backend.select(
+        "其他功能",
+        [
+            MenuChoice("csv_to_yaml", "CSV to YAML 脚本"),
+            MenuChoice("clear_r2", "R2 清空脚本"),
+        ],
+        allow_back=True,
+    )
+    if selected == "__back__":
+        return
+    if selected == "csv_to_yaml":
+        _handle_csv_to_yaml(backend)
+        return
+    if selected == "clear_r2":
+        _handle_clear_r2(backend)
+
+
+def _handle_csv_to_yaml(backend: QuestionaryMenuBackend) -> None:
+    selected = backend.select(
+        "选择 CSV 转 YAML 脚本",
+        [
+            MenuChoice("convert_x_csv", "X CSV 转 YAML"),
+            MenuChoice("convert_y_csv", "Y CSV 转 YAML"),
+        ],
+        allow_back=True,
+    )
+    if selected == "__back__":
+        return
+    if selected == "convert_x_csv":
+        csv_path = backend.text(
+            "输入 X CSV 路径（留空使用默认值）",
+            default=_default_convert_x_csv(),
+        )
+        _confirm_and_execute(
+            backend,
+            ExecutionPlan(
+                entry_key="convert_x_csv",
+                argv=[csv_path],
+                base_command=CONVERT_X_BASE_COMMAND,
+                success_prefix="转换完成，退出码: ",
+                cancel_message="已取消转换。",
+            ),
+        )
+        return
+
+    csv_path = backend.text(
+        "输入 Y CSV 路径（留空使用默认值）",
+        default=_default_convert_y_csv(),
+    )
+    _confirm_and_execute(
+        backend,
+        ExecutionPlan(
+            entry_key="convert_y_csv",
+            argv=[csv_path],
+            base_command=CONVERT_Y_BASE_COMMAND,
+            success_prefix="转换完成，退出码: ",
+            cancel_message="已取消转换。",
+        ),
+    )
+
+
+def _handle_clear_r2(backend: QuestionaryMenuBackend) -> None:
+    bucket_name = backend.text("输入要清空的 R2 桶名")
+    if not bucket_name:
+        backend.write("桶名不能为空，已返回上一级。")
+        return
+    plan = ExecutionPlan(
+        entry_key="clear_r2_bucket",
+        argv=[],
+        base_command=CLEAR_R2_BASE_COMMAND,
+        success_prefix="清空完成，退出码: ",
+        cancel_message="已取消清空 R2 桶。",
+    )
+    backend.write(f"目标桶: {bucket_name}")
+    if not backend.confirm("确认执行清空操作？", default=False):
+        backend.write(plan.cancel_message)
+        return
+    _run_with_bucket_name(backend, plan, bucket_name)
+
+
+def _confirm_and_execute(
+    backend: QuestionaryMenuBackend,
+    plan: ExecutionPlan,
+) -> None:
+    backend.write(f"预览命令: {plan.preview_command}")
+    if not backend.confirm("确认执行？", default=True):
+        backend.write(plan.cancel_message)
+        return
+    _run_execution_plan(backend, plan)
+
+
+def _run_with_bucket_name(
+    backend: QuestionaryMenuBackend,
+    plan: ExecutionPlan,
+    bucket_name: str,
+) -> None:
+    entry = get_entry(plan.entry_key)
+    main_func = load_entrypoint(entry)
+    original_input = os.environ.get("SDSLAB_R2_CLEAR_BUCKET_NAME")
+    os.environ["SDSLAB_R2_CLEAR_BUCKET_NAME"] = bucket_name
+    try:
+        exit_code = _execute_main(main_func, [])
+    finally:
+        if original_input is None:
+            os.environ.pop("SDSLAB_R2_CLEAR_BUCKET_NAME", None)
+        else:
+            os.environ["SDSLAB_R2_CLEAR_BUCKET_NAME"] = original_input
+    backend.write(f"{plan.success_prefix}{exit_code}")
+
+
+def _run_execution_plan(backend: QuestionaryMenuBackend, plan: ExecutionPlan) -> None:
+    entry = get_entry(plan.entry_key)
+    main_func = load_entrypoint(entry)
+    exit_code = _execute_main(main_func, plan.argv)
+    backend.write(f"{plan.success_prefix}{exit_code}")
+
+
+def _execute_main(main_func: ScriptMain, argv: list[str] | None) -> int:
+    try:
+        result = main_func(argv)
+    except SystemExit as exc:
+        code = exc.code
+        return code if isinstance(code, int) else 1
+    return result if isinstance(result, int) else 1
+
+
+def _prompt_generate_advanced_args(backend: QuestionaryMenuBackend) -> list[str]:
+    defaults = _parser_defaults(build_generate_parser())
+    argv: list[str] = []
+    if backend.confirm("开启 dry-run？", default=bool(defaults["dry_run"])):
+        argv.append("--dry-run")
+
+    run_dir = backend.text("自定义 --run-dir（留空使用默认行为）")
+    if run_dir:
+        argv.extend(["--run-dir", run_dir])
+
+    if backend.confirm("开启 --retry-failed？", default=False):
+        argv.append("--retry-failed")
+    if backend.confirm("开启 --retry-incomplete？", default=False):
+        argv.append("--retry-incomplete")
+
+    retry_error_code = backend.text("设置 --retry-error-code（逗号分隔，留空跳过）")
+    if retry_error_code:
+        argv.extend(["--retry-error-code", retry_error_code])
+
+    base_url = backend.text(f"覆盖 --base-url（留空使用默认值 {defaults['base_url']}）")
+    if base_url:
+        argv.extend(["--base-url", base_url])
+
+    request_timeout = backend.text(
+        f"覆盖 --request-timeout-s（留空使用默认值 {defaults['request_timeout_s']}）"
+    )
+    if request_timeout:
+        argv.extend(["--request-timeout-s", request_timeout])
+
+    job_timeout = backend.text(
+        f"覆盖 --job-timeout-s（留空使用默认值 {defaults['job_timeout_s']}）"
+    )
+    if job_timeout:
+        argv.extend(["--job-timeout-s", job_timeout])
+
+    concurrency = backend.text(
+        f"覆盖 --concurrency（留空使用默认值 {defaults['concurrency']}）"
+    )
+    if concurrency:
+        argv.extend(["--concurrency", concurrency])
+
+    client_id = backend.text("覆盖 --client-id（留空自动生成）")
+    if client_id:
+        argv.extend(["--client-id", client_id])
+    return argv
+
+
+def _prompt_upload_advanced_args(backend: QuestionaryMenuBackend) -> list[str]:
+    defaults = _parser_defaults(build_upload_parser())
+    argv: list[str] = []
+
+    run_root = backend.text(f"覆盖 --run-root（留空使用默认值 {defaults['run_root']}）")
+    if run_root:
+        argv.extend(["--run-root", run_root])
+
+    if backend.confirm("开启 dry-run？", default=bool(defaults["dry_run"])):
+        argv.append("--dry-run")
+
+    category = backend.select(
+        "选择 --category（或跳过）",
+        [
+            MenuChoice("", "保持默认"),
+            MenuChoice("normal", "normal"),
+            MenuChoice("advance", "advance"),
+            MenuChoice("nsfw", "nsfw"),
+        ],
+    )
+    if category:
+        argv.extend(["--category", category])
+
+    concurrency = backend.text(
+        f"覆盖 --concurrency（留空使用默认值 {defaults['concurrency']}）"
+    )
+    if concurrency:
+        argv.extend(["--concurrency", concurrency])
+
+    limit = backend.text("设置 --limit（留空跳过）")
+    if limit:
+        argv.extend(["--limit", limit])
+    return argv
+
+
+def _list_config_files() -> list[Path]:
+    if not DATA_RUNS_DIR.exists():
+        return []
+    return sorted(
+        path
+        for path in DATA_RUNS_DIR.iterdir()
+        if path.is_file() and path.suffix.lower() in {".yaml", ".yml", ".json"}
+    )
+
+
+def _list_run_dirs(run_root: Path) -> list[Path]:
+    if not run_root.exists():
+        return []
+    return sorted(
+        (path for path in run_root.iterdir() if path.is_dir()),
+        key=lambda path: path.name,
+    )
+
+
+def _default_convert_x_csv() -> str:
+    return _default_convert_csv(CONVERT_X_DEFAULT_ENV, DEFAULT_CONVERT_X_CSV)
+
+
+def _default_convert_y_csv() -> str:
+    return _default_convert_csv(CONVERT_Y_DEFAULT_ENV, DEFAULT_CONVERT_Y_CSV)
+
+
+def _default_convert_csv(env_name: str, fallback_csv: str) -> str:
     configured = os.getenv(env_name)
     if configured is None:
-        return (fallback_csv,)
+        return fallback_csv
     normalized = configured.strip()
-    if not normalized:
-        return (fallback_csv,)
-    return (normalized,)
+    return normalized or fallback_csv
 
 
-def _safe_read(io: MenuIO, prompt: str) -> ReadResult:
-    try:
-        return ReadResult(value=io.read(prompt))
-    except EOFError:
-        return ReadResult(exit_code=0)
-    except KeyboardInterrupt:
-        return ReadResult(exit_code=130)
-
-
-def _coerce_system_exit_code(code: object) -> int:
-    if code is None:
-        return 0
-    if isinstance(code, int):
-        return code
-    if isinstance(code, (str, bytes, bytearray)):
-        try:
-            return int(code)
-        except ValueError:
-            return 1
-    return 1
-
-
-def _run_selection_with_guard(
-    io: MenuIO,
-    selection: MenuSelection,
-    argv: list[str],
-    *,
-    success_prefix: str,
-) -> None:
-    try:
-        exit_code = run_selection(selection, argv)
-    except SystemExit as exc:
-        exit_code = _coerce_system_exit_code(exc.code)
-        io.write(f"Script exited with exit code: {exit_code}")
-        return
-    except Exception as exc:  # noqa: BLE001
-        io.write(f"Script execution failed: {exc}")
-        return
-    io.write(f"{success_prefix}{exit_code}")
-
-
-def run_selection(selection: MenuSelection, argv: list[str] | None = None) -> int:
-    if selection.entry is None:
-        raise ValueError("No entry selected")
-    if selection.error is not None:
-        raise ValueError(selection.error)
-    main_func = load_entrypoint(selection.entry)
-    return main_func(argv)
-
-
-def _prompt_preview_confirm_and_run(
-    io: MenuIO,
-    selection: MenuSelection,
-    *,
-    base_command: str,
-    success_prefix: str,
-    cancel_message: str,
-    invalid_prefix: str = "Invalid selection: ",
-    default_argv: tuple[str, ...] | None = None,
-) -> int | None:
-    extra_argv_result = _safe_read(io, "Extra argv (optional): ")
-    if extra_argv_result.exit_code is not None:
-        return extra_argv_result.exit_code
-
-    extra_argv_line = (extra_argv_result.value or "").strip()
-    try:
-        extra_argv = shlex.split(extra_argv_line)
-    except ValueError as exc:
-        io.write(f"{invalid_prefix}Invalid extra argv: {exc}")
-        return None
-
-    effective_argv = extra_argv
-    if default_argv is not None and not extra_argv:
-        effective_argv = list(default_argv)
-        io.write(f"No extra argv provided, using default: {shlex.join(effective_argv)}")
-
-    if not effective_argv:
-        preview_command = base_command
-    else:
-        preview_command = f"{base_command} {shlex.join(effective_argv)}"
-    io.write(f"Preview command: {preview_command}")
-
-    confirm_result = _safe_read(io, "Confirm execution? [Y/n]: ")
-    if confirm_result.exit_code is not None:
-        return confirm_result.exit_code
-
-    confirm = (confirm_result.value or "").strip().lower()
-    if confirm in {"", "y", "yes"}:
-        _run_selection_with_guard(
-            io,
-            selection,
-            effective_argv,
-            success_prefix=success_prefix,
-        )
-    else:
-        if confirm not in {"n", "no"}:
-            io.write("Invalid confirmation, cancelled.")
-        else:
-            io.write(cancel_message)
-    return None
+def _parser_defaults(parser: argparse.ArgumentParser) -> dict[str, object]:
+    defaults: dict[str, object] = {}
+    for action in parser._actions:
+        if action.dest == "help":
+            continue
+        defaults[action.dest] = action.default
+    return defaults

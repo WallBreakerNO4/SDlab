@@ -20,23 +20,28 @@ class MenuEntry:
 _DEFAULT_ENTRIES: tuple[MenuEntry, ...] = (
     MenuEntry(
         key="generate_grid",
-        label="Generate ComfyUI grid",
+        label="生图",
         entrypoint="scripts.generation.comfyui_part1_generate:main",
     ),
     MenuEntry(
         key="convert_x_csv",
-        label="Convert X CSV to JSON",
+        label="X CSV 转 YAML",
         entrypoint="scripts.other.convert_x_csv_to_json:main",
     ),
     MenuEntry(
         key="convert_y_csv",
-        label="Convert Y CSV to JSON",
+        label="Y CSV 转 YAML",
         entrypoint="scripts.other.convert_y_csv_to_json:main",
     ),
     MenuEntry(
         key="upload_r2",
-        label="Upload images to R2",
+        label="上传到 R2",
         entrypoint="scripts.r2_upload.upload_images_to_r2:main",
+    ),
+    MenuEntry(
+        key="clear_r2_bucket",
+        label="清空 R2 桶",
+        entrypoint="scripts.r2_upload.clear_bucket:main",
     ),
 )
 
