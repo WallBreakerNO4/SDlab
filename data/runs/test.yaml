@@ -11,9 +11,9 @@ model:
   family: stable-diffusion-xl
   # 可选外链；没有就填 null。
   links:
-    homepage: null
-    huggingface: null
-    civitai: null
+    homepage: https://blog.wall-breaker-no4.xyz/
+    huggingface: https://huggingface.co/
+    civitai: https://civitai.com/
   # 多语言描述；当前 schema 要求同时提供 zh / en。
   description:
     zh: 一份测试配置
@@ -37,7 +37,7 @@ workflow:
 # 如果某个字段填 null，就尽量回退到 workflow 里的默认参数。
 generation:
   # 正向 prompt 拼装模板；只支持 {gender} / {characters} / {series} / {rating} / {y} / {general} / {quality} 这些占位符。
-  template: "{gender}{characters}{series}{rating}{y}{general}{quality}"
+  template: "{quality}{rating}{y}{gender}{characters}{series}{general}"
   # 基础种子；每个网格单元会基于 base_seed + x/y 索引派生稳定 seed。
   base_seed: 114514
   # 基础负面提示词；设为 null 时优先使用 workflow 中自带的 negative prompt。

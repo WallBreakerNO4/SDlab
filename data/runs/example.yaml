@@ -37,7 +37,7 @@ workflow:
 # 如果某个字段填 null，就尽量回退到 workflow 里的默认参数。
 generation:
   # 正向 prompt 拼装模板；只支持 {gender} / {characters} / {series} / {rating} / {y} / {general} / {quality} 这些占位符。
-  template: "{gender}{characters}{series}{rating}{y}{general}{quality}"
+  template: "{quality}{rating}{y}{gender}{characters}{series}{general}"
   # 基础种子；每个网格单元会基于 base_seed + x/y 索引派生稳定 seed。
   base_seed: 123
   # 基础负面提示词；设为 null 时优先使用 workflow 中自带的 negative prompt。
