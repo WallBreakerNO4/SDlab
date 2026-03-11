@@ -21,8 +21,8 @@ from scripts.generation.prompt_grid import (
 )
 
 
-X_JSON = ROOT / "data" / "prompts" / "X" / "common_prompts.json"
-Y_JSON = ROOT / "data" / "prompts" / "Y" / "300_NAI_Styles_Table-test.json"
+X_JSON = ROOT / "data" / "prompts" / "X" / "common_prompts.yaml"
+Y_JSON = ROOT / "data" / "prompts" / "Y" / "300_NAI_Styles_Table-test.yaml"
 
 
 def test_read_x_rows_maps_real_columns_and_ignores_trailing_empty_column():

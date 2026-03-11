@@ -1,18 +1,18 @@
 # pyright: reportMissingImports=false, reportUnknownVariableType=false, reportUnknownMemberType=false, reportUnknownArgumentType=false
 
-import json
 import sys
 from pathlib import Path
+
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-X_JSON = ROOT / "data" / "prompts" / "X" / "common_prompts.json"
+X_YAML = ROOT / "data" / "prompts" / "X" / "common_prompts.yaml"
 
 
 def test_common_prompts_json_has_items_array():
-    with open(X_JSON, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    data = yaml.safe_load(X_YAML.read_text(encoding="utf-8"))
 
     assert isinstance(data, dict)
     assert "items" in data
@@ -22,8 +22,7 @@ def test_common_prompts_json_has_items_array():
 
 
 def test_common_prompts_json_each_item_has_description_dict():
-    with open(X_JSON, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    data = yaml.safe_load(X_YAML.read_text(encoding="utf-8"))
 
     items = data["items"]
     for item in items:
@@ -33,8 +32,7 @@ def test_common_prompts_json_each_item_has_description_dict():
 
 
 def test_common_prompts_json_each_item_has_zh_and_en_non_empty():
-    with open(X_JSON, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    data = yaml.safe_load(X_YAML.read_text(encoding="utf-8"))
 
     items = data["items"]
     for i, item in enumerate(items):
@@ -50,8 +48,7 @@ def test_common_prompts_json_each_item_has_zh_and_en_non_empty():
 
 
 def test_common_prompts_json_info_index_preserved():
-    with open(X_JSON, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    data = yaml.safe_load(X_YAML.read_text(encoding="utf-8"))
 
     items = data["items"]
     indices = [item["info"]["index"] for item in items]
