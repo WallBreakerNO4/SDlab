@@ -365,7 +365,7 @@ class SupabaseWriter:
         if seed is None:
             seed = optional_int(metadata.get("seed"), field="metadata.seed")
         if seed is not None:
-            row["seed"] = seed
+            row["seed"] = str(seed)
 
         prompt_hash = _optional_required_string(
             image.get("prompt_hash")

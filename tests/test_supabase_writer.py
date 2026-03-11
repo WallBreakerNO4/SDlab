@@ -370,7 +370,7 @@ def test_upsert_upload_index_extracts_structured_columns() -> None:
     ]
 
     image_row = next(iter(client._tables["images"].values()))
-    assert image_row["seed"] == 42
+    assert image_row["seed"] == "42"
     assert image_row["prompt_hash"] == "hash-1"
     assert image_row["positive_prompt"] == "hello"
     assert image_row["y_value"] == "Y1"
@@ -386,6 +386,30 @@ def test_upsert_upload_index_fallbacks_to_select_for_ids() -> None:
     assert client.row_count("images") == 1
     assert client.row_count("image_variants") == 2
     assert client.select_execute_calls >= 2
+
+
+def test_upsert_upload_index_preserves_large_seed_as_string() -> None:
+    client = _InMemorySupabaseClient(return_upsert_rows=True)
+    writer = SupabaseWriter(client=client, dry_run=False)
+    payload = {
+        "run_dir": "run-20260221T080000Z",
+        "run_json": {"run_id": "large-seed-run"},
+        "images": [
+            {
+                "x_index": 0,
+                "y_index": 0,
+                "batch_index": 0,
+                "category": "normal",
+                "metadata": {"seed": 18020657621215222860},
+                "variants": [],
+            }
+        ],
+    }
+
+    writer.upsert_upload_index(cast(dict[str, object], payload))
+
+    image_row = next(iter(client._tables["images"].values()))
+    assert image_row["seed"] == "18020657621215222860"
 
 
 def test_upsert_upload_index_rejects_invalid_payload() -> None:
