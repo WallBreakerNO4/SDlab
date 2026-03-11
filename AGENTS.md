@@ -1,8 +1,8 @@
 # Agent Guide (sd-style-lab/images-script)
 
-**生成时间:** 2026-03-11T16:08:09+08:00
-**Commit:** 7049157
-**分支:** refactor/scripts
+**生成时间:** 2026-03-11T17:56:12+08:00
+**Commit:** 1ecc38d
+**分支:** main
 
 本文件给仓库级 agent 使用；子目录 `AGENTS.md` 只补充局部知识，不重复根规则。
 
@@ -39,23 +39,24 @@
 
 ## 去哪儿看
 
-| 任务              | 位置                                           | 备注                                           |
-| ----------------- | ---------------------------------------------- | ---------------------------------------------- |
-| Python 顶层入口   | `main.py`                                      | 菜单/主 runner 的统一入口                      |
-| 生图主入口        | `scripts/generation/comfyui_part1_generate.py` | dry-run / retry / 落盘合约                     |
-| 并发 runner       | `scripts/generation/runner_coordinator.py`     | ThreadPoolExecutor 双池                        |
-| ComfyUI 通信      | `scripts/generation/comfyui_client.py`         | HTTP / WS / 错误码                             |
-| R2 上传入口       | `scripts/r2_upload/upload_images_to_r2.py`     | 编码、上传、写 Supabase                        |
-| 上传规划          | `scripts/r2_upload/upload_planner.py`          | 多变体规划 + 并发编码                          |
-| 网站首页          | `app/page.tsx`                                 | 读取 runs 列表                                 |
-| run 详情页        | `app/runs/[runDir]/page.tsx`                   | 并行拉 run + grid                              |
-| ComfyUI API       | `app/api/comfyui/**/route.ts`                  | Node runtime + Supabase 查询                   |
-| R2 私有代理       | `app/api/r2/private/[...r2Key]/route.ts`       | 认证后代理 R2 private bucket                   |
-| 服务端 Supabase   | `lib/supabase-auth.ts`                         | `server-only` + cookie session                 |
-| 浏览器端 Supabase | `lib/supabase-browser.ts`                      | AuthProvider 使用                              |
-| 路径安全          | `lib/comfyui-path.ts`                          | 相对路径与根目录逃逸防护                       |
-| R2 URL 构建       | `lib/r2-url.ts`                                | 公开/私有 URL 与变体白名单                     |
-| 会话刷新          | `middleware.ts`                                | Edge middleware，不能引 `lib/supabase-auth.ts` |
+| 任务                | 位置                                           | 备注                                           |
+| ------------------- | ---------------------------------------------- | ---------------------------------------------- |
+| Python 顶层入口     | `main.py`                                      | 菜单/主 runner 的统一入口                      |
+| 生图主入口          | `scripts/generation/comfyui_part1_generate.py` | dry-run / retry / 落盘合约                     |
+| 并发 runner         | `scripts/generation/runner_coordinator.py`     | ThreadPoolExecutor 双池                        |
+| ComfyUI 通信        | `scripts/generation/comfyui_client.py`         | HTTP / WS / 错误码                             |
+| R2 上传入口         | `scripts/r2_upload/upload_images_to_r2.py`     | 编码、上传、写 Supabase                        |
+| 上传规划            | `scripts/r2_upload/upload_planner.py`          | 多变体规划 + 并发编码                          |
+| 网站首页            | `app/page.tsx`                                 | 读取 runs 列表                                 |
+| run 详情页          | `app/runs/[runDir]/page.tsx`                   | 并行拉 run + grid                              |
+| ComfyUI API         | `app/api/comfyui/**/route.ts`                  | Node runtime + Supabase 查询                   |
+| R2 私有代理         | `app/api/r2/private/[...r2Key]/route.ts`       | 认证后代理 R2 private bucket                   |
+| 站点壳层 / 登录入口 | `app/layout.tsx`、`components/site-header.tsx` | ThemeProvider + AuthProvider + 登录弹窗入口    |
+| 服务端 Supabase     | `lib/supabase-auth.ts`                         | `server-only` + cookie session                 |
+| 浏览器端 Supabase   | `lib/supabase-browser.ts`                      | AuthProvider 使用                              |
+| 路径安全            | `lib/comfyui-path.ts`                          | 相对路径与根目录逃逸防护                       |
+| R2 URL 构建         | `lib/r2-url.ts`                                | 公开/私有 URL 与变体白名单                     |
+| 会话刷新            | `middleware.ts`                                | Edge middleware，不能引 `lib/supabase-auth.ts` |
 
 ## 代码图
 
@@ -130,6 +131,7 @@ pnpm dlx supabase migration new <name>
 
 - `app/AGENTS.md`：App Router 页面与 API 的局部规则。
 - `app/api/comfyui/AGENTS.md`：ComfyUI JSON API 约定。
+- `app/api/r2/AGENTS.md`：R2 私有对象代理、鉴权与 range/HEAD 约定。
 - `components/AGENTS.md` / `components/ui/AGENTS.md` / `components/comfyui/AGENTS.md`：组件分层、UI primitives、网格性能约定。
 - `lib/AGENTS.md`：Supabase/R2/路径安全/共享类型边界。
 - `scripts/AGENTS.md` / `scripts/generation/AGENTS.md` / `scripts/r2_upload/AGENTS.md` / `scripts/cli/AGENTS.md`：Python 主代码域。
