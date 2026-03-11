@@ -12,10 +12,10 @@
   "dependencies": {
     "@base-ui/react": "^1.2.0",
     "@hugeicons/core-free-icons": "^3.3.0",
-    "@hugeicons/react": "^1.1.5",
+    "@hugeicons/react": "^1.1.6",
     "@supabase/ssr": "^0.8.0",
-    "@supabase/supabase-js": "^2.98.0",
-    "@tanstack/react-virtual": "^3.13.19",
+    "@supabase/supabase-js": "^2.99.1",
+    "@tanstack/react-virtual": "^3.13.21",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -29,7 +29,7 @@
     "react": "19.2.3",
     "react-day-picker": "^9.14.0",
     "react-dom": "19.2.3",
-    "react-resizable-panels": "^4.7.1",
+    "react-resizable-panels": "^4.7.2",
     "recharts": "2.15.4",
     "shadcn": "^3.8.5",
     "sonner": "^2.0.7",
@@ -41,14 +41,14 @@
     "@opennextjs/cloudflare": "^1.17.1",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4.2.1",
-    "@types/node": "^20.19.35",
+    "@types/node": "^20.19.37",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "eslint": "^9.39.3",
+    "eslint": "^9.39.4",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3",
-    "wrangler": "^4.70.0"
+    "wrangler": "^4.72.0"
   },
   "packageManager": "pnpm@10.31.0+sha512.e3927388bfaa8078ceb79b748ffc1e8274e84d75163e67bc22e06c0d3aed43dd153151cbf11d7f8301ff4acb98c68bdc5cadf6989532801ffafe3b3e4a63c268"
 }
