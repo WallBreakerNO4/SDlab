@@ -22,7 +22,7 @@ from scripts.r2_upload.supabase_writer import (
 
 def _sample_payload() -> dict[str, object]:
     return {
-        "run_dir": "run-20260221T080000Z",
+        "run_dir": "test-run",
         "run_json": {"base_seed": 123, "count": 1},
         "images": [
             {
@@ -332,7 +332,7 @@ def test_upsert_upload_index_extracts_structured_columns() -> None:
     client = _InMemorySupabaseClient(return_upsert_rows=True)
     writer = SupabaseWriter(client=client, dry_run=False)
     payload = {
-        "run_dir": "run-20260221T080000Z",
+        "run_dir": "structured-run",
         "run_json": {
             "run_id": "structured-run-id",
             "selection": {
@@ -392,7 +392,7 @@ def test_upsert_upload_index_preserves_large_seed_as_string() -> None:
     client = _InMemorySupabaseClient(return_upsert_rows=True)
     writer = SupabaseWriter(client=client, dry_run=False)
     payload = {
-        "run_dir": "run-20260221T080000Z",
+        "run_dir": "large-seed-run",
         "run_json": {"run_id": "large-seed-run"},
         "images": [
             {
@@ -415,7 +415,7 @@ def test_upsert_upload_index_preserves_large_seed_as_string() -> None:
 def test_upsert_upload_index_rejects_invalid_payload() -> None:
     writer = SupabaseWriter(client=None, dry_run=True)
     bad_payload = {
-        "run_dir": "run-20260221T080000Z",
+        "run_dir": "invalid-payload-run",
         "run_json": {},
         "images": "not-an-array",
     }

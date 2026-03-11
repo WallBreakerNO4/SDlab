@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from scripts.run_naming import RUN_KEY_RE
+
 Category = Literal["normal", "advance", "nsfw"]
 BucketScope = Literal["public", "private"]
 
-_RUN_DIR_NAME_RE = re.compile(r"^run-\d{8}T\d{6}Z$")
+_RUN_DIR_NAME_RE = RUN_KEY_RE
 _CATEGORY_CHOICES: tuple[Category, Category, Category] = (
     "normal",
     "advance",

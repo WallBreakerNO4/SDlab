@@ -18,7 +18,7 @@ def test_dry_run_prints_structured_summary_placeholder(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    run_dir = tmp_path / "run-20260217T072414Z"
+    run_dir = tmp_path / "contract-run"
     images_dir = run_dir / "images"
     images_dir.mkdir(parents=True)
 
@@ -28,8 +28,9 @@ def test_dry_run_prints_structured_summary_placeholder(
     (run_dir / "run.json").write_text(
         (
             "{"
-            '"run_id":"test",'
-            '"run_dir":"run-20260217T072414Z",'
+            '"run_id":"contract-run",'
+            '"run_key":"contract-run",'
+            '"run_dir":"contract-run",'
             '"config_schema_version":"image-run-config/v1",'
             '"config_path":"data/runs/example.yaml",'
             '"config_sha256":"' + ("deadbeef" * 8) + '",'

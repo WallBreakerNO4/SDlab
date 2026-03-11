@@ -17,7 +17,7 @@ from scripts.r2_upload.upload_images_to_r2 import main
 
 _RUN_FLAG = "SDSL_RUN_LOCAL_SUPABASE_INTEGRATION"
 _RUN_DIR_ARG = "tests/fixtures/run_minimal"
-_RUN_DIR_NAME = "run-20260221T160000Z"
+_RUN_DIR_NAME = "local-supabase-run"
 
 
 class _FakeR2Client:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .upload_contracts import _RUN_DIR_NAME_RE
+from scripts.run_naming import validate_run_dir_path, validate_run_key
 
 
 def _is_valid_run_dir(run_dir: Path) -> bool:
@@ -26,7 +26,7 @@ def _discover_run_dirs(run_root: Path) -> list[Path]:
         for child in run_root.iterdir()
         if child.is_dir() and _is_valid_run_dir(child)
     ]
-    run_dirs.sort(key=lambda item: item.name, reverse=True)
+    run_dirs.sort(key=lambda item: (item.stat().st_mtime_ns, item.name), reverse=True)
     return run_dirs
 
 
@@ -61,14 +61,24 @@ def _resolve_selected_run_dirs(args: argparse.Namespace) -> list[Path]:
 
 
 def _resolve_run_dir_name(run_dir: Path, run_json: dict[str, object]) -> str:
-    candidate = run_dir.name.strip()
-    if _RUN_DIR_NAME_RE.fullmatch(candidate):
-        return candidate
+    candidate = validate_run_dir_path(run_dir)
 
     run_json_dir = run_json.get("run_dir")
     if isinstance(run_json_dir, str):
-        from_run_json = Path(run_json_dir).name.strip()
-        if _RUN_DIR_NAME_RE.fullmatch(from_run_json):
-            return from_run_json
+        from_run_json = validate_run_key(
+            run_json_dir,
+            field_name="run_json.run_dir",
+        )
+        if from_run_json != candidate:
+            raise ValueError("run.json 中 run_dir 与目录名不一致")
 
-    raise ValueError(f"run_dir 名称非法（需要 run-YYYYMMDDTHHMMSSZ）: {run_dir.name}")
+    run_json_key = run_json.get("run_key")
+    if isinstance(run_json_key, str):
+        normalized_run_key = validate_run_key(
+            run_json_key,
+            field_name="run_json.run_key",
+        )
+        if normalized_run_key != candidate:
+            raise ValueError("run.json 中 run_key 与目录名不一致")
+
+    return candidate

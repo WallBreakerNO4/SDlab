@@ -28,8 +28,9 @@ def _write_run_fixture(root: Path, *, run_name: str) -> Path:
     (run_dir / "run.json").write_text(
         json.dumps(
             {
-                "run_id": "test-run-id",
-                "run_dir": str(run_dir),
+                "run_id": run_name,
+                "run_key": run_name,
+                "run_dir": run_name,
             },
             ensure_ascii=False,
         ),
@@ -175,7 +176,7 @@ def test_rerun_recovers_db_after_partial_failure_without_reupload(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    run_dir = _write_run_fixture(tmp_path, run_name="run-20260221T150000Z")
+    run_dir = _write_run_fixture(tmp_path, run_name="retry-db-recovery-run")
 
     monkeypatch.setenv("R2_PUBLIC_BUCKET", "dummy-public")
     monkeypatch.setenv("R2_PRIVATE_BUCKET", "dummy-private")
@@ -222,7 +223,7 @@ def test_execute_uses_r2_upload_concurrency_from_env(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    run_dir = _write_run_fixture(tmp_path, run_name="run-20260221T190000Z")
+    run_dir = _write_run_fixture(tmp_path, run_name="upload-concurrency-run")
 
     monkeypatch.setenv("R2_PUBLIC_BUCKET", "dummy-public")
     monkeypatch.setenv("R2_PRIVATE_BUCKET", "dummy-private")
@@ -256,7 +257,7 @@ def test_execute_rejects_invalid_r2_upload_concurrency_env(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    run_dir = _write_run_fixture(tmp_path, run_name="run-20260221T200000Z")
+    run_dir = _write_run_fixture(tmp_path, run_name="invalid-upload-concurrency-run")
 
     monkeypatch.setenv("R2_PUBLIC_BUCKET", "dummy-public")
     monkeypatch.setenv("R2_PRIVATE_BUCKET", "dummy-private")

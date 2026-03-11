@@ -34,7 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     _ = parser.add_argument(
         "--run-root",
         default="comfyui_api_outputs",
-        help="Root directory containing run-* folders.",
+        help="Root directory containing run folders.",
     )
     run_group = parser.add_mutually_exclusive_group()
     _ = run_group.add_argument(

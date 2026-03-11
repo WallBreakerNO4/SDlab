@@ -24,9 +24,11 @@ def _write_png(path: Path, *, size: tuple[int, int] = (8, 6)) -> None:
 def _extended_run_json(
     *, run_dir: Path, run_dir_value: str | None = None
 ) -> dict[str, object]:
+    run_name = run_dir_value if run_dir_value is not None else run_dir.name
     return {
-        "run_id": "test-run-id",
-        "run_dir": run_dir_value if run_dir_value is not None else str(run_dir),
+        "run_id": run_name,
+        "run_key": run_name,
+        "run_dir": run_name,
         "dry_run": False,
         "config_schema_version": "image-run-config/v1",
         "config_path": "data/runs/example.yaml",
@@ -141,7 +143,7 @@ def test_cli_dry_run_outputs_required_keys_and_manifest_uploads(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    run_dir = _write_run_fixture(tmp_path, run_name="run-20260221T120000Z")
+    run_dir = _write_run_fixture(tmp_path, run_name="chenkinnoob-xl-rf")
 
     for key in [
         "R2_ENDPOINT",
@@ -196,14 +198,14 @@ def test_cli_default_selects_latest_run_under_run_root(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     run_root = tmp_path / "outputs"
-    _ = _write_run_fixture(run_root, run_name="run-20260220T120000Z")
-    _ = _write_run_fixture(run_root, run_name="run-20260221T120000Z")
+    _ = _write_run_fixture(run_root, run_name="alpha-run")
+    _ = _write_run_fixture(run_root, run_name="beta-run")
 
     exit_code = main(["--dry-run", "--run-root", str(run_root)])
 
     assert exit_code == 0
     payload = _read_stdout_json(capsys)
-    assert payload.get("run_dirs") == ["run-20260221T120000Z"]
+    assert payload.get("run_dirs") == ["beta-run"]
 
 
 def test_cli_dry_run_limit_applies_to_resolved_metadata_paths(
@@ -213,7 +215,7 @@ def test_cli_dry_run_limit_applies_to_resolved_metadata_paths(
     run_root = tmp_path / "outputs"
     run_dir = _write_run_fixture(
         run_root,
-        run_name="run-20260221T130000Z",
+        run_name="limit-run",
         use_multi_paths=True,
     )
 
@@ -238,7 +240,7 @@ def test_cli_run_dir_can_be_name_when_run_root_is_provided(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     run_root = tmp_path / "outputs"
-    _ = _write_run_fixture(run_root, run_name="run-20260221T140000Z")
+    _ = _write_run_fixture(run_root, run_name="selected-run")
 
     exit_code = main(
         [
@@ -246,16 +248,16 @@ def test_cli_run_dir_can_be_name_when_run_root_is_provided(
             "--run-root",
             str(run_root),
             "--run-dir",
-            "run-20260221T140000Z",
+            "selected-run",
         ]
     )
 
     assert exit_code == 0
     payload = _read_stdout_json(capsys)
-    assert payload.get("run_dirs") == ["run-20260221T140000Z"]
+    assert payload.get("run_dirs") == ["selected-run"]
 
 
-def test_cli_dry_run_accepts_extended_run_json_with_run_dir_fallback(
+def test_cli_dry_run_uses_run_dir_from_current_directory_name(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -263,19 +265,19 @@ def test_cli_dry_run_accepts_extended_run_json_with_run_dir_fallback(
     run_dir = _write_run_fixture(
         run_root,
         run_name="custom-folder-name",
-        run_json_run_dir="comfyui_api_outputs/run-20260221T190000Z",
+        run_json_run_dir="custom-folder-name",
     )
 
     exit_code = main(["--dry-run", "--run-dir", str(run_dir)])
 
     assert exit_code == 0
     payload = _read_stdout_json(capsys)
-    assert payload.get("run_dirs") == ["run-20260221T190000Z"]
+    assert payload.get("run_dirs") == ["custom-folder-name"]
     planned_uploads = payload.get("planned_uploads")
     assert isinstance(planned_uploads, list)
     assert planned_uploads
     assert all(
-        "run-20260221T190000Z" in str(item.get("key"))
+        "custom-folder-name" in str(item.get("key"))
         for item in planned_uploads
         if isinstance(item, dict)
     )
@@ -286,7 +288,7 @@ def test_cli_dry_run_writes_intermediate_variants_to_env_dir(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    run_dir = _write_run_fixture(tmp_path, run_name="run-20260221T150000Z")
+    run_dir = _write_run_fixture(tmp_path, run_name="intermediate-run")
     intermediate_root = tmp_path / "custom-intermediate"
     monkeypatch.setenv("R2_UPLOAD_INTERMEDIATE_DIR", str(intermediate_root))
 
@@ -295,7 +297,7 @@ def test_cli_dry_run_writes_intermediate_variants_to_env_dir(
     assert exit_code == 0
     payload = _read_stdout_json(capsys)
 
-    expected_run_intermediate = intermediate_root / "run-20260221T150000Z"
+    expected_run_intermediate = intermediate_root / "intermediate-run"
     assert payload.get("intermediate_dirs") == [str(expected_run_intermediate)]
 
     files = [item for item in expected_run_intermediate.iterdir() if item.is_file()]
@@ -309,7 +311,7 @@ def test_cli_dry_run_reuses_cached_variants_without_reencoding(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    run_dir = _write_run_fixture(tmp_path, run_name="run-20260221T160000Z")
+    run_dir = _write_run_fixture(tmp_path, run_name="cache-run")
 
     first_exit = main(["--dry-run", "--run-dir", str(run_dir)])
     assert first_exit == 0
@@ -334,7 +336,7 @@ def test_cli_uses_r2_image_workers_from_env(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    run_dir = _write_run_fixture(tmp_path, run_name="run-20260221T170000Z")
+    run_dir = _write_run_fixture(tmp_path, run_name="worker-run")
     monkeypatch.setenv("R2_IMAGE_WORKERS", "3")
 
     exit_code = main(["--dry-run", "--run-dir", str(run_dir)])
@@ -349,7 +351,7 @@ def test_cli_rejects_invalid_r2_image_workers_env(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    run_dir = _write_run_fixture(tmp_path, run_name="run-20260221T180000Z")
+    run_dir = _write_run_fixture(tmp_path, run_name="invalid-worker-run")
     monkeypatch.setenv("R2_IMAGE_WORKERS", "0")
 
     exit_code = main(["--dry-run", "--run-dir", str(run_dir)])

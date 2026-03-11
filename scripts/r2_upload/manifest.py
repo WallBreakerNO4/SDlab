@@ -3,13 +3,13 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-import re
 from collections.abc import Mapping, Sequence
 from typing import Final, Literal, cast
 
+from scripts.run_naming import validate_run_key
+
 
 SCHEMA_VERSION: Final[int] = 1
-_RUN_DIR_NAME_RE: Final[re.Pattern[str]] = re.compile(r"^run-\d{8}T\d{6}Z$")
 _VISIBILITY_VALUES: Final[set[str]] = {"public", "private"}
 
 
@@ -103,11 +103,7 @@ def _normalize_visibility(visibility: str) -> str:
 
 
 def _validate_run_dir_name(run_dir_name: str) -> str:
-    if not _RUN_DIR_NAME_RE.fullmatch(run_dir_name):
-        raise ValueError(
-            "run_dir_name 必须形如 run-YYYYMMDDTHHMMSSZ，例如 run-20260217T072414Z"
-        )
-    return run_dir_name
+    return validate_run_key(run_dir_name, field_name="run_dir_name")
 
 
 def _normalize_schema_version(raw: object) -> int | str:

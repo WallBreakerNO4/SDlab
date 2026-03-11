@@ -22,7 +22,7 @@ from scripts.r2_upload.manifest import (
 
 def _sample_payload() -> dict[str, object]:
     return {
-        "run_dir": "run-20260217T072414Z",
+        "run_dir": "chenkinnoob-xl-rf",
         "images": [
             {
                 "x_index": 0,
@@ -109,11 +109,11 @@ def test_build_public_manifest_redacts_private_content_and_keys() -> None:
 def test_manifest_object_key_is_stable_and_contains_required_segments() -> None:
     manifest = build_run_manifest(_sample_payload())
 
-    key1 = manifest_object_key("run-20260217T072414Z", manifest, visibility="private")
-    key2 = manifest_object_key("run-20260217T072414Z", manifest, visibility="private")
+    key1 = manifest_object_key("chenkinnoob-xl-rf", manifest, visibility="private")
+    key2 = manifest_object_key("chenkinnoob-xl-rf", manifest, visibility="private")
 
     assert key1 == key2
-    assert key1.startswith("manifests/private/runs/run-20260217T072414Z/schema/1/")
+    assert key1.startswith("manifests/private/runs/chenkinnoob-xl-rf/schema/1/")
     assert key1.endswith(".json")
 
     digest = key1.removesuffix(".json").split("/")[-1]
@@ -124,14 +124,12 @@ def test_manifest_object_key_is_stable_and_contains_required_segments() -> None:
 def test_manifest_object_key_changes_with_schema_or_content() -> None:
     manifest = build_run_manifest(_sample_payload())
 
-    base_key = manifest_object_key(
-        "run-20260217T072414Z", manifest, visibility="public"
-    )
+    base_key = manifest_object_key("chenkinnoob-xl-rf", manifest, visibility="public")
 
     schema_changed = copy.deepcopy(manifest)
     schema_changed["schema_version"] = 2
     schema_key = manifest_object_key(
-        "run-20260217T072414Z",
+        "chenkinnoob-xl-rf",
         schema_changed,
         visibility="public",
     )
@@ -140,7 +138,7 @@ def test_manifest_object_key_changes_with_schema_or_content() -> None:
     images = cast(list[dict[str, object]], content_changed["images"])
     images[0]["x_index"] = 999
     content_key = manifest_object_key(
-        "run-20260217T072414Z",
+        "chenkinnoob-xl-rf",
         content_changed,
         visibility="public",
     )
@@ -154,11 +152,11 @@ def test_manifest_object_key_rejects_invalid_inputs() -> None:
     manifest = build_run_manifest(_sample_payload())
 
     with pytest.raises(ValueError, match="run_dir_name"):
-        manifest_object_key("run-2026-02-17", manifest, visibility="public")
+        manifest_object_key("NAI_4_FULL", manifest, visibility="public")
 
     with pytest.raises(ValueError, match="visibility"):
         manifest_object_key(
-            "run-20260217T072414Z",
+            "chenkinnoob-xl-rf",
             manifest,
             visibility=cast(Literal["public", "private"], "internal"),
         )
