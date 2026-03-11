@@ -32,8 +32,8 @@
   ],
   // 所有环境变量均为非敏感（无需 wrangler secret）
   "vars": {
-    "NEXT_PUBLIC_SUPABASE_URL": "https://pdrckkktaduhivesfmct.supabase.co",
-    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_nir1DNGHiT6QTekTi_iRHQ_JGlgbegd",
+    "NEXT_PUBLIC_SUPABASE_URL": "https://pevlrhqutitakzpsvqyc.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_CBYV0tBjm0qaZy2LeJz6_w_EMbT3L5m",
     "R2_PUBLIC_BASE_URL": "https://images.sdlab.wall-breaker-no4.xyz"
   }
 }
