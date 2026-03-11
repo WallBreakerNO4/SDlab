@@ -12,7 +12,6 @@ def test_comfyui_part1_generate_exports():
         "run",
         "run_retry",
         "_append_negative_prompt",
-        "_resolve_append_negative_prompt",
         "comfy_submit_prompt",
         "comfy_wait_prompt_done_with_fallback",
         "comfy_get_history_item",

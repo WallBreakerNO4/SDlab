@@ -250,6 +250,9 @@ def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
         == "{gender}{characters}{series}{rating}{y}{general}{quality}"
     )
     assert run_payload["base_seed"] == 123
+    assert run_payload["run_id"] == "run-dry"
+    assert run_payload["run_key"] == "run-dry"
+    assert run_payload["run_dir"] == "run-dry"
     assert run_payload["generation_overrides"]["negative_prompt"] == "neg,"
     assert run_payload["generation_overrides"]["append_negative_prompt"] == "app,"
     assert run_payload["config_schema_version"] == "image-run-config/v1"
@@ -303,6 +306,38 @@ def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
     metadata_records = _read_valid_jsonl(run_dir / "metadata.jsonl")
     assert len(metadata_records) == 1
     assert metadata_records[0]["status"] == "skipped"
+
+
+def test_dry_run_without_run_dir_uses_model_key_as_default_output_dir(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = _import_runner_module()
+    _clear_deprecated_business_env(monkeypatch)
+    x_path, y_path = _write_json_inputs(tmp_path)
+    config_path = tmp_path / "example.yaml"
+    config_path.write_text("schema_version: image-run-config/v1\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    monkeypatch.setattr(
+        runner,
+        "load_runner_config",
+        lambda path, repo_root: _fake_runner_config(
+            config_path=config_path,
+            x_path=x_path,
+            y_path=y_path,
+            append_negative_prompt="app,",
+        ),
+    )
+
+    exit_code = runner.main(["--dry-run", "--config", str(config_path)])
+
+    assert exit_code == 0
+    run_dir = tmp_path / "comfyui_api_outputs" / "nai-4-full"
+    run_payload = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert run_payload["run_id"] == "nai-4-full"
+    assert run_payload["run_key"] == "nai-4-full"
+    assert run_payload["run_dir"] == "nai-4-full"
 
 
 def test_dry_run_uses_config_append_negative_prompt(

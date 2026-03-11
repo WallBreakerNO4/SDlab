@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 
 from scripts.generation.runner_env import _env_str
+from scripts.run_naming import validate_run_key
 
 DEFAULT_RUN_ROOT = "comfyui_api_outputs"
 
@@ -19,13 +19,17 @@ class RunArtifacts:
     metadata_path: Path
 
 
-def _prepare_run_artifacts(run_dir_arg: str | None) -> RunArtifacts:
+def _prepare_run_artifacts(
+    run_dir_arg: str | None, *, default_run_key: str
+) -> RunArtifacts:
     if run_dir_arg:
         run_dir = Path(run_dir_arg)
     else:
         run_root = Path(_env_str("COMFYUI_OUT_DIR") or DEFAULT_RUN_ROOT)
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        run_dir = run_root / f"run-{timestamp}"
+        run_key = validate_run_key(default_run_key, field_name="model.key")
+        run_dir = run_root / run_key
+
+    _ = validate_run_key(run_dir.name, field_name="run_dir")
 
     run_dir.mkdir(parents=True, exist_ok=True)
     return RunArtifacts(
@@ -43,6 +47,7 @@ def _prepare_existing_run_artifacts(run_dir_arg: str | None) -> RunArtifacts:
     run_dir = Path(run_dir_arg)
     if not run_dir.exists() or not run_dir.is_dir():
         raise ValueError(f"retry 模式 --run-dir 不存在或不是目录: {run_dir}")
+    _ = validate_run_key(run_dir.name, field_name="run_dir")
 
     return RunArtifacts(
         run_dir=run_dir,

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 import hashlib
 from pathlib import Path
 from typing import Any, cast
-import uuid
+from datetime import datetime, timezone
 
 from scripts.generation.prompt_grid import read_x_descriptions
 from scripts.generation.runner_selection import _extract_x_info_type
@@ -30,18 +29,15 @@ def _build_run_payload(
 
     x_path = Path(args.x_json)
     y_path = Path(args.y_json)
-    run_id = (
-        datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        + "-"
-        + uuid.uuid4().hex[:8]
-    )
+    run_key = run_dir.name
     x_descriptions = read_x_descriptions(args.x_json)
 
     return {
-        "run_id": run_id,
+        "run_id": run_key,
+        "run_key": run_key,
         "created_at": _now_iso(),
         "dry_run": args.dry_run,
-        "run_dir": str(run_dir),
+        "run_dir": run_key,
         "config_schema_version": getattr(args, "config_schema_version", None),
         "config_path": getattr(args, "config_path", None),
         "config_sha256": getattr(args, "config_sha256", None),

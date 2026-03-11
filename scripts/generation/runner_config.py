@@ -8,6 +8,8 @@ from typing import cast
 
 import yaml
 
+from scripts.run_naming import validate_run_key
+
 
 SCHEMA_VERSION = "image-run-config/v1"
 
@@ -249,7 +251,10 @@ def _load_model(payload: object) -> ModelConfig:
     }
 
     return ModelConfig(
-        key=_require_non_empty_str(mapping["key"], "model.key"),
+        key=validate_run_key(
+            _require_non_empty_str(mapping["key"], "model.key"),
+            field_name="model.key",
+        ),
         name=_require_non_empty_str(mapping["name"], "model.name"),
         family=_require_non_empty_str(mapping["family"], "model.family"),
         links=links,

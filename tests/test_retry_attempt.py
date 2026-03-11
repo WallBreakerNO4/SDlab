@@ -1,5 +1,6 @@
 # pyright: basic, reportMissingImports=false, reportUnusedCallResult=false
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -144,6 +145,50 @@ def _stub_generation(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runner, "comfy_download_image_to_path", fake_download)
 
 
+def _build_runner_args(
+    *,
+    x_json: Path,
+    y_json: Path,
+    run_dir: Path,
+    base_seed: int,
+    dry_run: bool,
+    workflow_json: str | None = None,
+) -> argparse.Namespace:
+    return argparse.Namespace(
+        config=None,
+        dry_run=dry_run,
+        retry_failed=False,
+        retry_incomplete=False,
+        retry_error_code=None,
+        run_dir=str(run_dir),
+        client_id="test-client",
+        base_url="http://127.0.0.1:8188",
+        request_timeout_s=1.0,
+        job_timeout_s=2.0,
+        concurrency=1,
+        x_json=str(x_json),
+        y_json=str(y_json),
+        template="{gender}{characters}{series}{rating}{y}{general}{quality}",
+        base_seed=base_seed,
+        workflow_json=workflow_json,
+        ksampler_node_id="3",
+        negative_prompt="neg,",
+        append_negative_prompt=None,
+        width=None,
+        height=None,
+        batch_size=1,
+        steps=28,
+        cfg=5.5,
+        denoise=1.0,
+        sampler_name="euler",
+        scheduler="normal",
+        x_limit=1,
+        y_limit=1,
+        x_indexes="0",
+        y_indexes="0",
+    )
+
+
 def test_next_attempt_pure_function_handles_increment_and_legacy() -> None:
     assert runner._next_attempt(None, increment=False) == 1
     assert runner._next_attempt(None, increment=True) == 1
@@ -164,18 +209,14 @@ def test_dry_run_writes_attempt_one_when_no_previous_record(
     x_json, y_json = _write_single_cell_inputs(tmp_path)
     run_dir = tmp_path / "run-dry-attempt"
 
-    exit_code = runner.main(
-        [
-            "--dry-run",
-            "--x-json",
-            str(x_json),
-            "--y-json",
-            str(y_json),
-            "--run-dir",
-            str(run_dir),
-            "--base-seed",
-            "100",
-        ]
+    exit_code = runner.run(
+        _build_runner_args(
+            x_json=x_json,
+            y_json=y_json,
+            run_dir=run_dir,
+            base_seed=100,
+            dry_run=True,
+        )
     )
 
     assert exit_code == 0
@@ -227,18 +268,14 @@ def test_resume_hit_keeps_previous_attempt_without_increment(
         encoding="utf-8",
     )
 
-    exit_code = runner.main(
-        [
-            "--dry-run",
-            "--x-json",
-            str(x_json),
-            "--y-json",
-            str(y_json),
-            "--run-dir",
-            str(run_dir),
-            "--base-seed",
-            "100",
-        ]
+    exit_code = runner.run(
+        _build_runner_args(
+            x_json=x_json,
+            y_json=y_json,
+            run_dir=run_dir,
+            base_seed=100,
+            dry_run=True,
+        )
     )
 
     assert exit_code == 0
@@ -276,18 +313,14 @@ def test_dry_run_non_resume_uses_previous_attempt_without_increment(
         encoding="utf-8",
     )
 
-    exit_code = runner.main(
-        [
-            "--dry-run",
-            "--x-json",
-            str(x_json),
-            "--y-json",
-            str(y_json),
-            "--run-dir",
-            str(run_dir),
-            "--base-seed",
-            "100",
-        ]
+    exit_code = runner.run(
+        _build_runner_args(
+            x_json=x_json,
+            y_json=y_json,
+            run_dir=run_dir,
+            base_seed=100,
+            dry_run=True,
+        )
     )
 
     assert exit_code == 0
@@ -307,33 +340,25 @@ def test_generation_attempt_increments_on_actual_rerun(
     x_json, y_json = _write_single_cell_inputs(tmp_path)
     run_dir = tmp_path / "run-gen-attempt"
 
-    first_exit = runner.main(
-        [
-            "--x-json",
-            str(x_json),
-            "--y-json",
-            str(y_json),
-            "--run-dir",
-            str(run_dir),
-            "--base-seed",
-            "100",
-            "--workflow-json",
-            "workflow.json",
-        ]
+    first_exit = runner.run(
+        _build_runner_args(
+            x_json=x_json,
+            y_json=y_json,
+            run_dir=run_dir,
+            base_seed=100,
+            dry_run=False,
+            workflow_json="workflow.json",
+        )
     )
-    second_exit = runner.main(
-        [
-            "--x-json",
-            str(x_json),
-            "--y-json",
-            str(y_json),
-            "--run-dir",
-            str(run_dir),
-            "--base-seed",
-            "101",
-            "--workflow-json",
-            "workflow.json",
-        ]
+    second_exit = runner.run(
+        _build_runner_args(
+            x_json=x_json,
+            y_json=y_json,
+            run_dir=run_dir,
+            base_seed=101,
+            dry_run=False,
+            workflow_json="workflow.json",
+        )
     )
 
     assert first_exit == 0
@@ -374,19 +399,15 @@ def test_generation_legacy_record_without_attempt_uses_previous_as_one(
         encoding="utf-8",
     )
 
-    exit_code = runner.main(
-        [
-            "--x-json",
-            str(x_json),
-            "--y-json",
-            str(y_json),
-            "--run-dir",
-            str(run_dir),
-            "--base-seed",
-            "100",
-            "--workflow-json",
-            "workflow.json",
-        ]
+    exit_code = runner.run(
+        _build_runner_args(
+            x_json=x_json,
+            y_json=y_json,
+            run_dir=run_dir,
+            base_seed=100,
+            dry_run=False,
+            workflow_json="workflow.json",
+        )
     )
 
     assert exit_code == 0

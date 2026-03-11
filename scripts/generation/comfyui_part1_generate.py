@@ -113,6 +113,7 @@ from scripts.generation.runner_retry import (  # noqa: E402
     _validate_retry_failed_cells_consistency,
 )
 from scripts.generation.runner_config import load_runner_config  # noqa: E402
+from scripts.run_naming import validate_run_key  # noqa: E402
 from scripts.generation.workflow_patch import (  # noqa: E402
     WorkflowDict,
     WorkflowOverrides,
@@ -257,6 +258,7 @@ def _apply_fresh_run_config(args: argparse.Namespace) -> None:
     args.config_path = config.config_path
     args.config_sha256 = config.config_sha256
     args.config_model = config.model
+    args.run_key = config.model.key
     args.config_prompts = config.prompts
     args.config_workflow = config.workflow
     args.config_generation = config.generation
@@ -325,7 +327,10 @@ def run(args: argparse.Namespace) -> int:
         axis_name="y",
     )
 
-    run_artifacts = _prepare_run_artifacts(args.run_dir)
+    run_artifacts = _prepare_run_artifacts(
+        args.run_dir,
+        default_run_key=_default_run_key(args),
+    )
     run_artifacts.images_dir.mkdir(parents=True, exist_ok=True)
 
     workflow_context = _load_workflow_context(args)
@@ -576,6 +581,17 @@ def _configure_logging() -> None:
     if root.handlers:
         return
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+
+
+def _default_run_key(args: argparse.Namespace) -> str:
+    run_dir = getattr(args, "run_dir", None)
+    if isinstance(run_dir, str) and run_dir.strip():
+        return validate_run_key(Path(run_dir).name, field_name="run_dir")
+
+    run_key = getattr(args, "run_key", None)
+    if not isinstance(run_key, str):
+        raise ValueError("fresh-run 缺少 model.key，无法生成默认 run 目录名")
+    return validate_run_key(run_key, field_name="model.key")
 
 
 def _validate_args(args: argparse.Namespace) -> None:

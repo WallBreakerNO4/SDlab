@@ -344,6 +344,20 @@ def test_load_runner_config_rejects_empty_model_key(tmp_path: Path) -> None:
         module.load_runner_config(str(config_path), repo_root=tmp_path)
 
 
+def test_load_runner_config_rejects_non_slug_model_key(tmp_path: Path) -> None:
+    module = _import_runner_config_module()
+    _ = _write_assets(tmp_path)
+    config_path = tmp_path / "data/runs/example.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        _valid_config_text().replace("  key: nai-4-full", "  key: NAI_4_FULL"),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="model.key"):
+        module.load_runner_config(str(config_path), repo_root=tmp_path)
+
+
 def test_fresh_run_rejects_deprecated_business_env_before_loading_config(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
