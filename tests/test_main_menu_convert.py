@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 import sys
 from pathlib import Path
 
@@ -106,19 +107,21 @@ def test_other_convert_y_can_use_manual_path(
     assert "转换完成，退出码: 3" in outputs
 
 
-def test_other_clear_r2_uses_bucket_name_from_menu(
+def test_other_clear_r2_uses_bucket_target_from_menu(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: list[list[str] | None] = []
+    captured_targets: list[str | None] = []
 
     def _fake_clear_bucket_main(argv: list[str] | None = None) -> int:
         captured.append(argv)
+        captured_targets.append(os.environ.get("SDSLAB_R2_CLEAR_BUCKET_TARGET"))
         return 0
 
     monkeypatch.setattr("scripts.r2_upload.clear_bucket.main", _fake_clear_bucket_main)
     fake_questionary = _FakeQuestionary(
-        selects=["other", "clear_r2", "__exit__"],
-        texts=["private-bucket"],
+        selects=["other", "clear_r2", "private", "__exit__"],
+        texts=[],
         confirms=[True],
     )
     monkeypatch.setattr("scripts.cli.menu._load_questionary", lambda: fake_questionary)
@@ -128,5 +131,6 @@ def test_other_clear_r2_uses_bucket_name_from_menu(
 
     assert exit_code == 0
     assert captured == [[]]
-    assert "目标桶: private-bucket" in outputs
+    assert captured_targets == ["private"]
+    assert "清空目标: R2_PRIVATE_BUCKET" in outputs
     assert "清空完成，退出码: 0" in outputs

@@ -272,10 +272,22 @@ def _handle_csv_to_yaml(backend: QuestionaryMenuBackend) -> None:
 
 
 def _handle_clear_r2(backend: QuestionaryMenuBackend) -> None:
-    bucket_name = backend.text("输入要清空的 R2 桶名")
-    if not bucket_name:
-        backend.write("桶名不能为空，已返回上一级。")
+    selected = backend.select(
+        "选择要清空的 R2 桶",
+        [
+            MenuChoice("public", "清空 R2_PUBLIC_BUCKET"),
+            MenuChoice("private", "清空 R2_PRIVATE_BUCKET"),
+            MenuChoice("both", "清空 R2_PUBLIC_BUCKET 和 R2_PRIVATE_BUCKET"),
+        ],
+        allow_back=True,
+    )
+    if selected == "__back__":
         return
+    target_label = {
+        "public": "R2_PUBLIC_BUCKET",
+        "private": "R2_PRIVATE_BUCKET",
+        "both": "R2_PUBLIC_BUCKET + R2_PRIVATE_BUCKET",
+    }.get(selected, selected)
     plan = ExecutionPlan(
         entry_key="clear_r2_bucket",
         argv=[],
@@ -283,11 +295,11 @@ def _handle_clear_r2(backend: QuestionaryMenuBackend) -> None:
         success_prefix="清空完成，退出码: ",
         cancel_message="已取消清空 R2 桶。",
     )
-    backend.write(f"目标桶: {bucket_name}")
+    backend.write(f"清空目标: {target_label}")
     if not backend.confirm("确认执行清空操作？", default=False):
         backend.write(plan.cancel_message)
         return
-    _run_with_bucket_name(backend, plan, bucket_name)
+    _run_with_clear_target(backend, plan, selected)
 
 
 def _confirm_and_execute(
@@ -301,22 +313,28 @@ def _confirm_and_execute(
     _run_execution_plan(backend, plan)
 
 
-def _run_with_bucket_name(
+def _run_with_clear_target(
     backend: QuestionaryMenuBackend,
     plan: ExecutionPlan,
-    bucket_name: str,
+    clear_target: str,
 ) -> None:
     entry = get_entry(plan.entry_key)
     main_func = load_entrypoint(entry)
-    original_input = os.environ.get("SDSLAB_R2_CLEAR_BUCKET_NAME")
-    os.environ["SDSLAB_R2_CLEAR_BUCKET_NAME"] = bucket_name
+    original_target = os.environ.get("SDSLAB_R2_CLEAR_BUCKET_TARGET")
+    original_legacy_target = os.environ.get("SDSLAB_R2_CLEAR_BUCKET_NAME")
+    os.environ["SDSLAB_R2_CLEAR_BUCKET_TARGET"] = clear_target
+    _ = os.environ.pop("SDSLAB_R2_CLEAR_BUCKET_NAME", None)
     try:
         exit_code = _execute_main(main_func, [])
     finally:
-        if original_input is None:
-            os.environ.pop("SDSLAB_R2_CLEAR_BUCKET_NAME", None)
+        if original_target is None:
+            _ = os.environ.pop("SDSLAB_R2_CLEAR_BUCKET_TARGET", None)
         else:
-            os.environ["SDSLAB_R2_CLEAR_BUCKET_NAME"] = original_input
+            os.environ["SDSLAB_R2_CLEAR_BUCKET_TARGET"] = original_target
+        if original_legacy_target is None:
+            _ = os.environ.pop("SDSLAB_R2_CLEAR_BUCKET_NAME", None)
+        else:
+            os.environ["SDSLAB_R2_CLEAR_BUCKET_NAME"] = original_legacy_target
     backend.write(f"{plan.success_prefix}{exit_code}")
 
 
