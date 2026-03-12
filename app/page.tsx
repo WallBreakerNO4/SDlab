@@ -154,7 +154,10 @@ export default function Page() {
 
         {!isLoading && runs.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {runs.map((run, index) => (
+            {runs.map((run, index) => {
+              const modelName = run.model?.name || run.run_dir
+              const modelDesc = run.model?.description?.zh || run.model?.description?.en
+              return (
               <Link
                 key={run.run_dir}
                 href={`/runs/${encodeURIComponent(run.run_dir)}`}
@@ -165,24 +168,36 @@ export default function Page() {
                   animationDelay: `${index * 80}ms`,
                 }}
               >
-                <Card className="hover:border-primary/20 transition-all duration-200 hover:shadow-lg">
-                  <CardContent className="flex flex-col justify-center space-y-4 pt-6">
-                    <div className="space-y-1.5">
-                      <div className="text-lg font-bold leading-none tracking-tight">
-                        {run.run_dir}
+                <Card className="hover:border-primary/50 group h-full transition-all duration-300 hover:shadow-xl dark:hover:shadow-primary/5">
+                  <CardContent className="flex h-full flex-col justify-between space-y-4 pt-6">
+                    <div className="space-y-3">
+                      <div className="space-y-1.5">
+                        <div className="group-hover:text-primary transition-colors text-xl font-bold leading-none tracking-tight">
+                          {modelName}
+                        </div>
+                        <div className="text-muted-foreground/60 font-mono text-[10px]">
+                          {run.run_dir}
+                        </div>
                       </div>
-                      <div className="text-muted-foreground text-sm">
+                      {modelDesc ? (
+                        <div className="bg-muted/50 rounded-md p-3 text-sm text-muted-foreground line-clamp-2">
+                          {modelDesc}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center justify-between pt-2">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="bg-primary/5">{`${run.x_count}×${run.y_count}`}</Badge>
+                        <Badge variant="secondary" className="opacity-80">{`${run.total_cells} 张`}</Badge>
+                      </div>
+                      <div className="text-muted-foreground/80 text-xs">
                         {formatCreatedAt(run.created_at)}
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge>{`${run.x_count}×${run.y_count}`}</Badge>
-                      <Badge variant="secondary">{`${run.total_cells} 张`}</Badge>
                     </div>
                   </CardContent>
                 </Card>
               </Link>
-            ))}
+            )})}
           </div>
         ) : null}
       </div>

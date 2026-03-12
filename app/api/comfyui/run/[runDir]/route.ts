@@ -25,6 +25,27 @@ function getNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null
 }
 
+function parseModelMetadata(rawModel: unknown) {
+  const model = asJsonObject(rawModel as JsonValue)
+  if (!model) return null
+
+  const description = asJsonObject(model.description as JsonValue)
+  const links = asJsonObject(model.links as JsonValue)
+
+  return {
+    name: getNonEmptyString(model.name),
+    description: description ? {
+      zh: getNonEmptyString(description.zh),
+      en: getNonEmptyString(description.en),
+    } : null,
+    links: links ? {
+      homepage: getNonEmptyString(links.homepage),
+      huggingface: getNonEmptyString(links.huggingface),
+      civitai: getNonEmptyString(links.civitai),
+    } : null,
+  }
+}
+
 export async function GET(
   _request: Request,
   context: RouteContext,
@@ -59,6 +80,7 @@ export async function GET(
     const runJson = asJsonObject(row.run_json)
     const runId = getNonEmptyString(row.run_id) ?? (runJson ? getNonEmptyString(runJson.run_id) : null)
     const selection = runJson ? asJsonObject(runJson.selection as JsonValue) : null
+    const modelMetadata = runJson ? parseModelMetadata(runJson.model) : null
 
     const xColumnsRaw = Array.isArray(row.x_columns) ? row.x_columns : selection?.x_columns
     const yIndexesRaw = Array.isArray(row.y_indexes) ? row.y_indexes : selection?.y_indexes
@@ -102,6 +124,7 @@ export async function GET(
         selection: {
           total_cells,
         },
+        model: modelMetadata,
       },
       xLabels,
       yLabels,

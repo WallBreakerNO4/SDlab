@@ -17,6 +17,21 @@ export interface GenerationParams {
   scheduler: string | null;
 }
 
+export interface ModelLinks {
+  homepage?: string | null;
+  huggingface?: string | null;
+  civitai?: string | null;
+}
+
+export interface ModelMetadata {
+  name?: string | null;
+  description?: {
+    zh?: string | null;
+    en?: string | null;
+  } | null;
+  links?: ModelLinks | null;
+}
+
 export interface XFields {
   quality?: string;
   rating?: string;
@@ -95,6 +110,7 @@ export interface RunDetail {
   client_id: string | null;
   selection: Selection;
   generation_overrides: GenerationOverrides;
+  model?: ModelMetadata | null;
 }
 
 export interface RunSummary {
@@ -104,6 +120,7 @@ export interface RunSummary {
   x_count: number;
   y_count: number;
   total_cells: number;
+  model?: ModelMetadata | null;
 }
 
 export interface GridIndex {
