@@ -24,7 +24,13 @@ export interface SupabaseRunRow {
   x_count?: number | null;
   y_count?: number | null;
   total_cells?: number | null;
-  run_json: JsonValue;
+  model_name?: string | null;
+  model_description_zh?: string | null;
+  model_description_en?: string | null;
+  model_homepage?: string | null;
+  model_huggingface?: string | null;
+  model_civitai?: string | null;
+  run_json?: JsonValue | null;
 }
 
 export interface SupabaseImageRow {

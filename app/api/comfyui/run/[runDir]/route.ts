@@ -1,49 +1,47 @@
-import { isValidRunDir } from "@/lib/comfyui-types"
-import { createSupabaseAuthClient } from "@/lib/supabase-auth"
-import type { JsonObject, JsonValue, SupabaseRunRow } from "@/lib/supabase-types"
+import { isValidRunDir } from "@/lib/comfyui-types";
+import { createSupabaseAuthClient } from "@/lib/supabase-auth";
+import type {
+  JsonObject,
+  JsonValue,
+  SupabaseRunRow,
+} from "@/lib/supabase-types";
 
-export const runtime = "nodejs"
+export const runtime = "nodejs";
 
 type RouteContext = {
-  params: Promise<{ runDir: string }>
-}
+  params: Promise<{ runDir: string }>;
+};
 
 function asJsonObject(value: JsonValue): JsonObject | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return null
+    return null;
   }
-  return value as JsonObject
+  return value as JsonObject;
 }
 
 function getNonEmptyString(value: unknown): string | null {
-  if (typeof value !== "string") return null
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 function getNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function parseModelMetadata(rawModel: unknown) {
-  const model = asJsonObject(rawModel as JsonValue)
-  if (!model) return null
-
-  const description = asJsonObject(model.description as JsonValue)
-  const links = asJsonObject(model.links as JsonValue)
-
+function readModelMetadata(row: SupabaseRunRow) {
   return {
-    name: getNonEmptyString(model.name),
-    description: description ? {
-      zh: getNonEmptyString(description.zh),
-      en: getNonEmptyString(description.en),
-    } : null,
-    links: links ? {
-      homepage: getNonEmptyString(links.homepage),
-      huggingface: getNonEmptyString(links.huggingface),
-      civitai: getNonEmptyString(links.civitai),
-    } : null,
-  }
+    name: getNonEmptyString(row.model_name),
+    description: {
+      zh: getNonEmptyString(row.model_description_zh),
+      en: getNonEmptyString(row.model_description_en),
+    },
+    links: {
+      homepage: getNonEmptyString(row.model_homepage),
+      huggingface: getNonEmptyString(row.model_huggingface),
+      civitai: getNonEmptyString(row.model_civitai),
+    },
+  };
 }
 
 export async function GET(
@@ -51,17 +49,19 @@ export async function GET(
   context: RouteContext,
 ): Promise<Response> {
   try {
-    const { runDir } = await context.params
+    const { runDir } = await context.params;
     if (!isValidRunDir(runDir)) {
-      return Response.json({ error: "Run not found" }, { status: 404 })
+      return Response.json({ error: "Run not found" }, { status: 404 });
     }
 
-    const supabase = await createSupabaseAuthClient()
+    const supabase = await createSupabaseAuthClient();
     const { data, error } = await supabase
       .from("runs")
-      .select("run_id, run_dir, created_at, x_columns, y_indexes, x_count, y_count, total_cells, run_json")
+      .select(
+        "run_id, run_dir, created_at, x_columns, y_indexes, x_count, y_count, total_cells, model_name, model_description_zh, model_description_en, model_homepage, model_huggingface, model_civitai",
+      )
       .eq("run_dir", runDir)
-      .maybeSingle()
+      .maybeSingle();
 
     if (error) {
       return Response.json(
@@ -69,52 +69,55 @@ export async function GET(
           error: "Failed to load run detail",
         },
         { status: 500 },
-      )
+      );
     }
 
-    const row = data as SupabaseRunRow | null
+    const row = data as SupabaseRunRow | null;
     if (!row) {
-      return Response.json({ error: "Run not found" }, { status: 404 })
+      return Response.json({ error: "Run not found" }, { status: 404 });
     }
 
-    const runJson = asJsonObject(row.run_json)
-    const runId = getNonEmptyString(row.run_id) ?? (runJson ? getNonEmptyString(runJson.run_id) : null)
-    const selection = runJson ? asJsonObject(runJson.selection as JsonValue) : null
-    const modelMetadata = runJson ? parseModelMetadata(runJson.model) : null
+    const runId = getNonEmptyString(row.run_id);
+    const xColumnsRaw = row.x_columns;
+    const yIndexesRaw = row.y_indexes;
 
-    const xColumnsRaw = Array.isArray(row.x_columns) ? row.x_columns : selection?.x_columns
-    const yIndexesRaw = Array.isArray(row.y_indexes) ? row.y_indexes : selection?.y_indexes
-
-    const x_columns: JsonObject[] = Array.isArray(xColumnsRaw)
-      ? xColumnsRaw
-          .map((item) => asJsonObject(item as JsonValue))
-          .filter((item): item is JsonObject => item !== null)
-      : []
-
-    const y_indexes: number[] = Array.isArray(yIndexesRaw)
-      ? yIndexesRaw.filter((item): item is number => typeof item === "number")
-      : []
-
-    const totalCellsFromRow = getNumber(row.total_cells)
-    const totalCellsFromJson = getNumber(selection?.total_cells)
-    const total_cells = totalCellsFromRow ?? totalCellsFromJson ?? x_columns.length * y_indexes.length
-
-    if (!runId) {
+    if (!runId || !Array.isArray(xColumnsRaw) || !Array.isArray(yIndexesRaw)) {
       return Response.json(
         {
           error: "Failed to load run detail",
         },
         { status: 500 },
-      )
+      );
+    }
+
+    const x_columns: JsonObject[] = Array.isArray(xColumnsRaw)
+      ? xColumnsRaw
+          .map((item) => asJsonObject(item as JsonValue))
+          .filter((item): item is JsonObject => item !== null)
+      : [];
+
+    const y_indexes: number[] = Array.isArray(yIndexesRaw)
+      ? yIndexesRaw.filter((item): item is number => typeof item === "number")
+      : [];
+
+    const total_cells = getNumber(row.total_cells);
+
+    if (total_cells === null) {
+      return Response.json(
+        {
+          error: "Failed to load run detail",
+        },
+        { status: 500 },
+      );
     }
 
     const xLabels = x_columns.map((col, index) => {
-      const desc = asJsonObject(col.description as JsonValue)
-      const zh = desc ? getNonEmptyString(desc.zh) : null
-      return zh ?? `X${index}`
-    })
+      const desc = asJsonObject(col.description as JsonValue);
+      const zh = desc ? getNonEmptyString(desc.zh) : null;
+      return zh ?? `X${index}`;
+    });
 
-    const yLabels = y_indexes.map((yIndex) => `Y${yIndex}`)
+    const yLabels = y_indexes.map((yIndex) => `Y${yIndex}`);
 
     return Response.json({
       run: {
@@ -124,19 +127,19 @@ export async function GET(
         selection: {
           total_cells,
         },
-        model: modelMetadata,
+        model: readModelMetadata(row),
       },
       xLabels,
       yLabels,
       x_columns,
       y_indexes,
-    })
+    });
   } catch {
     return Response.json(
       {
         error: "Failed to load run detail",
       },
       { status: 500 },
-    )
+    );
   }
 }
