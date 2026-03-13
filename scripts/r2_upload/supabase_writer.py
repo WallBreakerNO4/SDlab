@@ -212,7 +212,10 @@ class SupabaseWriter:
 
         if self.dry_run:
             return
-        run_row = self._build_run_row(payload, run_dir=run_dir, run_json=run_json)
+        try:
+            run_row = self._build_run_row(payload, run_dir=run_dir, run_json=run_json)
+        except PayloadValidationError as exc:
+            raise _to_argument_error(exc) from exc
         run_id = self._upsert_run(run_row, run_dir=run_dir)
         _tick_progress()
         image_rows: list[dict[str, object]] = []
@@ -220,11 +223,14 @@ class SupabaseWriter:
         image_variant_lists: list[list[Mapping[str, object]]] = []
         image_lookup_keys: list[tuple[object, object, object, object]] = []
         for image in images:
-            row, context, lookup_key, variants = self._build_image_row(
-                run_id,
-                image,
-                run_dir=run_dir,
-            )
+            try:
+                row, context, lookup_key, variants = self._build_image_row(
+                    run_id,
+                    image,
+                    run_dir=run_dir,
+                )
+            except PayloadValidationError as exc:
+                raise _to_argument_error(exc) from exc
             image_rows.append(row)
             image_contexts.append(context)
             image_variant_lists.append(variants)
@@ -247,7 +253,10 @@ class SupabaseWriter:
                 )
             _tick_progress()
             for variant in variants:
-                row = self._build_variant_row(image_id, variant, run_dir=run_dir)
+                try:
+                    row = self._build_variant_row(image_id, variant, run_dir=run_dir)
+                except PayloadValidationError as exc:
+                    raise _to_argument_error(exc) from exc
                 variant_rows.append(row)
                 _tick_progress()
         self._upsert_variants_batch(variant_rows)
@@ -259,52 +268,37 @@ class SupabaseWriter:
         run_dir: str,
         run_json: Mapping[str, object],
     ) -> dict[str, object]:
-        selection = _extract_selection(run_json)
-        x_columns = _optional_object_list_field(payload, "x_columns")
-        if not x_columns and selection is not None:
-            x_columns = optional_object_list(
-                selection.get("x_columns"), field="run_json.selection.x_columns"
-            )
-
-        y_indexes = _optional_int_list(payload.get("y_indexes"))
-        if not y_indexes and selection is not None:
-            y_indexes = _optional_int_list(selection.get("y_indexes"))
-
-        x_count = _optional_int_field(payload, "x_count")
-        if x_count is None and selection is not None:
-            x_count = optional_int(
-                selection.get("x_count"), field="run_json.selection.x_count"
-            )
-        if x_count is None:
-            x_count = len(x_columns)
-
-        y_count = _optional_int_field(payload, "y_count")
-        if y_count is None and selection is not None:
-            y_count = optional_int(
-                selection.get("y_count"), field="run_json.selection.y_count"
-            )
-        if y_count is None:
-            y_count = len(y_indexes)
-
-        total_cells = _optional_int_field(payload, "total_cells")
-        if total_cells is None and selection is not None:
-            total_cells = optional_int(
-                selection.get("total_cells"), field="run_json.selection.total_cells"
-            )
-        if total_cells is None:
-            total_cells = x_count * y_count
+        x_columns = _required_object_list_field(payload, "x_columns")
+        y_indexes = _required_int_list_field(payload, "y_indexes")
+        x_count = required_int(payload, "x_count")
+        y_count = required_int(payload, "y_count")
+        total_cells = required_int(payload, "total_cells")
 
         row: dict[str, object] = {
             "run_dir": run_dir,
             "run_json": dict(run_json),
-            "run_id": _optional_required_string(payload.get("run_id"))
-            or _optional_required_string(run_json.get("run_id"))
-            or run_dir,
+            "run_id": required_str(payload, "run_id"),
             "x_columns": x_columns,
             "y_indexes": y_indexes,
             "x_count": x_count,
             "y_count": y_count,
             "total_cells": total_cells,
+            "model_name": optional_str(payload.get("model_name"), field="model_name"),
+            "model_description_zh": optional_str(
+                payload.get("model_description_zh"), field="model_description_zh"
+            ),
+            "model_description_en": optional_str(
+                payload.get("model_description_en"), field="model_description_en"
+            ),
+            "model_homepage": optional_str(
+                payload.get("model_homepage"), field="model_homepage"
+            ),
+            "model_huggingface": optional_str(
+                payload.get("model_huggingface"), field="model_huggingface"
+            ),
+            "model_civitai": optional_str(
+                payload.get("model_civitai"), field="model_civitai"
+            ),
         }
         return row
 
@@ -676,20 +670,6 @@ def _to_argument_error(exc: PayloadValidationError) -> SupabaseArgumentError:
     )
 
 
-def _extract_selection(run_json: Mapping[str, object]) -> Mapping[str, object] | None:
-    direct = run_json.get("selection")
-    if isinstance(direct, Mapping):
-        return cast(Mapping[str, object], direct)
-
-    config_snapshot = run_json.get("config_snapshot")
-    if isinstance(config_snapshot, Mapping):
-        config_snapshot_map = cast(Mapping[str, object], config_snapshot)
-        selection = config_snapshot_map.get("selection")
-        if isinstance(selection, Mapping):
-            return cast(Mapping[str, object], selection)
-    return None
-
-
 def _optional_required_string(value: object) -> str | None:
     if not isinstance(value, str):
         return None
@@ -707,6 +687,16 @@ def _optional_int_list(value: object) -> list[int]:
     return result
 
 
+def _required_int_list_field(obj: Mapping[str, object], key: str) -> list[int]:
+    if key not in obj:
+        raise PayloadValidationError(
+            "payload field must be an integer array",
+            field=key,
+            expected="int[]",
+        )
+    return _optional_int_list(obj.get(key))
+
+
 def _optional_int_field(obj: Mapping[str, object], key: str) -> int | None:
     return optional_int(obj.get(key), field=key)
 
@@ -714,4 +704,16 @@ def _optional_int_field(obj: Mapping[str, object], key: str) -> int | None:
 def _optional_object_list_field(
     obj: Mapping[str, object], key: str
 ) -> list[Mapping[str, object]]:
+    return optional_object_list(obj.get(key), field=key)
+
+
+def _required_object_list_field(
+    obj: Mapping[str, object], key: str
+) -> list[Mapping[str, object]]:
+    if key not in obj:
+        raise PayloadValidationError(
+            "payload field must be an array",
+            field=key,
+            expected="object[]",
+        )
     return optional_object_list(obj.get(key), field=key)

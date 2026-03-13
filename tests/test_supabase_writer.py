@@ -24,6 +24,18 @@ def _sample_payload() -> dict[str, object]:
     return {
         "run_dir": "test-run",
         "run_json": {"base_seed": 123, "count": 1},
+        "run_id": "test-run",
+        "x_columns": [],
+        "y_indexes": [],
+        "x_count": 0,
+        "y_count": 0,
+        "total_cells": 0,
+        "model_name": None,
+        "model_description_zh": None,
+        "model_description_en": None,
+        "model_homepage": None,
+        "model_huggingface": None,
+        "model_civitai": None,
         "images": [
             {
                 "x_index": 0,
@@ -334,12 +346,21 @@ def test_upsert_upload_index_extracts_structured_columns() -> None:
     payload = {
         "run_dir": "structured-run",
         "run_json": {
-            "run_id": "structured-run-id",
-            "selection": {
-                "x_columns": [{"type": "quality", "description": {"zh": "高质量"}}],
-                "y_indexes": [0, 1],
-            },
+            "run_id": "json-run-id",
+            "selection": {"x_count": 99, "y_count": 99, "total_cells": 9801},
         },
+        "run_id": "structured-run-id",
+        "x_columns": [{"type": "quality", "description": {"zh": "高质量"}}],
+        "y_indexes": [0, 1],
+        "x_count": 1,
+        "y_count": 2,
+        "total_cells": 2,
+        "model_name": "ChenkinNoob XL Rectified Flow",
+        "model_description_zh": "示例配置",
+        "model_description_en": "Example config",
+        "model_homepage": None,
+        "model_huggingface": "https://huggingface.co/example",
+        "model_civitai": None,
         "images": [
             {
                 "x_index": 0,
@@ -368,6 +389,10 @@ def test_upsert_upload_index_extracts_structured_columns() -> None:
     assert run_row["x_columns"] == [
         {"type": "quality", "description": {"zh": "高质量"}}
     ]
+    assert run_row["model_name"] == "ChenkinNoob XL Rectified Flow"
+    assert run_row["model_description_zh"] == "示例配置"
+    assert run_row["model_description_en"] == "Example config"
+    assert run_row["model_huggingface"] == "https://huggingface.co/example"
 
     image_row = next(iter(client._tables["images"].values()))
     assert image_row["seed"] == "42"
@@ -394,6 +419,18 @@ def test_upsert_upload_index_preserves_large_seed_as_string() -> None:
     payload = {
         "run_dir": "large-seed-run",
         "run_json": {"run_id": "large-seed-run"},
+        "run_id": "large-seed-run",
+        "x_columns": [],
+        "y_indexes": [],
+        "x_count": 0,
+        "y_count": 0,
+        "total_cells": 0,
+        "model_name": None,
+        "model_description_zh": None,
+        "model_description_en": None,
+        "model_homepage": None,
+        "model_huggingface": None,
+        "model_civitai": None,
         "images": [
             {
                 "x_index": 0,
@@ -410,6 +447,36 @@ def test_upsert_upload_index_preserves_large_seed_as_string() -> None:
 
     image_row = next(iter(client._tables["images"].values()))
     assert image_row["seed"] == "18020657621215222860"
+
+
+def test_upsert_upload_index_requires_structured_run_fields() -> None:
+    client = _InMemorySupabaseClient(return_upsert_rows=True)
+    writer = SupabaseWriter(client=client, dry_run=False)
+    payload = {
+        "run_dir": "missing-structured-run",
+        "run_json": {
+            "run_id": "json-only-run-id",
+            "selection": {
+                "x_columns": [{"type": "quality"}],
+                "y_indexes": [0],
+                "x_count": 1,
+                "y_count": 1,
+                "total_cells": 1,
+            },
+        },
+        "x_columns": [],
+        "y_indexes": [],
+        "x_count": 0,
+        "y_count": 0,
+        "total_cells": 0,
+        "images": [],
+    }
+
+    with pytest.raises(SupabaseArgumentError) as exc:
+        writer.upsert_upload_index(cast(dict[str, object], payload))
+
+    assert exc.value.code == "invalid_payload"
+    assert exc.value.context["field"] == "run_id"
 
 
 def test_upsert_upload_index_rejects_invalid_payload() -> None:

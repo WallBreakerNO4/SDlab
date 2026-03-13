@@ -22,6 +22,26 @@ from scripts.r2_upload.supabase_writer import (
 )
 
 
+def _structured_run_payload() -> dict[str, object]:
+    return {
+        "run_dir": "run-1",
+        "run_json": {"base_seed": 1},
+        "run_id": "run-1",
+        "x_columns": [],
+        "y_indexes": [],
+        "x_count": 0,
+        "y_count": 0,
+        "total_cells": 0,
+        "model_name": None,
+        "model_description_zh": None,
+        "model_description_en": None,
+        "model_homepage": None,
+        "model_huggingface": None,
+        "model_civitai": None,
+        "images": [],
+    }
+
+
 class _FakeHTTPResponse:
     def __init__(self, payload: object, *, status: int = 200) -> None:
         self.status = status
@@ -161,13 +181,7 @@ def test_from_env_execute_mode_does_not_import_supabase_or_httpx(
     monkeypatch.setattr(builtins, "__import__", guarded_import)
 
     writer = SupabaseWriter.from_env(dry_run=False)
-    writer.upsert_upload_index(
-        {
-            "run_dir": "run-1",
-            "run_json": {"base_seed": 1},
-            "images": [],
-        }
-    )
+    writer.upsert_upload_index(_structured_run_payload())
 
     assert writer.dry_run is False
 
@@ -195,13 +209,7 @@ def test_postgrest_http_error_code_is_mapped_without_secret_leak(
 
     writer = SupabaseWriter.from_env(dry_run=False)
     with pytest.raises(SupabaseRemoteError) as exc:
-        writer.upsert_upload_index(
-            {
-                "run_dir": "run-1",
-                "run_json": {"base_seed": 1},
-                "images": [],
-            }
-        )
+        writer.upsert_upload_index(_structured_run_payload())
 
     assert exc.value.code == "request_failed"
     assert exc.value.context["remote_code"] == "23505"
@@ -239,11 +247,5 @@ def test_postgrest_http_retries_transient_connection_error(
 
     writer = SupabaseWriter.from_env(dry_run=False)
 
-    writer.upsert_upload_index(
-        {
-            "run_dir": "run-1",
-            "run_json": {"base_seed": 1},
-            "images": [],
-        }
-    )
+    writer.upsert_upload_index(_structured_run_payload())
     assert _RetryConnection.request_calls == 2
