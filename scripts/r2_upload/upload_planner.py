@@ -87,10 +87,17 @@ def _selection_from_run_json(run_json: dict[str, object]) -> dict[str, object] |
     return _json_object(config_snapshot.get("selection"))
 
 
+def _model_from_run_json(run_json: dict[str, object]) -> dict[str, object] | None:
+    return _json_object(run_json.get("model"))
+
+
 def _build_run_db_fields(
     run_json: dict[str, object], *, run_dir_name: str
 ) -> dict[str, object]:
     selection = _selection_from_run_json(run_json)
+    model = _model_from_run_json(run_json)
+    description = _json_object(model.get("description") if model else None)
+    links = _json_object(model.get("links") if model else None)
     x_columns = _json_object_list(selection.get("x_columns") if selection else None)
     y_indexes = _int_list(selection.get("y_indexes") if selection else None)
 
@@ -121,6 +128,18 @@ def _build_run_db_fields(
         "x_count": x_count,
         "y_count": y_count,
         "total_cells": total_cells,
+        "model_name": _non_empty_str(model.get("name") if model else None),
+        "model_description_zh": _non_empty_str(
+            description.get("zh") if description else None
+        ),
+        "model_description_en": _non_empty_str(
+            description.get("en") if description else None
+        ),
+        "model_homepage": _non_empty_str(links.get("homepage") if links else None),
+        "model_huggingface": _non_empty_str(
+            links.get("huggingface") if links else None
+        ),
+        "model_civitai": _non_empty_str(links.get("civitai") if links else None),
     }
 
 

@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from scripts.r2_upload.upload_images_to_r2 import main
+from scripts.r2_upload.upload_planner import _build_run_db_fields
 
 
 def _write_png(path: Path, *, size: tuple[int, int] = (8, 6)) -> None:
@@ -191,6 +192,21 @@ def test_cli_dry_run_outputs_required_keys_and_manifest_uploads(
     assert isinstance(manifest_keys.get("private"), list)
     assert len(cast(list[object], manifest_keys["public"])) == 1
     assert len(cast(list[object], manifest_keys["private"])) == 1
+
+
+def test_build_run_db_fields_extracts_model_structured_fields(tmp_path: Path) -> None:
+    run_dir = tmp_path / "model-run"
+    fields = _build_run_db_fields(
+        _extended_run_json(run_dir=run_dir), run_dir_name=run_dir.name
+    )
+
+    assert fields["run_id"] == "model-run"
+    assert fields["model_name"] == "ChenkinNoob XL Rectified Flow"
+    assert fields["model_description_zh"] == "示例配置"
+    assert fields["model_description_en"] == "Example config"
+    assert fields["model_homepage"] is None
+    assert fields["model_huggingface"] is None
+    assert fields["model_civitai"] is None
 
 
 def test_cli_default_selects_latest_run_under_run_root(
