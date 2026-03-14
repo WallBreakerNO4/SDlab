@@ -6,19 +6,19 @@
 
 ## 去哪儿看
 
-| 场景 | 位置 | 备注 |
-| --- | --- | --- |
-| 虚拟网格 + 预览 | `virtual-grid.tsx` | `@tanstack/react-virtual` + Dialog + 复制/切图 |
-| Blurhash 占位 | `blurhash-canvas.tsx` | 从 blurhash 字符串渲染 canvas 占位图 |
-| 网格图片组件 | `grid-image.tsx` | R2 图片 + blurhash 占位 + 加载/错误状态 |
-| 页面侧消费 | `app/runs/[runDir]/page.tsx` | fetch + type guard + skeleton/empty 状态 |
+| 场景            | 位置                         | 备注                                           |
+| --------------- | ---------------------------- | ---------------------------------------------- |
+| 虚拟网格 + 预览 | `virtual-grid.tsx`           | `@tanstack/react-virtual` + Dialog + 复制/切图 |
+| Blurhash 占位   | `blurhash-canvas.tsx`        | 从 blurhash 字符串渲染 canvas 占位图           |
+| 网格图片组件    | `grid-image.tsx`             | R2 图片 + blurhash 占位 + 加载/错误状态        |
+| 页面侧消费      | `app/runs/[runDir]/page.tsx` | fetch + type guard + skeleton/empty 状态       |
 
 ## 约定（本目录特有）
 
 - 性能：大网格必须虚拟化渲染（只渲染可视行/列）；避免一次性 render 全量 cell。
 - 图片源：R2 公开 URL 优先；私有图片走 `/api/r2/private/` 代理。URL 构建使用 `lib/r2-url.ts`。
 - Blurhash：图片未加载时展示 blurhash canvas 占位；加载完成后平滑切换到真实图片。
-- 多图：预览数据来自 `/row` 返回的 `items[].thumb` / `display` / `original`；展示时优先选可用 display/thumb 变体。
+- 多图：预览数据来自 `/row` 返回的 `items[].thumb` / `display`；展示时优先选可用 display/thumb 变体。
 - 状态：组件层核心是 row cache 的 `ready/error` 与图片加载中的占位态；缺失 cell 也要能渲染 blurhash 或空态。
 - UI primitives：按钮/对话框等交互来自 `components/ui/*`，不要在业务组件里手写 primitives。
 

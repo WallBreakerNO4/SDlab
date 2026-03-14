@@ -6,23 +6,23 @@
 
 ## 去哪儿看
 
-| 场景 | 位置 | 备注 |
-| --- | --- | --- |
-| 服务端 Supabase 客户端 | `supabase-auth.ts` | `server-only` + cookie session + publishable key |
-| 浏览器端 Supabase 客户端 | `supabase-browser.ts` | `AuthProvider` 使用 |
-| Supabase 相关类型 | `supabase-types.ts` | run/image/variant 与 JSON 类型 |
-| R2 URL 构建 | `r2-url.ts` | `publicObjectUrl()` / `privateObjectUrl()` |
-| runDir / imagePath 校验 | `comfyui-path.ts` | allowlist、相对路径、防逃逸 |
-| Web 领域类型 | `comfyui-types.ts` | `RunSummary` / `RunDir` / type guard |
-| className 合并 | `utils.ts` | `cn()` |
+| 场景                     | 位置                  | 备注                                             |
+| ------------------------ | --------------------- | ------------------------------------------------ |
+| 服务端 Supabase 客户端   | `supabase-auth.ts`    | `server-only` + cookie session + publishable key |
+| 浏览器端 Supabase 客户端 | `supabase-browser.ts` | `AuthProvider` 使用                              |
+| Supabase 相关类型        | `supabase-types.ts`   | run/image/variant 与 JSON 类型                   |
+| R2 URL 构建              | `r2-url.ts`           | `publicObjectUrl()` / `privateObjectUrl()`       |
+| runDir / imagePath 校验  | `comfyui-path.ts`     | allowlist、相对路径、防逃逸                      |
+| Web 领域类型             | `comfyui-types.ts`    | `RunSummary` / `RunDir` / type guard             |
+| className 合并           | `utils.ts`            | `cn()`                                           |
 
 ## 约定（本目录特有）
 
 - ComfyUI API route 和 R2 私有代理统一使用 `createSupabaseAuthClient()`；它依赖 `server-only` 与 `next/headers`。
 - 浏览器端认证统一使用 `createSupabaseBrowserClient()`；不要在客户端自己拼 Supabase SSR 初始化。
 - `middleware.ts` 是例外：因为运行在 Edge，不能 import `lib/supabase-auth.ts`，只能内联建 client。
-- `publicObjectUrl()` 只允许公开 display/thumb 变体；`original_png` 不能暴露到 public URL。
-- `privateObjectUrl()` 只负责生成站内代理路径，真正鉴权在 `app/api/r2/private/[...r2Key]/route.ts`。
+- `publicObjectUrl()` 和 `privateObjectUrl()` 都只允许 display/thumb 变体。
+- 站内代理的真正鉴权仍在 `app/api/r2/private/[...r2Key]/route.ts`。
 - `assertAllowedRunDir()` 和 `assertSafeRelativeImagePath()` 是路径安全的唯一入口；放宽规则前先回看调用链。
 
 ## 反模式

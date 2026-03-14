@@ -17,7 +17,7 @@
 - route 保持 `export const runtime = "nodejs"`，并显式 `dynamic = "force-dynamic"`。
 - 只接受 `GET` / `HEAD`；其余方法直接 405，不在这里扩展写操作。
 - 进入 R2 前先做鉴权：统一调用 `createSupabaseAuthClient()` 检查当前用户。
-- `r2Key` 必须先过 segment decode + 校验；仅允许 `runs/` 前缀，以及 `original_png` / `display_*` / `thumb_*` 这些变体命名。
+- `r2Key` 必须先过 segment decode + 校验；仅允许 `runs/` 前缀，以及 `display_*` / `thumb_*` 这些变体命名。
 - 代理响应要保留 R2 metadata / ETag / range / conditional request 语义；错误响应只返回固定短文案。
 - 日志只打印脱敏后的 key 摘要（`hash12`），不要输出完整对象 key。
 
