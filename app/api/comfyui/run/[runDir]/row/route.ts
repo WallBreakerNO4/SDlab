@@ -22,8 +22,6 @@ type DbImageRow = {
   prompt_hash: string | null;
   positive_prompt: string | null;
   y_value: string | null;
-  original_bucket: R2Bucket | null;
-  original_r2_key: string | null;
   thumb_webp_bucket: R2Bucket | null;
   thumb_webp_r2_key: string | null;
   thumb_avif_bucket: R2Bucket | null;
@@ -53,7 +51,6 @@ type RowItem = {
   height: number | null;
   blurhash: string | null;
   meta: RowMeta;
-  original: string | null;
   thumb: VariantUrls | null;
   display: VariantUrls | null;
 };
@@ -136,7 +133,7 @@ export async function GET(
     const { data: imagesData, error: imagesError } = await supabase
       .from("comfyui_row_items")
       .select(
-        "run_dir,x_index,y_index,batch_index,category,width,height,blurhash,seed,prompt_hash,positive_prompt,y_value,original_bucket,original_r2_key,thumb_webp_bucket,thumb_webp_r2_key,thumb_avif_bucket,thumb_avif_r2_key,display_webp_bucket,display_webp_r2_key,display_avif_bucket,display_avif_r2_key",
+        "run_dir,x_index,y_index,batch_index,category,width,height,blurhash,seed,prompt_hash,positive_prompt,y_value,thumb_webp_bucket,thumb_webp_r2_key,thumb_avif_bucket,thumb_avif_r2_key,display_webp_bucket,display_webp_r2_key,display_avif_bucket,display_avif_r2_key",
       )
       .eq("run_dir", runDir)
       .eq("y_index", yIndex)
@@ -209,7 +206,6 @@ export async function GET(
         height: image.height,
         blurhash: image.blurhash,
         meta,
-        original: nullableUrl(image.original_bucket, image.original_r2_key),
         thumb: Object.keys(thumb).length > 0 ? thumb : null,
         display: Object.keys(display).length > 0 ? display : null,
       };

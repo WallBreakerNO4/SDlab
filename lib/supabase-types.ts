@@ -7,7 +7,6 @@ export type JsonObject = { [key: string]: JsonValue };
 export type ImageCategory = "normal" | "advance" | "nsfw";
 
 export type ImageVariantName =
-  | "original_png"
   | "display_webp"
   | "display_avif"
   | "thumb_webp"
