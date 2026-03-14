@@ -281,9 +281,9 @@ def test_put_bytes_non_retryable_remote_error_is_classified() -> None:
     plan = UploadPlan.from_variant(
         bucket_name="sdslab-private",
         bucket_scope="private",
-        key="runs/r/file.png",
-        variant="original_png",
-        body_bytes=b"png",
+        key="runs/r/file.webp",
+        variant="display_webp",
+        body_bytes=b"webp",
     )
     stubber.add_client_error(
         "put_object",
@@ -292,9 +292,9 @@ def test_put_bytes_non_retryable_remote_error_is_classified() -> None:
         http_status_code=400,
         expected_params={
             "Bucket": "sdslab-private",
-            "Key": "runs/r/file.png",
-            "Body": b"png",
-            "ContentType": "image/png",
+            "Key": "runs/r/file.webp",
+            "Body": b"webp",
+            "ContentType": "image/webp",
             "CacheControl": "private, max-age=0, no-cache",
         },
     )

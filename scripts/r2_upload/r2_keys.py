@@ -8,7 +8,6 @@ from typing import Final, Literal, cast
 from scripts.run_naming import validate_run_key
 
 VariantId = Literal[
-    "original_png",
     "display_webp",
     "display_avif",
     "thumb_webp",
@@ -20,7 +19,6 @@ BucketName = Literal["public", "private"]
 _SHA256_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9a-fA-F]{64}$")
 
 _VARIANT_EXT: Final[dict[VariantId, str]] = {
-    "original_png": "png",
     "display_webp": "webp",
     "display_avif": "avif",
     "thumb_webp": "webp",
@@ -28,7 +26,6 @@ _VARIANT_EXT: Final[dict[VariantId, str]] = {
 }
 
 _VARIANT_CONTENT_TYPE: Final[dict[VariantId, str]] = {
-    "original_png": "image/png",
     "display_webp": "image/webp",
     "display_avif": "image/avif",
     "thumb_webp": "image/webp",

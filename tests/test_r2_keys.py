@@ -17,7 +17,6 @@ from scripts.r2_upload.r2_keys import (
 
 
 ALL_VARIANTS = [
-    "original_png",
     "display_webp",
     "display_avif",
     "thumb_webp",
@@ -69,7 +68,7 @@ def test_r2_key_uses_expected_immutable_layout() -> None:
 
 
 def test_r2_key_does_not_embed_absolute_local_paths() -> None:
-    key = object_key("chenkinnoob-xl-rf", "e" * 64, "original_png")
+    key = object_key("chenkinnoob-xl-rf", "e" * 64, "display_webp")
 
     assert "/home/" not in key
     assert "C:\\" not in key
@@ -107,10 +106,6 @@ def test_r2_key_bucket_mapping_normal_public_for_display_and_thumb(
     assert bucket_for("normal", variant) == "public"
 
 
-def test_r2_key_bucket_mapping_normal_original_is_private() -> None:
-    assert bucket_for("normal", "original_png") == "private"
-
-
 @pytest.mark.parametrize("category", ["advance", "nsfw"])
 @pytest.mark.parametrize("variant", ALL_VARIANTS)
 def test_r2_key_bucket_mapping_advance_and_nsfw_always_private(
@@ -127,7 +122,6 @@ def test_r2_key_bucket_mapping_rejects_unknown_category() -> None:
 @pytest.mark.parametrize(
     ("variant", "expected"),
     [
-        ("original_png", "image/png"),
         ("display_webp", "image/webp"),
         ("display_avif", "image/avif"),
         ("thumb_webp", "image/webp"),

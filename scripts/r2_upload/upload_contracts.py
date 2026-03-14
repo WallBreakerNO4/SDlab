@@ -18,7 +18,6 @@ _CATEGORY_CHOICES: tuple[Category, Category, Category] = (
     "nsfw",
 )
 _IMAGE_VARIANTS = {
-    "original_png",
     "display_webp",
     "display_avif",
     "thumb_webp",

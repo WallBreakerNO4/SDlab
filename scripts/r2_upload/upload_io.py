@@ -63,8 +63,6 @@ def _variant_extension(variant: str) -> str:
         return ".webp"
     if variant == "display_avif" or variant == "thumb_avif":
         return ".avif"
-    if variant == "original_png":
-        return ".png"
     return ".bin"
 
 
