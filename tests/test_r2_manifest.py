@@ -37,13 +37,6 @@ def _sample_payload() -> dict[str, object]:
                         "content_type": "image/webp",
                         "byte_size": 123,
                     },
-                    {
-                        "variant": "original_png",
-                        "bucket": "private",
-                        "r2_key": "runs/private/normal-original.png",
-                        "content_type": "image/png",
-                        "byte_size": 456,
-                    },
                 ],
             },
             {

@@ -163,11 +163,11 @@ def test_cli_dry_run_outputs_required_keys_and_manifest_uploads(
     payload = _read_stdout_json(capsys)
 
     assert isinstance(payload.get("planned_variants"), int)
-    assert payload["planned_variants"] == 5
+    assert payload["planned_variants"] == 4
 
     planned_uploads = payload.get("planned_uploads")
     assert isinstance(planned_uploads, list)
-    assert len(planned_uploads) >= 7
+    assert len(planned_uploads) >= 6
 
     required_fields = {
         "bucket_scope",
@@ -248,7 +248,7 @@ def test_cli_dry_run_limit_applies_to_resolved_metadata_paths(
     assert exit_code == 0
     payload = _read_stdout_json(capsys)
     assert payload.get("processed_images") == 1
-    assert payload.get("planned_variants") == 5
+    assert payload.get("planned_variants") == 4
 
 
 def test_cli_run_dir_can_be_name_when_run_root_is_provided(

@@ -239,29 +239,6 @@ def _prepare_image_payload_inputs(
     uploads: list[PlannedUpload] = []
     variant_rows: list[dict[str, object]] = []
 
-    original_variant = "original_png"
-    original_scope = bucket_for(category, original_variant)
-    original_key = object_key(run_dir_name, original_sha256, original_variant)
-    original_upload = _build_variant_upload(
-        variant=original_variant,
-        bucket_scope=original_scope,
-        key=original_key,
-        byte_size=image_path.stat().st_size,
-        local_path=image_path,
-    )
-    uploads.append(original_upload)
-    variant_rows.append(
-        {
-            "variant": original_variant,
-            "bucket": original_scope,
-            "r2_key": original_key,
-            "content_type": original_upload.content_type,
-            "cache_control": original_upload.cache_control,
-            "byte_size": original_upload.byte_size,
-            "sha256": original_sha256,
-        }
-    )
-
     cached_variant_paths: dict[str, Path] = {
         variant: _intermediate_variant_path(
             run_intermediate_dir=run_intermediate_dir,
