@@ -35,7 +35,6 @@ type RowItem = {
   height: number | null;
   blurhash: string | null;
   meta: RowMeta;
-  original: string | null;
   thumb: VariantUrls | null;
   display: VariantUrls | null;
 };
@@ -175,7 +174,6 @@ type SelectedCellPreview = {
     batchIndex: number;
     width: number | null;
     height: number | null;
-    original: string | null;
     thumb: VariantUrls | null;
     display: VariantUrls | null;
   }>;
@@ -253,7 +251,6 @@ function normalizeRowPayload(
                     height: getFiniteNumber(item.height),
                     blurhash: getNonEmptyString(item.blurhash),
                     meta,
-                    original: getNonEmptyString(item.original),
                     thumb: parseVariantUrls(item.thumb),
                     display: parseVariantUrls(item.display),
                   };
@@ -411,10 +408,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
     return pickBestVariants(currentItem.display, currentItem.thumb);
   }, [currentItem]);
   const currentDownloadUrl =
-    currentItem?.original ??
-    currentDisplayVariants?.webp ??
-    currentDisplayVariants?.avif ??
-    null;
+    currentDisplayVariants?.webp ?? currentDisplayVariants?.avif ?? null;
   const sizeText =
     currentItem &&
     typeof currentItem.width === "number" &&
@@ -553,7 +547,6 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
           batchIndex: item.batch_index,
           width: item.width,
           height: item.height,
-          original: item.original,
           thumb: item.thumb,
           display: item.display,
         }))
