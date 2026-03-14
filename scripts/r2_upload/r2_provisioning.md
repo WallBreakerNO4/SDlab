@@ -12,8 +12,7 @@
   - 使用强缓存策略：`Cache-Control: public,max-age=31536000,immutable`
 
 - **`sdslab-private`**: 私有桶
-  - 承载所有 `original_png` 变体
-  - 承载 `category='advance'` 和 `category='nsfw'` 的所有变体
+  - 承载 `category='advance'` 和 `category='nsfw'` 的 `display_*`/`thumb_*` 变体
   - 不绑定公开域名
   - 未来由 Cloudflare Worker 代理或使用 presigned URL 访问
 

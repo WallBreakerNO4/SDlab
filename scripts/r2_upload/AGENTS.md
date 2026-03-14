@@ -6,26 +6,26 @@
 
 ## 去哪儿改
 
-| 任务 | 位置 | 备注 |
-| --- | --- | --- |
-| 上传主入口与 CLI | `upload_images_to_r2.py` | `build_parser()`；编排编码/上传/写入；4 条 tqdm 进度条 |
-| R2 存储客户端 | `r2_client.py` | boto3 S3 兼容；`R2Client` + 重试 + 结构化错误（`R2ClientError` 含 retryable 标志） |
-| Supabase 批量写入 | `supabase_writer.py` | `SupabaseWriter.upsert_upload_index()`；分批 upsert + 并发写入 |
-| 上传规划与变体 | `upload_planner.py` | `_build_run_plan()`；多变体规划 + ThreadPoolExecutor 并发编码 |
-| R2 key 生成与 bucket 映射 | `r2_keys.py` | key 格式：`runs/{run_dir}/{variant}_{filename}`；normal→public, advance/nsfw→private |
-| 图片编码参数 | `encoding_params.py` | webp/avif 质量/尺寸参数；thumb 尺寸为 display 一半（向下取整，≥1） |
-| 变体图片处理 | `variants.py` | PIL 缩放 + 编码；生成 display/thumb 的 webp/avif |
-| 上传合约类型 | `upload_contracts.py` | `PlannedUpload`/`UploadResult` 等 dataclass |
-| 上传执行器 | `upload_executor.py` | 并发上传调度 |
-| 上传 I/O | `upload_io.py` | 文件读写工具 |
-| 上传发现 | `upload_discovery.py` | 从 metadata.jsonl 发现待上传图片 |
-| 上传运行时 | `upload_runtime.py` | 运行时环境初始化 |
-| manifest 生成 | `manifest.py` | JSON manifest 构建（公开/私有） |
-| 路径安全 | `path_safety.py` | R2 key 路径校验 |
-| PostgREST HTTP | `postgrest_http.py` | Supabase PostgREST HTTP 客户端封装 |
-| Supabase 环境 | `supabase_env.py` | 环境变量读取（URL/key） |
-| Supabase 数据归一化 | `supabase_normalize.py` | 行数据归一化为 PostgREST 格式 |
-| 清空 bucket 工具 | `clear_bucket.py` | 交互式清空 R2 bucket |
+| 任务                      | 位置                     | 备注                                                                                 |
+| ------------------------- | ------------------------ | ------------------------------------------------------------------------------------ |
+| 上传主入口与 CLI          | `upload_images_to_r2.py` | `build_parser()`；编排编码/上传/写入；4 条 tqdm 进度条                               |
+| R2 存储客户端             | `r2_client.py`           | boto3 S3 兼容；`R2Client` + 重试 + 结构化错误（`R2ClientError` 含 retryable 标志）   |
+| Supabase 批量写入         | `supabase_writer.py`     | `SupabaseWriter.upsert_upload_index()`；分批 upsert + 并发写入                       |
+| 上传规划与变体            | `upload_planner.py`      | `_build_run_plan()`；多变体规划 + ThreadPoolExecutor 并发编码                        |
+| R2 key 生成与 bucket 映射 | `r2_keys.py`             | key 格式：`runs/{run_dir}/{variant}_{filename}`；normal→public, advance/nsfw→private |
+| 图片编码参数              | `encoding_params.py`     | webp/avif 质量/尺寸参数；thumb 尺寸为 display 一半（向下取整，≥1）                   |
+| 变体图片处理              | `variants.py`            | PIL 缩放 + 编码；生成 display/thumb 的 webp/avif                                     |
+| 上传合约类型              | `upload_contracts.py`    | `PlannedUpload`/`UploadResult` 等 dataclass                                          |
+| 上传执行器                | `upload_executor.py`     | 并发上传调度                                                                         |
+| 上传 I/O                  | `upload_io.py`           | 文件读写工具                                                                         |
+| 上传发现                  | `upload_discovery.py`    | 从 metadata.jsonl 发现待上传图片                                                     |
+| 上传运行时                | `upload_runtime.py`      | 运行时环境初始化                                                                     |
+| manifest 生成             | `manifest.py`            | JSON manifest 构建（公开/私有）                                                      |
+| 路径安全                  | `path_safety.py`         | R2 key 路径校验                                                                      |
+| PostgREST HTTP            | `postgrest_http.py`      | Supabase PostgREST HTTP 客户端封装                                                   |
+| Supabase 环境             | `supabase_env.py`        | 环境变量读取（URL/key）                                                              |
+| Supabase 数据归一化       | `supabase_normalize.py`  | 行数据归一化为 PostgREST 格式                                                        |
+| 清空 bucket 工具          | `clear_bucket.py`        | 交互式清空 R2 bucket                                                                 |
 
 ## 核心流程
 
@@ -34,7 +34,7 @@ upload_images_to_r2.py (CLI)
   ↓
 upload_discovery.py → 发现 metadata.jsonl 中的图片
   ↓
-upload_planner.py → 规划变体（original_png + display_webp/avif + thumb_webp/avif）
+upload_planner.py → 规划变体（display_webp/avif + thumb_webp/avif）
   ↓ (ThreadPoolExecutor 并发编码)
 variants.py + encoding_params.py → 生成变体文件
   ↓
@@ -55,7 +55,7 @@ supabase_writer.py → 批量 upsert 到 Supabase（runs + images + variants）
 
 - 上传逻辑与生图逻辑分层：不要反向耦合到 `scripts/generation/` 内部流程
 - 凭证输入优先走环境变量（`R2_*`/`SUPABASE_*`），不在仓库内落盘明文配置
-- 变体命名：`original_png`/`display_webp`/`display_avif`/`thumb_webp`/`thumb_avif`
+- 变体命名：`display_webp`/`display_avif`/`thumb_webp`/`thumb_avif`
 - bucket 分配：normal category → public bucket；advance/nsfw → private bucket
 - 上传支持可配置并发（`--upload-workers`）和 dry-run 模式
 - I/O 统一用 `pathlib.Path`；中间编码产物写入 `_r2_upload_intermediate/`
