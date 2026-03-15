@@ -56,7 +56,7 @@ def _extended_run_json(
                 "y_sha256": "b" * 64,
             },
             "workflow": {
-                "path": "data/comfyui-flow/CKNOOBRF.json",
+                "path": "data/comfyui-flow/api-json/CKNOOBRF.json",
                 "sha256": "c" * 64,
                 "ksampler_node_id": "6",
             },

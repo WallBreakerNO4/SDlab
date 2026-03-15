@@ -1,60 +1,60 @@
-"use client"
+"use client";
 
-import { useCallback, useState } from "react"
-import { useAuth } from "./auth-provider"
+import { useCallback, useState } from "react";
+import { useAuth } from "./auth-provider";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 type AuthLoginDialogProps = {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+};
 
 export function AuthLoginDialog({ open, onOpenChange }: AuthLoginDialogProps) {
-  const { signInWithGitHub, signInWithGoogle, signInWithMicrosoft } = useAuth()
-  const [signingIn, setSigningIn] = useState<"github" | "google" | "microsoft" | null>(null)
+  const { signInWithGitHub, signInWithGoogle, signInWithMicrosoft } = useAuth();
+  const [signingIn, setSigningIn] = useState<
+    "github" | "google" | "microsoft" | null
+  >(null);
 
   const handleGitHub = useCallback(async () => {
-    setSigningIn("github")
+    setSigningIn("github");
     try {
-      await signInWithGitHub()
+      await signInWithGitHub();
     } finally {
-      setSigningIn(null)
+      setSigningIn(null);
     }
-  }, [signInWithGitHub])
+  }, [signInWithGitHub]);
 
   const handleMicrosoft = useCallback(async () => {
-    setSigningIn("microsoft")
+    setSigningIn("microsoft");
     try {
-      await signInWithMicrosoft()
+      await signInWithMicrosoft();
     } finally {
-      setSigningIn(null)
+      setSigningIn(null);
     }
-  }, [signInWithMicrosoft])
+  }, [signInWithMicrosoft]);
 
   const handleGoogle = useCallback(async () => {
-    setSigningIn("google")
+    setSigningIn("google");
     try {
-      await signInWithGoogle()
+      await signInWithGoogle();
     } finally {
-      setSigningIn(null)
+      setSigningIn(null);
     }
-  }, [signInWithGoogle])
+  }, [signInWithGoogle]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>登录</DialogTitle>
-          <DialogDescription>
-            登录后可查看高级内容和下载原始图片
-          </DialogDescription>
+          <DialogDescription>登录后可查看高级内容和下载图片</DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-3 pt-2">
@@ -117,5 +117,5 @@ export function AuthLoginDialog({ open, onOpenChange }: AuthLoginDialogProps) {
         </div>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

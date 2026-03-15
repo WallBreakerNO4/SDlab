@@ -12,9 +12,12 @@
 - `data/prompts/Y/300_NAI_Styles_Table-test.csv`
   - Y 轴示例表；默认读取列名 `Artists`（见 `scripts/generation/prompt_grid.py:read_y_rows()`）
 
-- `data/comfyui-flow/*.json`
-  - ComfyUI workflow 模板；默认使用 `data/comfyui-flow/CKNOOBRF.json`（见 `scripts/generation/comfyui_part1_generate.py`）
+- `data/comfyui-flow/api-json/*.json`
+  - 供生图脚本直接读取的 ComfyUI API JSON；默认使用 `data/comfyui-flow/api-json/CKNOOBRF.json`（见 `scripts/generation/comfyui_part1_generate.py`）
   - workflow 需要包含 `KSampler`，并能追溯到 `CLIPTextEncode`（positive/negative）与 `EmptyLatentImage`
+
+- `data/comfyui-flow/workflow-json/*.json`
+  - ComfyUI 工作流导出文件；用于保留可视化工作流版本，不直接作为当前生图脚本的默认输入
 
 ## 反模式
 

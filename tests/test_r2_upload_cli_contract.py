@@ -49,7 +49,7 @@ def test_dry_run_prints_structured_summary_placeholder(
             '"x_sha256":"' + ("a" * 64) + '",'
             '"y_sha256":"' + ("b" * 64) + '"},'
             '"workflow":{'
-            '"path":"data/comfyui-flow/CKNOOBRF.json",'
+            '"path":"data/comfyui-flow/api-json/CKNOOBRF.json",'
             '"sha256":"' + ("c" * 64) + '",'
             '"ksampler_node_id":"6"},'
             '"generation":{'

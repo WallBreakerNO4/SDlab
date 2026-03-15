@@ -123,7 +123,7 @@ from scripts.generation.workflow_patch import (  # noqa: E402
 DEFAULT_X_JSON = "data/prompts/X/common_prompts.yaml"
 DEFAULT_Y_JSON = "data/prompts/Y/300_NAI_Styles_Table-test.yaml"
 DEFAULT_TEMPLATE = "{gender}{characters}{series}{rating}{y}{general}{quality}"
-DEFAULT_WORKFLOW_JSON = "data/comfyui-flow/CKNOOBRF.json"
+DEFAULT_WORKFLOW_JSON = "data/comfyui-flow/api-json/CKNOOBRF.json"
 DEFAULT_BASE_URL = "http://127.0.0.1:8188"
 DEFAULT_REQUEST_TIMEOUT_S = 30.0
 DEFAULT_JOB_TIMEOUT_S = 600.0
