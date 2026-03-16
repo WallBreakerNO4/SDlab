@@ -6,15 +6,15 @@
 
 ## 去哪儿看
 
-| 场景                     | 位置                  | 备注                                             |
-| ------------------------ | --------------------- | ------------------------------------------------ |
-| 服务端 Supabase 客户端   | `supabase-auth.ts`    | `server-only` + cookie session + publishable key |
-| 浏览器端 Supabase 客户端 | `supabase-browser.ts` | `AuthProvider` 使用                              |
-| Supabase 相关类型        | `supabase-types.ts`   | run/image/variant 与 JSON 类型                   |
-| R2 URL 构建              | `r2-url.ts`           | `publicObjectUrl()` / `privateObjectUrl()`       |
-| runDir / imagePath 校验  | `comfyui-path.ts`     | allowlist、相对路径、防逃逸                      |
-| Web 领域类型             | `comfyui-types.ts`    | `RunSummary` / `RunDir` / type guard             |
-| className 合并           | `utils.ts`            | `cn()`                                           |
+| 场景                       | 位置                  | 备注                                             |
+| -------------------------- | --------------------- | ------------------------------------------------ |
+| 服务端 Supabase 客户端     | `supabase-auth.ts`    | `server-only` + cookie session + publishable key |
+| 浏览器端 Supabase 客户端   | `supabase-browser.ts` | `AuthProvider` 使用                              |
+| Supabase 相关类型          | `supabase-types.ts`   | run/image/variant 与 JSON 类型                   |
+| R2 URL 构建                | `r2-url.ts`           | `publicObjectUrl()` / `privateObjectUrl()`       |
+| runDir 共享工具 / 路径校验 | `comfyui-path.ts`     | allowlist、相对路径、防逃逸                      |
+| Web 领域类型               | `comfyui-types.ts`    | `RunSummary` / `RunDir` / type guard             |
+| className 合并             | `utils.ts`            | `cn()`                                           |
 
 ## 约定（本目录特有）
 
@@ -23,7 +23,7 @@
 - `middleware.ts` 是例外：因为运行在 Edge，不能 import `lib/supabase-auth.ts`，只能内联建 client。
 - `publicObjectUrl()` 和 `privateObjectUrl()` 都只允许 display/thumb 变体。
 - 站内代理的真正鉴权仍在 `app/api/r2/private/[...r2Key]/route.ts`。
-- `assertAllowedRunDir()` 和 `assertSafeRelativeImagePath()` 是路径安全的唯一入口；放宽规则前先回看调用链。
+- API 侧 `runDir` 形态判断当前主要走 `comfyui-types.ts:isValidRunDir()`；`comfyui-path.ts` 更偏共享路径安全与 allowlist 工具。
 
 ## 反模式
 

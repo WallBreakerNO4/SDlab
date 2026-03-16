@@ -11,6 +11,8 @@
 | 首页 runs 列表      | `app/page.tsx`                                      | 拉 `/api/comfyui/runs`                                     |
 | run 详情页          | `app/runs/[runDir]/page.tsx`                        | 并行拉 detail + grid，前端做 type guard                    |
 | Auth 回调页         | `app/auth/callback/route.ts`                        | OAuth 回跳处理                                             |
+| Auth 局部约定       | `app/auth/AGENTS.md`                                | PKCE session 交换特例                                      |
+| API 总约定          | `app/api/AGENTS.md`                                 | `runtime` / 错误响应 / 鉴权边界                            |
 | API：runs 列表      | `app/api/comfyui/runs/route.ts`                     | Supabase 查询                                              |
 | API：run 详情       | `app/api/comfyui/run/[runDir]/route.ts`             | 返回 `run`、`xLabels`、`yLabels`、`x_columns`、`y_indexes` |
 | API：grid 索引      | `app/api/comfyui/run/[runDir]/grid/route.ts`        | blurhash_cells + 网格索引                                  |
@@ -24,6 +26,7 @@
 
 - App Router API 保持 `export const runtime = "nodejs"`；R2 私有代理额外设 `dynamic = "force-dynamic"`。
 - ComfyUI API 与 R2 私有代理统一经 `createSupabaseAuthClient()`；`auth/callback` 为 PKCE 特例，直接用 `createServerClient()` 交换 session。
+- `app/api/` 负责 route 级共性约束；`app/api/comfyui/` 与 `app/api/r2/` 只补充各自 payload / 代理细节。
 - `app/layout.tsx` 负责挂载 `ThemeProvider`、`AuthProvider`、`SiteHeader`、`SiteFooter`；全站认证/主题入口从这里接入。
 - 页面 fetch 后先做 type guard，再进入渲染状态机；错误态与 not-found 分开处理。
 - 图片路径/对象 key 不在页面层手拼；公开变体走 `publicObjectUrl()`，私有对象走 `/api/r2/private/...`。

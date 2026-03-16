@@ -16,6 +16,7 @@
 | 浏览器端认证 Provider | `components/auth-provider.tsx`           | `createSupabaseBrowserClient()` + session 监听     |
 | 登录弹窗              | `components/auth-login-dialog.tsx`       | GitHub / Google / Microsoft OAuth 入口             |
 | 主题切换              | `components/theme-toggle.tsx`            | `next-themes` + mounted guard，避免 hydration 闪烁 |
+| Sidebar primitive     | `components/ui/sidebar.tsx`              | cookie 持久化 + 快捷键 + mobile Sheet fallback     |
 | UI 组件使用示例       | `components/component-example.tsx`       | 用于展示/验证 UI primitives                        |
 | shadcn 配置           | `components.json`                        | aliases、style、cssVariables 等                    |
 
