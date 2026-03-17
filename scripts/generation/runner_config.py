@@ -25,7 +25,8 @@ _MODEL_KEYS = {"key", "name", "family", "links", "description"}
 _MODEL_LINK_KEYS = {"homepage", "huggingface", "civitai"}
 _MODEL_DESCRIPTION_KEYS = {"zh", "en"}
 _PROMPTS_KEYS = {"x_path", "y_path"}
-_WORKFLOW_KEYS = {"path", "ksampler_node_id"}
+_WORKFLOW_KEYS = {"path", "download_path", "ksampler_node_id"}
+_WORKFLOW_REQUIRED_KEYS = {"path", "ksampler_node_id"}
 _GENERATION_KEYS = {
     "template",
     "base_seed",
@@ -72,6 +73,7 @@ class WorkflowConfig:
     path: str
     repo_relative_path: str
     sha256: str
+    download: AssetRef | None
     ksampler_node_id: str | None
 
 
@@ -287,7 +289,10 @@ def _load_prompts(payload: object, *, repo_root: Path) -> PromptsConfig:
 def _load_workflow(payload: object, *, repo_root: Path) -> WorkflowConfig:
     mapping = _require_mapping(payload, "workflow")
     _validate_keys(
-        mapping, field_name="workflow", allowed=_WORKFLOW_KEYS, required=_WORKFLOW_KEYS
+        mapping,
+        field_name="workflow",
+        allowed=_WORKFLOW_KEYS,
+        required=_WORKFLOW_REQUIRED_KEYS,
     )
 
     asset = _resolve_repo_path(
@@ -300,6 +305,16 @@ def _load_workflow(payload: object, *, repo_root: Path) -> WorkflowConfig:
         path=asset.path,
         repo_relative_path=asset.repo_relative_path,
         sha256=asset.sha256,
+        download=(
+            _resolve_repo_path(
+                mapping["download_path"],
+                field_name="workflow.download_path",
+                repo_root=repo_root,
+                allowed_extensions=_WORKFLOW_EXTENSIONS,
+            )
+            if mapping.get("download_path") is not None
+            else None
+        ),
         ksampler_node_id=_optional_str(
             mapping["ksampler_node_id"], "workflow.ksampler_node_id"
         ),

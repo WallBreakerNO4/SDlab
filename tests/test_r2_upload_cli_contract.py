@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import sys
 from pathlib import Path
 
@@ -21,6 +22,11 @@ def test_dry_run_prints_structured_summary_placeholder(
     run_dir = tmp_path / "contract-run"
     images_dir = run_dir / "images"
     images_dir.mkdir(parents=True)
+    workflow_download_path = run_dir / "workflow-download.json"
+    workflow_download_path.write_text('{"version":1}\n', encoding="utf-8")
+    workflow_download_sha256 = hashlib.sha256(
+        workflow_download_path.read_bytes()
+    ).hexdigest()
 
     source = images_dir / "x0-y0.png"
     Image.new("RGB", (8, 6), (128, 64, 32)).save(source, format="PNG")
@@ -51,6 +57,8 @@ def test_dry_run_prints_structured_summary_placeholder(
             '"workflow":{'
             '"path":"data/comfyui-flow/api-json/CKNOOBRF.json",'
             '"sha256":"' + ("c" * 64) + '",'
+            '"download_path":"data/comfyui-flow/workflow-json/CKNOOBRF.json",'
+            '"download_sha256":"' + workflow_download_sha256 + '",'
             '"ksampler_node_id":"6"},'
             '"generation":{'
             '"template":"{gender}{characters}{series}{rating}{y}{general}{quality}",'
@@ -68,6 +76,8 @@ def test_dry_run_prints_structured_summary_placeholder(
             "},"
             '"selection":{"x_limit":null,"y_limit":null,"x_indexes":null,"y_indexes":null}'
             "}"
+            ',"workflow_download_path":"' + str(workflow_download_path) + '"'
+            ',"workflow_download_sha256":"' + workflow_download_sha256 + '"'
             "}"
         ),
         encoding="utf-8",

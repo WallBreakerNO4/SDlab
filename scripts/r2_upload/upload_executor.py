@@ -74,26 +74,36 @@ def _upload_image_variants_for_plan(
     return uploaded, skipped_existing
 
 
-def _upload_manifests_for_plan(
+def _upload_artifacts_for_plan(
     *,
     plan: RunPlan,
     r2_client: R2Client,
     bucket_names: dict[BucketScope, str],
-    manifest_pbar: tqdm,
+    artifact_pbar: tqdm,
 ) -> tuple[int, int]:
-    manifest_uploaded = 0
+    artifact_uploaded = 0
     skipped_existing = 0
+    for artifact_upload in plan.artifact_uploads:
+        if _upload_if_missing(
+            r2_client=r2_client,
+            bucket_names=bucket_names,
+            planned=artifact_upload,
+        ):
+            artifact_uploaded += 1
+        else:
+            skipped_existing += 1
+        artifact_pbar.update(1)
     for manifest_upload in plan.manifest_uploads:
         if _upload_if_missing(
             r2_client=r2_client,
             bucket_names=bucket_names,
             planned=manifest_upload,
         ):
-            manifest_uploaded += 1
+            artifact_uploaded += 1
         else:
             skipped_existing += 1
-        manifest_pbar.update(1)
-    return manifest_uploaded, skipped_existing
+        artifact_pbar.update(1)
+    return artifact_uploaded, skipped_existing
 
 
 def _execute(
@@ -110,11 +120,13 @@ def _execute(
 
     uploaded = 0
     skipped_existing = 0
-    manifest_uploaded = 0
+    artifact_uploaded = 0
     processed_images = 0
 
     total_image_uploads = sum(len(plan.image_uploads) for plan in plans)
-    total_manifest_uploads = sum(len(plan.manifest_uploads) for plan in plans)
+    total_artifact_uploads = sum(
+        len(plan.artifact_uploads) + len(plan.manifest_uploads) for plan in plans
+    )
 
     total_db_records = 0
     for plan in plans:
@@ -129,10 +141,10 @@ def _execute(
             total_db_records += len(variants_list)
 
     LOG.info(
-        "start upload execution: run_count=%s image_upload_count=%s manifest_upload_count=%s db_record_count=%s upload_concurrency=%s",
+        "start upload execution: run_count=%s image_upload_count=%s artifact_upload_count=%s db_record_count=%s upload_concurrency=%s",
         len(plans),
         total_image_uploads,
-        total_manifest_uploads,
+        total_artifact_uploads,
         total_db_records,
         upload_concurrency,
     )
@@ -145,11 +157,11 @@ def _execute(
             dynamic_ncols=True,
         ) as image_pbar:
             with tqdm(
-                total=total_manifest_uploads,
-                desc="清单上传",
-                unit="manifest",
+                total=total_artifact_uploads,
+                desc="资源上传",
+                unit="artifact",
                 dynamic_ncols=True,
-            ) as manifest_pbar:
+            ) as artifact_pbar:
                 with tqdm(
                     total=total_db_records,
                     desc="数据上传",
@@ -174,22 +186,22 @@ def _execute(
                         uploaded += plan_uploaded
                         skipped_existing += plan_skipped
 
+                        (
+                            plan_artifact_uploaded,
+                            plan_artifact_skipped,
+                        ) = _upload_artifacts_for_plan(
+                            plan=plan,
+                            r2_client=r2_client,
+                            bucket_names=bucket_names,
+                            artifact_pbar=artifact_pbar,
+                        )
+                        artifact_uploaded += plan_artifact_uploaded
+                        skipped_existing += plan_artifact_skipped
+
                         supabase_writer.upsert_upload_index(
                             plan.upload_index_payload,
                             progress_callback=_tick_db_progress,
                         )
-
-                        (
-                            plan_manifest_uploaded,
-                            plan_manifest_skipped,
-                        ) = _upload_manifests_for_plan(
-                            plan=plan,
-                            r2_client=r2_client,
-                            bucket_names=bucket_names,
-                            manifest_pbar=manifest_pbar,
-                        )
-                        manifest_uploaded += plan_manifest_uploaded
-                        skipped_existing += plan_manifest_skipped
 
                     image_pbar.set_postfix(
                         uploaded=uploaded,
@@ -197,10 +209,10 @@ def _execute(
                         refresh=False,
                     )
     LOG.info(
-        "upload execution done: uploaded=%s skipped_existing=%s manifest_uploaded=%s",
+        "upload execution done: uploaded=%s skipped_existing=%s artifact_uploaded=%s",
         uploaded,
         skipped_existing,
-        manifest_uploaded,
+        artifact_uploaded,
     )
 
     return {
@@ -211,5 +223,5 @@ def _execute(
         "uploaded": uploaded,
         "skipped_existing": skipped_existing,
         "db_upserts": len(plans),
-        "manifest_uploaded": manifest_uploaded,
+        "artifact_uploaded": artifact_uploaded,
     }

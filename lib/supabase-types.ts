@@ -29,6 +29,8 @@ export interface SupabaseRunRow {
   model_homepage?: string | null;
   model_huggingface?: string | null;
   model_civitai?: string | null;
+  workflow_download_r2_key?: string | null;
+  workflow_download_sha256?: string | null;
   run_json?: JsonValue | null;
 }
 

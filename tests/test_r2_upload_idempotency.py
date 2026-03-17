@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import sys
 from concurrent.futures import Future
 from collections.abc import Callable
@@ -17,7 +18,13 @@ sys.path.insert(0, str(ROOT))
 from scripts.r2_upload.upload_images_to_r2 import main
 
 
-def _write_run_fixture(root: Path, *, run_name: str) -> Path:
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _write_run_fixture(
+    root: Path, *, run_name: str, include_workflow_download: bool = False
+) -> Path:
     run_dir = root / run_name
     images_dir = run_dir / "images"
     images_dir.mkdir(parents=True)
@@ -25,15 +32,20 @@ def _write_run_fixture(root: Path, *, run_name: str) -> Path:
     image_path = images_dir / "x0-y0.png"
     Image.new("RGB", (8, 6), (23, 45, 67)).save(image_path, format="PNG")
 
+    run_payload: dict[str, object] = {
+        "run_id": run_name,
+        "run_key": run_name,
+        "run_dir": run_name,
+    }
+    if include_workflow_download:
+        workflow_download_path = run_dir / "workflow-download.json"
+        workflow_download_path.write_text('{"version":1}\n', encoding="utf-8")
+        workflow_download_sha256 = _sha256_file(workflow_download_path)
+        run_payload["workflow_download_path"] = str(workflow_download_path)
+        run_payload["workflow_download_sha256"] = workflow_download_sha256
+
     (run_dir / "run.json").write_text(
-        json.dumps(
-            {
-                "run_id": run_name,
-                "run_key": run_name,
-                "run_dir": run_name,
-            },
-            ensure_ascii=False,
-        ),
+        json.dumps(run_payload, ensure_ascii=False),
         encoding="utf-8",
     )
     (run_dir / "metadata.jsonl").write_text(
@@ -132,6 +144,39 @@ class _NoopSupabaseWriter:
             progress_callback()
 
 
+class _ArtifactAwareSupabaseWriter:
+    def __init__(self, *, fake_r2: _FakeR2Client, public_bucket: str) -> None:
+        self.fake_r2 = fake_r2
+        self.public_bucket = public_bucket
+        self.calls = 0
+
+    def upsert_upload_index(
+        self,
+        payload: dict[str, object],
+        *,
+        progress_callback: Callable[[], None] | None = None,
+    ) -> None:
+        self.calls += 1
+        workflow_key = payload.get("workflow_download_r2_key")
+        assert isinstance(workflow_key, str)
+        assert (self.public_bucket, workflow_key) in self.fake_r2._objects
+        if progress_callback is None:
+            return
+
+        images_raw = payload.get("images")
+        images_list = images_raw if isinstance(images_raw, list) else []
+        total = 1 + len(images_list)
+        for image in images_list:
+            if not isinstance(image, dict):
+                continue
+            variants_raw = image.get("variants")
+            variants_list = variants_raw if isinstance(variants_raw, list) else []
+            total += len(variants_list)
+
+        for _ in range(total):
+            progress_callback()
+
+
 class _CapturingExecutor:
     seen_max_workers: list[int] = []
 
@@ -210,7 +255,7 @@ def test_rerun_recovers_db_after_partial_failure_without_reupload(
     assert second_exit == 0
     assert second_payload.get("mode") == "execute"
     assert fake_writer.calls == 2
-    assert fake_r2.upload_calls == uploaded_after_first + 2
+    assert fake_r2.upload_calls == uploaded_after_first
 
     key_counts: dict[tuple[str, str], int] = {}
     for object_ref in fake_r2.uploaded_keys:
@@ -250,6 +295,43 @@ def test_execute_uses_r2_upload_concurrency_from_env(
     assert exit_code == 0
     assert payload.get("mode") == "execute"
     assert 4 in _CapturingExecutor.seen_max_workers
+
+
+def test_execute_uploads_workflow_artifact_before_db_upsert(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_dir = _write_run_fixture(
+        tmp_path,
+        run_name="workflow-before-db-run",
+        include_workflow_download=True,
+    )
+
+    monkeypatch.setenv("R2_PUBLIC_BUCKET", "dummy-public")
+    monkeypatch.setenv("R2_PRIVATE_BUCKET", "dummy-private")
+
+    fake_r2 = _FakeR2Client()
+    fake_writer = _ArtifactAwareSupabaseWriter(
+        fake_r2=fake_r2,
+        public_bucket="dummy-public",
+    )
+
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.R2Client.from_env",
+        classmethod(lambda cls, dry_run, **kwargs: fake_r2),
+    )
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.SupabaseWriter.from_env",
+        classmethod(lambda cls, dry_run, **kwargs: fake_writer),
+    )
+
+    exit_code = main(["--run-dir", str(run_dir)])
+    payload = _read_stdout_json(capsys)
+
+    assert exit_code == 0
+    assert payload.get("mode") == "execute"
+    assert fake_writer.calls == 1
 
 
 def test_execute_rejects_invalid_r2_upload_concurrency_env(

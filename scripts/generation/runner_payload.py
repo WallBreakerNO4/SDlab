@@ -26,6 +26,7 @@ def _build_run_payload(
     workflow_hash = (
         workflow_context.workflow_hash if workflow_context is not None else "not_loaded"
     )
+    workflow_download_path = getattr(args, "workflow_download_json", None)
 
     x_path = Path(args.x_json)
     y_path = Path(args.y_json)
@@ -51,6 +52,12 @@ def _build_run_payload(
         "seed_strategy": "sha256(base_seed:x_index:y_index)[:16] mod 18446744073709519872",
         "workflow_json_path": workflow_json_path,
         "workflow_json_sha256": workflow_hash,
+        "workflow_download_path": workflow_download_path,
+        "workflow_download_sha256": (
+            _sha256_file(Path(workflow_download_path))
+            if isinstance(workflow_download_path, str) and workflow_download_path
+            else None
+        ),
         "workflow_status": workflow_status,
         "selected_ksampler_node_id": (
             workflow_context.selected_ksampler_id
@@ -139,6 +146,14 @@ def _build_config_snapshot(args: argparse.Namespace) -> dict[str, object] | None
         "workflow": {
             "path": workflow.repo_relative_path,
             "sha256": workflow.sha256,
+            "download_path": (
+                workflow.download.repo_relative_path
+                if workflow.download is not None
+                else None
+            ),
+            "download_sha256": (
+                workflow.download.sha256 if workflow.download is not None else None
+            ),
             "ksampler_node_id": workflow.ksampler_node_id,
         },
         "generation": {

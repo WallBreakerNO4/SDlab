@@ -54,6 +54,10 @@ type RunDetailSummary = {
       civitai?: string | null;
     } | null;
   } | null;
+  workflow?: {
+    sha256?: string | null;
+    download_url?: string | null;
+  } | null;
 };
 
 type RunDetailResponse = {
@@ -331,6 +335,7 @@ export default function RunDetailPage() {
               detailData.run.model?.description?.zh ||
               detailData.run.model?.description?.en;
             const links = detailData.run.model?.links;
+            const workflow = detailData.run.workflow;
 
             return (
               <div className="animate-fade-in-up bg-card text-card-foreground flex flex-col gap-4 rounded-xl border p-6 shadow-sm">
@@ -424,6 +429,23 @@ export default function RunDetailPage() {
                           Civitai
                         </a>
                       ) : null}
+                    </div>
+                  ) : null}
+
+                  {workflow?.download_url ? (
+                    <div className="flex items-center gap-2 border-l pl-6">
+                      <a
+                        href={workflow.download_url}
+                        download
+                        className="hover:text-primary text-muted-foreground inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors"
+                      >
+                        <HugeiconsIcon
+                          icon={FileIcon}
+                          className="size-4"
+                          strokeWidth={2}
+                        />
+                        下载工作流
+                      </a>
                     </div>
                   ) : null}
                 </div>

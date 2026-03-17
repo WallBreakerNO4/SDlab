@@ -44,6 +44,18 @@ function readModelMetadata(row: SupabaseRunRow) {
   };
 }
 
+function readWorkflowMetadata(row: SupabaseRunRow) {
+  const r2Key = getNonEmptyString(row.workflow_download_r2_key);
+  if (!r2Key) {
+    return null;
+  }
+
+  return {
+    sha256: getNonEmptyString(row.workflow_download_sha256),
+    download_url: `/api/comfyui/run/${encodeURIComponent(row.run_dir)}/workflow`,
+  };
+}
+
 export async function GET(
   _request: Request,
   context: RouteContext,
@@ -58,7 +70,7 @@ export async function GET(
     const { data, error } = await supabase
       .from("runs")
       .select(
-        "run_id, run_dir, created_at, x_columns, y_indexes, x_count, y_count, total_cells, model_name, model_description_zh, model_description_en, model_homepage, model_huggingface, model_civitai",
+        "run_id, run_dir, created_at, x_columns, y_indexes, x_count, y_count, total_cells, model_name, model_description_zh, model_description_en, model_homepage, model_huggingface, model_civitai, workflow_download_r2_key, workflow_download_sha256",
       )
       .eq("run_dir", runDir)
       .maybeSingle();
@@ -128,6 +140,7 @@ export async function GET(
           total_cells,
         },
         model: readModelMetadata(row),
+        workflow: readWorkflowMetadata(row),
       },
       xLabels,
       yLabels,

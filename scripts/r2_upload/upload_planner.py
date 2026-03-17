@@ -15,7 +15,13 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 from .encoding_params import avif_params, webp_params
 from .manifest import build_public_manifest, build_run_manifest, manifest_object_key
 from .path_safety import normalize_run_dir, resolve_metadata_image_paths
-from .r2_keys import bucket_for, cache_control_for, content_type_for, object_key
+from .r2_keys import (
+    bucket_for,
+    cache_control_for,
+    content_type_for,
+    object_key,
+    workflow_object_key,
+)
 from .upload_contracts import (
     BucketScope,
     Category,
@@ -120,6 +126,14 @@ def _build_run_db_fields(
         if isinstance(total_cells_raw, int) and not isinstance(total_cells_raw, bool)
         else x_count * y_count
     )
+    workflow_source_path, workflow_download_sha256, _ = (
+        _resolve_workflow_download_source(run_json)
+    )
+    workflow_download_r2_key = None
+    if workflow_source_path is not None and workflow_download_sha256 is not None:
+        workflow_download_r2_key = workflow_object_key(
+            run_dir_name, workflow_download_sha256
+        )
 
     return {
         "run_id": _non_empty_str(run_json.get("run_id")) or run_dir_name,
@@ -140,7 +154,84 @@ def _build_run_db_fields(
             links.get("huggingface") if links else None
         ),
         "model_civitai": _non_empty_str(links.get("civitai") if links else None),
+        "workflow_download_r2_key": workflow_download_r2_key,
+        "workflow_download_sha256": workflow_download_sha256,
     }
+
+
+def _workflow_download_snapshot(
+    run_json: dict[str, object],
+) -> tuple[list[str], str | None]:
+    declared_paths: list[str] = []
+    direct_path = _non_empty_str(run_json.get("workflow_download_path"))
+    if direct_path is not None:
+        declared_paths.append(direct_path)
+
+    config_snapshot = _json_object(run_json.get("config_snapshot"))
+    workflow_snapshot = (
+        _json_object(config_snapshot.get("workflow")) if config_snapshot else None
+    )
+    snapshot_path = (
+        _non_empty_str(workflow_snapshot.get("download_path"))
+        if workflow_snapshot is not None
+        else None
+    )
+    if snapshot_path is not None and snapshot_path not in declared_paths:
+        declared_paths.append(snapshot_path)
+
+    expected_sha256 = _non_empty_str(run_json.get("workflow_download_sha256"))
+    if expected_sha256 is None and workflow_snapshot is not None:
+        expected_sha256 = _non_empty_str(workflow_snapshot.get("download_sha256"))
+
+    return declared_paths, expected_sha256
+
+
+def _resolve_workflow_download_source(
+    run_json: dict[str, object],
+) -> tuple[Path | None, str | None, bool]:
+    declared_paths, expected_sha256 = _workflow_download_snapshot(run_json)
+    if not declared_paths:
+        return None, expected_sha256, False
+
+    for declared_path in declared_paths:
+        candidate = Path(declared_path)
+        if candidate.exists() and candidate.is_file():
+            actual_sha256 = _sha256_file(candidate)
+            return candidate, actual_sha256, True
+
+    return None, expected_sha256, True
+
+
+def _build_workflow_download_upload(
+    run_json: dict[str, object], *, run_dir_name: str
+) -> PlannedUpload | None:
+    workflow_path, actual_sha256, declared = _resolve_workflow_download_source(run_json)
+    if workflow_path is None:
+        if declared:
+            raise ValueError("workflow 下载文件不存在")
+        return None
+
+    _, expected_sha256 = _workflow_download_snapshot(run_json)
+    if expected_sha256 is not None and actual_sha256 is not None:
+        if expected_sha256 != actual_sha256:
+            raise ValueError(
+                f"workflow 下载文件 sha256 校验失败: expected={expected_sha256}, actual={actual_sha256}"
+            )
+
+    if actual_sha256 is None:
+        raise ValueError("workflow 下载文件缺少 sha256")
+
+    workflow_sha256 = actual_sha256
+
+    return PlannedUpload(
+        variant="workflow_download",
+        bucket_scope="public",
+        key=workflow_object_key(run_dir_name, workflow_sha256),
+        content_type="application/json",
+        cache_control=cache_control_for("public"),
+        byte_size=workflow_path.stat().st_size,
+        local_path=workflow_path,
+    )
 
 
 def _build_image_db_fields(metadata_record: dict[str, object]) -> dict[str, object]:
@@ -561,6 +652,10 @@ def _build_run_plan(
     }
     db_payload.update(_build_run_db_fields(run_json, run_dir_name=run_dir_name))
 
+    workflow_upload = _build_workflow_download_upload(
+        run_json, run_dir_name=run_dir_name
+    )
+
     private_manifest = build_run_manifest(db_payload)
     public_manifest = build_public_manifest(private_manifest)
     private_manifest_bytes = _to_json_line(private_manifest).encode("utf-8")
@@ -605,6 +700,7 @@ def _build_run_plan(
         processed_images=processed_images,
         upload_index_payload=db_payload,
         image_uploads=image_uploads,
+        artifact_uploads=[workflow_upload] if workflow_upload is not None else [],
         manifest_uploads=manifest_uploads,
     )
 
@@ -716,6 +812,8 @@ def _dry_run_summary(plans: list[RunPlan]) -> dict[str, object]:
         planned_variants += len(plan.image_uploads)
         for upload in plan.image_uploads:
             planned_uploads.append(upload.to_safe_json())
+        for artifact_upload in plan.artifact_uploads:
+            planned_uploads.append(artifact_upload.to_safe_json())
         for manifest_upload in plan.manifest_uploads:
             planned_uploads.append(manifest_upload.to_safe_json())
             manifest_keys[manifest_upload.bucket_scope].append(manifest_upload.key)

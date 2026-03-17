@@ -100,3 +100,9 @@ def object_key(run_dir_name: str, image_sha256: str, variant: str) -> str:
         f"sha256/{normalized_sha256[:2]}/{normalized_sha256}/"
         f"{normalized_variant}.{ext}"
     )
+
+
+def workflow_object_key(run_dir_name: str, workflow_sha256: str) -> str:
+    normalized_run_dir_name = _validate_run_dir_name(run_dir_name)
+    normalized_sha256 = _normalize_image_sha256(workflow_sha256)
+    return f"runs/{normalized_run_dir_name}/artifacts/workflow/{normalized_sha256}.json"

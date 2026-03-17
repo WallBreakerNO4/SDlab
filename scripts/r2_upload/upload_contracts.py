@@ -81,6 +81,7 @@ class RunPlan:
     processed_images: int
     upload_index_payload: dict[str, object]
     image_uploads: list[PlannedUpload]
+    artifact_uploads: list[PlannedUpload]
     manifest_uploads: list[PlannedUpload]
 
 

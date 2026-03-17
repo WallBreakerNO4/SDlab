@@ -125,7 +125,9 @@ def _fake_runner_config(
     append_negative_prompt: str | None,
 ) -> SimpleNamespace:
     workflow_path = config_path.parent / "workflow.json"
+    workflow_download_path = config_path.parent / "workflow-download.json"
     workflow_path.write_text('{"3": {"class_type": "KSampler"}}\n', encoding="utf-8")
+    workflow_download_path.write_text('{"version": 1}\n', encoding="utf-8")
     return SimpleNamespace(
         schema_version="image-run-config/v1",
         config_path="data/runs/example.yaml",
@@ -157,6 +159,11 @@ def _fake_runner_config(
             path=str(workflow_path),
             sha256=_sha256_file(workflow_path),
             repo_relative_path="data/workflows/example.json",
+            download=SimpleNamespace(
+                path=str(workflow_download_path),
+                sha256=_sha256_file(workflow_download_path),
+                repo_relative_path="data/workflows/example-download.json",
+            ),
             ksampler_node_id="3",
         ),
         generation=SimpleNamespace(
@@ -279,6 +286,10 @@ def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
         "workflow": {
             "path": "data/workflows/example.json",
             "sha256": run_payload["config_snapshot"]["workflow"]["sha256"],
+            "download_path": "data/workflows/example-download.json",
+            "download_sha256": run_payload["config_snapshot"]["workflow"][
+                "download_sha256"
+            ],
             "ksampler_node_id": "3",
         },
         "generation": {
@@ -302,6 +313,10 @@ def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
             "y_indexes": [0],
         },
     }
+    assert run_payload["workflow_download_path"].endswith("workflow-download.json")
+    assert run_payload["workflow_download_sha256"] == _sha256_file(
+        Path(run_payload["workflow_download_path"])
+    )
 
     metadata_records = _read_valid_jsonl(run_dir / "metadata.jsonl")
     assert len(metadata_records) == 1

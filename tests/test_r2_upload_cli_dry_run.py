@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import sys
 from pathlib import Path
 from typing import cast
@@ -17,6 +18,10 @@ from scripts.r2_upload.upload_images_to_r2 import main
 from scripts.r2_upload.upload_planner import _build_run_db_fields
 
 
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def _write_png(path: Path, *, size: tuple[int, int] = (8, 6)) -> None:
     image = Image.new("RGB", size, (10, 20, 30))
     image.save(path, format="PNG")
@@ -26,6 +31,10 @@ def _extended_run_json(
     *, run_dir: Path, run_dir_value: str | None = None
 ) -> dict[str, object]:
     run_name = run_dir_value if run_dir_value is not None else run_dir.name
+    run_dir.mkdir(parents=True, exist_ok=True)
+    workflow_download_path = run_dir / "workflow-download.json"
+    workflow_download_path.write_text('{"version": 1}\n', encoding="utf-8")
+    workflow_download_sha256 = _sha256_file(workflow_download_path)
     return {
         "run_id": run_name,
         "run_key": run_name,
@@ -58,6 +67,8 @@ def _extended_run_json(
             "workflow": {
                 "path": "data/comfyui-flow/api-json/CKNOOBRF.json",
                 "sha256": "c" * 64,
+                "download_path": "data/comfyui-flow/workflow-json/CKNOOBRF.json",
+                "download_sha256": workflow_download_sha256,
                 "ksampler_node_id": "6",
             },
             "generation": {
@@ -81,6 +92,8 @@ def _extended_run_json(
                 "y_indexes": None,
             },
         },
+        "workflow_download_path": str(workflow_download_path),
+        "workflow_download_sha256": workflow_download_sha256,
     }
 
 
@@ -183,6 +196,7 @@ def test_cli_dry_run_outputs_required_keys_and_manifest_uploads(
     variant_names = {
         str(cast(dict[str, object], item).get("variant")) for item in planned_uploads
     }
+    assert "workflow_download" in variant_names
     assert "manifest_public" in variant_names
     assert "manifest_private" in variant_names
 
@@ -207,6 +221,76 @@ def test_build_run_db_fields_extracts_model_structured_fields(tmp_path: Path) ->
     assert fields["model_homepage"] is None
     assert fields["model_huggingface"] is None
     assert fields["model_civitai"] is None
+    expected_sha256 = _sha256_file(run_dir / "workflow-download.json")
+    assert fields["workflow_download_r2_key"] == (
+        f"runs/model-run/artifacts/workflow/{expected_sha256}.json"
+    )
+    assert fields["workflow_download_sha256"] == expected_sha256
+
+
+def test_build_run_db_fields_skips_workflow_download_when_only_sha_present() -> None:
+    fields = _build_run_db_fields(
+        {
+            "run_id": "model-run",
+            "workflow_download_sha256": "a" * 64,
+        },
+        run_dir_name="model-run",
+    )
+
+    assert fields["workflow_download_r2_key"] is None
+    assert fields["workflow_download_sha256"] == "a" * 64
+
+
+def test_build_run_db_fields_workflow_key_changes_when_content_changes(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "model-run"
+    payload = _extended_run_json(run_dir=run_dir)
+    first_fields = _build_run_db_fields(payload, run_dir_name=run_dir.name)
+
+    workflow_download_path = run_dir / "workflow-download.json"
+    workflow_download_path.write_text('{"version": 2}\n', encoding="utf-8")
+    new_sha256 = _sha256_file(workflow_download_path)
+    payload["workflow_download_sha256"] = new_sha256
+
+    config_snapshot = payload.get("config_snapshot")
+    assert isinstance(config_snapshot, dict)
+    workflow_snapshot = config_snapshot.get("workflow")
+    assert isinstance(workflow_snapshot, dict)
+    workflow_snapshot["download_sha256"] = new_sha256
+
+    second_fields = _build_run_db_fields(payload, run_dir_name=run_dir.name)
+
+    assert (
+        first_fields["workflow_download_r2_key"]
+        != second_fields["workflow_download_r2_key"]
+    )
+
+
+def test_cli_dry_run_fails_when_workflow_download_sha_mismatches(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_dir = _write_run_fixture(tmp_path, run_name="workflow-sha-mismatch-run")
+    run_payload = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert isinstance(run_payload, dict)
+    run_payload["workflow_download_sha256"] = "0" * 64
+    config_snapshot = run_payload.get("config_snapshot")
+    assert isinstance(config_snapshot, dict)
+    workflow_snapshot = config_snapshot.get("workflow")
+    assert isinstance(workflow_snapshot, dict)
+    workflow_snapshot["download_sha256"] = "0" * 64
+    (run_dir / "run.json").write_text(
+        json.dumps(run_payload, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    exit_code = main(["--dry-run", "--run-dir", str(run_dir)])
+    payload = _read_stdout_json(capsys)
+
+    assert exit_code != 0
+    assert payload.get("mode") == "error"
+    assert "sha256 校验失败" in str(payload.get("message"))
 
 
 def test_cli_default_selects_latest_run_under_run_root(

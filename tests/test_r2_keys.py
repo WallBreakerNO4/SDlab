@@ -13,6 +13,7 @@ from scripts.r2_upload.r2_keys import (
     cache_control_for,
     content_type_for,
     object_key,
+    workflow_object_key,
 )
 
 
@@ -95,6 +96,23 @@ def test_r2_key_rejects_invalid_sha256() -> None:
 def test_r2_key_rejects_unknown_variant() -> None:
     with pytest.raises(ValueError, match="variant"):
         object_key("chenkinnoob-xl-rf", "a" * 64, "raw_jpeg")
+
+
+def test_workflow_object_key_uses_expected_layout() -> None:
+    assert (
+        workflow_object_key("chenkinnoob-xl-rf", "a" * 64)
+        == "runs/chenkinnoob-xl-rf/artifacts/workflow/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json"
+    )
+
+
+def test_workflow_object_key_rejects_invalid_run_dir_name() -> None:
+    with pytest.raises(ValueError, match="run_dir_name"):
+        workflow_object_key("INVALID_RUN", "a" * 64)
+
+
+def test_workflow_object_key_rejects_invalid_sha256() -> None:
+    with pytest.raises(ValueError, match="image_sha256"):
+        workflow_object_key("chenkinnoob-xl-rf", "short")
 
 
 @pytest.mark.parametrize(

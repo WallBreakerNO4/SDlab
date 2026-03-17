@@ -30,6 +30,7 @@ prompts:
 workflow:
   # Workflow JSON 路径；必须是仓库相对路径，且扩展名必须为 .json。
   path: data/comfyui-flow/api-json/CKNOOBRF.json
+  download_path: data/comfyui-flow/workflow-json/CKNOOBRF.json
   # 要注入参数的 KSampler 节点 ID；如果 workflow 里有多个 KSampler，通常需要显式指定。
   ksampler_node_id: "6"
 

@@ -299,6 +299,14 @@ class SupabaseWriter:
             "model_civitai": optional_str(
                 payload.get("model_civitai"), field="model_civitai"
             ),
+            "workflow_download_r2_key": optional_str(
+                payload.get("workflow_download_r2_key"),
+                field="workflow_download_r2_key",
+            ),
+            "workflow_download_sha256": optional_str(
+                payload.get("workflow_download_sha256"),
+                field="workflow_download_sha256",
+            ),
         }
         return row
 

@@ -269,6 +269,9 @@ def _apply_fresh_run_config(args: argparse.Namespace) -> None:
     args.template = config.generation.template
     args.base_seed = config.generation.base_seed
     args.workflow_json = config.workflow.path
+    args.workflow_download_json = (
+        config.workflow.download.path if config.workflow.download is not None else None
+    )
     args.ksampler_node_id = config.workflow.ksampler_node_id
 
     args.negative_prompt = config.generation.negative_prompt

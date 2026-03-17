@@ -30,6 +30,7 @@ class _WorkflowConfig(Protocol):
     path: str
     repo_relative_path: str
     sha256: str
+    download: _PromptRef | None
     ksampler_node_id: str | None
 
 
@@ -124,17 +125,19 @@ def _sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _write_assets(repo_root: Path) -> tuple[Path, Path, Path]:
+def _write_assets(repo_root: Path) -> tuple[Path, Path, Path, Path]:
     x_path = repo_root / "data/prompts/x.json"
     y_path = repo_root / "data/prompts/y.yaml"
     workflow_path = repo_root / "data/workflows/example.json"
+    workflow_download_path = repo_root / "data/workflows/example-download.json"
     x_path.parent.mkdir(parents=True, exist_ok=True)
     y_path.parent.mkdir(parents=True, exist_ok=True)
     workflow_path.parent.mkdir(parents=True, exist_ok=True)
     x_path.write_text(json.dumps({"schema": "", "items": []}) + "\n", encoding="utf-8")
     y_path.write_text("schema: prompt-y-table/v2\nitems: []\n", encoding="utf-8")
     workflow_path.write_text('{"3": {"class_type": "KSampler"}}\n', encoding="utf-8")
-    return x_path, y_path, workflow_path
+    workflow_download_path.write_text('{"version": 1}\n', encoding="utf-8")
+    return x_path, y_path, workflow_path, workflow_download_path
 
 
 def _valid_config_text(*, schema_version: str = "image-run-config/v1") -> str:
@@ -157,6 +160,7 @@ def _valid_config_text(*, schema_version: str = "image-run-config/v1") -> str:
             "  y_path: data/prompts/y.yaml",
             "workflow:",
             "  path: data/workflows/example.json",
+            "  download_path: data/workflows/example-download.json",
             "  ksampler_node_id: '3'",
             "generation:",
             "  template: '{gender}{y}{quality}'",
@@ -185,7 +189,7 @@ def test_load_runner_config_happy_path_resolves_repo_relative_paths_and_hashes(
     tmp_path: Path,
 ) -> None:
     module = _import_runner_config_module()
-    x_path, y_path, workflow_path = _write_assets(tmp_path)
+    x_path, y_path, workflow_path, workflow_download_path = _write_assets(tmp_path)
     config_path = tmp_path / "data/runs/example.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(_valid_config_text(), encoding="utf-8")
@@ -204,6 +208,13 @@ def test_load_runner_config_happy_path_resolves_repo_relative_paths_and_hashes(
     assert Path(config.workflow.path) == workflow_path
     assert config.workflow.repo_relative_path == "data/workflows/example.json"
     assert config.workflow.sha256 == _sha256_file(workflow_path)
+    assert config.workflow.download is not None
+    assert Path(config.workflow.download.path) == workflow_download_path
+    assert (
+        config.workflow.download.repo_relative_path
+        == "data/workflows/example-download.json"
+    )
+    assert config.workflow.download.sha256 == _sha256_file(workflow_download_path)
     assert config.workflow.ksampler_node_id == "3"
     assert config.model.key == "nai-4-full"
     assert config.model.name == "NAI 4 Full"
@@ -318,7 +329,7 @@ def test_load_runner_config_rejects_absolute_asset_path_inside_repo(
     tmp_path: Path,
 ) -> None:
     module = _import_runner_config_module()
-    x_path, _y_path, _workflow_path = _write_assets(tmp_path)
+    x_path, _y_path, _workflow_path, _workflow_download_path = _write_assets(tmp_path)
     config_path = tmp_path / "data/runs/example.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
