@@ -1,9 +1,8 @@
 # Agent Guide (sd-style-lab/images-script)
 
-**生成时间:** 2026-03-15T23:30:55+08:00
-**Commit:** 73920db
+**生成时间:** 2026-03-17T18:54:57+08:00
+**Commit:** ce7f591
 **分支:** refactor/scripts
-
 本文件给仓库级 agent 使用；子目录 `AGENTS.md` 只补充局部知识，不重复根规则。
 
 ## 概览
@@ -18,7 +17,7 @@
 ```text
 ./
 ├── app/                    # App Router 页面与 API route
-│   ├── api/comfyui/        # runs/run/grid/row JSON API
+│   ├── api/comfyui/        # runs/run/grid/row + workflow 下载
 │   ├── api/r2/private/     # R2 私有对象代理
 │   └── auth/               # Supabase PKCE callback
 ├── components/             # 业务组件 + UI primitives + auth provider
@@ -42,31 +41,31 @@
 
 ## 去哪儿看
 
-| 任务                  | 位置                                                           | 备注                                            |
-| --------------------- | -------------------------------------------------------------- | ----------------------------------------------- |
-| Python 顶层入口       | `main.py`                                                      | 菜单/主 runner 的统一入口                       |
-| 生图主入口            | `scripts/generation/comfyui_part1_generate.py`                 | dry-run / retry / 落盘合约                      |
-| 生图配置加载          | `scripts/generation/runner_config.py`                          | `--config` YAML schema + repo-relative 资产校验 |
-| 并发 runner           | `scripts/generation/runner_coordinator.py`                     | ThreadPoolExecutor 双池                         |
-| ComfyUI 通信          | `scripts/generation/comfyui_client.py`                         | HTTP / WS / 错误码                              |
-| R2 上传入口           | `scripts/r2_upload/upload_images_to_r2.py`                     | 编码、上传、写 Supabase                         |
-| 上传规划              | `scripts/r2_upload/upload_planner.py`                          | 多变体规划 + 并发编码                           |
-| 资产转换脚本          | `scripts/other/convert_*.py`                                   | 文件名遗留 `json`，实际输出 YAML 资产           |
-| run 配置示例          | `data/runs/example.yaml`                                       | `image-run-config/v1` 示例                      |
-| 网站首页              | `app/page.tsx`                                                 | 读取 runs 列表                                  |
-| run 详情页            | `app/runs/[runDir]/page.tsx`                                   | 并行拉 run + grid                               |
-| App API 总约定        | `app/api/AGENTS.md`                                            | `app/api/**/route.ts` 共享约束                  |
-| ComfyUI API           | `app/api/comfyui/**/route.ts`                                  | Node runtime + Supabase 查询                    |
-| R2 私有代理           | `app/api/r2/private/[...r2Key]/route.ts`                       | 认证后代理 R2 private bucket                    |
-| Auth 回调特例         | `app/auth/AGENTS.md`                                           | PKCE callback 直接交换 session                  |
-| 站点壳层 / 登录入口   | `app/layout.tsx`、`components/site-header.tsx`                 | ThemeProvider + AuthProvider + 登录弹窗入口     |
-| Cloudflare / OpenNext | `next.config.ts`、`open-next.config.ts`、`cloudflare-env.d.ts` | 本地 Miniflare + Workers bindings               |
-| 服务端 Supabase       | `lib/supabase-auth.ts`                                         | `server-only` + cookie session                  |
-| 浏览器端 Supabase     | `lib/supabase-browser.ts`                                      | AuthProvider 使用                               |
-| runDir 校验           | `lib/comfyui-types.ts`                                         | API 侧 `isValidRunDir()` type guard             |
-| 路径安全              | `lib/comfyui-path.ts`                                          | 共享路径工具与相对路径逃逸防护                  |
-| R2 URL 构建           | `lib/r2-url.ts`                                                | 公开/私有 URL 与变体白名单                      |
-| 会话刷新              | `middleware.ts`                                                | Edge middleware，不能引 `lib/supabase-auth.ts`  |
+| 任务                  | 位置                                                                             | 备注                                            |
+| --------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------- |
+| Python 顶层入口       | `main.py`                                                                        | 菜单/主 runner 的统一入口                       |
+| 生图主入口            | `scripts/generation/comfyui_part1_generate.py`                                   | dry-run / retry / 落盘合约                      |
+| 生图配置加载          | `scripts/generation/runner_config.py`                                            | `--config` YAML schema + repo-relative 资产校验 |
+| 并发 runner           | `scripts/generation/runner_coordinator.py`                                       | ThreadPoolExecutor 双池                         |
+| ComfyUI 通信          | `scripts/generation/comfyui_client.py`                                           | HTTP / WS / 错误码                              |
+| R2 上传入口           | `scripts/r2_upload/upload_images_to_r2.py`                                       | 编码、上传、写 Supabase                         |
+| 上传规划              | `scripts/r2_upload/upload_planner.py`                                            | 多变体规划 + 并发编码                           |
+| 资产转换脚本          | `scripts/other/convert_*.py`                                                     | 文件名遗留 `json`，实际输出 YAML 资产           |
+| run 配置示例          | `data/runs/example.yaml`                                                         | `image-run-config/v1` 示例                      |
+| 网站首页              | `app/page.tsx`                                                                   | 读取 runs 列表                                  |
+| run 详情页            | `app/runs/[runDir]/page.tsx`                                                     | 并行拉 run + grid，显示 workflow 下载入口       |
+| App API 总约定        | `app/api/AGENTS.md`                                                              | `app/api/**/route.ts` 共享约束                  |
+| ComfyUI API           | `app/api/comfyui/**/route.ts`                                                    | Node runtime + Supabase 查询 + workflow 下载    |
+| R2 私有代理           | `app/api/r2/private/[...r2Key]/route.ts`                                         | 认证后代理 R2 private bucket                    |
+| Auth 回调特例         | `app/auth/AGENTS.md`                                                             | PKCE callback 直接交换 session                  |
+| 站点壳层 / 登录入口   | `app/layout.tsx`、`components/site-header.tsx`                                   | ThemeProvider + AuthProvider + 登录弹窗入口     |
+| Cloudflare / OpenNext | `next.config.ts`、`open-next.config.ts`、`cloudflare-env.d.ts`、`wrangler.jsonc` | 本地 Miniflare + Workers bindings / vars        |
+| 服务端 Supabase       | `lib/supabase-auth.ts`                                                           | `server-only` + cookie session                  |
+| 浏览器端 Supabase     | `lib/supabase-browser.ts`                                                        | AuthProvider 使用                               |
+| runDir 校验           | `lib/comfyui-types.ts`                                                           | API 侧 `isValidRunDir()` type guard             |
+| 路径安全              | `lib/comfyui-path.ts`                                                            | 共享路径工具与相对路径逃逸防护                  |
+| R2 URL 构建           | `lib/r2-url.ts`                                                                  | 公开/私有 URL 与变体白名单                      |
+| 会话刷新              | `middleware.ts`                                                                  | Edge middleware，不能引 `lib/supabase-auth.ts`  |
 
 ## 代码图
 
@@ -143,7 +142,7 @@ pnpm dlx supabase migration new <name>
 
 - `app/AGENTS.md`：App Router 页面与 API 的局部规则。
 - `app/api/AGENTS.md`：`app/api/**/route.ts` 共性约定。
-- `app/api/comfyui/AGENTS.md`：ComfyUI JSON API 约定。
+- `app/api/comfyui/AGENTS.md`：ComfyUI 查询 / workflow 下载 API 约定。
 - `app/api/r2/AGENTS.md`：R2 私有对象代理、鉴权与 range/HEAD 约定。
 - `app/auth/AGENTS.md`：Supabase PKCE callback 的局部特例。
 - `components/AGENTS.md` / `components/ui/AGENTS.md` / `components/comfyui/AGENTS.md`：组件分层、UI primitives、网格性能约定。
