@@ -37,55 +37,8 @@ items:
       index: 0
       type: normal
     description:
-      zh: 展示：Amiya 单人中景正面微笑。观察：身份一致性、构图距离、表情与视线稳定性。
-      en:
-        "Shows: Amiya in a front-view cowboy shot. Look for identity consistency,
-        framing stability, and smile/gaze accuracy."
-  - tags:
-      gender:
-        - text: 2girls
-          weight: 1.0
-      characters:
-        - text: texas \(arknights\)
-          weight: 1.0
-        - text: lappland \(arknights\)
-          weight: 1.0
-      series:
-        - text: arknights
-          weight: 1.0
-      rating:
-        - text: safe
-          weight: 1.0
-      general:
-        - text: shopping mall
-          weight: 1.0
-        - text: indoor
-          weight: 1.0
-        - text: cowboy shot
-          weight: 1.0
-        - text: holding hands
-          weight: 1.0
-        - text: front view
-          weight: 1.0
-      quality:
-        - text: masterpiece
-          weight: 1.0
-        - text: high score
-          weight: 1.0
-        - text: great score
-          weight: 1.0
-        - text: absurdres
-          weight: 1.0
-        - text: year 2025
-          weight: 1.0
-    info:
-      index: 1
-      type: normal
-    description:
-      zh: 展示：Texas 与 Lappland 双人牵手室内场景。观察：手部接触自然度、人物间距与场景可读性。
-      en:
-        "Shows: Texas and Lappland holding hands in an indoor mall. Look for natural
-        hand contact, spacing, and clear scene readability."
+      zh: ""
+      en: ""
   - tags:
       gender:
         - text: 1girl
@@ -130,13 +83,11 @@ items:
         - text: year 2025
           weight: 1.0
     info:
-      index: 2
-      type: advance
+      index: 1
+      type: normal
     description:
-      zh: 展示：Exusiai 街头手持杯子并用吸管饮用。观察：吸管与嘴部对位、手部抓握与道具形体稳定性。
-      en:
-        "Shows: Exusiai on a street, holding a cup and drinking through a straw. Look
-        for straw-to-mouth alignment, hand grip, and prop shape stability."
+      zh: ""
+      en: ""
   - tags:
       gender:
         - text: 1girl
@@ -187,19 +138,17 @@ items:
         - text: year 2025
           weight: 1.0
     info:
-      index: 3
+      index: 2
       type: advance
     description:
-      zh: 展示：Muelsyse 雨夜撑伞街景。观察：雨夜光影一致性、地面反射层次与主体清晰度。
-      en:
-        "Shows: Muelsyse walking with an umbrella in a rainy night street. Look for
-        coherent lighting, wet-surface reflections, and subject clarity."
+      zh: ""
+      en: ""
   - tags:
       gender:
         - text: 1girl
           weight: 1.0
       characters:
-        - text: la pluma \(summer_flowers\) \(arknights\)
+        - text: nymph \(arknights\)
           weight: 1.0
       series:
         - text: arknights
@@ -208,21 +157,51 @@ items:
         - text: safe
           weight: 1.0
       general:
-        - text: bikini
-          weight: 1.0
-        - text: front view
-          weight: 1.0
-        - text: standing
-          weight: 1.0
-        - text: poolside
-          weight: 1.0
-        - text: pool
-          weight: 1.0
-        - text: detailed swimwear
+        - text: solo
           weight: 1.0
         - text: cowboy shot
           weight: 1.0
-        - text: coat
+        - text: simple background
+          weight: 1.0
+      quality:
+        - text: masterpiece
+          weight: 1.0
+        - text: high score
+          weight: 1.0
+        - text: great score
+          weight: 1.0
+        - text: absurdres
+          weight: 1.0
+        - text: year 2025
+          weight: 1.0
+    info:
+      index: 3
+      type: advance
+    description:
+      zh: 《明日方舟》角色妮芙，2024年7月9日上线，danbooru 上 400 张图 | 观察模型能否正确绘制角色特征，训练数据集是否包含这名角色
+      en:
+        Arknights character Nymph, released on July 9, 2024, with 400 images on danbooru
+        | Observing whether the model can accurately depict character features and if
+        the training dataset includes this character
+  - tags:
+      gender:
+        - text: 1girl
+          weight: 1.0
+      characters:
+        - text: narantuya \(arknights\)
+          weight: 1.0
+      series:
+        - text: arknights
+          weight: 1.0
+      rating:
+        - text: safe
+          weight: 1.0
+      general:
+        - text: solo
+          weight: 1.0
+        - text: cowboy shot
+          weight: 1.0
+        - text: simple background
           weight: 1.0
       quality:
         - text: masterpiece
@@ -239,16 +218,17 @@ items:
       index: 4
       type: advance
     description:
-      zh: 展示：La Pluma 泳池边泳装与外套层叠。观察：泳装细节、材质区分与遮挡关系是否自然。
+      zh: 《明日方舟》角色娜仁图亚，2024年8月1日上线，danbooru 上 180 张图（训练图片量少） | 观察模型能否正确绘制角色特征，训练数据集是否包含这名角色
       en:
-        "Shows: La Pluma poolside with detailed swimwear and coat layering. Look for
-        swimwear detail, material separation, and natural occlusion."
+        Arknights character Narantuya, released on August 1, 2024, with 180 images
+        on danbooru (few training images) | Observing whether the model can accurately
+        depict character features and if the training dataset includes this character
   - tags:
       gender:
         - text: 1girl
           weight: 1.0
       characters:
-        - text: rosmontis \(arknights\)
+        - text: raidian \(arknights\)
           weight: 1.0
       series:
         - text: arknights
@@ -261,11 +241,7 @@ items:
           weight: 1.0
         - text: cowboy shot
           weight: 1.0
-        - text: loli
-          weight: 1.0
-        - text: cat ears
-          weight: 1.0
-        - text: white dress
+        - text: simple background
           weight: 1.0
       quality:
         - text: masterpiece
@@ -282,10 +258,56 @@ items:
       index: 5
       type: advance
     description:
-      zh: 展示：Rosmontis 白裙猫耳中景。观察：猫耳位置稳定性、裙装细节与角色比例一致性。
+      zh: 《明日方舟》角色电弧，2025年8月2日上线，danbooru 上 690 张图（角色较新） | 观察模型能否正确绘制角色特征，训练数据集是否包含这名角色
       en:
-        "Shows: Rosmontis in a white dress with cat ears. Look for ear placement stability,
-        dress detail, and consistent character proportions."
+        Arknights character Raidian, released on August 2, 2025, with 690 images on
+        danbooru (new character) | Observing whether the model can accurately depict
+        character features and if the training dataset includes this character
+  - tags:
+      gender:
+        - text: 2girls
+          weight: 1.0
+      characters:
+        - text: texas \(arknights\)
+          weight: 1.0
+        - text: lappland \(arknights\)
+          weight: 1.0
+      series:
+        - text: arknights
+          weight: 1.0
+      rating:
+        - text: safe
+          weight: 1.0
+      general:
+        - text: shopping mall
+          weight: 1.0
+        - text: indoor
+          weight: 1.0
+        - text: cowboy shot
+          weight: 1.0
+        - text: holding hands
+          weight: 1.0
+        - text: front view
+          weight: 1.0
+      quality:
+        - text: masterpiece
+          weight: 1.0
+        - text: high score
+          weight: 1.0
+        - text: great score
+          weight: 1.0
+        - text: absurdres
+          weight: 1.0
+        - text: year 2025
+          weight: 1.0
+    info:
+      index: 6
+      type: advance
+    description:
+      zh: 双人图 | 观察双人结构，以及人物特征是否正确
+      en:
+        Dual character diagram | Observe the dual structure, and whether the character
+        features are correct
   - tags:
       gender:
         - text: 1girl
@@ -304,17 +326,7 @@ items:
           weight: 1.0
         - text: cowboy shot
           weight: 1.0
-        - text: night
-          weight: 1.0
-        - text: street
-          weight: 1.0
-        - text: cityscape
-          weight: 1.0
-        - text: people
-          weight: 1.0
-        - text: nude
-          weight: 1.0
-        - text: cross pasties
+        - text: nipples
           weight: 1.0
         - text: pussy
           weight: 1.0
@@ -322,13 +334,39 @@ items:
           weight: 1.0
         - text: white thighhighs
           weight: 1.0
-        - text: trench coat
-          weight: 1.0
         - text: one hand in pocket
+          weight: 1.0
+        - text: people
+          weight: 1.0
+        - text: open clothes
+          weight: 1.0
+        - text: tongue out
           weight: 1.0
         - text: v sign
           weight: 1.0
-        - text: leaning on wall
+        - text: hand pocket
+          weight: 1.0
+        - text: trench coat
+          weight: 1.0
+        - text: upturned collar
+          weight: 1.0
+        - text: city street
+          weight: 1.0
+        - text: wet ground
+          weight: 1.0
+        - text: rain
+          weight: 1.0
+        - text: dusk
+          weight: 1.0
+        - text: streetlamp
+          weight: 1.0
+        - text: flickering light
+          weight: 1.0
+        - text: standing
+          weight: 1.0
+        - text: looking at viewer
+          weight: 1.0
+        - text: dynamic pose
           weight: 1.0
       quality:
         - text: masterpiece
@@ -342,10 +380,150 @@ items:
         - text: year 2025
           weight: 1.0
     info:
-      index: 6
+      index: 7
       type: nsfw
     description:
-      zh: 展示：Ho'olheyak 夜晚街头半裸姿态。观察：裸体细节、姿势自然度与夜景光影一致性。
-      en:
-        "Shows: Ho'olheyak in a night street scene with a nude pose. Look for nude
-        detail, natural posture, and coherent night lighting."
+      zh: NSFW 图片
+      en: NSFW image
+  - tags:
+      gender:
+        - text: 1girl
+          weight: 1.0
+        - text: 1boy
+          weight: 1.0
+      characters:
+        - text: la pluma \(arknights\)
+          weight: 1.0
+      series:
+        - text: arknights
+          weight: 1.0
+      rating:
+        - text: nsfw
+          weight: 1.0
+      general:
+        - text: penis
+          weight: 1.0
+        - text: grabbing
+          weight: 1.0
+        - text: lying on the desk
+          weight: 1.0
+        - text: grabbing breasts
+          weight: 1.0
+        - text: pov
+          weight: 1.0
+        - text: classroom
+          weight: 1.0
+        - text: from above
+          weight: 1.0
+        - text: lifted shirt
+          weight: 1.0
+        - text: nipples
+          weight: 1.0
+        - text: vaginal
+          weight: 1.0
+        - text: school
+          weight: 1.0
+        - text: chalkboard
+          weight: 1.0
+        - text: facing viewer
+          weight: 1.0
+        - text: looking at viewer
+          weight: 1.0
+        - text: pussy
+          weight: 1.0
+        - text: spread legs
+          weight: 1.0
+        - text: smile
+          weight: 1.0
+      quality:
+        - text: masterpiece
+          weight: 1.0
+        - text: high score
+          weight: 1.0
+        - text: great score
+          weight: 1.0
+        - text: absurdres
+          weight: 1.0
+        - text: year 2025
+          weight: 1.0
+    info:
+      index: 8
+      type: nsfw
+    description:
+      zh: NSFW 图片
+      en: NSFW image
+  - tags:
+      gender:
+        - text: 1girl
+          weight: 1.0
+      characters:
+        - text: specter \(arknights\)
+          weight: 1.0
+      series:
+        - text: arknights
+          weight: 1.0
+      rating:
+        - text: nsfw
+          weight: 1.0
+      general:
+        - text: from behind
+          weight: 1.0
+        - text: looking back
+          weight: 1.0
+        - text: ass focus
+          weight: 1.0
+        - text: ass
+          weight: 1.0
+        - text: pussy
+          weight: 1.0
+        - text: no pants
+          weight: 1.0
+        - text: no panties
+          weight: 1.0
+        - text: anus
+          weight: 1.0
+        - text: anal beads
+          weight: 1.0
+        - text: anal object insertion
+          weight: 1.0
+        - text: anal
+          weight: 1.0
+        - text: large beads
+          weight: 1.0
+        - text: anal fluid
+          weight: 1.0
+        - text: pov hands
+          weight: 1.0
+        - text: sex toy pull
+          weight: 1.0
+        - text: anal
+          weight: 1.0
+        - text: anal fluid
+          weight: 1.0
+        - text: pussy juice
+          weight: 1.0
+        - text: all fours
+          weight: 1.0
+        - text: orgasm
+          weight: 1.0
+        - text: blush
+          weight: 1.0
+        - text: ahegao
+          weight: 1.0
+      quality:
+        - text: masterpiece
+          weight: 1.0
+        - text: high score
+          weight: 1.0
+        - text: great score
+          weight: 1.0
+        - text: absurdres
+          weight: 1.0
+        - text: year 2025
+          weight: 1.0
+    info:
+      index: 9
+      type: nsfw
+    description:
+      zh: NSFW 图片
+      en: NSFW image
