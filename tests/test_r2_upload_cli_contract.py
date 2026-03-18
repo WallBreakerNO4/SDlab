@@ -12,7 +12,18 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from scripts.r2_upload.upload_images_to_r2 import main
+from scripts.r2_upload.upload_images_to_r2 import build_parser, main
+
+
+def test_build_parser_uses_comfyui_out_dir_as_run_root_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("COMFYUI_OUT_DIR", "custom-run-root")
+
+    parser = build_parser()
+    args = parser.parse_args([])
+
+    assert args.run_root == "custom-run-root"
 
 
 def test_dry_run_prints_structured_summary_placeholder(

@@ -285,3 +285,4 @@ node_modules/
 /playwright/.auth/
 /.open-next
 /.wrangler
+/outputs

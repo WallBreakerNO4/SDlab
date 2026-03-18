@@ -13,12 +13,12 @@ from scripts.generation.comfyui_part1_generate import (
     build_parser as build_generate_parser,
 )
 from scripts.r2_upload.upload_images_to_r2 import build_parser as build_upload_parser
+from scripts.r2_upload.upload_runtime import _resolve_default_run_root
 
 from .io import MenuIO
 from .registry import ScriptMain, get_entry, load_entrypoint
 
 DATA_RUNS_DIR = Path("data/runs")
-UPLOAD_RUN_ROOT = Path("comfyui_api_outputs")
 DEFAULT_CONVERT_X_CSV = "data/prompts/X/common_prompts.csv"
 DEFAULT_CONVERT_Y_CSV = "data/prompts/Y/300_NAI_Styles_Table-test.csv"
 CONVERT_X_DEFAULT_ENV = "CONVERT_X_DEFAULT_CSV"
@@ -180,9 +180,10 @@ def _handle_generate(backend: QuestionaryMenuBackend) -> None:
 
 
 def _handle_upload(backend: QuestionaryMenuBackend) -> None:
-    run_dirs = _list_run_dirs(UPLOAD_RUN_ROOT)
+    upload_run_root = Path(_resolve_default_run_root())
+    run_dirs = _list_run_dirs(upload_run_root)
     if not run_dirs:
-        backend.write("未找到可上传的生成结果目录（comfyui_api_outputs/）。")
+        backend.write(f"未找到可上传的生成结果目录（{upload_run_root.as_posix()}/）。")
         return
 
     selected = backend.select(

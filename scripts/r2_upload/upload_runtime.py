@@ -12,6 +12,21 @@ from dotenv import find_dotenv, load_dotenv
 from .upload_contracts import BucketScope, UploadScriptError
 
 
+DEFAULT_RUN_ROOT = "comfyui_api_outputs"
+
+
+def _env_optional_str(name: str) -> str | None:
+    raw = os.getenv(name)
+    if raw is None:
+        return None
+    stripped = raw.strip()
+    return stripped if stripped else None
+
+
+def _resolve_default_run_root() -> str:
+    return _env_optional_str("COMFYUI_OUT_DIR") or DEFAULT_RUN_ROOT
+
+
 def _exit_code_for_exception(
     exc: Exception, *, exit_codes_by_category: dict[str, int]
 ) -> int:

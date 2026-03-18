@@ -15,6 +15,7 @@ from .upload_planner import _build_plans, _dry_run_summary
 from .upload_runtime import (
     _autoload_dotenv,
     _configure_logging,
+    _resolve_default_run_root,
     _exit_code_for_exception,
     _require_bucket_names,
     _resolve_image_workers,
@@ -33,7 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _ = parser.add_argument(
         "--run-root",
-        default="comfyui_api_outputs",
+        default=_resolve_default_run_root(),
         help="Root directory containing run folders.",
     )
     run_group = parser.add_mutually_exclusive_group()

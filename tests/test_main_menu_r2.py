@@ -135,6 +135,35 @@ def test_upload_advanced_flow_collects_optional_args(
     assert "上传完成，退出码: 5" in outputs
 
 
+def test_upload_menu_uses_comfyui_out_dir_for_run_discovery(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    custom_root = tmp_path / "custom-outputs"
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("COMFYUI_OUT_DIR", str(custom_root))
+    (custom_root / "run-env").mkdir(parents=True)
+    calls: list[list[str] | None] = []
+
+    def _fake_upload_main(argv: list[str] | None = None) -> int:
+        calls.append(argv)
+        return 0
+
+    monkeypatch.setattr("scripts.r2_upload.upload_images_to_r2.main", _fake_upload_main)
+    fake_questionary = _FakeQuestionary(
+        selects=["upload", "run-env", "__exit__"],
+        texts=[],
+        confirms=[False, True],
+    )
+    monkeypatch.setattr("scripts.cli.menu._load_questionary", lambda: fake_questionary)
+
+    outputs: list[str] = []
+    exit_code = run_menu(MenuIO(print_func=outputs.append))
+
+    assert exit_code == 0
+    assert calls == [["--run-dir", "run-env"]]
+
+
 def test_upload_without_run_dirs_prints_hint(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -150,3 +179,22 @@ def test_upload_without_run_dirs_prints_hint(
 
     assert exit_code == 0
     assert "未找到可上传的生成结果目录（comfyui_api_outputs/）。" in outputs
+
+
+def test_upload_without_run_dirs_prints_env_specific_hint(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    custom_root = tmp_path / "custom-outputs"
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("COMFYUI_OUT_DIR", str(custom_root))
+    fake_questionary = _FakeQuestionary(
+        selects=["upload", "__exit__"], texts=[], confirms=[]
+    )
+    monkeypatch.setattr("scripts.cli.menu._load_questionary", lambda: fake_questionary)
+
+    outputs: list[str] = []
+    exit_code = run_menu(MenuIO(print_func=outputs.append))
+
+    assert exit_code == 0
+    assert f"未找到可上传的生成结果目录（{custom_root.as_posix()}/）。" in outputs
