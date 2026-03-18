@@ -8,7 +8,7 @@ from pathlib import Path
 from scripts.generation.runner_env import _env_str
 from scripts.run_naming import validate_run_key
 
-DEFAULT_RUN_ROOT = "comfyui_api_outputs"
+DEFAULT_RUN_ROOT = "outputs"
 
 
 @dataclass(slots=True)

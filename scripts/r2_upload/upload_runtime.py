@@ -12,7 +12,7 @@ from dotenv import find_dotenv, load_dotenv
 from .upload_contracts import BucketScope, UploadScriptError
 
 
-DEFAULT_RUN_ROOT = "comfyui_api_outputs"
+DEFAULT_RUN_ROOT = "outputs"
 
 
 def _env_optional_str(name: str) -> str | None:

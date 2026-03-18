@@ -221,6 +221,17 @@ def test_cli_help_exposes_config_runtime_flags_only() -> None:
         assert removed_flag not in help_text
 
 
+def test_build_parser_defaults_match_env_example(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = _import_runner_module()
+    monkeypatch.delenv("COMFYUI_CONCURRENCY", raising=False)
+
+    args = runner.build_parser().parse_args([])
+
+    assert args.concurrency == 8
+
+
 def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -348,7 +359,7 @@ def test_dry_run_without_run_dir_uses_model_key_as_default_output_dir(
     exit_code = runner.main(["--dry-run", "--config", str(config_path)])
 
     assert exit_code == 0
-    run_dir = tmp_path / "comfyui_api_outputs" / "nai-4-full"
+    run_dir = tmp_path / "outputs" / "nai-4-full"
     run_payload = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
     assert run_payload["run_id"] == "nai-4-full"
     assert run_payload["run_key"] == "nai-4-full"

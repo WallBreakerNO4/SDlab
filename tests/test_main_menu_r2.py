@@ -66,7 +66,7 @@ def test_upload_basic_flow_uses_selected_run_dir(
     tmp_path: Path,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "comfyui_api_outputs" / "run-a").mkdir(parents=True)
+    (tmp_path / "outputs" / "run-a").mkdir(parents=True)
     calls: list[list[str] | None] = []
 
     def _fake_upload_main(argv: list[str] | None = None) -> int:
@@ -98,7 +98,7 @@ def test_upload_advanced_flow_collects_optional_args(
     tmp_path: Path,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "comfyui_api_outputs" / "run-b").mkdir(parents=True)
+    (tmp_path / "outputs" / "run-b").mkdir(parents=True)
     calls: list[list[str] | None] = []
 
     def _fake_upload_main(argv: list[str] | None = None) -> int:
@@ -178,7 +178,7 @@ def test_upload_without_run_dirs_prints_hint(
     exit_code = run_menu(MenuIO(print_func=outputs.append))
 
     assert exit_code == 0
-    assert "未找到可上传的生成结果目录（comfyui_api_outputs/）。" in outputs
+    assert "未找到可上传的生成结果目录（outputs/）。" in outputs
 
 
 def test_upload_without_run_dirs_prints_env_specific_hint(

@@ -204,7 +204,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--concurrency",
         type=int,
-        default=_env_optional_int("COMFYUI_CONCURRENCY") or 1,
+        default=_env_optional_int("COMFYUI_CONCURRENCY") or 8,
     )
     parser.add_argument("--client-id")
 
