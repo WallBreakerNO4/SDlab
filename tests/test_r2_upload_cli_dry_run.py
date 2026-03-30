@@ -15,10 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from scripts.r2_upload.upload_images_to_r2 import main
-from scripts.r2_upload.upload_planner import (
-    _build_run_db_fields,
-    _normalize_run_json_config_path,
-)
+from scripts.r2_upload.upload_planner import _build_run_db_fields
 
 
 def _sha256_file(path: Path) -> str:
@@ -44,7 +41,7 @@ def _extended_run_json(
         "run_dir": run_name,
         "dry_run": False,
         "config_schema_version": "image-run-config/v1",
-        "config_path": "data/runs/example.yaml",
+        "config_path": "data/runs/example/config.yaml",
         "config_sha256": "deadbeef" * 8,
         "model": {
             "key": "chenkinnoob-xl-rf",
@@ -229,15 +226,6 @@ def test_build_run_db_fields_extracts_model_structured_fields(tmp_path: Path) ->
         f"runs/model-run/artifacts/workflow/{expected_sha256}.json"
     )
     assert fields["workflow_download_sha256"] == expected_sha256
-
-
-def test_normalize_run_json_config_path_maps_legacy_data_runs_layout(
-    tmp_path: Path,
-) -> None:
-    run_dir = tmp_path / "legacy-config-run"
-    normalized = _normalize_run_json_config_path(_extended_run_json(run_dir=run_dir))
-
-    assert normalized["config_path"] == "data/runs/example/config.yaml"
 
 
 def test_build_run_db_fields_skips_workflow_download_when_only_sha_present() -> None:
