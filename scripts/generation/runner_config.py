@@ -8,6 +8,7 @@ from typing import cast
 
 import yaml
 
+from scripts.run_config_path import resolve_run_config_path
 from scripts.run_naming import validate_run_key
 
 
@@ -369,7 +370,7 @@ def _load_selection(payload: object) -> SelectionConfig:
 
 def load_runner_config(config_path: str, *, repo_root: Path) -> RunnerConfig:
     repo_root = repo_root.resolve()
-    config_file = Path(config_path).resolve()
+    config_file = resolve_run_config_path(config_path, repo_root=repo_root)
 
     if not config_file.is_relative_to(repo_root):
         raise ValueError(f"字段 config_path 必须是 repo-relative 路径: {config_file}")

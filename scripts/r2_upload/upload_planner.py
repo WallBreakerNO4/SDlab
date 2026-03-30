@@ -12,6 +12,8 @@ from typing import cast
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
+from scripts.run_config_path import normalize_run_config_path
+
 from .encoding_params import avif_params, webp_params
 from .manifest import build_public_manifest, build_run_manifest, manifest_object_key
 from .path_safety import normalize_run_dir, resolve_metadata_image_paths
@@ -95,6 +97,20 @@ def _selection_from_run_json(run_json: dict[str, object]) -> dict[str, object] |
 
 def _model_from_run_json(run_json: dict[str, object]) -> dict[str, object] | None:
     return _json_object(run_json.get("model"))
+
+
+def _normalize_run_json_config_path(run_json: dict[str, object]) -> dict[str, object]:
+    config_path = _non_empty_str(run_json.get("config_path"))
+    if config_path is None:
+        return run_json
+
+    normalized_path = normalize_run_config_path(config_path)
+    if normalized_path == config_path:
+        return run_json
+
+    normalized_run_json = dict(run_json)
+    normalized_run_json["config_path"] = normalized_path
+    return normalized_run_json
 
 
 def _build_run_db_fields(
@@ -572,7 +588,7 @@ def _build_run_plan(
     ] = inspect_image_metadata,
 ) -> RunPlan:
     normalized_run_dir = normalize_run_dir(run_dir)
-    run_json = _load_run_json(normalized_run_dir)
+    run_json = _normalize_run_json_config_path(_load_run_json(normalized_run_dir))
     run_dir_name = _resolve_run_dir_name(normalized_run_dir, run_json)
     metadata_records = _load_metadata_records(normalized_run_dir)
     run_intermediate_dir = (intermediate_root / run_dir_name).resolve()

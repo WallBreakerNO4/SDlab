@@ -190,14 +190,14 @@ def test_load_runner_config_happy_path_resolves_repo_relative_paths_and_hashes(
 ) -> None:
     module = _import_runner_config_module()
     x_path, y_path, workflow_path, workflow_download_path = _write_assets(tmp_path)
-    config_path = tmp_path / "data/runs/example.yaml"
+    config_path = tmp_path / "data/runs/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(_valid_config_text(), encoding="utf-8")
 
     config = module.load_runner_config(str(config_path), repo_root=tmp_path)
 
     assert config.schema_version == "image-run-config/v1"
-    assert config.config_path == "data/runs/example.yaml"
+    assert config.config_path == "data/runs/example/config.yaml"
     assert config.config_sha256 == _sha256_file(config_path)
     assert Path(config.prompts.x.path) == x_path
     assert Path(config.prompts.y.path) == y_path
@@ -246,7 +246,7 @@ def test_load_runner_config_happy_path_resolves_repo_relative_paths_and_hashes(
 def test_load_runner_config_rejects_unknown_key(tmp_path: Path) -> None:
     module = _import_runner_config_module()
     _ = _write_assets(tmp_path)
-    config_path = tmp_path / "data/runs/example.yaml"
+    config_path = tmp_path / "data/runs/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         "schema_version: image-run-config/v1\nunknown_key: true\n",
@@ -260,7 +260,7 @@ def test_load_runner_config_rejects_unknown_key(tmp_path: Path) -> None:
 def test_load_runner_config_rejects_invalid_schema_version(tmp_path: Path) -> None:
     module = _import_runner_config_module()
     _ = _write_assets(tmp_path)
-    config_path = tmp_path / "data/runs/example.yaml"
+    config_path = tmp_path / "data/runs/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         _valid_config_text(schema_version="image-run-config/v999"), encoding="utf-8"
@@ -274,7 +274,7 @@ def test_load_runner_config_rejects_repo_external_path(tmp_path: Path) -> None:
     module = _import_runner_config_module()
     outside = tmp_path.parent / "outside.json"
     outside.write_text("{}\n", encoding="utf-8")
-    config_path = tmp_path / "data/runs/example.yaml"
+    config_path = tmp_path / "data/runs/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         "\n".join(
@@ -330,7 +330,7 @@ def test_load_runner_config_rejects_absolute_asset_path_inside_repo(
 ) -> None:
     module = _import_runner_config_module()
     x_path, _y_path, _workflow_path, _workflow_download_path = _write_assets(tmp_path)
-    config_path = tmp_path / "data/runs/example.yaml"
+    config_path = tmp_path / "data/runs/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         _valid_config_text().replace("data/prompts/x.json", str(x_path)),
@@ -344,7 +344,7 @@ def test_load_runner_config_rejects_absolute_asset_path_inside_repo(
 def test_load_runner_config_rejects_empty_model_key(tmp_path: Path) -> None:
     module = _import_runner_config_module()
     _ = _write_assets(tmp_path)
-    config_path = tmp_path / "data/runs/example.yaml"
+    config_path = tmp_path / "data/runs/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         _valid_config_text().replace("  key: nai-4-full", "  key: ''"),
@@ -358,7 +358,7 @@ def test_load_runner_config_rejects_empty_model_key(tmp_path: Path) -> None:
 def test_load_runner_config_rejects_non_slug_model_key(tmp_path: Path) -> None:
     module = _import_runner_config_module()
     _ = _write_assets(tmp_path)
-    config_path = tmp_path / "data/runs/example.yaml"
+    config_path = tmp_path / "data/runs/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         _valid_config_text().replace("  key: nai-4-full", "  key: NAI_4_FULL"),
@@ -390,7 +390,7 @@ def test_fresh_run_rejects_deprecated_business_env_before_loading_config(
 def test_load_runner_config_exposes_compact_model_snapshot_only(tmp_path: Path) -> None:
     module = _import_runner_config_module()
     _ = _write_assets(tmp_path)
-    config_path = tmp_path / "data/runs/example.yaml"
+    config_path = tmp_path / "data/runs/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         "\n".join(
@@ -442,3 +442,18 @@ def test_load_runner_config_exposes_compact_model_snapshot_only(tmp_path: Path) 
     assert config.model.key == "demo"
     assert not hasattr(config.model, "workflow")
     assert not hasattr(config.prompts, "items")
+
+
+def test_load_runner_config_accepts_run_directory_and_reads_config_yaml(
+    tmp_path: Path,
+) -> None:
+    module = _import_runner_config_module()
+    _ = _write_assets(tmp_path)
+    config_dir = tmp_path / "data/runs/example"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config_path = config_dir / "config.yaml"
+    config_path.write_text(_valid_config_text(), encoding="utf-8")
+
+    config = module.load_runner_config("data/runs/example", repo_root=tmp_path)
+
+    assert config.config_path == "data/runs/example/config.yaml"

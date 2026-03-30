@@ -14,11 +14,11 @@ from scripts.generation.comfyui_part1_generate import (
 )
 from scripts.r2_upload.upload_images_to_r2 import build_parser as build_upload_parser
 from scripts.r2_upload.upload_runtime import _resolve_default_run_root
+from scripts.run_config_path import DATA_RUNS_DIR, iter_run_config_files
 
 from .io import MenuIO
 from .registry import ScriptMain, get_entry, load_entrypoint
 
-DATA_RUNS_DIR = Path("data/runs")
 DEFAULT_CONVERT_X_CSV = "data/prompts/X/common_prompts.csv"
 DEFAULT_CONVERT_Y_CSV = "data/prompts/Y/300_NAI_Styles_Table-test.csv"
 CONVERT_X_DEFAULT_ENV = "CONVERT_X_DEFAULT_CSV"
@@ -157,7 +157,10 @@ def _handle_generate(backend: QuestionaryMenuBackend) -> None:
 
     selected = backend.select(
         "选择运行配置",
-        [MenuChoice(path.as_posix(), path.name) for path in config_files],
+        [
+            MenuChoice(path.as_posix(), path.relative_to(DATA_RUNS_DIR).as_posix())
+            for path in config_files
+        ],
         allow_back=True,
     )
     if selected == "__back__":
@@ -438,13 +441,7 @@ def _prompt_upload_advanced_args(backend: QuestionaryMenuBackend) -> list[str]:
 
 
 def _list_config_files() -> list[Path]:
-    if not DATA_RUNS_DIR.exists():
-        return []
-    return sorted(
-        path
-        for path in DATA_RUNS_DIR.iterdir()
-        if path.is_file() and path.suffix.lower() in {".yaml", ".yml", ".json"}
-    )
+    return iter_run_config_files(DATA_RUNS_DIR)
 
 
 def _list_run_dirs(run_root: Path) -> list[Path]:

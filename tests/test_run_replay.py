@@ -44,7 +44,7 @@ def _base_run_payload(x_path: Path, y_path: Path) -> dict[str, object]:
             "y_indexes": [1],
         },
         "config_schema_version": "image-run-config/v1",
-        "config_path": "data/runs/example.yaml",
+        "config_path": "data/runs/example/config.yaml",
         "config_sha256": "config-sha",
         "model": {
             "key": "nai-4-full",

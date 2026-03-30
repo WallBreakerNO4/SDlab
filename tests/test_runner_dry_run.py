@@ -130,7 +130,7 @@ def _fake_runner_config(
     workflow_download_path.write_text('{"version": 1}\n', encoding="utf-8")
     return SimpleNamespace(
         schema_version="image-run-config/v1",
-        config_path="data/runs/example.yaml",
+        config_path="data/runs/example/config.yaml",
         config_sha256=_sha256_file(config_path),
         model=SimpleNamespace(
             key="nai-4-full",
@@ -274,7 +274,7 @@ def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
     assert run_payload["generation_overrides"]["negative_prompt"] == "neg,"
     assert run_payload["generation_overrides"]["append_negative_prompt"] == "app,"
     assert run_payload["config_schema_version"] == "image-run-config/v1"
-    assert run_payload["config_path"] == "data/runs/example.yaml"
+    assert run_payload["config_path"] == "data/runs/example/config.yaml"
     assert run_payload["config_sha256"] == _sha256_file(config_path)
     assert run_payload["model"] == {
         "key": "nai-4-full",

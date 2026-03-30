@@ -75,7 +75,7 @@ def test_generate_basic_flow_uses_selected_config(
         _fake_generate_main,
     )
     fake_questionary = _FakeQuestionary(
-        selects=["generate", "data/runs/example.yaml", "__exit__"],
+        selects=["generate", "data/runs/example/config.yaml", "__exit__"],
         confirms=[False, True],
     )
     monkeypatch.setattr("scripts.cli.menu._load_questionary", lambda: fake_questionary)
@@ -84,9 +84,9 @@ def test_generate_basic_flow_uses_selected_config(
     exit_code = run_menu(_build_menu_io(outputs))
 
     assert exit_code == 0
-    assert calls == [["--config", "data/runs/example.yaml"]]
+    assert calls == [["--config", "data/runs/example/config.yaml"]]
     assert any(
-        "预览命令: uv run python scripts/generation/comfyui_part1_generate.py --config data/runs/example.yaml"
+        "预览命令: uv run python scripts/generation/comfyui_part1_generate.py --config data/runs/example/config.yaml"
         in output
         for output in outputs
     )
@@ -107,7 +107,7 @@ def test_generate_advanced_flow_maps_original_cli_args(
         _fake_generate_main,
     )
     fake_questionary = _FakeQuestionary(
-        selects=["generate", "data/runs/test.yaml", "__exit__"],
+        selects=["generate", "data/runs/test/config.yaml", "__exit__"],
         texts=[
             "custom-run",
             "TEMP,AUTH",
@@ -128,7 +128,7 @@ def test_generate_advanced_flow_maps_original_cli_args(
     assert calls == [
         [
             "--config",
-            "data/runs/test.yaml",
+            "data/runs/test/config.yaml",
             "--dry-run",
             "--run-dir",
             "custom-run",

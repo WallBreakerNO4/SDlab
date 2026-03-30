@@ -49,7 +49,7 @@ def test_dry_run_prints_structured_summary_placeholder(
             '"run_key":"contract-run",'
             '"run_dir":"contract-run",'
             '"config_schema_version":"image-run-config/v1",'
-            '"config_path":"data/runs/example.yaml",'
+            '"config_path":"data/runs/example/config.yaml",'
             '"config_sha256":"' + ("deadbeef" * 8) + '",'
             '"model":{'
             '"key":"chenkinnoob-xl-rf",'

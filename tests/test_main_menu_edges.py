@@ -87,7 +87,7 @@ def test_generate_cancelled_before_execution_does_not_call_main(
         "scripts.generation.comfyui_part1_generate.main", _fake_generate_main
     )
     fake_questionary = _FakeQuestionary(
-        selects=["generate", "data/runs/example.yaml", "__exit__"],
+        selects=["generate", "data/runs/example/config.yaml", "__exit__"],
         texts=[],
         confirms=[False, False],
     )
