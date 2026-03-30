@@ -263,6 +263,7 @@ def _apply_fresh_run_config(args: argparse.Namespace) -> None:
     args.config_workflow = config.workflow
     args.config_generation = config.generation
     args.config_selection = config.selection
+    args.run_assets = config.assets
 
     args.x_json = config.prompts.x.path
     args.y_json = config.prompts.y.path

@@ -132,11 +132,19 @@ def _execute(
     for plan in plans:
         images_raw = plan.upload_index_payload.get("images")
         images_list = images_raw if isinstance(images_raw, list) else []
-        total_db_records += 1 + len(images_list)
+        run_assets_raw = plan.upload_index_payload.get("run_assets")
+        run_assets_list = run_assets_raw if isinstance(run_assets_raw, list) else []
+        total_db_records += 1 + len(images_list) + len(run_assets_list)
         for image in images_list:
             if not isinstance(image, dict):
                 continue
             variants_raw = image.get("variants")
+            variants_list = variants_raw if isinstance(variants_raw, list) else []
+            total_db_records += len(variants_list)
+        for run_asset in run_assets_list:
+            if not isinstance(run_asset, dict):
+                continue
+            variants_raw = run_asset.get("variants")
             variants_list = variants_raw if isinstance(variants_raw, list) else []
             total_db_records += len(variants_list)
 

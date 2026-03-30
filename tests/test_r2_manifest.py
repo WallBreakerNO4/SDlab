@@ -23,6 +23,21 @@ from scripts.r2_upload.manifest import (
 def _sample_payload() -> dict[str, object]:
     return {
         "run_dir": "chenkinnoob-xl-rf",
+        "run_assets": [
+            {
+                "asset_role": "cover",
+                "asset_index": 0,
+                "variants": [
+                    {
+                        "variant": "display_webp",
+                        "bucket": "public",
+                        "r2_key": "runs/public/cover-display.webp",
+                        "content_type": "image/webp",
+                        "byte_size": 321,
+                    }
+                ],
+            }
+        ],
         "images": [
             {
                 "x_index": 0,
@@ -80,6 +95,12 @@ def test_build_public_manifest_redacts_private_content_and_keys() -> None:
     images = cast(list[dict[str, object]], public_manifest["images"])
     assert len(images) == 1
     assert images[0]["category"] == "normal"
+
+    run_assets = cast(list[dict[str, object]], public_manifest["run_assets"])
+    assert len(run_assets) == 1
+    run_asset_variants = cast(list[dict[str, object]], run_assets[0]["variants"])
+    assert len(run_asset_variants) == 1
+    assert run_asset_variants[0]["bucket"] == "public"
 
     variants = cast(list[dict[str, object]], images[0]["variants"])
     assert len(variants) == 1

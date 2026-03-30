@@ -5,6 +5,7 @@ export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
 export type JsonObject = { [key: string]: JsonValue };
 
 export type ImageCategory = "normal" | "advance" | "nsfw";
+export type RunAssetRole = "cover" | "homepage_thumb";
 
 export type ImageVariantName =
   | "display_webp"
@@ -48,6 +49,24 @@ export interface SupabaseImageRow {
 }
 
 export interface SupabaseImageVariantRow {
+  variant: ImageVariantName;
+  bucket: R2Bucket;
+  r2_key: string;
+  content_type: string;
+}
+
+export interface SupabaseRunAssetRow {
+  asset_role: RunAssetRole;
+  asset_index: number;
+  source_path: string;
+  source_sha256: string;
+  blurhash: string | null;
+  blurhash_width?: number | null;
+  blurhash_height?: number | null;
+  metadata: JsonObject;
+}
+
+export interface SupabaseRunAssetVariantRow {
   variant: ImageVariantName;
   bucket: R2Bucket;
   r2_key: string;

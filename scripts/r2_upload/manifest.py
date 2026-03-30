@@ -25,6 +25,9 @@ def build_public_manifest(private_manifest: Mapping[str, object]) -> dict[str, o
         private_manifest.get("schema_version")
     )
     public_manifest["images"] = _public_images(private_manifest.get("images"))
+    public_manifest["run_assets"] = _public_run_assets(
+        private_manifest.get("run_assets")
+    )
     return public_manifest
 
 
@@ -66,6 +69,21 @@ def _public_images(value: object) -> list[dict[str, object]]:
         image = _clone_mapping(image_mapping)
         image["variants"] = _public_variants(image_mapping.get("variants"))
         result.append(image)
+    return result
+
+
+def _public_run_assets(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        return []
+
+    result: list[dict[str, object]] = []
+    for run_asset_obj in value:
+        if not isinstance(run_asset_obj, Mapping):
+            continue
+        run_asset_mapping = cast(Mapping[str, object], run_asset_obj)
+        run_asset = _clone_mapping(run_asset_mapping)
+        run_asset["variants"] = _public_variants(run_asset_mapping.get("variants"))
+        result.append(run_asset)
     return result
 
 

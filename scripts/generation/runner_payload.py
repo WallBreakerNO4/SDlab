@@ -102,6 +102,7 @@ def _build_run_payload(
             "sampler_name": args.sampler_name,
             "scheduler": args.scheduler,
         },
+        "assets": _build_assets_snapshot(args),
         "config_snapshot": _build_config_snapshot(args),
     }
 
@@ -135,7 +136,6 @@ def _build_config_snapshot(args: argparse.Namespace) -> dict[str, object] | None
     workflow = cast(Any, workflow_obj)
     generation = cast(Any, generation_obj)
     selection = cast(Any, selection_obj)
-
     return {
         "prompts": {
             "x_path": prompts.x.repo_relative_path,
@@ -177,6 +177,55 @@ def _build_config_snapshot(args: argparse.Namespace) -> dict[str, object] | None
             "y_indexes": selection.y_indexes,
         },
     }
+
+
+def _build_assets_snapshot(args: argparse.Namespace) -> dict[str, object] | None:
+    assets_obj = getattr(args, "run_assets", None)
+    if assets_obj is None:
+        return None
+
+    assets = cast(Any, assets_obj)
+    return _build_asset_collection_payload(
+        cover_image=assets.cover_image,
+        homepage_images=assets.homepage_images,
+        include_absolute_path=True,
+    )
+
+
+def _build_asset_collection_payload(
+    *,
+    cover_image: Any,
+    homepage_images: list[Any],
+    include_absolute_path: bool,
+) -> dict[str, object]:
+    return {
+        "cover_image": _build_asset_ref_payload(
+            cover_image,
+            include_absolute_path=include_absolute_path,
+        ),
+        "homepage_images": [
+            _build_asset_ref_payload(
+                asset,
+                include_absolute_path=include_absolute_path,
+            )
+            for asset in homepage_images
+        ],
+    }
+
+
+def _build_asset_ref_payload(
+    asset: Any, *, include_absolute_path: bool
+) -> dict[str, object] | None:
+    if asset is None:
+        return None
+
+    payload: dict[str, object] = {
+        "repo_relative_path": asset.repo_relative_path,
+        "sha256": asset.sha256,
+    }
+    if include_absolute_path:
+        payload["path"] = asset.path
+    return payload
 
 
 def _sha256_file(path: Path) -> str:

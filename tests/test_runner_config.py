@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Protocol, cast
 
 import pytest
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -56,6 +57,11 @@ class _SelectionConfig(Protocol):
     y_indexes: list[int] | None
 
 
+class _AssetsConfig(Protocol):
+    cover_image: _PromptRef | None
+    homepage_images: list[_PromptRef]
+
+
 class _ModelConfig(Protocol):
     key: str
     name: str
@@ -73,6 +79,7 @@ class _RunnerConfig(Protocol):
     model: _ModelConfig
     generation: _GenerationConfig
     selection: _SelectionConfig
+    assets: _AssetsConfig
 
 
 class _RunnerConfigModule(Protocol):
@@ -125,11 +132,19 @@ def _sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _write_assets(repo_root: Path) -> tuple[Path, Path, Path, Path]:
+def _write_png(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (8, 6), (120, 80, 40)).save(path, format="PNG")
+
+
+def _write_assets(repo_root: Path) -> tuple[Path, Path, Path, Path, Path, Path, Path]:
     x_path = repo_root / "data/prompts/x.json"
     y_path = repo_root / "data/prompts/y.yaml"
     workflow_path = repo_root / "data/workflows/example.json"
     workflow_download_path = repo_root / "data/workflows/example-download.json"
+    cover_image_path = repo_root / "data/runs/example/image.jpg"
+    homepage_first = repo_root / "data/runs/example/images/001.png"
+    homepage_second = repo_root / "data/runs/example/images/002.png"
     x_path.parent.mkdir(parents=True, exist_ok=True)
     y_path.parent.mkdir(parents=True, exist_ok=True)
     workflow_path.parent.mkdir(parents=True, exist_ok=True)
@@ -137,7 +152,18 @@ def _write_assets(repo_root: Path) -> tuple[Path, Path, Path, Path]:
     y_path.write_text("schema: prompt-y-table/v2\nitems: []\n", encoding="utf-8")
     workflow_path.write_text('{"3": {"class_type": "KSampler"}}\n', encoding="utf-8")
     workflow_download_path.write_text('{"version": 1}\n', encoding="utf-8")
-    return x_path, y_path, workflow_path, workflow_download_path
+    _write_png(cover_image_path)
+    _write_png(homepage_first)
+    _write_png(homepage_second)
+    return (
+        x_path,
+        y_path,
+        workflow_path,
+        workflow_download_path,
+        cover_image_path,
+        homepage_first,
+        homepage_second,
+    )
 
 
 def _valid_config_text(*, schema_version: str = "image-run-config/v1") -> str:
@@ -189,7 +215,15 @@ def test_load_runner_config_happy_path_resolves_repo_relative_paths_and_hashes(
     tmp_path: Path,
 ) -> None:
     module = _import_runner_config_module()
-    x_path, y_path, workflow_path, workflow_download_path = _write_assets(tmp_path)
+    (
+        x_path,
+        y_path,
+        workflow_path,
+        workflow_download_path,
+        cover_image_path,
+        homepage_first,
+        homepage_second,
+    ) = _write_assets(tmp_path)
     config_path = tmp_path / "data/runs/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(_valid_config_text(), encoding="utf-8")
@@ -216,6 +250,18 @@ def test_load_runner_config_happy_path_resolves_repo_relative_paths_and_hashes(
     )
     assert config.workflow.download.sha256 == _sha256_file(workflow_download_path)
     assert config.workflow.ksampler_node_id == "3"
+    assert config.assets.cover_image is not None
+    assert Path(config.assets.cover_image.path) == cover_image_path
+    assert config.assets.cover_image.repo_relative_path == "data/runs/example/image.jpg"
+    assert config.assets.cover_image.sha256 == _sha256_file(cover_image_path)
+    assert [asset.repo_relative_path for asset in config.assets.homepage_images] == [
+        "data/runs/example/images/001.png",
+        "data/runs/example/images/002.png",
+    ]
+    assert [Path(asset.path) for asset in config.assets.homepage_images] == [
+        homepage_first,
+        homepage_second,
+    ]
     assert config.model.key == "nai-4-full"
     assert config.model.name == "NAI 4 Full"
     assert config.model.family == "novelai"
@@ -329,7 +375,7 @@ def test_load_runner_config_rejects_absolute_asset_path_inside_repo(
     tmp_path: Path,
 ) -> None:
     module = _import_runner_config_module()
-    x_path, _y_path, _workflow_path, _workflow_download_path = _write_assets(tmp_path)
+    x_path, *_ = _write_assets(tmp_path)
     config_path = tmp_path / "data/runs/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(

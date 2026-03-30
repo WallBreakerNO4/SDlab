@@ -45,6 +45,7 @@ _GENERATION_KEYS = {
 _SELECTION_KEYS = {"x_limit", "y_limit", "x_indexes", "y_indexes"}
 _PROMPT_EXTENSIONS = {".yaml", ".yml", ".json"}
 _WORKFLOW_EXTENSIONS = {".json"}
+_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".avif"}
 
 
 @dataclass(frozen=True)
@@ -103,6 +104,12 @@ class SelectionConfig:
 
 
 @dataclass(frozen=True)
+class AssetsConfig:
+    cover_image: AssetRef | None
+    homepage_images: list[AssetRef]
+
+
+@dataclass(frozen=True)
 class RunnerConfig:
     schema_version: str
     config_path: str
@@ -112,6 +119,7 @@ class RunnerConfig:
     workflow: WorkflowConfig
     generation: GenerationConfig
     selection: SelectionConfig
+    assets: AssetsConfig
 
 
 def _sha256_file(path: Path) -> str:
@@ -221,6 +229,40 @@ def _resolve_repo_path(
         repo_relative_path=resolved.relative_to(repo_root).as_posix(),
         sha256=_sha256_file(resolved),
     )
+
+
+def _load_assets(*, run_dir: Path, repo_root: Path) -> AssetsConfig:
+    cover_image_path = run_dir / "image.jpg"
+    cover_image: AssetRef | None = None
+    if cover_image_path.exists():
+        if not cover_image_path.is_file():
+            raise ValueError(f"run 封面图不是文件: {cover_image_path}")
+        cover_image = AssetRef(
+            path=str(cover_image_path.resolve()),
+            repo_relative_path=cover_image_path.resolve()
+            .relative_to(repo_root)
+            .as_posix(),
+            sha256=_sha256_file(cover_image_path),
+        )
+
+    homepage_image_dir = run_dir / "images"
+    homepage_images: list[AssetRef] = []
+    if homepage_image_dir.exists():
+        if not homepage_image_dir.is_dir():
+            raise ValueError(f"run 主页缩略图目录不是文件夹: {homepage_image_dir}")
+        for path in sorted(homepage_image_dir.iterdir()):
+            if not path.is_file() or path.suffix.lower() not in _IMAGE_EXTENSIONS:
+                continue
+            resolved = path.resolve()
+            homepage_images.append(
+                AssetRef(
+                    path=str(resolved),
+                    repo_relative_path=resolved.relative_to(repo_root).as_posix(),
+                    sha256=_sha256_file(path),
+                )
+            )
+
+    return AssetsConfig(cover_image=cover_image, homepage_images=homepage_images)
 
 
 def _load_model(payload: object) -> ModelConfig:
@@ -380,7 +422,10 @@ def load_runner_config(config_path: str, *, repo_root: Path) -> RunnerConfig:
     payload_obj = cast(object, yaml.safe_load(config_file.read_text(encoding="utf-8")))
     mapping = _require_mapping(payload_obj, "<root>")
     _validate_keys(
-        mapping, field_name="<root>", allowed=_ROOT_KEYS, required=_ROOT_KEYS
+        mapping,
+        field_name="<root>",
+        allowed=_ROOT_KEYS,
+        required=_ROOT_KEYS,
     )
 
     schema_version = _require_str(mapping["schema_version"], "schema_version")
@@ -398,6 +443,7 @@ def load_runner_config(config_path: str, *, repo_root: Path) -> RunnerConfig:
         workflow=_load_workflow(mapping["workflow"], repo_root=repo_root),
         generation=_load_generation(mapping["generation"]),
         selection=_load_selection(mapping["selection"]),
+        assets=_load_assets(run_dir=config_file.parent, repo_root=repo_root),
     )
 
 
