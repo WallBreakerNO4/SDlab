@@ -9,6 +9,7 @@
 
 - 仓库分两条主线：Next.js 站点负责展示 runs / grid / 图片；Python 脚本负责生图、上传 R2、写入 Supabase。
 - 当前网站数据链路以 Supabase + R2 为准；不要假设 Web 侧仍有本地文件降级读取。
+- 术语约定：当前已接入、由上传脚本生成的 `display_*` / `thumb_*` 变体统一称为“展示页缩略图”；未来若为首页 run 卡片引入 `run/image.*` 与同级 `images/*` 资源，统一称为“主页缩略图”。两者不是同一套资源，讨论与实现时必须明确区分。
 - 认证链路走 Supabase SSR：浏览器端 `lib/supabase-browser.ts`，服务端 `lib/supabase-auth.ts`，会话刷新在 `middleware.ts`。
 - Web 部署目标是 OpenNext + Cloudflare：本地 `next dev` 会启 Miniflare，部分服务端能力通过 Workers bindings 读取。
 
@@ -41,31 +42,31 @@
 
 ## 去哪儿看
 
-| 任务                  | 位置                                                                             | 备注                                            |
-| --------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------- |
-| Python 顶层入口       | `main.py`                                                                        | 菜单/主 runner 的统一入口                       |
-| 生图主入口            | `scripts/generation/comfyui_part1_generate.py`                                   | dry-run / retry / 落盘合约                      |
-| 生图配置加载          | `scripts/generation/runner_config.py`                                            | `--config` YAML schema + repo-relative 资产校验 |
-| 并发 runner           | `scripts/generation/runner_coordinator.py`                                       | ThreadPoolExecutor 双池                         |
-| ComfyUI 通信          | `scripts/generation/comfyui_client.py`                                           | HTTP / WS / 错误码                              |
-| R2 上传入口           | `scripts/r2_upload/upload_images_to_r2.py`                                       | 编码、上传、写 Supabase                         |
-| 上传规划              | `scripts/r2_upload/upload_planner.py`                                            | 多变体规划 + 并发编码                           |
-| 资产转换脚本          | `scripts/other/convert_*.py`                                                     | 文件名遗留 `json`，实际输出 YAML 资产           |
-| run 配置示例          | `data/runs/example.yaml`                                                         | `image-run-config/v1` 示例                      |
-| 网站首页              | `app/page.tsx`                                                                   | 读取 runs 列表                                  |
-| run 详情页            | `app/runs/[runDir]/page.tsx`                                                     | 并行拉 run + grid，显示 workflow 下载入口       |
-| App API 总约定        | `app/api/AGENTS.md`                                                              | `app/api/**/route.ts` 共享约束                  |
-| ComfyUI API           | `app/api/comfyui/**/route.ts`                                                    | Node runtime + Supabase 查询 + workflow 下载    |
-| R2 私有代理           | `app/api/r2/private/[...r2Key]/route.ts`                                         | 认证后代理 R2 private bucket                    |
-| Auth 回调特例         | `app/auth/AGENTS.md`                                                             | PKCE callback 直接交换 session                  |
-| 站点壳层 / 登录入口   | `app/layout.tsx`、`components/site-header.tsx`                                   | ThemeProvider + AuthProvider + 登录弹窗入口     |
-| Cloudflare / OpenNext | `next.config.ts`、`open-next.config.ts`、`cloudflare-env.d.ts`、`wrangler.jsonc` | 本地 Miniflare + Workers bindings / vars        |
-| 服务端 Supabase       | `lib/supabase-auth.ts`                                                           | `server-only` + cookie session                  |
-| 浏览器端 Supabase     | `lib/supabase-browser.ts`                                                        | AuthProvider 使用                               |
-| runDir 校验           | `lib/comfyui-types.ts`                                                           | API 侧 `isValidRunDir()` type guard             |
-| 路径安全              | `lib/comfyui-path.ts`                                                            | 共享路径工具与相对路径逃逸防护                  |
-| R2 URL 构建           | `lib/r2-url.ts`                                                                  | 公开/私有 URL 与变体白名单                      |
-| 会话刷新              | `middleware.ts`                                                                  | Edge middleware，不能引 `lib/supabase-auth.ts`  |
+| 任务                  | 位置                                                                             | 备注                                             |
+| --------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------ |
+| Python 顶层入口       | `main.py`                                                                        | 菜单/主 runner 的统一入口                        |
+| 生图主入口            | `scripts/generation/comfyui_part1_generate.py`                                   | dry-run / retry / 落盘合约                       |
+| 生图配置加载          | `scripts/generation/runner_config.py`                                            | `--config` YAML schema + repo-relative 资产校验  |
+| 并发 runner           | `scripts/generation/runner_coordinator.py`                                       | ThreadPoolExecutor 双池                          |
+| ComfyUI 通信          | `scripts/generation/comfyui_client.py`                                           | HTTP / WS / 错误码                               |
+| R2 上传入口           | `scripts/r2_upload/upload_images_to_r2.py`                                       | 编码、上传、写 Supabase                          |
+| 上传规划              | `scripts/r2_upload/upload_planner.py`                                            | 多变体规划 + 并发编码                            |
+| 资产转换脚本          | `scripts/other/convert_*.py`                                                     | 文件名遗留 `json`，实际输出 YAML 资产            |
+| run 配置示例          | `data/runs/example.yaml`                                                         | `image-run-config/v1` 示例                       |
+| 网站首页              | `app/page.tsx`                                                                   | 读取 runs 列表；未来主页缩略图若接入也从这里消费 |
+| run 详情页            | `app/runs/[runDir]/page.tsx`                                                     | 并行拉 run + grid，显示 workflow 下载入口        |
+| App API 总约定        | `app/api/AGENTS.md`                                                              | `app/api/**/route.ts` 共享约束                   |
+| ComfyUI API           | `app/api/comfyui/**/route.ts`                                                    | Node runtime + Supabase 查询 + workflow 下载     |
+| R2 私有代理           | `app/api/r2/private/[...r2Key]/route.ts`                                         | 认证后代理 R2 private bucket                     |
+| Auth 回调特例         | `app/auth/AGENTS.md`                                                             | PKCE callback 直接交换 session                   |
+| 站点壳层 / 登录入口   | `app/layout.tsx`、`components/site-header.tsx`                                   | ThemeProvider + AuthProvider + 登录弹窗入口      |
+| Cloudflare / OpenNext | `next.config.ts`、`open-next.config.ts`、`cloudflare-env.d.ts`、`wrangler.jsonc` | 本地 Miniflare + Workers bindings / vars         |
+| 服务端 Supabase       | `lib/supabase-auth.ts`                                                           | `server-only` + cookie session                   |
+| 浏览器端 Supabase     | `lib/supabase-browser.ts`                                                        | AuthProvider 使用                                |
+| runDir 校验           | `lib/comfyui-types.ts`                                                           | API 侧 `isValidRunDir()` type guard              |
+| 路径安全              | `lib/comfyui-path.ts`                                                            | 共享路径工具与相对路径逃逸防护                   |
+| R2 URL 构建           | `lib/r2-url.ts`                                                                  | 公开/私有 URL 与变体白名单                       |
+| 会话刷新              | `middleware.ts`                                                                  | Edge middleware，不能引 `lib/supabase-auth.ts`   |
 
 ## 代码图
 
@@ -92,7 +93,7 @@
 - Middleware 例外：`middleware.ts` 不能 import `lib/supabase-auth.ts`，因为后者依赖 `server-only` + `next/headers`。
 - Cloudflare：本地 `next dev` 通过 `initOpenNextCloudflareForDev()` 提供 Miniflare 绑定；服务端访问 R2 bucket 走 `getCloudflareContext()`。
 - 路径与 URL：API 入口的 `runDir` 先用 `lib/comfyui-types.ts:isValidRunDir()` 判形态；共享路径处理再走 `lib/comfyui-path.ts`；R2 URL 统一走 `lib/r2-url.ts`。
-- 前端：大网格必须虚拟化；图片优先消费 R2 display/thumb 变体并配合 blurhash 占位。
+- 前端：大网格必须虚拟化；图片优先消费 R2 display/thumb 变体并配合 blurhash 占位，这套变体统一称为“展示页缩略图”。
 - 工具链：Python 用 `uv` + `pytest`（>=3.13）；Web 用 `pnpm` + Next 16 + React 19；E2E 用 Playwright。
 - Supabase CLI：本仓库默认直接使用系统安装的 `supabase ...` 命令；既然已通过 `.deb` 安装 CLI，就不要再混用 `pnpm dlx supabase ...` 或 `npx supabase ...`。
 - 协作文档与 git commit message 默认使用中文；涉及环境变量示例时优先更新 `.env.example`，不要直接读取/修改真实 `.env`。

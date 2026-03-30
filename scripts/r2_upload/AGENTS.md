@@ -3,6 +3,7 @@
 ## 概览
 
 - 完整的图片上传管线：从本地 run 产物读取 → 多变体编码（webp/avif）→ R2 上传 → Supabase 索引写入。19 个 Python 文件。
+- 术语约定：本目录生成的 `display_*` / `thumb_*` 变体统一称为“展示页缩略图”；它们服务 run 详情页与网格展示，不等于未来首页卡片要用的“主页缩略图”。
 
 ## 去哪儿改
 
@@ -13,8 +14,8 @@
 | Supabase 批量写入         | `supabase_writer.py`     | `SupabaseWriter.upsert_upload_index()`；分批 upsert + 并发写入                       |
 | 上传规划与变体            | `upload_planner.py`      | `_build_run_plan()`；多变体规划 + ThreadPoolExecutor 并发编码                        |
 | R2 key 生成与 bucket 映射 | `r2_keys.py`             | key 格式：`runs/{run_dir}/{variant}_{filename}`；normal→public, advance/nsfw→private |
-| 图片编码参数              | `encoding_params.py`     | webp/avif 质量/尺寸参数；thumb 尺寸为 display 一半（向下取整，≥1）                   |
-| 变体图片处理              | `variants.py`            | PIL 缩放 + 编码；生成 display/thumb 的 webp/avif                                     |
+| 图片编码参数              | `encoding_params.py`     | webp/avif 质量/尺寸参数；展示页缩略图中的 thumb 尺寸为 display 一半（向下取整，≥1）  |
+| 变体图片处理              | `variants.py`            | PIL 缩放 + 编码；生成展示页缩略图所需的 display/thumb webp/avif                      |
 | 上传合约类型              | `upload_contracts.py`    | `PlannedUpload`/`UploadResult` 等 dataclass                                          |
 | 上传执行器                | `upload_executor.py`     | 并发上传调度                                                                         |
 | 上传 I/O                  | `upload_io.py`           | 文件读写工具                                                                         |
@@ -34,7 +35,7 @@ upload_images_to_r2.py (CLI)
   ↓
 upload_discovery.py → 发现 metadata.jsonl 中的图片
   ↓
-upload_planner.py → 规划变体（display_webp/avif + thumb_webp/avif）
+upload_planner.py → 规划展示页缩略图变体（display_webp/avif + thumb_webp/avif）
   ↓ (ThreadPoolExecutor 并发编码)
 variants.py + encoding_params.py → 生成变体文件
   ↓
@@ -55,7 +56,8 @@ supabase_writer.py → 批量 upsert 到 Supabase（runs + images + variants）
 
 - 上传逻辑与生图逻辑分层：不要反向耦合到 `scripts/generation/` 内部流程
 - 凭证输入优先走环境变量（`R2_*`/`SUPABASE_*`），不在仓库内落盘明文配置
-- 变体命名：`display_webp`/`display_avif`/`thumb_webp`/`thumb_avif`
+- 变体命名：`display_webp`/`display_avif`/`thumb_webp`/`thumb_avif`，文档中统称“展示页缩略图”
+- `run/image.*` 与同级 `images/*` 这类未来首页卡片资源不由本目录自动接线；若要接入，应单独建模为“主页缩略图”链路。
 - bucket 分配：normal category → public bucket；advance/nsfw → private bucket
 - 上传支持可配置并发（`--upload-workers`）和 dry-run 模式
 - I/O 统一用 `pathlib.Path`；中间编码产物写入 `_r2_upload_intermediate/`

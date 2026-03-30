@@ -21,7 +21,7 @@
 - ComfyUI API route 和 R2 私有代理统一使用 `createSupabaseAuthClient()`；它依赖 `server-only` 与 `next/headers`。
 - 浏览器端认证统一使用 `createSupabaseBrowserClient()`；不要在客户端自己拼 Supabase SSR 初始化。
 - `middleware.ts` 是例外：因为运行在 Edge，不能 import `lib/supabase-auth.ts`，只能内联建 client。
-- `publicObjectUrl()` 和 `privateObjectUrl()` 都只允许 display/thumb 变体。
+- `publicObjectUrl()` 和 `privateObjectUrl()` 都只允许 display/thumb 变体；这些 URL 服务的是“展示页缩略图”，不是未来首页卡片的“主页缩略图”。
 - 站内代理的真正鉴权仍在 `app/api/r2/private/[...r2Key]/route.ts`。
 - API 侧 `runDir` 形态判断当前主要走 `comfyui-types.ts:isValidRunDir()`；`comfyui-path.ts` 更偏共享路径安全与 allowlist 工具。
 

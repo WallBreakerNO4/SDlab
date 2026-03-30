@@ -3,12 +3,13 @@
 ## 概览
 
 - 页面层负责 runs / run detail / auth callback 展示与全站 layout 装配；数据从 Supabase API 读取，图片从 R2 公开 URL 或私有代理读取。
+- 术语约定：run 详情页网格里消费的 `display_*` / `thumb_*` 变体叫“展示页缩略图”；未来首页卡片若消费 `run/image.*` 与同级 `images/*`，叫“主页缩略图”。当前首页尚未接入主页缩略图。
 
 ## 去哪儿看
 
 | 场景                | 位置                                                | 备注                                                          |
 | ------------------- | --------------------------------------------------- | ------------------------------------------------------------- |
-| 首页 runs 列表      | `app/page.tsx`                                      | 拉 `/api/comfyui/runs`                                        |
+| 首页 runs 列表      | `app/page.tsx`                                      | 拉 `/api/comfyui/runs`；当前未返回主页缩略图                  |
 | run 详情页          | `app/runs/[runDir]/page.tsx`                        | 并行拉 detail + grid，前端做 type guard，并显示 workflow 下载 |
 | Auth 回调页         | `app/auth/callback/route.ts`                        | OAuth 回跳处理                                                |
 | Auth 局部约定       | `app/auth/AGENTS.md`                                | PKCE session 交换特例                                         |
@@ -29,6 +30,7 @@
 - ComfyUI API 与 R2 私有代理统一经 `createSupabaseAuthClient()`；`auth/callback` 为 PKCE 特例，直接用 `createServerClient()` 交换 session。
 - `app/api/` 负责 route 级共性约束；`app/api/comfyui/` 与 `app/api/r2/` 只补充各自 payload / 代理细节。
 - run 详情页当前除了 summary + grid，还消费 `run.workflow.download_url` 暴露 workflow 下载入口；页面层只消费 URL，不直接接触 R2 bucket 细节。
+- 首页若未来接入主页缩略图，需要新增明确的数据字段或 API 输出；不要把 run 详情页的展示页缩略图语义直接挪作首页卡片素材。
 - `app/layout.tsx` 负责挂载 `ThemeProvider`、`AuthProvider`、`SiteHeader`、`SiteFooter`；全站认证/主题入口从这里接入。
 - 页面 fetch 后先做 type guard，再进入渲染状态机；错误态与 not-found 分开处理。
 - 图片路径/对象 key 不在页面层手拼；公开变体走 `publicObjectUrl()`，私有对象走 `/api/r2/private/...`。
