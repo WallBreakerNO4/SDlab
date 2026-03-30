@@ -32,7 +32,7 @@ def _extended_run_json(
     *,
     run_dir: Path,
     run_dir_value: str | None = None,
-    asset_root: Path | None = None,
+    include_run_assets: bool = False,
 ) -> dict[str, object]:
     run_name = run_dir_value if run_dir_value is not None else run_dir.name
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -99,21 +99,17 @@ def _extended_run_json(
         "workflow_download_path": str(workflow_download_path),
         "workflow_download_sha256": workflow_download_sha256,
     }
-    if asset_root is not None:
-        cover_path = asset_root / "image.jpg"
-        homepage_path = asset_root / "images" / "001.png"
-        _write_png(cover_path, size=(12, 10))
-        _write_png(homepage_path, size=(10, 8))
+    if include_run_assets:
+        cover_path = ROOT / "data/runs/example/image.jpg"
+        homepage_path = ROOT / "data/runs/example/images/1021-832x1216.jpg"
         payload["assets"] = {
             "cover_image": {
-                "path": str(cover_path),
                 "repo_relative_path": "data/runs/example/image.jpg",
                 "sha256": _sha256_file(cover_path),
             },
             "homepage_images": [
                 {
-                    "path": str(homepage_path),
-                    "repo_relative_path": "data/runs/example/images/001.png",
+                    "repo_relative_path": "data/runs/example/images/1021-832x1216.jpg",
                     "sha256": _sha256_file(homepage_path),
                 }
             ],
@@ -158,9 +154,7 @@ def _write_run_fixture(
             _extended_run_json(
                 run_dir=run_dir,
                 run_dir_value=run_json_run_dir,
-                asset_root=(root / "repo-assets" / run_name)
-                if include_run_assets
-                else None,
+                include_run_assets=include_run_assets,
             ),
             ensure_ascii=False,
         ),
@@ -206,8 +200,11 @@ def test_cli_dry_run_outputs_required_keys_and_manifest_uploads(
     assert exit_code == 0
     payload = _read_stdout_json(capsys)
 
-    assert isinstance(payload.get("planned_variants"), int)
-    assert payload["planned_variants"] == 4
+    assert isinstance(payload.get("planned_grid_image_variant_uploads"), int)
+    assert payload["planned_grid_image_variant_uploads"] == 4
+    assert payload["planned_run_asset_variant_uploads"] == 0
+    assert payload["planned_artifact_uploads"] == 1
+    assert payload["planned_manifest_uploads"] == 2
 
     planned_uploads = payload.get("planned_uploads")
     assert isinstance(planned_uploads, list)
@@ -253,7 +250,10 @@ def test_cli_dry_run_includes_cover_and_homepage_asset_variants(
 
     assert exit_code == 0
     payload = _read_stdout_json(capsys)
-    assert payload.get("planned_variants") == 12
+    assert payload.get("planned_grid_image_variant_uploads") == 4
+    assert payload.get("planned_run_asset_variant_uploads") == 8
+    assert payload.get("planned_artifact_uploads") == 1
+    assert payload.get("planned_manifest_uploads") == 2
 
     planned_uploads = payload.get("planned_uploads")
     assert isinstance(planned_uploads, list)
@@ -389,8 +389,8 @@ def test_cli_dry_run_limit_applies_to_resolved_metadata_paths(
 
     assert exit_code == 0
     payload = _read_stdout_json(capsys)
-    assert payload.get("processed_images") == 1
-    assert payload.get("planned_variants") == 4
+    assert payload.get("processed_grid_images") == 1
+    assert payload.get("planned_grid_image_variant_uploads") == 4
 
 
 def test_cli_run_dir_can_be_name_when_run_root_is_provided(
@@ -486,7 +486,7 @@ def test_cli_dry_run_reuses_cached_variants_without_reencoding(
     second_exit = main(["--dry-run", "--run-dir", str(run_dir)])
     assert second_exit == 0
     payload = _read_stdout_json(capsys)
-    assert payload.get("processed_images") == 1
+    assert payload.get("processed_grid_images") == 1
 
 
 def test_cli_uses_r2_image_workers_from_env(
@@ -501,7 +501,7 @@ def test_cli_uses_r2_image_workers_from_env(
 
     assert exit_code == 0
     payload = _read_stdout_json(capsys)
-    assert payload.get("processed_images") == 1
+    assert payload.get("processed_grid_images") == 1
 
 
 def test_cli_rejects_invalid_r2_image_workers_env(

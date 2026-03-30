@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import logging
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
@@ -284,7 +285,7 @@ def _resolve_run_asset_source_label(asset: dict[str, object], source_path: Path)
     repo_relative_path = _non_empty_str(asset.get("repo_relative_path"))
     if repo_relative_path is not None:
         return repo_relative_path
-    return str(source_path)
+    return source_path.name
 
 
 def _validate_run_asset_sha256(asset: dict[str, object], *, actual_sha256: str) -> None:
@@ -293,6 +294,76 @@ def _validate_run_asset_sha256(asset: dict[str, object], *, actual_sha256: str) 
         raise ValueError(
             f"run 级静态资源 sha256 校验失败: expected={expected_sha256}, actual={actual_sha256}"
         )
+
+
+def _sanitize_run_json_for_persistence(
+    run_json: dict[str, object],
+) -> dict[str, object]:
+    persisted: dict[str, object] = {}
+    for key in (
+        "run_id",
+        "run_key",
+        "created_at",
+        "dry_run",
+        "run_dir",
+        "config_schema_version",
+        "config_path",
+        "config_sha256",
+        "x_json_sha256",
+        "y_json_sha256",
+        "model",
+        "template",
+        "base_seed",
+        "seed_strategy",
+        "workflow_json_sha256",
+        "workflow_download_sha256",
+        "workflow_status",
+        "selected_ksampler_node_id",
+        "selection",
+        "generation_overrides",
+        "config_snapshot",
+    ):
+        value = run_json.get(key)
+        if value is not None:
+            persisted[key] = copy.deepcopy(value)
+
+    assets = _assets_from_run_json(run_json)
+    if assets is not None:
+        persisted["assets"] = _sanitize_asset_snapshot(assets)
+
+    return persisted
+
+
+def _sanitize_asset_snapshot(assets: dict[str, object]) -> dict[str, object]:
+    sanitized: dict[str, object] = {}
+    cover_image = _json_object(assets.get("cover_image"))
+    if cover_image is not None:
+        sanitized_cover = _sanitize_asset_ref(cover_image)
+        if sanitized_cover is not None:
+            sanitized["cover_image"] = sanitized_cover
+
+    homepage_images = [
+        sanitized_asset
+        for asset in _json_object_list(assets.get("homepage_images"))
+        if (sanitized_asset := _sanitize_asset_ref(asset)) is not None
+    ]
+    if homepage_images:
+        sanitized["homepage_images"] = homepage_images
+    return sanitized
+
+
+def _sanitize_asset_ref(asset: dict[str, object]) -> dict[str, object] | None:
+    repo_relative_path = _non_empty_str(asset.get("repo_relative_path"))
+    sha256 = _non_empty_str(asset.get("sha256"))
+    if repo_relative_path is None and sha256 is None:
+        return None
+
+    sanitized: dict[str, object] = {}
+    if repo_relative_path is not None:
+        sanitized["repo_relative_path"] = repo_relative_path
+    if sha256 is not None:
+        sanitized["sha256"] = sha256
+    return sanitized
 
 
 def _collect_public_variant_payloads(
@@ -554,7 +625,7 @@ def _build_run_asset_payloads(
             run_dir_name=run_dir_name,
             run_intermediate_dir=run_intermediate_dir,
             asset=homepage_asset,
-            asset_role="homepage_thumb",
+            asset_role="homepage_card",
             asset_index=asset_index,
             batch_index=batch_index,
             plan_image_variants_fn=plan_image_variants_fn,
@@ -965,9 +1036,11 @@ def _build_run_plan(
     )
     image_uploads.extend(run_asset_uploads)
 
+    persisted_run_json = _sanitize_run_json_for_persistence(run_json)
+
     db_payload: dict[str, object] = {
         "run_dir": run_dir_name,
-        "run_json": run_json,
+        "run_json": persisted_run_json,
         "images": images_rows,
         "run_assets": run_assets_rows,
     }
@@ -1125,17 +1198,37 @@ def _build_plans(
 def _dry_run_summary(plans: list[RunPlan]) -> dict[str, object]:
     planned_uploads: list[dict[str, object]] = []
     manifest_keys: dict[str, list[str]] = {"public": [], "private": []}
-    planned_variants = 0
-    processed_images = 0
+    planned_grid_image_variant_uploads = 0
+    planned_run_asset_variant_uploads = 0
+    planned_artifact_uploads = 0
+    planned_manifest_uploads = 0
+    processed_grid_images = 0
 
     for plan in plans:
-        processed_images += plan.processed_images
-        planned_variants += len(plan.image_uploads)
+        processed_grid_images += plan.processed_images
+        images_raw = plan.upload_index_payload.get("images")
+        images_list = images_raw if isinstance(images_raw, list) else []
+        for image in images_list:
+            if not isinstance(image, dict):
+                continue
+            variants_raw = image.get("variants")
+            variants_list = variants_raw if isinstance(variants_raw, list) else []
+            planned_grid_image_variant_uploads += len(variants_list)
+        run_assets_raw = plan.upload_index_payload.get("run_assets")
+        run_assets_list = run_assets_raw if isinstance(run_assets_raw, list) else []
+        for run_asset in run_assets_list:
+            if not isinstance(run_asset, dict):
+                continue
+            variants_raw = run_asset.get("variants")
+            variants_list = variants_raw if isinstance(variants_raw, list) else []
+            planned_run_asset_variant_uploads += len(variants_list)
         for upload in plan.image_uploads:
             planned_uploads.append(upload.to_safe_json())
         for artifact_upload in plan.artifact_uploads:
+            planned_artifact_uploads += 1
             planned_uploads.append(artifact_upload.to_safe_json())
         for manifest_upload in plan.manifest_uploads:
+            planned_manifest_uploads += 1
             planned_uploads.append(manifest_upload.to_safe_json())
             manifest_keys[manifest_upload.bucket_scope].append(manifest_upload.key)
 
@@ -1144,8 +1237,12 @@ def _dry_run_summary(plans: list[RunPlan]) -> dict[str, object]:
         "run_count": len(plans),
         "run_dirs": [plan.run_dir_name for plan in plans],
         "intermediate_dirs": [str(plan.intermediate_dir) for plan in plans],
-        "processed_images": processed_images,
-        "planned_variants": planned_variants,
+        "processed_grid_images": processed_grid_images,
+        "planned_grid_image_variant_uploads": planned_grid_image_variant_uploads,
+        "planned_run_asset_variant_uploads": planned_run_asset_variant_uploads,
+        "planned_artifact_uploads": planned_artifact_uploads,
+        "planned_manifest_uploads": planned_manifest_uploads,
+        "planned_total_uploads": len(planned_uploads),
         "planned_uploads": planned_uploads,
         "manifest_keys": manifest_keys,
     }

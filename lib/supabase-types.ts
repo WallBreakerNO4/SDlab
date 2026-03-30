@@ -5,7 +5,7 @@ export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
 export type JsonObject = { [key: string]: JsonValue };
 
 export type ImageCategory = "normal" | "advance" | "nsfw";
-export type RunAssetRole = "cover" | "homepage_thumb";
+export type RunAssetRole = "cover" | "homepage_card";
 
 export type ImageVariantName =
   | "display_webp"

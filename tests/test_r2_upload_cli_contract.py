@@ -103,5 +103,5 @@ def test_dry_run_prints_structured_summary_placeholder(
     assert exit_code == 0
 
     output = capsys.readouterr().out
-    assert "planned_variants" in output
+    assert "planned_grid_image_variant_uploads" in output
     assert "planned_uploads" in output

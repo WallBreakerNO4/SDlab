@@ -188,7 +188,7 @@ def _build_assets_snapshot(args: argparse.Namespace) -> dict[str, object] | None
     return _build_asset_collection_payload(
         cover_image=assets.cover_image,
         homepage_images=assets.homepage_images,
-        include_absolute_path=True,
+        include_absolute_path=False,
     )
 
 

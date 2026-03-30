@@ -24,6 +24,7 @@ def build_public_manifest(private_manifest: Mapping[str, object]) -> dict[str, o
     public_manifest["schema_version"] = _normalize_schema_version(
         private_manifest.get("schema_version")
     )
+    public_manifest["run_json"] = _public_run_json(private_manifest.get("run_json"))
     public_manifest["images"] = _public_images(private_manifest.get("images"))
     public_manifest["run_assets"] = _public_run_assets(
         private_manifest.get("run_assets")
@@ -85,6 +86,79 @@ def _public_run_assets(value: object) -> list[dict[str, object]]:
         run_asset["variants"] = _public_variants(run_asset_mapping.get("variants"))
         result.append(run_asset)
     return result
+
+
+def _public_run_json(value: object) -> dict[str, object]:
+    if not isinstance(value, Mapping):
+        return {}
+
+    run_json = cast(Mapping[str, object], value)
+    result: dict[str, object] = {}
+    for key in (
+        "run_id",
+        "run_key",
+        "created_at",
+        "dry_run",
+        "run_dir",
+        "config_schema_version",
+        "config_path",
+        "config_sha256",
+        "x_json_sha256",
+        "y_json_sha256",
+        "model",
+        "template",
+        "base_seed",
+        "seed_strategy",
+        "workflow_json_sha256",
+        "workflow_download_sha256",
+        "workflow_status",
+        "selected_ksampler_node_id",
+        "selection",
+        "generation_overrides",
+        "config_snapshot",
+    ):
+        raw = run_json.get(key)
+        if raw is not None:
+            result[key] = copy.deepcopy(raw)
+    assets = _public_asset_snapshot(run_json.get("assets"))
+    if assets:
+        result["assets"] = assets
+    return result
+
+
+def _public_asset_snapshot(value: object) -> dict[str, object]:
+    if not isinstance(value, Mapping):
+        return {}
+
+    assets = cast(Mapping[str, object], value)
+    result: dict[str, object] = {}
+    cover_image = _public_asset_ref(assets.get("cover_image"))
+    if cover_image is not None:
+        result["cover_image"] = cover_image
+
+    homepage_images = [
+        asset
+        for raw in cast(Sequence[object], assets.get("homepage_images", []))
+        if (asset := _public_asset_ref(raw)) is not None
+    ]
+    if homepage_images:
+        result["homepage_images"] = homepage_images
+    return result
+
+
+def _public_asset_ref(value: object) -> dict[str, object] | None:
+    if not isinstance(value, Mapping):
+        return None
+
+    asset = cast(Mapping[str, object], value)
+    result: dict[str, object] = {}
+    repo_relative_path = asset.get("repo_relative_path")
+    sha256 = asset.get("sha256")
+    if isinstance(repo_relative_path, str) and repo_relative_path:
+        result["repo_relative_path"] = repo_relative_path
+    if isinstance(sha256, str) and sha256:
+        result["sha256"] = sha256
+    return result if result else None
 
 
 def _public_variants(value: object) -> list[dict[str, object]]:
