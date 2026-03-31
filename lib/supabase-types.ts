@@ -16,6 +16,7 @@ export type ImageVariantName =
 export type R2Bucket = "public" | "private";
 
 export interface SupabaseRunRow {
+  id?: string | null;
   run_id?: string | null;
   run_dir: string;
   created_at: string;
@@ -56,10 +57,14 @@ export interface SupabaseImageVariantRow {
 }
 
 export interface SupabaseRunAssetRow {
+  id?: string | null;
+  run_id?: string | null;
   asset_role: RunAssetRole;
   asset_index: number;
   source_path: string;
   source_sha256: string;
+  width?: number | null;
+  height?: number | null;
   blurhash: string | null;
   blurhash_width?: number | null;
   blurhash_height?: number | null;
@@ -67,6 +72,8 @@ export interface SupabaseRunAssetRow {
 }
 
 export interface SupabaseRunAssetVariantRow {
+  id?: string | null;
+  run_asset_id?: string | null;
   variant: ImageVariantName;
   bucket: R2Bucket;
   r2_key: string;

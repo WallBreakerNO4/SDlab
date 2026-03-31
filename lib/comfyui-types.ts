@@ -32,6 +32,26 @@ export interface ModelMetadata {
   links?: ModelLinks | null;
 }
 
+export interface VariantUrls {
+  webp?: string;
+  avif?: string;
+}
+
+export interface RunAssetSummary {
+  width?: number | null;
+  height?: number | null;
+  blurhash?: string | null;
+  blurhash_width?: number | null;
+  blurhash_height?: number | null;
+  thumb?: VariantUrls | null;
+  display?: VariantUrls | null;
+}
+
+export interface RunHomepageAssets {
+  cover?: RunAssetSummary | null;
+  homepage_cards?: RunAssetSummary[] | null;
+}
+
 export interface XFields {
   quality?: string;
   rating?: string;
@@ -121,6 +141,7 @@ export interface RunSummary {
   y_count: number;
   total_cells: number;
   model?: ModelMetadata | null;
+  assets?: RunHomepageAssets | null;
 }
 
 export interface GridIndex {
