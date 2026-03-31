@@ -109,7 +109,7 @@ def _public_run_json(value: object) -> dict[str, object]:
         "template",
         "base_seed",
         "seed_strategy",
-        "workflow_json_sha256",
+        "workflow_api_sha256",
         "workflow_download_sha256",
         "workflow_status",
         "selected_ksampler_node_id",

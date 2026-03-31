@@ -37,8 +37,8 @@ items:
       index: 0
       type: normal
     description:
-      zh: ""
-      en: ""
+      zh: 阿米娅半身构图示例
+      en: Amiya half-body composition sample
   - tags:
       gender:
         - text: 1girl
@@ -86,8 +86,8 @@ items:
       index: 1
       type: normal
     description:
-      zh: ""
-      en: ""
+      zh: 能天使街景饮品示例
+      en: Exusiai street drink sample
   - tags:
       gender:
         - text: 1girl
@@ -141,8 +141,8 @@ items:
       index: 2
       type: advance
     description:
-      zh: ""
-      en: ""
+      zh: 缪尔赛思雨夜街头示例
+      en: Muelsyse rainy night street sample
   - tags:
       gender:
         - text: 1girl

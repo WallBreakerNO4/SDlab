@@ -24,7 +24,7 @@ def _base_run_payload(x_path: Path, y_path: Path) -> dict[str, object]:
         "y_json_path": str(y_path),
         "template": "{gender}{y}{quality}",
         "base_seed": 123,
-        "workflow_json_path": "data/workflows/demo.json",
+        "workflow_api_path": "data/workflows/demo.json",
         "x_json_sha256": _sha256_file(x_path),
         "y_json_sha256": _sha256_file(y_path),
         "generation_overrides": {
@@ -65,8 +65,8 @@ def _base_run_payload(x_path: Path, y_path: Path) -> dict[str, object]:
                 "y_sha256": _sha256_file(y_path),
             },
             "workflow": {
-                "path": "data/workflows/demo.json",
-                "sha256": "workflow-sha",
+                "api_path": "data/workflows/demo.json",
+                "api_sha256": "workflow-sha",
                 "ksampler_node_id": "3",
             },
             "generation": {
@@ -163,7 +163,7 @@ def test_load_run_replay_config_allows_missing_ksampler_snapshot(
     assert config.ksampler_node_id is None
 
 
-def test_load_run_replay_config_allows_legacy_payload_without_config_snapshot(
+def test_load_run_replay_config_rejects_missing_config_snapshot(
     tmp_path: Path,
 ) -> None:
     run_dir = tmp_path / "run-legacy"
@@ -182,9 +182,8 @@ def test_load_run_replay_config_allows_legacy_payload_without_config_snapshot(
         json.dumps(payload, ensure_ascii=False), encoding="utf-8"
     )
 
-    config = load_run_replay_config(run_dir)
-    assert config.generation_overrides.append_negative_prompt is None
-    assert config.ksampler_node_id is None
+    with pytest.raises(ValueError, match="config_snapshot"):
+        load_run_replay_config(run_dir)
 
 
 def test_load_run_replay_config_sha_mismatch(tmp_path: Path) -> None:
@@ -218,13 +217,13 @@ def test_load_run_replay_config_workflow_sha_mismatch_when_workflow_readable(
     workflow_path.write_text('{"3":{"inputs":{}}}', encoding="utf-8")
 
     payload = _base_run_payload(x_path, y_path)
-    payload["workflow_json_path"] = str(workflow_path)
-    payload["workflow_json_sha256"] = "deadbeef"
+    payload["workflow_api_path"] = str(workflow_path)
+    payload["workflow_api_sha256"] = "deadbeef"
     (run_dir / "run.json").write_text(
         json.dumps(payload, ensure_ascii=False), encoding="utf-8"
     )
 
-    with pytest.raises(ValueError, match="workflow_json_sha256 校验失败"):
+    with pytest.raises(ValueError, match="workflow_api_sha256 校验失败"):
         load_run_replay_config(run_dir)
 
 
@@ -240,11 +239,11 @@ def test_load_run_replay_config_allows_workflow_sha_when_workflow_unreadable(
     y_path.write_text('[{"y":"style"}]', encoding="utf-8")
 
     payload = _base_run_payload(x_path, y_path)
-    payload["workflow_json_path"] = str(missing_workflow_path)
-    payload["workflow_json_sha256"] = "deadbeef"
+    payload["workflow_api_path"] = str(missing_workflow_path)
+    payload["workflow_api_sha256"] = "deadbeef"
     (run_dir / "run.json").write_text(
         json.dumps(payload, ensure_ascii=False), encoding="utf-8"
     )
 
     config = load_run_replay_config(run_dir)
-    assert config.workflow_json_path == str(missing_workflow_path)
+    assert config.workflow_api_path == str(missing_workflow_path)

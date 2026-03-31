@@ -124,8 +124,8 @@ def _fake_runner_config(
     y_path: Path,
     append_negative_prompt: str | None,
 ) -> SimpleNamespace:
-    workflow_path = config_path.parent / "workflow.json"
-    workflow_download_path = config_path.parent / "workflow-download.json"
+    workflow_path = config_path.parent / "api.json"
+    workflow_download_path = config_path.parent / "workflow.json"
     workflow_path.write_text('{"3": {"class_type": "KSampler"}}\n', encoding="utf-8")
     workflow_download_path.write_text('{"version": 1}\n', encoding="utf-8")
     return SimpleNamespace(
@@ -158,11 +158,11 @@ def _fake_runner_config(
         workflow=SimpleNamespace(
             path=str(workflow_path),
             sha256=_sha256_file(workflow_path),
-            repo_relative_path="data/workflows/example.json",
+            repo_relative_path="data/runs/example/api.json",
             download=SimpleNamespace(
                 path=str(workflow_download_path),
                 sha256=_sha256_file(workflow_download_path),
-                repo_relative_path="data/workflows/example-download.json",
+                repo_relative_path="data/runs/example/workflow.json",
             ),
             ksampler_node_id="3",
         ),
@@ -185,6 +185,10 @@ def _fake_runner_config(
             y_limit=1,
             x_indexes=[0],
             y_indexes=[0],
+        ),
+        assets=SimpleNamespace(
+            cover_image=None,
+            homepage_images=[],
         ),
     )
 
@@ -295,9 +299,9 @@ def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
             "y_sha256": _sha256_file(y_path),
         },
         "workflow": {
-            "path": "data/workflows/example.json",
-            "sha256": run_payload["config_snapshot"]["workflow"]["sha256"],
-            "download_path": "data/workflows/example-download.json",
+            "api_path": "data/runs/example/api.json",
+            "api_sha256": run_payload["config_snapshot"]["workflow"]["api_sha256"],
+            "download_path": "data/runs/example/workflow.json",
             "download_sha256": run_payload["config_snapshot"]["workflow"][
                 "download_sha256"
             ],
@@ -324,7 +328,12 @@ def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
             "y_indexes": [0],
         },
     }
-    assert run_payload["workflow_download_path"].endswith("workflow-download.json")
+    assert run_payload["workflow_api_path"].endswith("api.json")
+    assert run_payload["workflow_api_sha256"] == _sha256_file(
+        Path(run_payload["workflow_api_path"])
+    )
+    assert run_payload["workflow_status"] == "not_loaded"
+    assert run_payload["workflow_download_path"].endswith("workflow.json")
     assert run_payload["workflow_download_sha256"] == _sha256_file(
         Path(run_payload["workflow_download_path"])
     )

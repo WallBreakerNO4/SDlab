@@ -26,8 +26,8 @@ _MODEL_KEYS = {"key", "name", "family", "links", "description"}
 _MODEL_LINK_KEYS = {"homepage", "huggingface", "civitai"}
 _MODEL_DESCRIPTION_KEYS = {"zh", "en"}
 _PROMPTS_KEYS = {"x_path", "y_path"}
-_WORKFLOW_KEYS = {"path", "download_path", "ksampler_node_id"}
-_WORKFLOW_REQUIRED_KEYS = {"path", "ksampler_node_id"}
+_WORKFLOW_KEYS = {"ksampler_node_id"}
+_WORKFLOW_REQUIRED_KEYS = {"ksampler_node_id"}
 _GENERATION_KEYS = {
     "template",
     "base_seed",
@@ -46,6 +46,8 @@ _SELECTION_KEYS = {"x_limit", "y_limit", "x_indexes", "y_indexes"}
 _PROMPT_EXTENSIONS = {".yaml", ".yml", ".json"}
 _WORKFLOW_EXTENSIONS = {".json"}
 _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".avif"}
+_WORKFLOW_API_FILENAME = "api.json"
+_WORKFLOW_DOWNLOAD_FILENAME = "workflow.json"
 
 
 @dataclass(frozen=True)
@@ -231,6 +233,38 @@ def _resolve_repo_path(
     )
 
 
+def _resolve_workflow_asset_from_config_dir(
+    *,
+    config_dir: Path,
+    repo_root: Path,
+    filename: str,
+    field_name: str,
+    required: bool,
+) -> AssetRef | None:
+    candidate = config_dir / filename
+    resolved = candidate.resolve()
+
+    if not resolved.is_relative_to(repo_root):
+        raise ValueError(f"字段 {field_name} 必须位于仓库内: {resolved}")
+    if not resolved.exists():
+        if required:
+            raise ValueError(f"字段 {field_name} 对应文件不存在: {resolved}")
+        return None
+    if not resolved.is_file():
+        raise ValueError(f"字段 {field_name} 对应路径不是文件: {resolved}")
+
+    suffix = resolved.suffix.lower()
+    if suffix not in _WORKFLOW_EXTENSIONS:
+        allowed = ", ".join(sorted(_WORKFLOW_EXTENSIONS))
+        raise ValueError(f"字段 {field_name} 仅支持扩展名: {allowed}")
+
+    return AssetRef(
+        path=str(resolved),
+        repo_relative_path=resolved.relative_to(repo_root).as_posix(),
+        sha256=_sha256_file(resolved),
+    )
+
+
 def _load_assets(*, run_dir: Path, repo_root: Path) -> AssetsConfig:
     cover_image_path = run_dir / "image.jpg"
     cover_image: AssetRef | None = None
@@ -329,7 +363,12 @@ def _load_prompts(payload: object, *, repo_root: Path) -> PromptsConfig:
     )
 
 
-def _load_workflow(payload: object, *, repo_root: Path) -> WorkflowConfig:
+def _load_workflow(
+    payload: object,
+    *,
+    repo_root: Path,
+    config_dir: Path,
+) -> WorkflowConfig:
     mapping = _require_mapping(payload, "workflow")
     _validate_keys(
         mapping,
@@ -338,25 +377,26 @@ def _load_workflow(payload: object, *, repo_root: Path) -> WorkflowConfig:
         required=_WORKFLOW_REQUIRED_KEYS,
     )
 
-    asset = _resolve_repo_path(
-        mapping["path"],
-        field_name="workflow.path",
+    api_asset = _resolve_workflow_asset_from_config_dir(
+        config_dir=config_dir,
         repo_root=repo_root,
-        allowed_extensions=_WORKFLOW_EXTENSIONS,
+        filename=_WORKFLOW_API_FILENAME,
+        field_name="workflow.api_json",
+        required=True,
     )
+    if api_asset is None:
+        raise ValueError("字段 workflow.api_json 对应文件不存在")
+
     return WorkflowConfig(
-        path=asset.path,
-        repo_relative_path=asset.repo_relative_path,
-        sha256=asset.sha256,
-        download=(
-            _resolve_repo_path(
-                mapping["download_path"],
-                field_name="workflow.download_path",
-                repo_root=repo_root,
-                allowed_extensions=_WORKFLOW_EXTENSIONS,
-            )
-            if mapping.get("download_path") is not None
-            else None
+        path=api_asset.path,
+        repo_relative_path=api_asset.repo_relative_path,
+        sha256=api_asset.sha256,
+        download=_resolve_workflow_asset_from_config_dir(
+            config_dir=config_dir,
+            repo_root=repo_root,
+            filename=_WORKFLOW_DOWNLOAD_FILENAME,
+            field_name="workflow.workflow_json",
+            required=False,
         ),
         ksampler_node_id=_optional_str(
             mapping["ksampler_node_id"], "workflow.ksampler_node_id"
@@ -440,7 +480,11 @@ def load_runner_config(config_path: str, *, repo_root: Path) -> RunnerConfig:
         config_sha256=_sha256_file(config_file),
         model=_load_model(mapping["model"]),
         prompts=_load_prompts(mapping["prompts"], repo_root=repo_root),
-        workflow=_load_workflow(mapping["workflow"], repo_root=repo_root),
+        workflow=_load_workflow(
+            mapping["workflow"],
+            repo_root=repo_root,
+            config_dir=config_file.parent,
+        ),
         generation=_load_generation(mapping["generation"]),
         selection=_load_selection(mapping["selection"]),
         assets=_load_assets(run_dir=config_file.parent, repo_root=repo_root),

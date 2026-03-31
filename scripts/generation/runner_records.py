@@ -41,7 +41,7 @@ def _build_base_metadata_record(
         "seed": seed,
         "attempt": attempt,
         "generation_params": generation_params,
-        "workflow_hash": workflow_hash,
+        "workflow_api_sha256": workflow_hash,
         "comfyui_prompt_id": None,
         "remote_images": None,
         "local_image_path": None,

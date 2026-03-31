@@ -330,6 +330,7 @@ def test_final_negative_prompt_for_x_row_uses_args_append_and_ignores_env(
     assert normal_prompt == "lowres, config-append,"
     assert lora_prompt == "lowres,"
 
+
 def test_final_negative_prompt_for_x_row_append_only_normal() -> None:
     runner = _import_runner_module()
     args = _build_worker_args(
@@ -345,6 +346,7 @@ def test_final_negative_prompt_for_x_row_append_only_normal() -> None:
         {X_INFO_TYPE_KEY: "normal"},
     )
     assert normal_prompt == "only-append,"
+
 
 def test_final_negative_prompt_for_x_row_append_only_non_normal_returns_none() -> None:
     runner = _import_runner_module()

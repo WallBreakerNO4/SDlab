@@ -38,7 +38,7 @@ def _write_run_fixture(
         "run_dir": run_name,
     }
     if include_workflow_download:
-        workflow_download_path = run_dir / "workflow-download.json"
+        workflow_download_path = run_dir / "workflow.json"
         workflow_download_path.write_text('{"version":1}\n', encoding="utf-8")
         workflow_download_sha256 = _sha256_file(workflow_download_path)
         run_payload["workflow_download_path"] = str(workflow_download_path)

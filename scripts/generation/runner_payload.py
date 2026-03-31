@@ -18,7 +18,7 @@ def _build_run_payload(
     workflow_context: Any,
 ) -> dict[str, object]:
     workflow_status = "loaded" if workflow_context is not None else "not_loaded"
-    workflow_json_path: str | None = (
+    workflow_api_path: str | None = (
         workflow_context.workflow_json_path
         if workflow_context is not None
         else args.workflow_json
@@ -26,6 +26,13 @@ def _build_run_payload(
     workflow_hash = (
         workflow_context.workflow_hash if workflow_context is not None else "not_loaded"
     )
+    workflow_api_sha256 = workflow_hash
+    if (
+        workflow_context is None
+        and isinstance(workflow_api_path, str)
+        and workflow_api_path
+    ):
+        workflow_api_sha256 = _sha256_file(Path(workflow_api_path))
     workflow_download_path = getattr(args, "workflow_download_json", None)
 
     x_path = Path(args.x_json)
@@ -50,8 +57,8 @@ def _build_run_payload(
         "template": args.template,
         "base_seed": args.base_seed,
         "seed_strategy": "sha256(base_seed:x_index:y_index)[:16] mod 18446744073709519872",
-        "workflow_json_path": workflow_json_path,
-        "workflow_json_sha256": workflow_hash,
+        "workflow_api_path": workflow_api_path,
+        "workflow_api_sha256": workflow_api_sha256,
         "workflow_download_path": workflow_download_path,
         "workflow_download_sha256": (
             _sha256_file(Path(workflow_download_path))
@@ -144,8 +151,8 @@ def _build_config_snapshot(args: argparse.Namespace) -> dict[str, object] | None
             "y_sha256": prompts.y.sha256,
         },
         "workflow": {
-            "path": workflow.repo_relative_path,
-            "sha256": workflow.sha256,
+            "api_path": workflow.repo_relative_path,
+            "api_sha256": workflow.sha256,
             "download_path": (
                 workflow.download.repo_relative_path
                 if workflow.download is not None

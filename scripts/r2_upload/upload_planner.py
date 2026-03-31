@@ -315,7 +315,7 @@ def _sanitize_run_json_for_persistence(
         "template",
         "base_seed",
         "seed_strategy",
-        "workflow_json_sha256",
+        "workflow_api_sha256",
         "workflow_download_sha256",
         "workflow_status",
         "selected_ksampler_node_id",

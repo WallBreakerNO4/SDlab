@@ -33,7 +33,7 @@ def test_dry_run_prints_structured_summary_placeholder(
     run_dir = tmp_path / "contract-run"
     images_dir = run_dir / "images"
     images_dir.mkdir(parents=True)
-    workflow_download_path = run_dir / "workflow-download.json"
+    workflow_download_path = run_dir / "workflow.json"
     workflow_download_path.write_text('{"version":1}\n', encoding="utf-8")
     workflow_download_sha256 = hashlib.sha256(
         workflow_download_path.read_bytes()
@@ -66,9 +66,9 @@ def test_dry_run_prints_structured_summary_placeholder(
             '"x_sha256":"' + ("a" * 64) + '",'
             '"y_sha256":"' + ("b" * 64) + '"},'
             '"workflow":{'
-            '"path":"data/comfyui-flow/api-json/CKNOOBRF.json",'
-            '"sha256":"' + ("c" * 64) + '",'
-            '"download_path":"data/comfyui-flow/workflow-json/CKNOOBRF.json",'
+            '"api_path":"data/runs/example/api.json",'
+            '"api_sha256":"' + ("c" * 64) + '",'
+            '"download_path":"data/runs/example/workflow.json",'
             '"download_sha256":"' + workflow_download_sha256 + '",'
             '"ksampler_node_id":"6"},'
             '"generation":{'

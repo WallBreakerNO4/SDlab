@@ -14,7 +14,7 @@ def _apply_replay_config_to_args(
     args.y_json = str(replay.y_json_path)
     args.template = replay.template
     args.base_seed = replay.base_seed
-    args.workflow_json = replay.workflow_json_path
+    args.workflow_json = replay.workflow_api_path
     args.ksampler_node_id = replay.ksampler_node_id
 
     args.negative_prompt = replay.generation_overrides.negative_prompt
@@ -92,13 +92,9 @@ def _build_retry_target_cells(
 
 
 def _record_workflow_hash(record: dict[str, object]) -> str | None:
-    workflow_hash = record.get("workflow_hash")
-    if isinstance(workflow_hash, str) and workflow_hash:
-        return workflow_hash
-
-    legacy_hash = record.get("workflow_json_sha256")
-    if isinstance(legacy_hash, str) and legacy_hash:
-        return legacy_hash
+    api_hash = record.get("workflow_api_sha256")
+    if isinstance(api_hash, str) and api_hash:
+        return api_hash
     return None
 
 
@@ -147,6 +143,6 @@ def _validate_retry_failed_cells_consistency(
         actual_workflow_hash = _record_workflow_hash(record)
         if actual_workflow_hash != workflow_hash:
             raise ValueError(
-                f"retry strict 校验失败(workflow_hash): x={x_index} y={y_index} "
+                f"retry strict 校验失败(workflow_api_sha256): x={x_index} y={y_index} "
                 f"expected={workflow_hash} actual={actual_workflow_hash}"
             )

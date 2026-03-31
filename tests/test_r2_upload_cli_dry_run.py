@@ -36,7 +36,7 @@ def _extended_run_json(
 ) -> dict[str, object]:
     run_name = run_dir_value if run_dir_value is not None else run_dir.name
     run_dir.mkdir(parents=True, exist_ok=True)
-    workflow_download_path = run_dir / "workflow-download.json"
+    workflow_download_path = run_dir / "workflow.json"
     workflow_download_path.write_text('{"version": 1}\n', encoding="utf-8")
     workflow_download_sha256 = _sha256_file(workflow_download_path)
     payload: dict[str, object] = {
@@ -69,9 +69,9 @@ def _extended_run_json(
                 "y_sha256": "b" * 64,
             },
             "workflow": {
-                "path": "data/comfyui-flow/api-json/CKNOOBRF.json",
-                "sha256": "c" * 64,
-                "download_path": "data/comfyui-flow/workflow-json/CKNOOBRF.json",
+                "api_path": "data/runs/example/api.json",
+                "api_sha256": "c" * 64,
+                "download_path": "data/runs/example/workflow.json",
                 "download_sha256": workflow_download_sha256,
                 "ksampler_node_id": "6",
             },
@@ -279,7 +279,7 @@ def test_build_run_db_fields_extracts_model_structured_fields(tmp_path: Path) ->
     assert fields["model_homepage"] is None
     assert fields["model_huggingface"] is None
     assert fields["model_civitai"] is None
-    expected_sha256 = _sha256_file(run_dir / "workflow-download.json")
+    expected_sha256 = _sha256_file(run_dir / "workflow.json")
     assert fields["workflow_download_r2_key"] == (
         f"runs/model-run/artifacts/workflow/{expected_sha256}.json"
     )
@@ -306,7 +306,7 @@ def test_build_run_db_fields_workflow_key_changes_when_content_changes(
     payload = _extended_run_json(run_dir=run_dir)
     first_fields = _build_run_db_fields(payload, run_dir_name=run_dir.name)
 
-    workflow_download_path = run_dir / "workflow-download.json"
+    workflow_download_path = run_dir / "workflow.json"
     workflow_download_path.write_text('{"version": 2}\n', encoding="utf-8")
     new_sha256 = _sha256_file(workflow_download_path)
     payload["workflow_download_sha256"] = new_sha256

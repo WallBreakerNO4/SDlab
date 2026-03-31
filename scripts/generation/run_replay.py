@@ -36,7 +36,7 @@ class RunReplayConfig:
     y_json_path: Path
     template: str
     base_seed: int
-    workflow_json_path: str | None
+    workflow_api_path: str | None
     generation_overrides: ReplayGenerationOverrides
     selection: ReplaySelection
     x_json_sha256: str
@@ -56,8 +56,8 @@ def load_run_replay_config(
     y_json_path = Path(_require_str(payload, "y_json_path"))
     template = _require_str(payload, "template")
     base_seed = _require_int(payload, "base_seed")
-    workflow_json_path = _require_optional_str(payload, "workflow_json_path")
-    workflow_json_sha256 = _optional_top_level_str(payload, "workflow_json_sha256")
+    workflow_api_path = _require_optional_str(payload, "workflow_api_path")
+    workflow_api_sha256 = _optional_top_level_str(payload, "workflow_api_sha256")
     x_json_sha256 = _require_str(payload, "x_json_sha256")
     y_json_sha256 = _require_str(payload, "y_json_sha256")
     ksampler_node_id = _parse_optional_ksampler_node_id(payload)
@@ -79,8 +79,8 @@ def load_run_replay_config(
             field_name="y_json_sha256",
         )
         _maybe_assert_workflow_sha256_matches(
-            workflow_json_path=workflow_json_path,
-            expected_sha256=workflow_json_sha256,
+            workflow_api_path=workflow_api_path,
+            expected_sha256=workflow_api_sha256,
         )
 
     return RunReplayConfig(
@@ -88,7 +88,7 @@ def load_run_replay_config(
         y_json_path=y_json_path,
         template=template,
         base_seed=base_seed,
-        workflow_json_path=workflow_json_path,
+        workflow_api_path=workflow_api_path,
         generation_overrides=generation_overrides,
         selection=selection,
         x_json_sha256=x_json_sha256,
@@ -181,7 +181,7 @@ def _parse_generation_overrides(
 def _parse_optional_ksampler_node_id(payload: dict[str, object]) -> str | None:
     config_snapshot_obj = payload.get("config_snapshot")
     if config_snapshot_obj is None:
-        return None
+        raise ValueError("run.json 缺少字段: config_snapshot")
 
     config_snapshot = _as_object_dict(
         config_snapshot_obj,
@@ -190,7 +190,7 @@ def _parse_optional_ksampler_node_id(payload: dict[str, object]) -> str | None:
 
     workflow_obj = config_snapshot.get("workflow")
     if workflow_obj is None:
-        return None
+        raise ValueError("run.json 缺少字段: config_snapshot.workflow")
 
     workflow = _as_object_dict(
         workflow_obj,
@@ -328,13 +328,13 @@ def _assert_sha256_matches(
 
 def _maybe_assert_workflow_sha256_matches(
     *,
-    workflow_json_path: str | None,
+    workflow_api_path: str | None,
     expected_sha256: str | None,
 ) -> None:
-    if workflow_json_path is None or expected_sha256 is None:
+    if workflow_api_path is None or expected_sha256 is None:
         return
 
-    workflow_path = Path(workflow_json_path)
+    workflow_path = Path(workflow_api_path)
     if not workflow_path.is_file():
         return
 
@@ -345,7 +345,7 @@ def _maybe_assert_workflow_sha256_matches(
 
     if actual_sha256 != expected_sha256:
         raise ValueError(
-            f"workflow_json_sha256 校验失败: expected={expected_sha256}, actual={actual_sha256}"
+            f"workflow_api_sha256 校验失败: expected={expected_sha256}, actual={actual_sha256}"
         )
 
 

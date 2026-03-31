@@ -18,8 +18,7 @@ from scripts.generation.workflow_patch import (
 )
 
 
-RF_WORKFLOW = ROOT / "data" / "comfyui-flow" / "CKNOOBRF.json"
-MAIN_WORKFLOW = ROOT / "data" / "comfyui-flow" / "CKNOOBmain.json"
+RF_WORKFLOW = ROOT / "data" / "runs" / "example" / "api.json"
 
 
 def _inputs(node: dict[str, object]) -> dict[str, object]:
@@ -69,7 +68,7 @@ def test_patch_workflow_reference_chasing_injects_rf_and_applies_overrides():
 
 
 def test_patch_workflow_reference_chasing_injects_main_with_tristate_none_unchanged():
-    workflow = load_workflow(MAIN_WORKFLOW)
+    workflow = load_workflow(RF_WORKFLOW)
     original = copy.deepcopy(workflow)
 
     patched = patch_workflow(
@@ -79,20 +78,20 @@ def test_patch_workflow_reference_chasing_injects_main_with_tristate_none_unchan
         overrides=WorkflowOverrides(steps=31),
     )
 
-    assert _inputs(patched["3"]).get("text") == "main pos"
+    assert _inputs(patched["12"]).get("text") == "main pos"
     assert _inputs(patched["4"]).get("text") == "main neg"
-    assert _inputs(patched["5"]).get("steps") == 31
-    assert _inputs(patched["5"]).get("seed") == _inputs(original["5"]).get("seed")
-    assert _inputs(patched["5"]).get("cfg") == _inputs(original["5"]).get("cfg")
-    assert _inputs(patched["6"]).get("width") == _inputs(original["6"]).get("width")
-    assert _inputs(patched["6"]).get("height") == _inputs(original["6"]).get("height")
-    assert _inputs(patched["6"]).get("batch_size") == _inputs(original["6"]).get(
+    assert _inputs(patched["6"]).get("steps") == 31
+    assert _inputs(patched["6"]).get("seed") == _inputs(original["6"]).get("seed")
+    assert _inputs(patched["6"]).get("cfg") == _inputs(original["6"]).get("cfg")
+    assert _inputs(patched["5"]).get("width") == _inputs(original["5"]).get("width")
+    assert _inputs(patched["5"]).get("height") == _inputs(original["5"]).get("height")
+    assert _inputs(patched["5"]).get("batch_size") == _inputs(original["5"]).get(
         "batch_size"
     )
 
 
 def test_patch_workflow_overrides_save_image_filename_prefix_when_requested():
-    workflow = load_workflow(MAIN_WORKFLOW)
+    workflow = load_workflow(RF_WORKFLOW)
 
     patched = patch_workflow(
         workflow,

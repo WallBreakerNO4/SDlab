@@ -140,8 +140,8 @@ def _write_png(path: Path) -> None:
 def _write_assets(repo_root: Path) -> tuple[Path, Path, Path, Path, Path, Path, Path]:
     x_path = repo_root / "data/prompts/x.json"
     y_path = repo_root / "data/prompts/y.yaml"
-    workflow_path = repo_root / "data/workflows/example.json"
-    workflow_download_path = repo_root / "data/workflows/example-download.json"
+    workflow_path = repo_root / "data/runs/example/api.json"
+    workflow_download_path = repo_root / "data/runs/example/workflow.json"
     cover_image_path = repo_root / "data/runs/example/image.jpg"
     homepage_first = repo_root / "data/runs/example/images/001.png"
     homepage_second = repo_root / "data/runs/example/images/002.png"
@@ -185,8 +185,6 @@ def _valid_config_text(*, schema_version: str = "image-run-config/v1") -> str:
             "  x_path: data/prompts/x.json",
             "  y_path: data/prompts/y.yaml",
             "workflow:",
-            "  path: data/workflows/example.json",
-            "  download_path: data/workflows/example-download.json",
             "  ksampler_node_id: '3'",
             "generation:",
             "  template: '{gender}{y}{quality}'",
@@ -240,13 +238,12 @@ def test_load_runner_config_happy_path_resolves_repo_relative_paths_and_hashes(
     assert config.prompts.x.sha256 == _sha256_file(x_path)
     assert config.prompts.y.sha256 == _sha256_file(y_path)
     assert Path(config.workflow.path) == workflow_path
-    assert config.workflow.repo_relative_path == "data/workflows/example.json"
+    assert config.workflow.repo_relative_path == "data/runs/example/api.json"
     assert config.workflow.sha256 == _sha256_file(workflow_path)
     assert config.workflow.download is not None
     assert Path(config.workflow.download.path) == workflow_download_path
     assert (
-        config.workflow.download.repo_relative_path
-        == "data/workflows/example-download.json"
+        config.workflow.download.repo_relative_path == "data/runs/example/workflow.json"
     )
     assert config.workflow.download.sha256 == _sha256_file(workflow_download_path)
     assert config.workflow.ksampler_node_id == "3"
@@ -341,7 +338,6 @@ def test_load_runner_config_rejects_repo_external_path(tmp_path: Path) -> None:
                 f"  x_path: {outside}",
                 "  y_path: data/prompts/y.yaml",
                 "workflow:",
-                "  path: data/workflows/example.json",
                 "  ksampler_node_id: null",
                 "generation:",
                 "  template: '{gender}{y}'",
@@ -457,7 +453,6 @@ def test_load_runner_config_exposes_compact_model_snapshot_only(tmp_path: Path) 
                 "  x_path: data/prompts/x.json",
                 "  y_path: data/prompts/y.yaml",
                 "workflow:",
-                "  path: data/workflows/example.json",
                 "  ksampler_node_id: null",
                 "generation:",
                 "  template: '{gender}{y}'",
