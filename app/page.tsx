@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { BlurhashCanvas } from "@/components/comfyui/blurhash-canvas";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -75,35 +76,81 @@ function resolvePreferredImageSource(
   return null;
 }
 
-function selectCardAsset(run: RunSummary) {
-  const candidates = [run.assets?.cover, ...(run.assets?.homepage_cards ?? [])];
+function CardImage({
+  src,
+  avif,
+  webp,
+  alt,
+  blurhash,
+  blurhashWidth,
+  blurhashHeight,
+  imgClassName,
+}: {
+  src?: string | null;
+  avif?: string | null;
+  webp?: string | null;
+  alt: string;
+  blurhash?: string | null;
+  blurhashWidth?: number | null;
+  blurhashHeight?: number | null;
+  imgClassName?: string;
+}) {
+  const [isLoaded, setIsLoaded] = useState(false);
 
-  for (const candidate of candidates) {
-    const source = resolvePreferredImageSource(candidate);
-    if (source?.imgSrc) {
-      return {
-        asset: candidate ?? null,
-        source,
-      };
-    }
-  }
-
-  return {
-    asset: null,
-    source: null,
-  };
+  return (
+    <>
+      {blurhash ? (
+        <BlurhashCanvas
+          blurhash={blurhash}
+          width={blurhashWidth || 32}
+          height={blurhashHeight || 32}
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-500 ${
+            isLoaded ? "opacity-0" : "opacity-100"
+          }`}
+        />
+      ) : null}
+      {src ? (
+        <picture>
+          {avif && <source srcSet={avif} type="image/avif" />}
+          {webp && <source srcSet={webp} type="image/webp" />}
+          <img
+            ref={(node) => {
+              if (node?.complete) {
+                setIsLoaded(true);
+              }
+            }}
+            src={src}
+            alt={alt}
+            className={`${imgClassName || ""} ${
+              isLoaded ? "opacity-100" : "opacity-0"
+            }`}
+            loading="lazy"
+            onLoad={() => setIsLoaded(true)}
+          />
+        </picture>
+      ) : null}
+    </>
+  );
 }
 
 function RunsSkeleton() {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="columns-1 md:columns-2 lg:columns-3 gap-6">
       {[1, 2, 3].map((id) => (
-        <Card key={id} className="flex flex-col overflow-hidden">
-          <Skeleton className="aspect-video w-full rounded-none" />
+        <Card
+          key={id}
+          className="flex flex-col overflow-hidden mb-6 break-inside-avoid"
+        >
+          <Skeleton className="aspect-square w-full rounded-none" />
           <CardContent className="flex flex-1 flex-col justify-between space-y-4 p-6">
             <div className="space-y-3">
               <Skeleton className="h-6 w-3/4" />
               <Skeleton className="h-4 w-full" />
+            </div>
+            <div className="flex gap-2 overflow-hidden pt-2">
+              <Skeleton className="h-16 w-16 rounded-md shrink-0" />
+              <Skeleton className="h-16 w-16 rounded-md shrink-0" />
+              <Skeleton className="h-16 w-16 rounded-md shrink-0" />
             </div>
             <div className="flex items-center justify-between pt-2">
               <div className="flex gap-2">
@@ -196,51 +243,47 @@ export default function Page() {
         ) : null}
 
         {!isLoading && runs.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="columns-1 md:columns-2 lg:columns-3 gap-6">
             {runs.map((run, index) => {
               const modelName = run.model?.name || run.run_dir;
               const modelDesc =
                 run.model?.description?.zh || run.model?.description?.en;
-              const { source } = selectCardAsset(run);
-              const webpSrc = source?.webpSrc ?? null;
-              const avifSrc = source?.avifSrc ?? null;
-              const imgSrc = source?.imgSrc ?? null;
+
+              const coverAsset = run.assets?.cover;
+              const coverSource = resolvePreferredImageSource(coverAsset);
+              const homepageCards = run.assets?.homepage_cards || [];
+
+              const coverRatio =
+                coverAsset?.width && coverAsset?.height
+                  ? `${coverAsset.width} / ${coverAsset.height}`
+                  : "16 / 9";
 
               return (
                 <Link
                   key={run.run_dir}
                   href={`/runs/${encodeURIComponent(run.run_dir)}`}
-                  className="animate-fade-in-up block h-full"
+                  className="animate-fade-in-up block mb-6 break-inside-avoid h-fit"
                   style={{
                     animationFillMode: "forwards",
                     opacity: 0,
                     animationDelay: `${index * 80}ms`,
                   }}
                 >
-                  <Card className="hover:border-primary/50 overflow-hidden group h-full flex flex-col transition-all duration-300 hover:shadow-xl dark:hover:shadow-primary/5">
-                    <div className="relative aspect-video w-full overflow-hidden bg-muted/30">
-                      {imgSrc ? (
-                        <picture>
-                          {avifSrc && (
-                            <source srcSet={avifSrc} type="image/avif" />
-                          )}
-                          {webpSrc && (
-                            <source srcSet={webpSrc} type="image/webp" />
-                          )}
-                          <img
-                            src={imgSrc}
-                            alt={modelName}
-                            className="object-cover w-full h-full transition-transform duration-500 group-hover:scale-105"
-                            loading="lazy"
-                          />
-                        </picture>
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center">
-                          <span className="text-muted-foreground/40 text-sm">
-                            暂无预览图
-                          </span>
-                        </div>
-                      )}
+                  <Card className="hover:border-primary/50 overflow-hidden group flex flex-col transition-all duration-300 hover:shadow-xl dark:hover:shadow-primary/5">
+                    <div
+                      className="relative w-full overflow-hidden bg-muted/30"
+                      style={{ aspectRatio: coverRatio }}
+                    >
+                      <CardImage
+                        src={coverSource?.imgSrc}
+                        avif={coverSource?.avifSrc}
+                        webp={coverSource?.webpSrc}
+                        alt={modelName}
+                        blurhash={coverAsset?.blurhash}
+                        blurhashWidth={coverAsset?.blurhash_width}
+                        blurhashHeight={coverAsset?.blurhash_height}
+                        imgClassName="absolute inset-0 h-full w-full object-cover transition-all duration-500 group-hover:scale-105"
+                      />
                     </div>
                     <CardContent className="flex flex-1 flex-col justify-between space-y-4 p-6">
                       <div className="space-y-3">
@@ -258,6 +301,41 @@ export default function Page() {
                           </div>
                         ) : null}
                       </div>
+
+                      {homepageCards.length > 0 && (
+                        <div className="flex flex-row gap-2 overflow-x-auto pb-2 pt-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                          {homepageCards.map((thumbAsset, idx) => {
+                            const thumbSource =
+                              resolvePreferredImageSource(thumbAsset);
+                            if (!thumbSource?.imgSrc) return null;
+
+                            const thumbRatio =
+                              thumbAsset.width && thumbAsset.height
+                                ? `${thumbAsset.width} / ${thumbAsset.height}`
+                                : "1";
+
+                            return (
+                              <div
+                                key={thumbSource.imgSrc || idx}
+                                className="relative h-16 sm:h-20 shrink-0 overflow-hidden rounded-md bg-muted/30 ring-1 ring-border/50"
+                                style={{ aspectRatio: thumbRatio }}
+                              >
+                                <CardImage
+                                  src={thumbSource.imgSrc}
+                                  avif={thumbSource.avifSrc}
+                                  webp={thumbSource.webpSrc}
+                                  alt={`${modelName} preview ${idx}`}
+                                  blurhash={thumbAsset.blurhash}
+                                  blurhashWidth={thumbAsset.blurhash_width}
+                                  blurhashHeight={thumbAsset.blurhash_height}
+                                  imgClassName="absolute inset-0 h-full w-full object-cover transition-all duration-500 hover:scale-110"
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
                       <div className="flex items-center justify-between pt-2">
                         <div className="flex items-center gap-2">
                           <Badge
