@@ -3,7 +3,7 @@
 ## 概览
 
 - 这里既有 JSON 查询 API，也有 workflow 下载 route：`runs`、`run detail`、`grid`、`row`、`workflow`。查询数据主要来自 Supabase，workflow 文件通过 Cloudflare R2 返回下载响应。
-- 术语约定：`row/route.ts` 与 `grid/route.ts` 暴露的 `display_*` / `thumb_*` 变体统一称为“展示页缩略图”；未来首页卡片若引入独立图片资源，应称为“主页缩略图”，并通过单独字段或接口输出。
+- 术语约定：`row/route.ts` 与 `grid/route.ts` 暴露的 `display_*` / `thumb_*` 变体统一称为“展示页缩略图”；run 级 `image.*` / `images/*` 属于首页图片资产（封面图 / 主页缩略图），需通过单独字段或接口输出。
 
 ## 去哪儿看
 
@@ -23,6 +23,7 @@
 - 对外 payload 只保留前端渲染需要的字段；不要透传原始 `run_json` / `metadata` 大对象。
 - `grid/route.ts` 需要分页拉 `images`，否则会撞 PostgREST 默认 `max_rows`。
 - `row/route.ts` 负责把 `image_variants` 映射成展示页缩略图 URL（display/thumb）；公开/私有 URL 都通过 `lib/r2-url.ts`。
+- `runs/route.ts` 当前只返回首页列表所需的基础字段；尽管脚本侧已具备封面图/主页缩略图资产，Web API 这里尚未输出对应字段。
 - `workflow/route.ts` 先从 `runs.workflow_download_r2_key` 取 key，再验证它必须落在 `runs/{runDir}/artifacts/workflow/*.json`，随后通过 `getCloudflareContext().env.R2_PUBLIC_BUCKET` 回源并保留对象 metadata。
 - `catch` 分支只返回固定短文案，避免暴露数据库、路径、环境细节。
 

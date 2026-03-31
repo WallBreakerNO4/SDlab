@@ -3,7 +3,7 @@
 ## 概览
 
 - 完整的图片上传管线：从本地 run 产物读取 → 多变体编码（webp/avif）→ R2 上传 → Supabase 索引写入。19 个 Python 文件。
-- 术语约定：本目录生成的 `display_*` / `thumb_*` 变体统一称为“展示页缩略图”；它们服务 run 详情页与网格展示，不等于未来首页卡片要用的“主页缩略图”。
+- 术语约定：本目录生成的 `display_*` / `thumb_*` 变体统一称为“展示页缩略图”；run 级 `image.*` 属于封面图，`images/*` 属于主页缩略图集合。两类首页图片资产已可随 run 级静态资源一起上传，但当前网页首页尚未完成消费。
 
 ## 去哪儿改
 
@@ -22,6 +22,7 @@
 | 上传发现                  | `upload_discovery.py`    | 从 metadata.jsonl 发现待上传图片                                                     |
 | 上传运行时                | `upload_runtime.py`      | 运行时环境初始化                                                                     |
 | manifest 生成             | `manifest.py`            | JSON manifest 构建（公开/私有）                                                      |
+| run 级静态资产上传        | `upload_planner.py`      | 识别并规划封面图/主页缩略图资产的上传与 DB 字段                                      |
 | 路径安全                  | `path_safety.py`         | R2 key 路径校验                                                                      |
 | PostgREST HTTP            | `postgrest_http.py`      | Supabase PostgREST HTTP 客户端封装                                                   |
 | Supabase 环境             | `supabase_env.py`        | 环境变量读取（URL/key）                                                              |
@@ -57,7 +58,7 @@ supabase_writer.py → 批量 upsert 到 Supabase（runs + images + variants）
 - 上传逻辑与生图逻辑分层：不要反向耦合到 `scripts/generation/` 内部流程
 - 凭证输入优先走环境变量（`R2_*`/`SUPABASE_*`），不在仓库内落盘明文配置
 - 变体命名：`display_webp`/`display_avif`/`thumb_webp`/`thumb_avif`，文档中统称“展示页缩略图”
-- `run/image.*` 与同级 `images/*` 这类未来首页卡片资源不由本目录自动接线；若要接入，应单独建模为“主页缩略图”链路。
+- `run/image.*` 与同级 `images/*` 这类 run 级静态资源现在已进入上传与 Supabase 写入链路；但它们在 Web 侧仍应作为独立的封面图/主页缩略图字段建模，不要与展示页缩略图混用。
 - bucket 分配：normal category → public bucket；advance/nsfw → private bucket
 - 上传支持可配置并发（`--upload-workers`）和 dry-run 模式
 - I/O 统一用 `pathlib.Path`；中间编码产物写入 `_r2_upload_intermediate/`
