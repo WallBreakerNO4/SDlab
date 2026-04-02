@@ -36,6 +36,44 @@ def _sample_payload() -> dict[str, object]:
         "model_homepage": None,
         "model_huggingface": None,
         "model_civitai": None,
+        "run_assets": [
+            {
+                "asset_role": "cover",
+                "asset_index": 0,
+                "source_path": "data/runs/example/image.jpg",
+                "source_sha256": "feed" * 16,
+                "width": 1024,
+                "height": 1536,
+                "blurhash": "L5H2EC=PM+yV0g-mq.wG9c010J}I",
+                "blurhash_width": 100,
+                "blurhash_height": 75,
+                "metadata": {"repo_relative_path": "data/runs/example/image.jpg"},
+                "variants": [
+                    {
+                        "variant": "display_webp",
+                        "bucket": "public",
+                        "r2_key": "runs/r/cover-display.webp",
+                        "content_type": "image/webp",
+                        "byte_size": 222,
+                        "sha256": "ghi",
+                        "width": 1024,
+                        "height": 1536,
+                        "webp_quality": 93,
+                    },
+                    {
+                        "variant": "thumb_webp",
+                        "bucket": "public",
+                        "r2_key": "runs/r/cover-thumb.webp",
+                        "content_type": "image/webp",
+                        "byte_size": 111,
+                        "sha256": "jkl",
+                        "width": 512,
+                        "height": 768,
+                        "webp_quality": 82,
+                    },
+                ],
+            }
+        ],
         "images": [
             {
                 "x_index": 0,
@@ -91,8 +129,16 @@ class _InMemorySupabaseClient:
             "runs": {},
             "images": {},
             "image_variants": {},
+            "run_assets": {},
+            "run_asset_variants": {},
         }
-        self._next_id = {"runs": 1, "images": 1, "image_variants": 1}
+        self._next_id = {
+            "runs": 1,
+            "images": 1,
+            "image_variants": 1,
+            "run_assets": 1,
+            "run_asset_variants": 1,
+        }
 
     def table(self, table_name: str) -> "_InMemoryQuery":
         return _InMemoryQuery(self, table_name)
@@ -333,11 +379,15 @@ def test_upsert_upload_index_is_idempotent() -> None:
     assert client.row_count("runs") == 1
     assert client.row_count("images") == 1
     assert client.row_count("image_variants") == 2
+    assert client.row_count("run_assets") == 1
+    assert client.row_count("run_asset_variants") == 2
 
     on_conflicts = {str(call["on_conflict"]) for call in client.upsert_calls}
     assert "run_dir" in on_conflicts
     assert "run_id,x_index,y_index,batch_index" in on_conflicts
     assert "image_id,variant" in on_conflicts
+    assert "run_id,asset_role,asset_index" in on_conflicts
+    assert "run_asset_id,variant" in on_conflicts
 
 
 def test_upsert_upload_index_extracts_structured_columns() -> None:
@@ -401,6 +451,27 @@ def test_upsert_upload_index_extracts_structured_columns() -> None:
     assert image_row["y_value"] == "Y1"
 
 
+def test_upsert_upload_index_persists_run_assets() -> None:
+    client = _InMemorySupabaseClient(return_upsert_rows=True)
+    writer = SupabaseWriter(client=client, dry_run=False)
+
+    writer.upsert_upload_index(_sample_payload())
+
+    run_asset_row = next(iter(client._tables["run_assets"].values()))
+    assert run_asset_row["asset_role"] == "cover"
+    assert run_asset_row["asset_index"] == 0
+    assert run_asset_row["source_path"] == "data/runs/example/image.jpg"
+    assert run_asset_row["blurhash_width"] == 100
+    assert run_asset_row["blurhash_height"] == 75
+
+    run_asset_variant_rows = list(client._tables["run_asset_variants"].values())
+    assert len(run_asset_variant_rows) == 2
+    assert {row["variant"] for row in run_asset_variant_rows} == {
+        "display_webp",
+        "thumb_webp",
+    }
+
+
 def test_upsert_upload_index_fallbacks_to_select_for_ids() -> None:
     client = _InMemorySupabaseClient(return_upsert_rows=False)
     writer = SupabaseWriter(client=client, dry_run=False)
@@ -410,7 +481,9 @@ def test_upsert_upload_index_fallbacks_to_select_for_ids() -> None:
     assert client.row_count("runs") == 1
     assert client.row_count("images") == 1
     assert client.row_count("image_variants") == 2
-    assert client.select_execute_calls >= 2
+    assert client.row_count("run_assets") == 1
+    assert client.row_count("run_asset_variants") == 2
+    assert client.select_execute_calls >= 3
 
 
 def test_upsert_upload_index_preserves_large_seed_as_string() -> None:

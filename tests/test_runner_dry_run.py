@@ -77,7 +77,6 @@ def _write_json_inputs(
                     "series": [{"text": "arknights", "weight": 1.0}],
                     "rating": [{"text": "safe", "weight": 1.0}],
                     "general": [{"text": "solo", "weight": 1.0}],
-                    "quality": [{"text": "masterpiece", "weight": 1.0}],
                 },
                 "info": {"index": 0, "type": x_info_type},
                 "description": {"zh": "示例模型", "en": "Example model"},
@@ -124,13 +123,13 @@ def _fake_runner_config(
     y_path: Path,
     append_negative_prompt: str | None,
 ) -> SimpleNamespace:
-    workflow_path = config_path.parent / "workflow.json"
-    workflow_download_path = config_path.parent / "workflow-download.json"
+    workflow_path = config_path.parent / "api.json"
+    workflow_download_path = config_path.parent / "workflow.json"
     workflow_path.write_text('{"3": {"class_type": "KSampler"}}\n', encoding="utf-8")
     workflow_download_path.write_text('{"version": 1}\n', encoding="utf-8")
     return SimpleNamespace(
         schema_version="image-run-config/v1",
-        config_path="data/runs/example.yaml",
+        config_path="data/runs/example/config.yaml",
         config_sha256=_sha256_file(config_path),
         model=SimpleNamespace(
             key="nai-4-full",
@@ -158,16 +157,17 @@ def _fake_runner_config(
         workflow=SimpleNamespace(
             path=str(workflow_path),
             sha256=_sha256_file(workflow_path),
-            repo_relative_path="data/workflows/example.json",
+            repo_relative_path="data/runs/example/api.json",
             download=SimpleNamespace(
                 path=str(workflow_download_path),
                 sha256=_sha256_file(workflow_download_path),
-                repo_relative_path="data/workflows/example-download.json",
+                repo_relative_path="data/runs/example/workflow.json",
             ),
             ksampler_node_id="3",
         ),
         generation=SimpleNamespace(
-            template="{gender}{characters}{series}{rating}{y}{general}{quality}",
+            template="{quality}{rating}{y}{gender}{characters}{series}{general}",
+            quality_prompt="masterpiece, best quality,",
             base_seed=123,
             negative_prompt="neg,",
             append_negative_prompt=append_negative_prompt,
@@ -185,6 +185,10 @@ def _fake_runner_config(
             y_limit=1,
             x_indexes=[0],
             y_indexes=[0],
+        ),
+        assets=SimpleNamespace(
+            cover_image=None,
+            homepage_images=[],
         ),
     )
 
@@ -265,8 +269,9 @@ def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
     assert run_payload["y_json_path"] == str(y_path)
     assert (
         run_payload["template"]
-        == "{gender}{characters}{series}{rating}{y}{general}{quality}"
+        == "{quality}{rating}{y}{gender}{characters}{series}{general}"
     )
+    assert run_payload["quality_prompt"] == "masterpiece, best quality,"
     assert run_payload["base_seed"] == 123
     assert run_payload["run_id"] == "run-dry"
     assert run_payload["run_key"] == "run-dry"
@@ -274,7 +279,7 @@ def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
     assert run_payload["generation_overrides"]["negative_prompt"] == "neg,"
     assert run_payload["generation_overrides"]["append_negative_prompt"] == "app,"
     assert run_payload["config_schema_version"] == "image-run-config/v1"
-    assert run_payload["config_path"] == "data/runs/example.yaml"
+    assert run_payload["config_path"] == "data/runs/example/config.yaml"
     assert run_payload["config_sha256"] == _sha256_file(config_path)
     assert run_payload["model"] == {
         "key": "nai-4-full",
@@ -295,16 +300,17 @@ def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
             "y_sha256": _sha256_file(y_path),
         },
         "workflow": {
-            "path": "data/workflows/example.json",
-            "sha256": run_payload["config_snapshot"]["workflow"]["sha256"],
-            "download_path": "data/workflows/example-download.json",
+            "api_path": "data/runs/example/api.json",
+            "api_sha256": run_payload["config_snapshot"]["workflow"]["api_sha256"],
+            "download_path": "data/runs/example/workflow.json",
             "download_sha256": run_payload["config_snapshot"]["workflow"][
                 "download_sha256"
             ],
             "ksampler_node_id": "3",
         },
         "generation": {
-            "template": "{gender}{characters}{series}{rating}{y}{general}{quality}",
+            "template": "{quality}{rating}{y}{gender}{characters}{series}{general}",
+            "quality_prompt": "masterpiece, best quality,",
             "base_seed": 123,
             "negative_prompt": "neg,",
             "append_negative_prompt": "app,",
@@ -324,7 +330,12 @@ def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
             "y_indexes": [0],
         },
     }
-    assert run_payload["workflow_download_path"].endswith("workflow-download.json")
+    assert run_payload["workflow_api_path"].endswith("api.json")
+    assert run_payload["workflow_api_sha256"] == _sha256_file(
+        Path(run_payload["workflow_api_path"])
+    )
+    assert run_payload["workflow_status"] == "not_loaded"
+    assert run_payload["workflow_download_path"].endswith("workflow.json")
     assert run_payload["workflow_download_sha256"] == _sha256_file(
         Path(run_payload["workflow_download_path"])
     )
@@ -429,7 +440,8 @@ def test_run_dry_run_ignores_env_append_negative_prompt_in_metadata(
         concurrency=1,
         x_json=str(x_path),
         y_json=str(y_path),
-        template="{gender}{characters}{series}{rating}{y}{general}{quality}",
+        template="{quality}{rating}{y}{gender}{characters}{series}{general}",
+        quality_prompt="masterpiece, best quality,",
         base_seed=123,
         workflow_json=None,
         ksampler_node_id="3",

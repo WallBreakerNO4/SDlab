@@ -57,7 +57,6 @@ def _write_xy_inputs(tmp_path: Path) -> tuple[Path, Path]:
                     "series": [{"text": "arknights", "weight": 1.0}],
                     "rating": [{"text": "safe", "weight": 1.0}],
                     "general": [{"text": "solo", "weight": 1.0}],
-                    "quality": [{"text": "masterpiece", "weight": 1.0}],
                 },
                 "info": {"index": 0, "type": "sfw"},
             }
@@ -101,8 +100,9 @@ def _write_run_json(run_dir: Path, x_json: Path, y_json: Path) -> None:
         "x_json_path": str(x_json),
         "y_json_path": str(y_json),
         "template": runner.DEFAULT_TEMPLATE,
+        "quality_prompt": "masterpiece, best quality,",
         "base_seed": 100,
-        "workflow_json_path": "workflow.json",
+        "workflow_api_path": "workflow.json",
         "x_json_sha256": _sha256_file(x_json),
         "y_json_sha256": _sha256_file(y_json),
         "generation_overrides": {
@@ -234,7 +234,6 @@ def test_retry_incomplete_integration_is_idempotent_and_covers_missing_cases(
         "series": "arknights,",
         "rating": "safe,",
         "general": "solo,",
-        "quality": "masterpiece,",
     }
     y_values = ["artist-a,", "artist-b,", "artist-c,"]
 
@@ -243,10 +242,10 @@ def test_retry_incomplete_integration_is_idempotent_and_covers_missing_cases(
         "x_index": 0,
         "y_index": 0,
         "prompt_hash": runner.compute_prompt_hash(
-            render_positive_prompt(x_row, y_values[0])
+            render_positive_prompt(x_row, y_values[0], "masterpiece, best quality,")
         ),
         "seed": derive_seed(100, 0, 0),
-        "workflow_hash": workflow_hash,
+        "workflow_api_sha256": workflow_hash,
         "attempt": 1,
         "error": {"code": "network_timeout"},
     }
@@ -255,10 +254,10 @@ def test_retry_incomplete_integration_is_idempotent_and_covers_missing_cases(
         "x_index": 0,
         "y_index": 2,
         "prompt_hash": runner.compute_prompt_hash(
-            render_positive_prompt(x_row, y_values[2])
+            render_positive_prompt(x_row, y_values[2], "masterpiece, best quality,")
         ),
         "seed": derive_seed(100, 0, 2),
-        "workflow_hash": workflow_hash,
+        "workflow_api_sha256": workflow_hash,
         "attempt": 1,
         "local_image_path": "images/x0-y2.png",
     }

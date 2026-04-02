@@ -722,14 +722,6 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                         preloadedCell?.category ??
                         representativeItem?.category ??
                         null;
-                      const effectiveWidth =
-                        preloadedCell?.width ??
-                        representativeItem?.width ??
-                        null;
-                      const effectiveHeight =
-                        preloadedCell?.height ??
-                        representativeItem?.height ??
-                        null;
 
                       const canOpenDialog =
                         !!rowCell && rowCell.items.length > 0;

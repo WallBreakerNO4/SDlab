@@ -163,12 +163,9 @@ def _extract_ref_node_id(value: object, input_name: str) -> str:
 
 
 def _record_workflow_hash(record: dict[str, object]) -> str | None:
-    workflow_hash = record.get("workflow_hash")
-    if isinstance(workflow_hash, str) and workflow_hash:
-        return workflow_hash
-    legacy_hash = record.get("workflow_json_sha256")
-    if isinstance(legacy_hash, str) and legacy_hash:
-        return legacy_hash
+    api_hash = record.get("workflow_api_sha256")
+    if isinstance(api_hash, str) and api_hash:
+        return api_hash
     return None
 
 

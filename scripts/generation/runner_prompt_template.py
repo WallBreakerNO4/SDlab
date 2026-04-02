@@ -8,13 +8,13 @@ from scripts.generation.prompt_grid import render_positive_prompt
 
 
 ALLOWED_TEMPLATE_KEYS = {
+    "quality",
     "gender",
     "characters",
     "series",
     "rating",
     "y",
     "general",
-    "quality",
 }
 TEMPLATE_TOKEN_RE = re.compile(r"\{([a-z_]+)\}")
 
@@ -42,23 +42,24 @@ def _render_prompt_by_template(
     y_value: str,
     *,
     default_template: str,
+    quality_prompt: str | None,
 ) -> str:
     if template == default_template:
-        return render_positive_prompt(x_row, y_value)
+        return render_positive_prompt(x_row, y_value, quality_prompt)
 
     key_map = {
+        "quality": quality_prompt or "",
         "gender": x_row.get("gender", ""),
         "characters": x_row.get("characters", ""),
         "series": x_row.get("series", ""),
         "rating": x_row.get("rating", ""),
         "y": y_value,
         "general": x_row.get("general", ""),
-        "quality": x_row.get("quality", ""),
     }
 
     stripped = TEMPLATE_TOKEN_RE.sub("", template)
     if stripped.strip():
-        raise ValueError("--template 仅支持由占位符组成，例如 {gender}{y}{quality}")
+        raise ValueError("--template 仅支持由占位符组成，例如 {quality}{gender}{y}")
 
     rendered: list[str] = []
     for match in TEMPLATE_TOKEN_RE.finditer(template):

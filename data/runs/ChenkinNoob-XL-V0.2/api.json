@@ -1,7 +1,7 @@
 {
   "1": {
     "inputs": {
-      "ckpt_name": "chenkinNoobXLCKXL_v02.safetensors"
+      "ckpt_name": "ChenkinNoob-XL-V0.2.safetensors"
     },
     "class_type": "CheckpointLoaderSimple",
     "_meta": {
@@ -10,7 +10,7 @@
   },
   "3": {
     "inputs": {
-      "text": "very awa, masterpiece, best quality, year 2025, newest, highres, absurdres, nsfw,\n[[nyalia]], [[[[ask \\(askzy\\)]]]], [[[wlop]]], (chyoel),\n1girl, ho'olheyak \\(arknights\\), arknights,\nsolo, cowboy shot,\nnight,\nnude, cross pasties, pussy, large breasts,\nwhite thighhighs, trench coat, tongue out, one hand in pocket, v sign, leaning on wall, Haruka (Arknights),",
+      "text": "aris_\\(blue_archive\\), 1girl, solo, long_hair, looking_at_viewer, smile, open_mouth, blue_eyes, simple_background, skirt, black_hair, hair_ornament, white_background, gloves, dress, thighhighs, hat, holding, bow, very_long_hair, heart, hair_bow, cowboy_shot, pleated_skirt, frills, one_eye_closed, sleeveless, alternate_costume, choker, hairclip, fang, white_gloves, bowtie, fingerless_gloves, white_thighhighs, halo, side_ponytail, thigh_strap, black_choker, white_headwear, blue_bow, garter_straps, frilled_skirt, single_thighhigh, microphone, corset, top_hat, blue_bowtie, mini_hat, absurdly_long_hair, holding_microphone, layered_skirt, idol, mini_top_hat, green_halo, single_garter_strap",
       "clip": [
         "1",
         1
@@ -36,7 +36,7 @@
   },
   "5": {
     "inputs": {
-      "seed": 1113494800638689,
+      "seed": 144943471798628,
       "steps": 28,
       "cfg": 4.5,
       "sampler_name": "euler",
@@ -66,8 +66,8 @@
   },
   "6": {
     "inputs": {
-      "width": 1024,
-      "height": 1536,
+      "width": 832,
+      "height": 1216,
       "batch_size": 1
     },
     "class_type": "EmptyLatentImage",

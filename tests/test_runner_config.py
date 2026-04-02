@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Protocol, cast
 
 import pytest
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -36,6 +37,7 @@ class _WorkflowConfig(Protocol):
 
 class _GenerationConfig(Protocol):
     template: str
+    quality_prompt: str
     base_seed: int
     negative_prompt: str | None
     append_negative_prompt: str | None
@@ -56,6 +58,11 @@ class _SelectionConfig(Protocol):
     y_indexes: list[int] | None
 
 
+class _AssetsConfig(Protocol):
+    cover_image: _PromptRef | None
+    homepage_images: list[_PromptRef]
+
+
 class _ModelConfig(Protocol):
     key: str
     name: str
@@ -73,6 +80,7 @@ class _RunnerConfig(Protocol):
     model: _ModelConfig
     generation: _GenerationConfig
     selection: _SelectionConfig
+    assets: _AssetsConfig
 
 
 class _RunnerConfigModule(Protocol):
@@ -125,11 +133,19 @@ def _sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _write_assets(repo_root: Path) -> tuple[Path, Path, Path, Path]:
+def _write_png(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (8, 6), (120, 80, 40)).save(path, format="PNG")
+
+
+def _write_assets(repo_root: Path) -> tuple[Path, Path, Path, Path, Path, Path, Path]:
     x_path = repo_root / "data/prompts/x.json"
     y_path = repo_root / "data/prompts/y.yaml"
-    workflow_path = repo_root / "data/workflows/example.json"
-    workflow_download_path = repo_root / "data/workflows/example-download.json"
+    workflow_path = repo_root / "data/runs/example/api.json"
+    workflow_download_path = repo_root / "data/runs/example/workflow.json"
+    cover_image_path = repo_root / "data/runs/example/image.jpg"
+    homepage_first = repo_root / "data/runs/example/images/001.png"
+    homepage_second = repo_root / "data/runs/example/images/002.png"
     x_path.parent.mkdir(parents=True, exist_ok=True)
     y_path.parent.mkdir(parents=True, exist_ok=True)
     workflow_path.parent.mkdir(parents=True, exist_ok=True)
@@ -137,7 +153,18 @@ def _write_assets(repo_root: Path) -> tuple[Path, Path, Path, Path]:
     y_path.write_text("schema: prompt-y-table/v2\nitems: []\n", encoding="utf-8")
     workflow_path.write_text('{"3": {"class_type": "KSampler"}}\n', encoding="utf-8")
     workflow_download_path.write_text('{"version": 1}\n', encoding="utf-8")
-    return x_path, y_path, workflow_path, workflow_download_path
+    _write_png(cover_image_path)
+    _write_png(homepage_first)
+    _write_png(homepage_second)
+    return (
+        x_path,
+        y_path,
+        workflow_path,
+        workflow_download_path,
+        cover_image_path,
+        homepage_first,
+        homepage_second,
+    )
 
 
 def _valid_config_text(*, schema_version: str = "image-run-config/v1") -> str:
@@ -159,11 +186,10 @@ def _valid_config_text(*, schema_version: str = "image-run-config/v1") -> str:
             "  x_path: data/prompts/x.json",
             "  y_path: data/prompts/y.yaml",
             "workflow:",
-            "  path: data/workflows/example.json",
-            "  download_path: data/workflows/example-download.json",
             "  ksampler_node_id: '3'",
             "generation:",
-            "  template: '{gender}{y}{quality}'",
+            "  template: '{quality}{gender}{y}'",
+            "  quality_prompt: 'masterpiece, best quality,'",
             "  base_seed: 123",
             "  negative_prompt: bad,",
             "  append_negative_prompt: nsfw, nipples,",
@@ -189,15 +215,23 @@ def test_load_runner_config_happy_path_resolves_repo_relative_paths_and_hashes(
     tmp_path: Path,
 ) -> None:
     module = _import_runner_config_module()
-    x_path, y_path, workflow_path, workflow_download_path = _write_assets(tmp_path)
-    config_path = tmp_path / "data/runs/example.yaml"
+    (
+        x_path,
+        y_path,
+        workflow_path,
+        workflow_download_path,
+        cover_image_path,
+        homepage_first,
+        homepage_second,
+    ) = _write_assets(tmp_path)
+    config_path = tmp_path / "data/runs/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(_valid_config_text(), encoding="utf-8")
 
     config = module.load_runner_config(str(config_path), repo_root=tmp_path)
 
     assert config.schema_version == "image-run-config/v1"
-    assert config.config_path == "data/runs/example.yaml"
+    assert config.config_path == "data/runs/example/config.yaml"
     assert config.config_sha256 == _sha256_file(config_path)
     assert Path(config.prompts.x.path) == x_path
     assert Path(config.prompts.y.path) == y_path
@@ -206,16 +240,27 @@ def test_load_runner_config_happy_path_resolves_repo_relative_paths_and_hashes(
     assert config.prompts.x.sha256 == _sha256_file(x_path)
     assert config.prompts.y.sha256 == _sha256_file(y_path)
     assert Path(config.workflow.path) == workflow_path
-    assert config.workflow.repo_relative_path == "data/workflows/example.json"
+    assert config.workflow.repo_relative_path == "data/runs/example/api.json"
     assert config.workflow.sha256 == _sha256_file(workflow_path)
     assert config.workflow.download is not None
     assert Path(config.workflow.download.path) == workflow_download_path
     assert (
-        config.workflow.download.repo_relative_path
-        == "data/workflows/example-download.json"
+        config.workflow.download.repo_relative_path == "data/runs/example/workflow.json"
     )
     assert config.workflow.download.sha256 == _sha256_file(workflow_download_path)
     assert config.workflow.ksampler_node_id == "3"
+    assert config.assets.cover_image is not None
+    assert Path(config.assets.cover_image.path) == cover_image_path
+    assert config.assets.cover_image.repo_relative_path == "data/runs/example/image.jpg"
+    assert config.assets.cover_image.sha256 == _sha256_file(cover_image_path)
+    assert [asset.repo_relative_path for asset in config.assets.homepage_images] == [
+        "data/runs/example/images/001.png",
+        "data/runs/example/images/002.png",
+    ]
+    assert [Path(asset.path) for asset in config.assets.homepage_images] == [
+        homepage_first,
+        homepage_second,
+    ]
     assert config.model.key == "nai-4-full"
     assert config.model.name == "NAI 4 Full"
     assert config.model.family == "novelai"
@@ -225,7 +270,8 @@ def test_load_runner_config_happy_path_resolves_repo_relative_paths_and_hashes(
         "civitai": None,
     }
     assert config.model.description == {"zh": "测试模型", "en": "Test model"}
-    assert config.generation.template == "{gender}{y}{quality}"
+    assert config.generation.template == "{quality}{gender}{y}"
+    assert config.generation.quality_prompt == "masterpiece, best quality,"
     assert config.generation.base_seed == 123
     assert config.generation.negative_prompt == "bad,"
     assert config.generation.append_negative_prompt == "nsfw, nipples,"
@@ -246,7 +292,7 @@ def test_load_runner_config_happy_path_resolves_repo_relative_paths_and_hashes(
 def test_load_runner_config_rejects_unknown_key(tmp_path: Path) -> None:
     module = _import_runner_config_module()
     _ = _write_assets(tmp_path)
-    config_path = tmp_path / "data/runs/example.yaml"
+    config_path = tmp_path / "data/runs/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         "schema_version: image-run-config/v1\nunknown_key: true\n",
@@ -260,7 +306,7 @@ def test_load_runner_config_rejects_unknown_key(tmp_path: Path) -> None:
 def test_load_runner_config_rejects_invalid_schema_version(tmp_path: Path) -> None:
     module = _import_runner_config_module()
     _ = _write_assets(tmp_path)
-    config_path = tmp_path / "data/runs/example.yaml"
+    config_path = tmp_path / "data/runs/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         _valid_config_text(schema_version="image-run-config/v999"), encoding="utf-8"
@@ -274,7 +320,7 @@ def test_load_runner_config_rejects_repo_external_path(tmp_path: Path) -> None:
     module = _import_runner_config_module()
     outside = tmp_path.parent / "outside.json"
     outside.write_text("{}\n", encoding="utf-8")
-    config_path = tmp_path / "data/runs/example.yaml"
+    config_path = tmp_path / "data/runs/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         "\n".join(
@@ -295,10 +341,10 @@ def test_load_runner_config_rejects_repo_external_path(tmp_path: Path) -> None:
                 f"  x_path: {outside}",
                 "  y_path: data/prompts/y.yaml",
                 "workflow:",
-                "  path: data/workflows/example.json",
                 "  ksampler_node_id: null",
                 "generation:",
                 "  template: '{gender}{y}'",
+                "  quality_prompt: 'masterpiece,'",
                 "  base_seed: 1",
                 "  negative_prompt: null",
                 "  append_negative_prompt: null",
@@ -329,8 +375,8 @@ def test_load_runner_config_rejects_absolute_asset_path_inside_repo(
     tmp_path: Path,
 ) -> None:
     module = _import_runner_config_module()
-    x_path, _y_path, _workflow_path, _workflow_download_path = _write_assets(tmp_path)
-    config_path = tmp_path / "data/runs/example.yaml"
+    x_path, *_ = _write_assets(tmp_path)
+    config_path = tmp_path / "data/runs/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         _valid_config_text().replace("data/prompts/x.json", str(x_path)),
@@ -344,7 +390,7 @@ def test_load_runner_config_rejects_absolute_asset_path_inside_repo(
 def test_load_runner_config_rejects_empty_model_key(tmp_path: Path) -> None:
     module = _import_runner_config_module()
     _ = _write_assets(tmp_path)
-    config_path = tmp_path / "data/runs/example.yaml"
+    config_path = tmp_path / "data/runs/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         _valid_config_text().replace("  key: nai-4-full", "  key: ''"),
@@ -358,7 +404,7 @@ def test_load_runner_config_rejects_empty_model_key(tmp_path: Path) -> None:
 def test_load_runner_config_rejects_non_slug_model_key(tmp_path: Path) -> None:
     module = _import_runner_config_module()
     _ = _write_assets(tmp_path)
-    config_path = tmp_path / "data/runs/example.yaml"
+    config_path = tmp_path / "data/runs/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         _valid_config_text().replace("  key: nai-4-full", "  key: NAI_4_FULL"),
@@ -390,7 +436,7 @@ def test_fresh_run_rejects_deprecated_business_env_before_loading_config(
 def test_load_runner_config_exposes_compact_model_snapshot_only(tmp_path: Path) -> None:
     module = _import_runner_config_module()
     _ = _write_assets(tmp_path)
-    config_path = tmp_path / "data/runs/example.yaml"
+    config_path = tmp_path / "data/runs/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         "\n".join(
@@ -411,10 +457,10 @@ def test_load_runner_config_exposes_compact_model_snapshot_only(tmp_path: Path) 
                 "  x_path: data/prompts/x.json",
                 "  y_path: data/prompts/y.yaml",
                 "workflow:",
-                "  path: data/workflows/example.json",
                 "  ksampler_node_id: null",
                 "generation:",
                 "  template: '{gender}{y}'",
+                "  quality_prompt: 'masterpiece,'",
                 "  base_seed: 1",
                 "  negative_prompt: null",
                 "  append_negative_prompt: null",
@@ -442,3 +488,18 @@ def test_load_runner_config_exposes_compact_model_snapshot_only(tmp_path: Path) 
     assert config.model.key == "demo"
     assert not hasattr(config.model, "workflow")
     assert not hasattr(config.prompts, "items")
+
+
+def test_load_runner_config_accepts_run_directory_and_reads_config_yaml(
+    tmp_path: Path,
+) -> None:
+    module = _import_runner_config_module()
+    _ = _write_assets(tmp_path)
+    config_dir = tmp_path / "data/runs/example"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config_path = config_dir / "config.yaml"
+    config_path.write_text(_valid_config_text(), encoding="utf-8")
+
+    config = module.load_runner_config("data/runs/example", repo_root=tmp_path)
+
+    assert config.config_path == "data/runs/example/config.yaml"

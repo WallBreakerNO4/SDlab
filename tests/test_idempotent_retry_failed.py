@@ -57,7 +57,6 @@ def _write_single_cell_inputs(tmp_path: Path) -> tuple[Path, Path]:
                     "series": [{"text": "arknights", "weight": 1.0}],
                     "rating": [{"text": "safe", "weight": 1.0}],
                     "general": [{"text": "solo", "weight": 1.0}],
-                    "quality": [{"text": "masterpiece", "weight": 1.0}],
                 },
                 "info": {"index": 0, "type": "sfw"},
             }
@@ -97,10 +96,21 @@ def _write_minimal_run_json(
         "x_json_path": str(x_json),
         "y_json_path": str(y_json),
         "template": runner.DEFAULT_TEMPLATE,
+        "quality_prompt": "masterpiece, best quality,",
         "base_seed": 100,
-        "workflow_json_path": "workflow.json",
+        "workflow_api_path": "workflow.json",
+        "workflow_api_sha256": "wf-hash",
         "x_json_sha256": _sha256_file(x_json),
         "y_json_sha256": _sha256_file(y_json),
+        "config_snapshot": {
+            "workflow": {
+                "api_path": "data/runs/example/api.json",
+                "api_sha256": "wf-hash",
+                "download_path": "data/runs/example/workflow.json",
+                "download_sha256": "download-sha",
+                "ksampler_node_id": None,
+            }
+        },
         "generation_overrides": {
             "negative_prompt": None,
             "width": None,
@@ -222,10 +232,11 @@ def test_retry_failed_is_idempotent_after_success(
         "series": "arknights,",
         "rating": "safe,",
         "general": "solo,",
-        "quality": "masterpiece,",
     }
     y_value = "artist-a,"
-    prompt_hash = runner.compute_prompt_hash(render_positive_prompt(x_row, y_value))
+    prompt_hash = runner.compute_prompt_hash(
+        render_positive_prompt(x_row, y_value, "masterpiece, best quality,")
+    )
     seed = derive_seed(100, 0, 0)
 
     initial_failed = {
@@ -234,7 +245,7 @@ def test_retry_failed_is_idempotent_after_success(
         "y_index": 0,
         "prompt_hash": prompt_hash,
         "seed": seed,
-        "workflow_hash": workflow_hash,
+        "workflow_api_sha256": workflow_hash,
         "attempt": 1,
         "error": {"code": "network_timeout"},
     }

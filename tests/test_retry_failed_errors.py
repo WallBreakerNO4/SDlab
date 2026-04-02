@@ -170,10 +170,20 @@ def test_retry_failed_with_sha256_mismatch(
         "x_json_path": str(x_json),
         "y_json_path": str(y_json),
         "template": "",
+        "quality_prompt": "masterpiece,",
         "base_seed": 123,
-        "workflow_json_path": None,
+        "workflow_api_path": None,
         "x_json_sha256": "wrong_sha256" * 10,  # 故意错误的 sha256
         "y_json_sha256": "wrong_sha256" * 10,
+        "config_snapshot": {
+            "workflow": {
+                "api_path": "data/runs/example/api.json",
+                "api_sha256": "wf-hash",
+                "download_path": "data/runs/example/workflow.json",
+                "download_sha256": "download-sha",
+                "ksampler_node_id": None,
+            }
+        },
         "generation_overrides": {
             "negative_prompt": None,
             "width": None,
@@ -236,10 +246,20 @@ def test_retry_failed_with_malformed_metadata_jsonl(
         "x_json_path": str(x_json),
         "y_json_path": str(y_json),
         "template": "",
+        "quality_prompt": "masterpiece,",
         "base_seed": 123,
-        "workflow_json_path": None,
+        "workflow_api_path": None,
         "x_json_sha256": sha256_file(x_json),
         "y_json_sha256": sha256_file(y_json),
+        "config_snapshot": {
+            "workflow": {
+                "api_path": "data/runs/example/api.json",
+                "api_sha256": "wf-hash",
+                "download_path": "data/runs/example/workflow.json",
+                "download_sha256": "download-sha",
+                "ksampler_node_id": None,
+            }
+        },
         "generation_overrides": {
             "negative_prompt": None,
             "width": None,

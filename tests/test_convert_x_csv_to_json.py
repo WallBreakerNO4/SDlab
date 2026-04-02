@@ -4,6 +4,8 @@ import yaml
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
@@ -17,8 +19,8 @@ def test_convert_x_csv_to_yaml_maps_type_and_descriptions(tmp_path: Path) -> Non
     csv_path.write_text(
         "\n".join(
             [
-                "Gender tags,Character(s) tags,Series tags,Rating tags,General tags,Qulity tags,Type,description_zh,description_en",
-                '"1girl,","amiya,","arknights,","safe,","solo,","masterpiece,",normal,"中文描述","English description"',
+                "Gender tags,Character(s) tags,Series tags,Rating tags,General tags,Type,description_zh,description_en",
+                '"1girl,","amiya,","arknights,","safe,","solo,",normal,"中文描述","English description"',
             ]
         )
         + "\n",
@@ -43,8 +45,8 @@ def test_convert_x_csv_to_yaml_fallbacks_when_columns_empty_or_missing(
     csv_path.write_text(
         "\n".join(
             [
-                "Gender tags,Character(s) tags,Series tags,Rating tags,General tags,Qulity tags,Type",
-                '"1girl,","amiya,","arknights,","safe,","solo,","masterpiece,",',
+                "Gender tags,Character(s) tags,Series tags,Rating tags,General tags,Type",
+                '"1girl,","amiya,","arknights,","safe,","solo,",',
             ]
         )
         + "\n",
@@ -58,3 +60,22 @@ def test_convert_x_csv_to_yaml_fallbacks_when_columns_empty_or_missing(
     item = payload["items"][0]
     assert item["info"]["type"] == "sfw"
     assert item["description"] == {"zh": "", "en": ""}
+
+
+def test_convert_x_csv_to_yaml_rejects_legacy_quality_column(tmp_path: Path) -> None:
+    csv_path = tmp_path / "x.csv"
+    out_path = tmp_path / "x.yaml"
+
+    csv_path.write_text(
+        "\n".join(
+            [
+                "Gender tags,Character(s) tags,Series tags,Rating tags,General tags,Qulity tags,Type",
+                '"1girl,","amiya,","arknights,","safe,","solo,","masterpiece,",normal',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Qulity tags"):
+        convert_csv_to_yaml(csv_path, out_path, schema="", item_type="sfw")

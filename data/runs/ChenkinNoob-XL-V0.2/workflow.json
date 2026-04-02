@@ -8,12 +8,12 @@
       "id": 1,
       "type": "CheckpointLoaderSimple",
       "pos": [
-        136.0665070530448,
-        130.64866140603715
+        111.72208037500707,
+        107.20721775061114
       ],
       "size": [
-        378,
-        130.65625
+        315,
+        98
       ],
       "flags": {},
       "order": 0,
@@ -65,12 +65,12 @@
       "id": 6,
       "type": "EmptyLatentImage",
       "pos": [
-        131.30053125937945,
-        343.7999712948369
+        107.75047296864385,
+        284.83330326272426
       ],
       "size": [
-        392.546875,
-        392
+        327.1306978339446,
+        106
       ],
       "flags": {},
       "order": 1,
@@ -97,8 +97,8 @@
         }
       },
       "widgets_values": [
-        1024,
-        1536,
+        832,
+        1216,
         1
       ]
     },
@@ -106,12 +106,12 @@
       "id": 4,
       "type": "CLIPTextEncode",
       "pos": [
-        537.3898028759843,
-        559.1667533771008
+        446.1581625831016,
+        464.30561844519883
       ],
       "size": [
-        713.78125,
-        203.171875
+        594.8283821079091,
+        169.32261254949572
       ],
       "flags": {},
       "order": 3,
@@ -152,12 +152,12 @@
       "id": 3,
       "type": "CLIPTextEncode",
       "pos": [
-        540.1193446353866,
-        129.22251744561783
+        448.43281145329763,
+        106.01876000445132
       ],
       "size": [
-        716.8125,
-        343.34375
+        597.3467653871982,
+        286.13218866537187
       ],
       "flags": {},
       "order": 2,
@@ -191,19 +191,19 @@
         }
       },
       "widgets_values": [
-        "very awa, masterpiece, best quality, year 2025, newest, highres, absurdres, nsfw,\n[[nyalia]], [[[[ask \\(askzy\\)]]]], [[[wlop]]], (chyoel),\n1girl, ho'olheyak \\(arknights\\), arknights,\nsolo, cowboy shot,\nnight,\nnude, cross pasties, pussy, large breasts,\nwhite thighhighs, trench coat, tongue out, one hand in pocket, v sign, leaning on wall,"
+        "aris_\\(blue_archive\\), 1girl, solo, long_hair, looking_at_viewer, smile, open_mouth, blue_eyes, simple_background, skirt, black_hair, hair_ornament, white_background, gloves, dress, thighhighs, hat, holding, bow, very_long_hair, heart, hair_bow, cowboy_shot, pleated_skirt, frills, one_eye_closed, sleeveless, alternate_costume, choker, hairclip, fang, white_gloves, bowtie, fingerless_gloves, white_thighhighs, halo, side_ponytail, thigh_strap, black_choker, white_headwear, blue_bow, garter_straps, frilled_skirt, single_thighhigh, microphone, corset, top_hat, blue_bowtie, mini_hat, absurdly_long_hair, holding_microphone, layered_skirt, idol, mini_top_hat, green_halo, single_garter_strap"
       ]
     },
     {
       "id": 5,
       "type": "KSampler",
       "pos": [
-        1274.1269869560374,
-        134.55601419755465
+        1060.1058769756232,
+        110.46333145240676
       ],
       "size": [
-        596.796875,
-        623.5
+        497.3422579951116,
+        519.5854551933282
       ],
       "flags": {},
       "order": 4,
@@ -255,12 +255,12 @@
         }
       },
       "widgets_values": [
-        192578239079048,
+        1076196490840423,
         "randomize",
         28,
         4.5,
         "euler",
-        "normal",
+        "karras",
         1
       ]
     },
@@ -268,12 +268,12 @@
       "id": 7,
       "type": "VAEDecode",
       "pos": [
-        1895.2388873039686,
-        136.89923361835474
+        1577.69900357515,
+        112.41602707945133
       ],
       "size": [
-        252,
-        72
+        210,
+        46
       ],
       "flags": {},
       "order": 5,
@@ -318,12 +318,12 @@
       "id": 9,
       "type": "SaveImage",
       "pos": [
-        1897.9575467439736,
-        238.988352327288
+        1579.9645533724533,
+        197.4902772332569
       ],
       "size": [
-        513.6875,
-        525.046875
+        428.0758417320353,
+        437.5416542212504
       ],
       "flags": {},
       "order": 6,
@@ -348,7 +348,7 @@
         }
       },
       "widgets_values": [
-        "%date:yyyy-MM-dd%/ComfyUI"
+        "ComfyUI"
       ]
     }
   ],
@@ -431,10 +431,10 @@
       "id": 1,
       "title": "模型加载",
       "bounding": [
-        125.86558591972599,
-        43.680306725004165,
-        405.48646946918836,
-        218.17062402631072
+        103.22132159977167,
+        34.73358893750347,
+        337.90539122432364,
+        181.80885335525895
       ],
       "color": "#3f789e",
       "font_size": 24,
@@ -444,10 +444,10 @@
       "id": 2,
       "title": "正向提示词",
       "bounding": [
-        533.0001010852869,
-        43.59201425351362,
-        728.1970656194543,
-        430.76445577013726
+        442.50008423773915,
+        34.660011877928014,
+        606.8308880162119,
+        358.9703798084477
       ],
       "color": "#3f789e",
       "font_size": 24,
@@ -457,10 +457,10 @@
       "id": 3,
       "title": "生成参数",
       "bounding": [
-        126.00594692320126,
-        263.5701919681573,
-        405.2882635594154,
-        210.71359571755752
+        103.33828910266772,
+        217.97515997346443,
+        337.74021963284616,
+        175.5946630979646
       ],
       "color": "#3f789e",
       "font_size": 24,
@@ -470,10 +470,10 @@
       "id": 4,
       "title": "反向提示词",
       "bounding": [
-        533.0796554880123,
-        475.97147806643574,
-        727.9432634638483,
-        294.9187456021842
+        442.5663795733436,
+        394.9762317220298,
+        606.6193862198736,
+        245.76562133515347
       ],
       "color": "#3f789e",
       "font_size": 24,
@@ -483,10 +483,10 @@
       "id": 5,
       "title": "生成图像",
       "bounding": [
-        1262.6866528682829,
-        43.56367749968445,
-        619.6875221386573,
-        727.4248181237901
+        1050.572210723569,
+        34.63639791640371,
+        516.4062684488811,
+        606.1873484364918
       ],
       "color": "#3f789e",
       "font_size": 24,
@@ -496,10 +496,10 @@
       "id": 6,
       "title": "保存图像",
       "bounding": [
-        1884.116366291598,
-        43.65096037586744,
-        538.8413143664543,
-        727.5669027872166
+        1568.4303052429984,
+        34.709133646556204,
+        449.0344286387119,
+        606.3057523226805
       ],
       "color": "#3f789e",
       "font_size": 24,
@@ -511,14 +511,14 @@
     "ds": {
       "scale": 0.7627768444385485,
       "offset": [
-        851.3109771113959,
-        286.696255142619
+        46.35733375330158,
+        172.6393056765696
       ]
     },
-    "workflowRendererVersion": "Vue",
+    "workflowRendererVersion": "LG",
     "ue_links": [],
     "links_added_by_ue": [],
-    "frontendVersion": "1.41.20"
+    "frontendVersion": "1.34.9"
   },
   "version": 0.4
 }

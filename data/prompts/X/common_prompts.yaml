@@ -22,23 +22,12 @@ items:
           weight: 1.0
         - text: looking at viewer
           weight: 1.0
-      quality:
-        - text: masterpiece
-          weight: 1.0
-        - text: high score
-          weight: 1.0
-        - text: great score
-          weight: 1.0
-        - text: absurdres
-          weight: 1.0
-        - text: year 2025
-          weight: 1.0
     info:
       index: 0
       type: normal
     description:
-      zh: ""
-      en: ""
+      zh: 阿米娅半身构图示例
+      en: Amiya half-body composition sample
   - tags:
       gender:
         - text: 1girl
@@ -71,23 +60,12 @@ items:
           weight: 1.0
         - text: drinking straw in mouth
           weight: 1.0
-      quality:
-        - text: masterpiece
-          weight: 1.0
-        - text: high score
-          weight: 1.0
-        - text: great score
-          weight: 1.0
-        - text: absurdres
-          weight: 1.0
-        - text: year 2025
-          weight: 1.0
     info:
       index: 1
       type: normal
     description:
-      zh: ""
-      en: ""
+      zh: 能天使街景饮品示例
+      en: Exusiai street drink sample
   - tags:
       gender:
         - text: 1girl
@@ -126,23 +104,12 @@ items:
           weight: 1.0
         - text: city lights
           weight: 1.0
-      quality:
-        - text: masterpiece
-          weight: 1.0
-        - text: high score
-          weight: 1.0
-        - text: great score
-          weight: 1.0
-        - text: absurdres
-          weight: 1.0
-        - text: year 2025
-          weight: 1.0
     info:
       index: 2
       type: advance
     description:
-      zh: ""
-      en: ""
+      zh: 缪尔赛思雨夜街头示例
+      en: Muelsyse rainy night street sample
   - tags:
       gender:
         - text: 1girl
@@ -162,17 +129,6 @@ items:
         - text: cowboy shot
           weight: 1.0
         - text: simple background
-          weight: 1.0
-      quality:
-        - text: masterpiece
-          weight: 1.0
-        - text: high score
-          weight: 1.0
-        - text: great score
-          weight: 1.0
-        - text: absurdres
-          weight: 1.0
-        - text: year 2025
           weight: 1.0
     info:
       index: 3
@@ -203,17 +159,6 @@ items:
           weight: 1.0
         - text: simple background
           weight: 1.0
-      quality:
-        - text: masterpiece
-          weight: 1.0
-        - text: high score
-          weight: 1.0
-        - text: great score
-          weight: 1.0
-        - text: absurdres
-          weight: 1.0
-        - text: year 2025
-          weight: 1.0
     info:
       index: 4
       type: advance
@@ -242,17 +187,6 @@ items:
         - text: cowboy shot
           weight: 1.0
         - text: simple background
-          weight: 1.0
-      quality:
-        - text: masterpiece
-          weight: 1.0
-        - text: high score
-          weight: 1.0
-        - text: great score
-          weight: 1.0
-        - text: absurdres
-          weight: 1.0
-        - text: year 2025
           weight: 1.0
     info:
       index: 5
@@ -288,17 +222,6 @@ items:
         - text: holding hands
           weight: 1.0
         - text: front view
-          weight: 1.0
-      quality:
-        - text: masterpiece
-          weight: 1.0
-        - text: high score
-          weight: 1.0
-        - text: great score
-          weight: 1.0
-        - text: absurdres
-          weight: 1.0
-        - text: year 2025
           weight: 1.0
     info:
       index: 6
@@ -368,17 +291,6 @@ items:
           weight: 1.0
         - text: dynamic pose
           weight: 1.0
-      quality:
-        - text: masterpiece
-          weight: 1.0
-        - text: high score
-          weight: 1.0
-        - text: great score
-          weight: 1.0
-        - text: absurdres
-          weight: 1.0
-        - text: year 2025
-          weight: 1.0
     info:
       index: 7
       type: nsfw
@@ -434,17 +346,6 @@ items:
         - text: spread legs
           weight: 1.0
         - text: smile
-          weight: 1.0
-      quality:
-        - text: masterpiece
-          weight: 1.0
-        - text: high score
-          weight: 1.0
-        - text: great score
-          weight: 1.0
-        - text: absurdres
-          weight: 1.0
-        - text: year 2025
           weight: 1.0
     info:
       index: 8
@@ -509,17 +410,6 @@ items:
         - text: blush
           weight: 1.0
         - text: ahegao
-          weight: 1.0
-      quality:
-        - text: masterpiece
-          weight: 1.0
-        - text: high score
-          weight: 1.0
-        - text: great score
-          weight: 1.0
-        - text: absurdres
-          weight: 1.0
-        - text: year 2025
           weight: 1.0
     info:
       index: 9

@@ -120,9 +120,9 @@ function isRunGridIndexData(value: unknown): value is RunGridIndexData {
   const x_columns = value.x_columns as unknown[];
   const xColumnsOk = x_columns.every((col) => {
     if (!isRecord(col)) return false;
-    const type = col["type"];
+    const type = col.type;
     const typeOk = typeof type === "string" || type === null;
-    const desc = col["description"];
+    const desc = col.description;
     const descOk = desc === null || isRecord(desc);
     return typeOk && descOk;
   });
@@ -132,7 +132,6 @@ function isRunGridIndexData(value: unknown): value is RunGridIndexData {
     (item) => typeof item === "number" && Number.isFinite(item) && item >= 0,
   );
 
-  // blurhash_cells is optional (best-effort), so we don't fail if missing
   const hasBlurhashCells = Array.isArray(value.blurhash_cells);
 
   return (

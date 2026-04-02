@@ -5,6 +5,7 @@ export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
 export type JsonObject = { [key: string]: JsonValue };
 
 export type ImageCategory = "normal" | "advance" | "nsfw";
+export type RunAssetRole = "cover" | "homepage_card";
 
 export type ImageVariantName =
   | "display_webp"
@@ -15,6 +16,7 @@ export type ImageVariantName =
 export type R2Bucket = "public" | "private";
 
 export interface SupabaseRunRow {
+  id?: string | null;
   run_id?: string | null;
   run_dir: string;
   created_at: string;
@@ -48,6 +50,30 @@ export interface SupabaseImageRow {
 }
 
 export interface SupabaseImageVariantRow {
+  variant: ImageVariantName;
+  bucket: R2Bucket;
+  r2_key: string;
+  content_type: string;
+}
+
+export interface SupabaseRunAssetRow {
+  id?: string | null;
+  run_id?: string | null;
+  asset_role: RunAssetRole;
+  asset_index: number;
+  source_path: string;
+  source_sha256: string;
+  width?: number | null;
+  height?: number | null;
+  blurhash: string | null;
+  blurhash_width?: number | null;
+  blurhash_height?: number | null;
+  metadata: JsonObject;
+}
+
+export interface SupabaseRunAssetVariantRow {
+  id?: string | null;
+  run_asset_id?: string | null;
   variant: ImageVariantName;
   bucket: R2Bucket;
   r2_key: string;

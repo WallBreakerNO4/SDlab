@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import logging
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
@@ -43,6 +44,7 @@ from .upload_io import (
 from .variants import inspect_image_metadata, plan_image_variants
 
 LOG = logging.getLogger(__name__)
+_RUN_ASSET_PUBLIC_BUCKET: BucketScope = "public"
 
 
 def _int_with_default(value: object, *, default: int = 0) -> int:
@@ -254,6 +256,386 @@ def _build_image_db_fields(metadata_record: dict[str, object]) -> dict[str, obje
         fields["y_value"] = y_value
 
     return fields
+
+
+def _assets_from_run_json(run_json: dict[str, object]) -> dict[str, object] | None:
+    return _json_object(run_json.get("assets"))
+
+
+def _resolve_run_asset_source_path(asset: dict[str, object]) -> Path:
+    direct_path = _non_empty_str(asset.get("path"))
+    if direct_path is not None:
+        candidate = Path(direct_path)
+        if candidate.exists() and candidate.is_file():
+            return candidate.resolve()
+
+    repo_relative_path = _non_empty_str(asset.get("repo_relative_path"))
+    if repo_relative_path is not None:
+        repo_root = Path.cwd().resolve()
+        candidate = (repo_root / repo_relative_path).resolve()
+        if not candidate.is_relative_to(repo_root):
+            raise ValueError(f"run 级静态资源路径越界: {repo_relative_path}")
+        if candidate.exists() and candidate.is_file():
+            return candidate
+
+    raise ValueError("run 级静态资源文件不存在")
+
+
+def _resolve_run_asset_source_label(asset: dict[str, object], source_path: Path) -> str:
+    repo_relative_path = _non_empty_str(asset.get("repo_relative_path"))
+    if repo_relative_path is not None:
+        return repo_relative_path
+    return source_path.name
+
+
+def _validate_run_asset_sha256(asset: dict[str, object], *, actual_sha256: str) -> None:
+    expected_sha256 = _non_empty_str(asset.get("sha256"))
+    if expected_sha256 is not None and expected_sha256 != actual_sha256:
+        raise ValueError(
+            f"run 级静态资源 sha256 校验失败: expected={expected_sha256}, actual={actual_sha256}"
+        )
+
+
+def _sanitize_run_json_for_persistence(
+    run_json: dict[str, object],
+) -> dict[str, object]:
+    persisted: dict[str, object] = {}
+    for key in (
+        "run_id",
+        "run_key",
+        "created_at",
+        "dry_run",
+        "run_dir",
+        "config_schema_version",
+        "config_path",
+        "config_sha256",
+        "x_json_sha256",
+        "y_json_sha256",
+        "model",
+        "template",
+        "base_seed",
+        "seed_strategy",
+        "workflow_api_sha256",
+        "workflow_download_sha256",
+        "workflow_status",
+        "selected_ksampler_node_id",
+        "selection",
+        "generation_overrides",
+        "config_snapshot",
+    ):
+        value = run_json.get(key)
+        if value is not None:
+            persisted[key] = copy.deepcopy(value)
+
+    assets = _assets_from_run_json(run_json)
+    if assets is not None:
+        persisted["assets"] = _sanitize_asset_snapshot(assets)
+
+    return persisted
+
+
+def _sanitize_asset_snapshot(assets: dict[str, object]) -> dict[str, object]:
+    sanitized: dict[str, object] = {}
+    cover_image = _json_object(assets.get("cover_image"))
+    if cover_image is not None:
+        sanitized_cover = _sanitize_asset_ref(cover_image)
+        if sanitized_cover is not None:
+            sanitized["cover_image"] = sanitized_cover
+
+    homepage_images = [
+        sanitized_asset
+        for asset in _json_object_list(assets.get("homepage_images"))
+        if (sanitized_asset := _sanitize_asset_ref(asset)) is not None
+    ]
+    if homepage_images:
+        sanitized["homepage_images"] = homepage_images
+    return sanitized
+
+
+def _sanitize_asset_ref(asset: dict[str, object]) -> dict[str, object] | None:
+    repo_relative_path = _non_empty_str(asset.get("repo_relative_path"))
+    sha256 = _non_empty_str(asset.get("sha256"))
+    if repo_relative_path is None and sha256 is None:
+        return None
+
+    sanitized: dict[str, object] = {}
+    if repo_relative_path is not None:
+        sanitized["repo_relative_path"] = repo_relative_path
+    if sha256 is not None:
+        sanitized["sha256"] = sha256
+    return sanitized
+
+
+def _collect_public_variant_payloads(
+    *,
+    run_dir_name: str,
+    run_intermediate_dir: Path,
+    image_path: Path,
+    batch_index: int,
+    original_sha256: str,
+    uploads: list[PlannedUpload],
+    variant_rows: list[dict[str, object]],
+    cached_variant_paths: dict[str, Path],
+    all_cached: bool,
+    plan_image_variants_fn: Callable[[Path], list[dict[str, object]]],
+    inspect_image_metadata_fn: Callable[[Path], dict[str, object]],
+) -> tuple[int | None, int | None, str | None, int | None, int | None]:
+    blurhash_value: str | None = None
+    blurhash_width: int | None = None
+    blurhash_height: int | None = None
+    width: int | None = None
+    height: int | None = None
+
+    if all_cached:
+        metadata = inspect_image_metadata_fn(image_path)
+        display_width = cast(int, metadata["display_width"])
+        display_height = cast(int, metadata["display_height"])
+        thumb_width = cast(int, metadata["thumb_width"])
+        thumb_height = cast(int, metadata["thumb_height"])
+        blurhash_candidate = metadata.get("blurhash")
+        if isinstance(blurhash_candidate, str) and blurhash_candidate:
+            blurhash_value = blurhash_candidate
+        blurhash_width = cast(int | None, metadata.get("blurhash_width"))
+        blurhash_height = cast(int | None, metadata.get("blurhash_height"))
+        width = display_width
+        height = display_height
+
+        for variant_raw in _DERIVED_IMAGE_VARIANTS:
+            intermediate_path = cached_variant_paths[variant_raw]
+            key = object_key(run_dir_name, original_sha256, variant_raw)
+            upload = _build_variant_upload(
+                variant=variant_raw,
+                bucket_scope=_RUN_ASSET_PUBLIC_BUCKET,
+                key=key,
+                byte_size=intermediate_path.stat().st_size,
+                local_path=intermediate_path,
+            )
+            uploads.append(upload)
+
+            row_width = display_width
+            row_height = display_height
+            if variant_raw in {"thumb_webp", "thumb_avif"}:
+                row_width = thumb_width
+                row_height = thumb_height
+
+            cached_variant_payload: dict[str, object] = {
+                "variant": variant_raw,
+                "bucket": _RUN_ASSET_PUBLIC_BUCKET,
+                "r2_key": key,
+                "content_type": upload.content_type,
+                "cache_control": upload.cache_control,
+                "byte_size": upload.byte_size,
+                "sha256": _sha256_file(intermediate_path),
+                "width": row_width,
+                "height": row_height,
+            }
+            cached_variant_payload.update(_encoding_fields_for_variant(variant_raw))
+            variant_rows.append(cached_variant_payload)
+
+        return width, height, blurhash_value, blurhash_width, blurhash_height
+
+    derived_rows = plan_image_variants_fn(image_path)
+    for row in derived_rows:
+        kind = row.get("kind")
+        if kind == "blurhash":
+            value = row.get("value")
+            if isinstance(value, str) and value:
+                blurhash_value = value
+            candidate_width = row.get("hash_width")
+            candidate_height = row.get("hash_height")
+            if isinstance(candidate_width, int):
+                blurhash_width = candidate_width
+            if isinstance(candidate_height, int):
+                blurhash_height = candidate_height
+            continue
+
+        if kind != "image":
+            continue
+
+        variant_raw = row.get("variant")
+        body_bytes = row.get("bytes")
+        row_width = row.get("width")
+        row_height = row.get("height")
+
+        if not isinstance(variant_raw, str) or variant_raw not in _IMAGE_VARIANTS:
+            continue
+        if not isinstance(body_bytes, bytes):
+            continue
+        if isinstance(row_width, int) and isinstance(row_height, int):
+            if width is None:
+                width = row_width
+            if height is None:
+                height = row_height
+
+        intermediate_path, variant_sha256 = _write_intermediate_variant(
+            run_intermediate_dir=run_intermediate_dir,
+            original_sha256=original_sha256,
+            batch_index=batch_index,
+            variant=variant_raw,
+            body_bytes=body_bytes,
+        )
+        key = object_key(run_dir_name, original_sha256, variant_raw)
+        upload = _build_variant_upload(
+            variant=variant_raw,
+            bucket_scope=_RUN_ASSET_PUBLIC_BUCKET,
+            key=key,
+            byte_size=intermediate_path.stat().st_size,
+            local_path=intermediate_path,
+        )
+        uploads.append(upload)
+        derived_variant_payload: dict[str, object] = {
+            "variant": variant_raw,
+            "bucket": _RUN_ASSET_PUBLIC_BUCKET,
+            "r2_key": key,
+            "content_type": upload.content_type,
+            "cache_control": upload.cache_control,
+            "byte_size": upload.byte_size,
+            "sha256": variant_sha256,
+        }
+        if isinstance(row_width, int):
+            derived_variant_payload["width"] = row_width
+        if isinstance(row_height, int):
+            derived_variant_payload["height"] = row_height
+        derived_variant_payload.update(_encoding_fields_for_variant(variant_raw))
+        variant_rows.append(derived_variant_payload)
+
+    return width, height, blurhash_value, blurhash_width, blurhash_height
+
+
+def _build_run_asset_payload(
+    *,
+    run_dir_name: str,
+    run_intermediate_dir: Path,
+    asset: dict[str, object],
+    asset_role: str,
+    asset_index: int,
+    batch_index: int,
+    plan_image_variants_fn: Callable[
+        [Path], list[dict[str, object]]
+    ] = plan_image_variants,
+    inspect_image_metadata_fn: Callable[
+        [Path], dict[str, object]
+    ] = inspect_image_metadata,
+) -> tuple[dict[str, object], list[PlannedUpload]]:
+    source_path = _resolve_run_asset_source_path(asset)
+    source_sha256 = _sha256_file(source_path)
+    _validate_run_asset_sha256(asset, actual_sha256=source_sha256)
+    source_label = _resolve_run_asset_source_label(asset, source_path)
+
+    (
+        original_sha256,
+        uploads,
+        variant_rows,
+        cached_variant_paths,
+        all_cached,
+    ) = _prepare_image_payload_inputs(
+        run_dir_name=run_dir_name,
+        run_intermediate_dir=run_intermediate_dir,
+        image_path=source_path,
+        category="normal",
+        batch_index=batch_index,
+    )
+    if original_sha256 != source_sha256:
+        raise ValueError("run 级静态资源 sha256 计算不一致")
+
+    (
+        width,
+        height,
+        blurhash_value,
+        blurhash_width,
+        blurhash_height,
+    ) = _collect_public_variant_payloads(
+        run_dir_name=run_dir_name,
+        run_intermediate_dir=run_intermediate_dir,
+        image_path=source_path,
+        batch_index=batch_index,
+        original_sha256=original_sha256,
+        uploads=uploads,
+        variant_rows=variant_rows,
+        cached_variant_paths=cached_variant_paths,
+        all_cached=all_cached,
+        plan_image_variants_fn=plan_image_variants_fn,
+        inspect_image_metadata_fn=inspect_image_metadata_fn,
+    )
+
+    payload: dict[str, object] = {
+        "asset_role": asset_role,
+        "asset_index": asset_index,
+        "source_path": source_label,
+        "source_sha256": source_sha256,
+        "metadata": {
+            "repo_relative_path": _non_empty_str(asset.get("repo_relative_path")),
+            "source_filename": source_path.name,
+        },
+        "variants": variant_rows,
+    }
+    if width is not None:
+        payload["width"] = width
+    if height is not None:
+        payload["height"] = height
+    if blurhash_value is not None:
+        payload["blurhash"] = blurhash_value
+    if blurhash_width is not None:
+        payload["blurhash_width"] = blurhash_width
+    if blurhash_height is not None:
+        payload["blurhash_height"] = blurhash_height
+    return payload, uploads
+
+
+def _build_run_asset_payloads(
+    *,
+    run_json: dict[str, object],
+    run_dir_name: str,
+    run_intermediate_dir: Path,
+    plan_image_variants_fn: Callable[
+        [Path], list[dict[str, object]]
+    ] = plan_image_variants,
+    inspect_image_metadata_fn: Callable[
+        [Path], dict[str, object]
+    ] = inspect_image_metadata,
+) -> tuple[list[dict[str, object]], list[PlannedUpload]]:
+    assets = _assets_from_run_json(run_json)
+    if assets is None:
+        return [], []
+
+    asset_rows: list[dict[str, object]] = []
+    uploads: list[PlannedUpload] = []
+    batch_index = 1_000_000
+
+    cover_image = _json_object(assets.get("cover_image"))
+    if cover_image is not None:
+        cover_payload, cover_uploads = _build_run_asset_payload(
+            run_dir_name=run_dir_name,
+            run_intermediate_dir=run_intermediate_dir,
+            asset=cover_image,
+            asset_role="cover",
+            asset_index=0,
+            batch_index=batch_index,
+            plan_image_variants_fn=plan_image_variants_fn,
+            inspect_image_metadata_fn=inspect_image_metadata_fn,
+        )
+        asset_rows.append(cover_payload)
+        uploads.extend(cover_uploads)
+        batch_index += 1
+
+    for asset_index, homepage_asset in enumerate(
+        _json_object_list(assets.get("homepage_images"))
+    ):
+        homepage_payload, homepage_uploads = _build_run_asset_payload(
+            run_dir_name=run_dir_name,
+            run_intermediate_dir=run_intermediate_dir,
+            asset=homepage_asset,
+            asset_role="homepage_card",
+            asset_index=asset_index,
+            batch_index=batch_index,
+            plan_image_variants_fn=plan_image_variants_fn,
+            inspect_image_metadata_fn=inspect_image_metadata_fn,
+        )
+        asset_rows.append(homepage_payload)
+        uploads.extend(homepage_uploads)
+        batch_index += 1
+
+    return asset_rows, uploads
 
 
 def _normalize_category(raw_value: object, override: Category | None) -> Category:
@@ -645,10 +1027,22 @@ def _build_run_plan(
             images_rows.append(image_payload)
             image_uploads.extend(uploads)
 
+    run_assets_rows, run_asset_uploads = _build_run_asset_payloads(
+        run_json=run_json,
+        run_dir_name=run_dir_name,
+        run_intermediate_dir=run_intermediate_dir,
+        plan_image_variants_fn=plan_image_variants_fn,
+        inspect_image_metadata_fn=inspect_image_metadata_fn,
+    )
+    image_uploads.extend(run_asset_uploads)
+
+    persisted_run_json = _sanitize_run_json_for_persistence(run_json)
+
     db_payload: dict[str, object] = {
         "run_dir": run_dir_name,
-        "run_json": run_json,
+        "run_json": persisted_run_json,
         "images": images_rows,
+        "run_assets": run_assets_rows,
     }
     db_payload.update(_build_run_db_fields(run_json, run_dir_name=run_dir_name))
 
@@ -804,17 +1198,37 @@ def _build_plans(
 def _dry_run_summary(plans: list[RunPlan]) -> dict[str, object]:
     planned_uploads: list[dict[str, object]] = []
     manifest_keys: dict[str, list[str]] = {"public": [], "private": []}
-    planned_variants = 0
-    processed_images = 0
+    planned_grid_image_variant_uploads = 0
+    planned_run_asset_variant_uploads = 0
+    planned_artifact_uploads = 0
+    planned_manifest_uploads = 0
+    processed_grid_images = 0
 
     for plan in plans:
-        processed_images += plan.processed_images
-        planned_variants += len(plan.image_uploads)
+        processed_grid_images += plan.processed_images
+        images_raw = plan.upload_index_payload.get("images")
+        images_list = images_raw if isinstance(images_raw, list) else []
+        for image in images_list:
+            if not isinstance(image, dict):
+                continue
+            variants_raw = image.get("variants")
+            variants_list = variants_raw if isinstance(variants_raw, list) else []
+            planned_grid_image_variant_uploads += len(variants_list)
+        run_assets_raw = plan.upload_index_payload.get("run_assets")
+        run_assets_list = run_assets_raw if isinstance(run_assets_raw, list) else []
+        for run_asset in run_assets_list:
+            if not isinstance(run_asset, dict):
+                continue
+            variants_raw = run_asset.get("variants")
+            variants_list = variants_raw if isinstance(variants_raw, list) else []
+            planned_run_asset_variant_uploads += len(variants_list)
         for upload in plan.image_uploads:
             planned_uploads.append(upload.to_safe_json())
         for artifact_upload in plan.artifact_uploads:
+            planned_artifact_uploads += 1
             planned_uploads.append(artifact_upload.to_safe_json())
         for manifest_upload in plan.manifest_uploads:
+            planned_manifest_uploads += 1
             planned_uploads.append(manifest_upload.to_safe_json())
             manifest_keys[manifest_upload.bucket_scope].append(manifest_upload.key)
 
@@ -823,8 +1237,12 @@ def _dry_run_summary(plans: list[RunPlan]) -> dict[str, object]:
         "run_count": len(plans),
         "run_dirs": [plan.run_dir_name for plan in plans],
         "intermediate_dirs": [str(plan.intermediate_dir) for plan in plans],
-        "processed_images": processed_images,
-        "planned_variants": planned_variants,
+        "processed_grid_images": processed_grid_images,
+        "planned_grid_image_variant_uploads": planned_grid_image_variant_uploads,
+        "planned_run_asset_variant_uploads": planned_run_asset_variant_uploads,
+        "planned_artifact_uploads": planned_artifact_uploads,
+        "planned_manifest_uploads": planned_manifest_uploads,
+        "planned_total_uploads": len(planned_uploads),
         "planned_uploads": planned_uploads,
         "manifest_keys": manifest_keys,
     }

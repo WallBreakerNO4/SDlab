@@ -18,7 +18,7 @@ model:
   description:
     zh: 使用仓库内置 ComfyUI workflow 与示例 prompts 的可运行配置
     en: Runnable example config using the repository workflow and sample prompts
-# Prompt 资产路径：X 轴通常是角色/质量等结构化 prompt 表，Y 轴通常是风格/artist 等单列 prompt 表。
+# Prompt 资产路径：X 轴通常是角色等结构化 prompt 表，Y 轴通常是风格/artist 等单列 prompt 表。
 # 这里的路径必须是仓库相对路径，且文件必须实际存在；支持 .yaml/.yml/.json。
 prompts:
   # X 轴 prompt 表路径。
@@ -28,17 +28,15 @@ prompts:
 
 # ComfyUI workflow 模板配置。
 workflow:
-  # Workflow JSON 路径；必须是仓库相对路径，且扩展名必须为 .json。
-  path: data/comfyui-flow/api-json/CKNOOBRF.json
-  download_path: data/comfyui-flow/workflow-json/CKNOOBRF.json
   # 要注入参数的 KSampler 节点 ID；如果 workflow 里有多个 KSampler，通常需要显式指定。
-  ksampler_node_id: "6"
+  ksampler_node_id: null
 
 # 生成参数：template/base_seed 为必填；其余项用于覆盖 workflow 内默认值。
 # 如果某个字段填 null，就尽量回退到 workflow 里的默认参数。
 generation:
-  # 正向 prompt 拼装模板；只支持 {gender} / {characters} / {series} / {rating} / {y} / {general} / {quality} 这些占位符。
+  # 正向 prompt 拼装模板；只支持 {quality} / {gender} / {characters} / {series} / {rating} / {y} / {general} 这些占位符。
   template: "{quality}{rating}{y}{gender}{characters}{series}{general}"
+  quality_prompt: "masterpiece,high score,great score,absurdres,year 2025,"
   # 基础种子；每个网格单元会基于 base_seed + x/y 索引派生稳定 seed。
   base_seed: 123
   # 基础负面提示词；设为 null 时优先使用 workflow 中自带的 negative prompt。
@@ -46,9 +44,9 @@ generation:
   # 追加到基础负面提示词后面的内容；常用于统一补一段安全/质量相关负面词。
   append_negative_prompt: "nsfw, nipples, pussy, nude,"
   # 输出宽度；覆盖 workflow 的 latent width。
-  width: 1024
+  width: 832
   # 输出高度；覆盖 workflow 的 latent height。
-  height: 1536
+  height: 1216
   # 单次生成张数；覆盖 workflow 的 batch_size。
   batch_size: 1
   # 采样步数；覆盖 KSampler.steps。

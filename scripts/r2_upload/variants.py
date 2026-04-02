@@ -84,13 +84,17 @@ def inspect_image_metadata(image_path: Path) -> dict[str, object]:
             Image.Resampling.LANCZOS,
         ),
     )
-    blurhash_value, _, _ = _compute_blurhash_from_thumb(thumb)
+    blurhash_value, blurhash_width, blurhash_height = _compute_blurhash_from_thumb(
+        thumb
+    )
     return {
         "display_width": display_width,
         "display_height": display_height,
         "thumb_width": thumb.width,
         "thumb_height": thumb.height,
         "blurhash": blurhash_value,
+        "blurhash_width": blurhash_width,
+        "blurhash_height": blurhash_height,
     }
 
 

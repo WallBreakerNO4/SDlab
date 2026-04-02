@@ -23,25 +23,29 @@ def _sha256_file(path: Path) -> str:
 
 
 def _write_png(path: Path, *, size: tuple[int, int] = (8, 6)) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     image = Image.new("RGB", size, (10, 20, 30))
     image.save(path, format="PNG")
 
 
 def _extended_run_json(
-    *, run_dir: Path, run_dir_value: str | None = None
+    *,
+    run_dir: Path,
+    run_dir_value: str | None = None,
+    include_run_assets: bool = False,
 ) -> dict[str, object]:
     run_name = run_dir_value if run_dir_value is not None else run_dir.name
     run_dir.mkdir(parents=True, exist_ok=True)
-    workflow_download_path = run_dir / "workflow-download.json"
+    workflow_download_path = run_dir / "workflow.json"
     workflow_download_path.write_text('{"version": 1}\n', encoding="utf-8")
     workflow_download_sha256 = _sha256_file(workflow_download_path)
-    return {
+    payload: dict[str, object] = {
         "run_id": run_name,
         "run_key": run_name,
         "run_dir": run_name,
         "dry_run": False,
         "config_schema_version": "image-run-config/v1",
-        "config_path": "data/runs/example.yaml",
+        "config_path": "data/runs/example/config.yaml",
         "config_sha256": "deadbeef" * 8,
         "model": {
             "key": "chenkinnoob-xl-rf",
@@ -65,14 +69,15 @@ def _extended_run_json(
                 "y_sha256": "b" * 64,
             },
             "workflow": {
-                "path": "data/comfyui-flow/api-json/CKNOOBRF.json",
-                "sha256": "c" * 64,
-                "download_path": "data/comfyui-flow/workflow-json/CKNOOBRF.json",
+                "api_path": "data/runs/example/api.json",
+                "api_sha256": "c" * 64,
+                "download_path": "data/runs/example/workflow.json",
                 "download_sha256": workflow_download_sha256,
                 "ksampler_node_id": "6",
             },
             "generation": {
-                "template": "{gender}{characters}{series}{rating}{y}{general}{quality}",
+                "template": "{quality}{rating}{y}{gender}{characters}{series}{general}",
+                "quality_prompt": "masterpiece, best quality,",
                 "base_seed": 123,
                 "negative_prompt": None,
                 "append_negative_prompt": "nsfw, nipples, pussy, nude,",
@@ -95,6 +100,22 @@ def _extended_run_json(
         "workflow_download_path": str(workflow_download_path),
         "workflow_download_sha256": workflow_download_sha256,
     }
+    if include_run_assets:
+        cover_path = ROOT / "data/runs/example/image.jpg"
+        homepage_path = ROOT / "data/runs/example/images/1021-832x1216.jpg"
+        payload["assets"] = {
+            "cover_image": {
+                "repo_relative_path": "data/runs/example/image.jpg",
+                "sha256": _sha256_file(cover_path),
+            },
+            "homepage_images": [
+                {
+                    "repo_relative_path": "data/runs/example/images/1021-832x1216.jpg",
+                    "sha256": _sha256_file(homepage_path),
+                }
+            ],
+        }
+    return payload
 
 
 def _write_run_fixture(
@@ -103,6 +124,7 @@ def _write_run_fixture(
     run_name: str,
     use_multi_paths: bool = False,
     run_json_run_dir: str | None = None,
+    include_run_assets: bool = False,
 ) -> Path:
     run_dir = root / run_name
     images_dir = run_dir / "images"
@@ -130,7 +152,11 @@ def _write_run_fixture(
 
     (run_dir / "run.json").write_text(
         json.dumps(
-            _extended_run_json(run_dir=run_dir, run_dir_value=run_json_run_dir),
+            _extended_run_json(
+                run_dir=run_dir,
+                run_dir_value=run_json_run_dir,
+                include_run_assets=include_run_assets,
+            ),
             ensure_ascii=False,
         ),
         encoding="utf-8",
@@ -175,8 +201,11 @@ def test_cli_dry_run_outputs_required_keys_and_manifest_uploads(
     assert exit_code == 0
     payload = _read_stdout_json(capsys)
 
-    assert isinstance(payload.get("planned_variants"), int)
-    assert payload["planned_variants"] == 4
+    assert isinstance(payload.get("planned_grid_image_variant_uploads"), int)
+    assert payload["planned_grid_image_variant_uploads"] == 4
+    assert payload["planned_run_asset_variant_uploads"] == 0
+    assert payload["planned_artifact_uploads"] == 1
+    assert payload["planned_manifest_uploads"] == 2
 
     planned_uploads = payload.get("planned_uploads")
     assert isinstance(planned_uploads, list)
@@ -208,6 +237,36 @@ def test_cli_dry_run_outputs_required_keys_and_manifest_uploads(
     assert len(cast(list[object], manifest_keys["private"])) == 1
 
 
+def test_cli_dry_run_includes_cover_and_homepage_asset_variants(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_dir = _write_run_fixture(
+        tmp_path,
+        run_name="asset-run",
+        include_run_assets=True,
+    )
+
+    exit_code = main(["--dry-run", "--run-dir", str(run_dir)])
+
+    assert exit_code == 0
+    payload = _read_stdout_json(capsys)
+    assert payload.get("planned_grid_image_variant_uploads") == 4
+    assert payload.get("planned_run_asset_variant_uploads") == 8
+    assert payload.get("planned_artifact_uploads") == 1
+    assert payload.get("planned_manifest_uploads") == 2
+
+    planned_uploads = payload.get("planned_uploads")
+    assert isinstance(planned_uploads, list)
+    asset_keys = [
+        str(cast(dict[str, object], item).get("key"))
+        for item in planned_uploads
+        if isinstance(item, dict)
+    ]
+    assert any("display_webp.webp" in key for key in asset_keys)
+    assert any("thumb_avif.avif" in key for key in asset_keys)
+
+
 def test_build_run_db_fields_extracts_model_structured_fields(tmp_path: Path) -> None:
     run_dir = tmp_path / "model-run"
     fields = _build_run_db_fields(
@@ -221,7 +280,7 @@ def test_build_run_db_fields_extracts_model_structured_fields(tmp_path: Path) ->
     assert fields["model_homepage"] is None
     assert fields["model_huggingface"] is None
     assert fields["model_civitai"] is None
-    expected_sha256 = _sha256_file(run_dir / "workflow-download.json")
+    expected_sha256 = _sha256_file(run_dir / "workflow.json")
     assert fields["workflow_download_r2_key"] == (
         f"runs/model-run/artifacts/workflow/{expected_sha256}.json"
     )
@@ -248,7 +307,7 @@ def test_build_run_db_fields_workflow_key_changes_when_content_changes(
     payload = _extended_run_json(run_dir=run_dir)
     first_fields = _build_run_db_fields(payload, run_dir_name=run_dir.name)
 
-    workflow_download_path = run_dir / "workflow-download.json"
+    workflow_download_path = run_dir / "workflow.json"
     workflow_download_path.write_text('{"version": 2}\n', encoding="utf-8")
     new_sha256 = _sha256_file(workflow_download_path)
     payload["workflow_download_sha256"] = new_sha256
@@ -331,8 +390,8 @@ def test_cli_dry_run_limit_applies_to_resolved_metadata_paths(
 
     assert exit_code == 0
     payload = _read_stdout_json(capsys)
-    assert payload.get("processed_images") == 1
-    assert payload.get("planned_variants") == 4
+    assert payload.get("processed_grid_images") == 1
+    assert payload.get("planned_grid_image_variant_uploads") == 4
 
 
 def test_cli_run_dir_can_be_name_when_run_root_is_provided(
@@ -428,7 +487,7 @@ def test_cli_dry_run_reuses_cached_variants_without_reencoding(
     second_exit = main(["--dry-run", "--run-dir", str(run_dir)])
     assert second_exit == 0
     payload = _read_stdout_json(capsys)
-    assert payload.get("processed_images") == 1
+    assert payload.get("processed_grid_images") == 1
 
 
 def test_cli_uses_r2_image_workers_from_env(
@@ -443,7 +502,7 @@ def test_cli_uses_r2_image_workers_from_env(
 
     assert exit_code == 0
     payload = _read_stdout_json(capsys)
-    assert payload.get("processed_images") == 1
+    assert payload.get("processed_grid_images") == 1
 
 
 def test_cli_rejects_invalid_r2_image_workers_env(

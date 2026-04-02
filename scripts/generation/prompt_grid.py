@@ -10,13 +10,13 @@ MAX_SEED = 18446744073709519872
 X_INFO_TYPE_KEY = "_x_info_type"
 
 PROMPT_TEMPLATE_ORDER = (
+    "quality",
     "gender",
     "characters",
     "series",
     "rating",
     "y",
     "general",
-    "quality",
 )
 
 
@@ -78,11 +78,15 @@ def read_x_rows(path: str | Path) -> list[dict[str, str]]:
         item = cast(dict[str, object], item_obj)
         tags_obj = item.get("tags")
         tags = cast(dict[str, object], tags_obj) if isinstance(tags_obj, dict) else {}
+        if "quality" in tags:
+            raise ValueError(
+                "X prompt 资产中的 tags.quality 已移除；请改用 generation.quality_prompt"
+            )
         info_obj = item.get("info")
         info = cast(dict[str, object], info_obj) if isinstance(info_obj, dict) else {}
 
         mapped_row: dict[str, str] = {}
-        for key in ["gender", "characters", "series", "rating", "general", "quality"]:
+        for key in ["gender", "characters", "series", "rating", "general"]:
             mapped_row[key] = _render_weighted_tags(tags.get(key, []))
 
         info_type_obj = info.get("type")
@@ -157,15 +161,17 @@ def read_y_rows(
     return rows
 
 
-def render_positive_prompt(x_row: Mapping[str, str], y_value: str) -> str:
+def render_positive_prompt(
+    x_row: Mapping[str, str], y_value: str, quality_prompt: str | None = None
+) -> str:
     segments = {
+        "quality": quality_prompt or "",
         "gender": x_row.get("gender", ""),
         "characters": x_row.get("characters", ""),
         "series": x_row.get("series", ""),
         "rating": x_row.get("rating", ""),
         "y": y_value,
         "general": x_row.get("general", ""),
-        "quality": x_row.get("quality", ""),
     }
     rendered: list[str] = []
     for key in PROMPT_TEMPLATE_ORDER:
@@ -202,9 +208,10 @@ def build_prompt_cell(
     base_seed: int,
     x_index: int,
     y_index: int,
+    quality_prompt: str | None = None,
 ) -> dict[str, str | int]:
     y_value = y_row if isinstance(y_row, str) else y_row.get("y", "")
-    positive_prompt = render_positive_prompt(x_row, y_value)
+    positive_prompt = render_positive_prompt(x_row, y_value, quality_prompt)
     return {
         "positive_prompt": positive_prompt,
         "prompt_hash": compute_prompt_hash(positive_prompt),

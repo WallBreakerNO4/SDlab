@@ -203,6 +203,9 @@ class SupabaseWriter:
             run_dir = required_str(payload, "run_dir")
             run_json = required_json_object(payload, "run_json")
             images = optional_object_list(payload.get("images"), field="images")
+            run_assets = optional_object_list(
+                payload.get("run_assets"), field="run_assets"
+            )
         except PayloadValidationError as exc:
             raise _to_argument_error(exc) from exc
 
@@ -260,6 +263,52 @@ class SupabaseWriter:
                 variant_rows.append(row)
                 _tick_progress()
         self._upsert_variants_batch(variant_rows)
+
+        run_asset_rows: list[dict[str, object]] = []
+        run_asset_contexts: list[dict[str, object]] = []
+        run_asset_variant_lists: list[list[Mapping[str, object]]] = []
+        run_asset_lookup_keys: list[tuple[object, object, object]] = []
+        for run_asset in run_assets:
+            try:
+                row, context, lookup_key, variants = self._build_run_asset_row(
+                    run_id,
+                    run_asset,
+                    run_dir=run_dir,
+                )
+            except PayloadValidationError as exc:
+                raise _to_argument_error(exc) from exc
+            run_asset_rows.append(row)
+            run_asset_contexts.append(context)
+            run_asset_variant_lists.append(variants)
+            run_asset_lookup_keys.append(lookup_key)
+        run_asset_ids_by_key = self._upsert_run_assets_batch(run_asset_rows)
+        run_asset_variant_rows: list[dict[str, object]] = []
+        for index, variants in enumerate(run_asset_variant_lists):
+            lookup_key = run_asset_lookup_keys[index]
+            run_asset_id = run_asset_ids_by_key.get(lookup_key)
+            if run_asset_id is None:
+                run_asset_id = self._lookup_id(
+                    table_name="run_assets",
+                    filters=(
+                        ("run_id", run_id),
+                        ("asset_role", lookup_key[1]),
+                        ("asset_index", lookup_key[2]),
+                    ),
+                    context=run_asset_contexts[index],
+                )
+            _tick_progress()
+            for variant in variants:
+                try:
+                    row = self._build_run_asset_variant_row(
+                        run_asset_id,
+                        variant,
+                        run_dir=run_dir,
+                    )
+                except PayloadValidationError as exc:
+                    raise _to_argument_error(exc) from exc
+                run_asset_variant_rows.append(row)
+                _tick_progress()
+        self._upsert_run_asset_variants_batch(run_asset_variant_rows)
 
     def _build_run_row(
         self,
@@ -448,6 +497,76 @@ class SupabaseWriter:
             row["sha256"] = sha256
         return row
 
+    def _build_run_asset_row(
+        self,
+        run_id: str,
+        run_asset: Mapping[str, object],
+        *,
+        run_dir: str,
+    ) -> tuple[
+        dict[str, object],
+        dict[str, object],
+        tuple[object, object, object],
+        list[Mapping[str, object]],
+    ]:
+        asset_role = required_str(run_asset, "asset_role")
+        asset_index = int_with_default(run_asset, "asset_index", default=0)
+        source_path = required_str(run_asset, "source_path")
+        source_sha256 = required_str(run_asset, "source_sha256")
+        metadata = required_json_object(run_asset, "metadata")
+        safe_context: dict[str, object] = {
+            "run_dir_hash12": hash12(run_dir),
+            "asset_role": asset_role,
+            "asset_index": asset_index,
+        }
+        row: dict[str, object] = {
+            "run_id": run_id,
+            "asset_role": asset_role,
+            "asset_index": asset_index,
+            "source_path": source_path,
+            "source_sha256": source_sha256,
+            "metadata": dict(metadata),
+        }
+        width = optional_int(run_asset.get("width"), field="width")
+        height = optional_int(run_asset.get("height"), field="height")
+        blurhash = optional_str(run_asset.get("blurhash"), field="blurhash")
+        blurhash_width = optional_int(
+            run_asset.get("blurhash_width"), field="blurhash_width"
+        )
+        blurhash_height = optional_int(
+            run_asset.get("blurhash_height"), field="blurhash_height"
+        )
+        if width is not None:
+            row["width"] = width
+        if height is not None:
+            row["height"] = height
+        if blurhash is not None:
+            row["blurhash"] = blurhash
+        if blurhash_width is not None:
+            row["blurhash_width"] = blurhash_width
+        if blurhash_height is not None:
+            row["blurhash_height"] = blurhash_height
+        variants = optional_object_list(
+            run_asset.get("variants"), field="run_assets[].variants"
+        )
+        return row, safe_context, (run_id, asset_role, asset_index), variants
+
+    def _build_run_asset_variant_row(
+        self,
+        run_asset_id: str,
+        variant: Mapping[str, object],
+        *,
+        run_dir: str,
+    ) -> dict[str, object]:
+        _ = run_dir
+        row = self._build_variant_row(
+            run_asset_id,
+            variant,
+            run_dir=run_dir,
+        )
+        row["run_asset_id"] = row.pop("image_id")
+        return row
+
     def _upsert_images_batch(
         self,
         rows: list[dict[str, object]],
@@ -502,6 +621,64 @@ class SupabaseWriter:
                     table_name="image_variants",
                     row_or_rows=_normalize_rows_for_postgrest(chunk),
                     on_conflict="image_id,variant",
+                    select_columns=None,
+                    returning_mode="minimal",
+                    context={"chunk_size": len(chunk)},
+                )
+                for chunk in chunks
+            ]
+            for future in as_completed(futures):
+                _ = future.result()
+
+    def _upsert_run_assets_batch(
+        self,
+        rows: list[dict[str, object]],
+    ) -> dict[tuple[object, object, object], str]:
+        if not rows:
+            return {}
+        mapped: dict[tuple[object, object, object], str] = {}
+        for chunk in self._iter_row_chunks(rows):
+            normalized_chunk = _normalize_rows_for_postgrest(chunk)
+            data = self._execute_upsert(
+                table_name="run_assets",
+                row_or_rows=normalized_chunk,
+                on_conflict="run_id,asset_role,asset_index",
+                select_columns="id,run_id,asset_role,asset_index",
+                returning_mode="representation",
+                context={"chunk_size": len(normalized_chunk)},
+            )
+            for row in extract_rows_from_data(data):
+                key = (row.get("run_id"), row.get("asset_role"), row.get("asset_index"))
+                row_id = row.get("id")
+                if isinstance(row_id, str) and row_id:
+                    mapped[key] = row_id
+        return mapped
+
+    def _upsert_run_asset_variants_batch(self, rows: list[dict[str, object]]) -> None:
+        if not rows:
+            return
+        chunks = list(self._iter_row_chunks(rows))
+        if self._db_concurrency <= 1 or len(chunks) <= 1:
+            for chunk in chunks:
+                normalized_chunk = _normalize_rows_for_postgrest(chunk)
+                _ = self._execute_upsert(
+                    table_name="run_asset_variants",
+                    row_or_rows=normalized_chunk,
+                    on_conflict="run_asset_id,variant",
+                    select_columns=None,
+                    returning_mode="minimal",
+                    context={"chunk_size": len(normalized_chunk)},
+                )
+            return
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        with ThreadPoolExecutor(max_workers=self._db_concurrency) as pool:
+            futures = [
+                pool.submit(
+                    self._execute_upsert,
+                    table_name="run_asset_variants",
+                    row_or_rows=_normalize_rows_for_postgrest(chunk),
+                    on_conflict="run_asset_id,variant",
                     select_columns=None,
                     returning_mode="minimal",
                     context={"chunk_size": len(chunk)},
