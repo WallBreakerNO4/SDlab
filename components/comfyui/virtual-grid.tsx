@@ -274,6 +274,34 @@ function normalizeRowPayload(
   };
 }
 
+function normalizeBlurhashCell(raw: unknown): BlurhashCell | null {
+  if (!isRecord(raw)) return null;
+
+  const xIndex = getFiniteNumber(raw.x_index);
+  const yIndex = getFiniteNumber(raw.y_index);
+  const batchIndex = getFiniteNumber(raw.batch_index);
+  const category = getNonEmptyString(raw.category);
+
+  if (
+    xIndex === null ||
+    yIndex === null ||
+    batchIndex === null ||
+    category === null
+  ) {
+    return null;
+  }
+
+  return {
+    x_index: xIndex,
+    y_index: yIndex,
+    batch_index: batchIndex,
+    category,
+    width: getFiniteNumber(raw.width),
+    height: getFiniteNumber(raw.height),
+    blurhash: getNonEmptyString(raw.blurhash),
+  };
+}
+
 function formatValue(value: string | number | null | undefined): string {
   return value === null || value === undefined || value === ""
     ? "-"
@@ -298,6 +326,17 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
   const [rowCacheVersion, setRowCacheVersion] = useState(0);
   const { user } = useAuth();
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
+
+  const blurhashMapRef = useRef<Map<string, BlurhashCell>>(
+    new Map(blurhashMap),
+  );
+  const blurhashRequestsRef = useRef<Map<number, AbortController>>(new Map());
+  const blurhashChunksFetched = useRef<Set<number>>(new Set());
+  const BLURHASH_CHUNK_SIZE = 32;
+
+  useEffect(() => {
+    blurhashMapRef.current = new Map(blurhashMap);
+  }, [blurhashMap]);
 
   useEffect(() => {
     const element = scrollElementRef.current;
@@ -341,7 +380,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
     );
     if (fromCache !== 1) return fromCache;
     // Fall back to pre-loaded blurhash cells for instant aspect ratio
-    for (const cell of blurhashMap.values()) {
+    for (const cell of blurhashMapRef.current.values()) {
       const w = cell.width;
       const h = cell.height;
       if (
@@ -356,7 +395,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
       }
     }
     return 1;
-  }, [rowCacheVersion, blurhashMap]);
+  }, [rowCacheVersion]);
 
   const cellWidth = useMemo(() => {
     if (!scrollViewportWidth || scrollViewportWidth <= 0) {
@@ -516,14 +555,72 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
     [runDir],
   );
 
+  const requestBlurhashChunk = useCallback(
+    async (chunkIndex: number) => {
+      if (blurhashChunksFetched.current.has(chunkIndex)) return;
+      if (blurhashRequestsRef.current.has(chunkIndex)) return;
+
+      const controller = new AbortController();
+      blurhashRequestsRef.current.set(chunkIndex, controller);
+
+      try {
+        const yOffset = chunkIndex * BLURHASH_CHUNK_SIZE;
+        const response = await fetch(
+          `/api/comfyui/run/${encodeURIComponent(runDir)}/grid?y_offset=${yOffset}&y_limit=${BLURHASH_CHUNK_SIZE}`,
+          { signal: controller.signal },
+        );
+
+        if (!response.ok) {
+          return;
+        }
+
+        const raw: unknown = await response.json();
+        if (isRecord(raw) && Array.isArray(raw.blurhash_cells)) {
+          for (const cellRaw of raw.blurhash_cells) {
+            const cell = normalizeBlurhashCell(cellRaw);
+            if (cell) {
+              const key = `${cell.x_index}:${cell.y_index}`;
+              if (!blurhashMapRef.current.has(key)) {
+                blurhashMapRef.current.set(key, cell);
+              }
+            }
+          }
+          blurhashChunksFetched.current.add(chunkIndex);
+          setRowCacheVersion((v) => v + 1);
+        }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+      } finally {
+        blurhashRequestsRef.current.delete(chunkIndex);
+      }
+    },
+    [runDir],
+  );
+
   useEffect(() => {
     const yIndexes = grid.y_indexes;
+    const visibleYIndexes = new Set<number>();
+
     for (const virtualRow of virtualRows) {
       const yIndex = yIndexes[virtualRow.index];
       if (typeof yIndex !== "number") continue;
+      visibleYIndexes.add(yIndex);
+
+      const chunkIndex = Math.floor(virtualRow.index / BLURHASH_CHUNK_SIZE);
+      void requestBlurhashChunk(chunkIndex);
+
       void requestRow(yIndex);
     }
-  }, [grid.y_indexes, requestRow, virtualRows]);
+
+    for (const [yIndex, controller] of rowRequestsRef.current.entries()) {
+      if (!visibleYIndexes.has(yIndex)) {
+        controller.abort();
+        rowRequestsRef.current.delete(yIndex);
+      }
+    }
+  }, [grid.y_indexes, requestRow, requestBlurhashChunk, virtualRows]);
 
   useEffect(() => {
     return () => {
@@ -531,6 +628,11 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
         controller.abort();
       }
       rowRequestsRef.current.clear();
+
+      for (const controller of blurhashRequestsRef.current.values()) {
+        controller.abort();
+      }
+      blurhashRequestsRef.current.clear();
     };
   }, []);
 
@@ -711,7 +813,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                       // Always use pre-loaded blurhash from the grid-level map as the
                       // primary source — it's available before any row API call completes.
                       // Fall back to the row-level data only if the map has no entry.
-                      const preloadedCell = blurhashMap.get(
+                      const preloadedCell = blurhashMapRef.current.get(
                         `${xIndex}:${yIndex}`,
                       );
                       const effectiveBlurhash =
@@ -721,14 +823,6 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                       const effectiveCategory =
                         preloadedCell?.category ??
                         representativeItem?.category ??
-                        null;
-                      const effectiveWidth =
-                        preloadedCell?.width ??
-                        representativeItem?.width ??
-                        null;
-                      const effectiveHeight =
-                        preloadedCell?.height ??
-                        representativeItem?.height ??
                         null;
 
                       const canOpenDialog =

@@ -73,13 +73,6 @@ function buildRunAssets(
   rows: SupabaseRunAssetRow[],
   variantsByAssetId: Map<string, SupabaseRunAssetVariantRow[]>,
 ): NonNullable<RunSummary["assets"]> | null {
-  const coverRows = rows
-    .filter((row) => row.asset_role === "cover")
-    .sort((a, b) => a.asset_index - b.asset_index);
-  const homepageRows = rows
-    .filter((row) => row.asset_role === "homepage_card")
-    .sort((a, b) => a.asset_index - b.asset_index);
-
   const toAssetSummary = (row: SupabaseRunAssetRow) => {
     const assetId = getNonEmptyString(row.id);
     const variants = assetId ? (variantsByAssetId.get(assetId) ?? []) : [];
@@ -96,8 +89,21 @@ function buildRunAssets(
     };
   };
 
-  const cover = coverRows[0] ? toAssetSummary(coverRows[0]) : null;
-  const homepageCards = homepageRows.map(toAssetSummary);
+  let cover: ReturnType<typeof toAssetSummary> | null = null;
+  const homepageCards: ReturnType<typeof toAssetSummary>[] = [];
+
+  for (const row of rows) {
+    if (row.asset_role === "cover") {
+      if (cover === null) {
+        cover = toAssetSummary(row);
+      }
+      continue;
+    }
+
+    if (row.asset_role === "homepage_card") {
+      homepageCards.push(toAssetSummary(row));
+    }
+  }
 
   if (!cover && homepageCards.length === 0) {
     return null;
@@ -145,6 +151,7 @@ export async function GET(): Promise<Response> {
         )
         .in("run_id", runIds)
         .in("asset_role", ["cover", "homepage_card"])
+        .order("run_id", { ascending: true })
         .order("asset_index", { ascending: true });
 
       if (runAssetsError) {
@@ -209,13 +216,6 @@ export async function GET(): Promise<Response> {
         } else {
           runAssetsByRunId.set(runId, [row]);
         }
-      }
-
-      for (const [runId, assetRows] of runAssetsByRunId.entries()) {
-        runAssetsByRunId.set(
-          runId,
-          assetRows.sort((a, b) => a.asset_index - b.asset_index),
-        );
       }
 
       for (const [runId, assetRows] of runAssetsByRunId.entries()) {
