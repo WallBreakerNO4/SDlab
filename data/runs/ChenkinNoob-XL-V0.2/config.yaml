@@ -6,7 +6,7 @@ model:
   # 机器可读的稳定 key；建议保持短且唯一。
   key: chenkinnoob-xl-v02
   # 给人看的展示名。
-  name: ChenkinNoob-XL Rectified-Flow v0.2
+  name: ChenkinNoob-XL v0.2
   # 模型家族/大类，例如 stable-diffusion-xl、novelai 等。
   family: stable-diffusion-xl
   # 可选外链；没有就填 null。
