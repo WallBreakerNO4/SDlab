@@ -1,8 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
-
-import { useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 
 import {
   type BlurhashCell,
@@ -172,7 +170,7 @@ function GridSkeleton() {
   return (
     <div className="space-y-2">
       {rowKeys.map((rowKey) => (
-        <div key={rowKey} className="grid min-w-[960px] grid-cols-6 gap-2">
+        <div key={rowKey} className="grid min-w-240 grid-cols-6 gap-2">
           {cellKeys.map((cellKey) => (
             <Skeleton key={`${rowKey}-${cellKey}`} className="h-32 w-full" />
           ))}
@@ -182,19 +180,25 @@ function GridSkeleton() {
   );
 }
 
-export default function RunDetailPage() {
-  const params = useParams<{ runDir: string | string[] }>();
+export default function RunDetailPage({
+  params,
+}: {
+  params: Promise<{ runDir: string | string[] }>;
+}) {
+  const resolvedParams = use(params);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [detailData, setDetailData] = useState<RunDetailResponse | null>(null);
   const [gridData, setGridData] = useState<RunGridIndexData | null>(null);
 
   const runDir = useMemo(() => {
-    if (!params?.runDir) {
+    if (!resolvedParams?.runDir) {
       return "";
     }
 
-    return Array.isArray(params.runDir) ? params.runDir[0] : params.runDir;
-  }, [params]);
+    return Array.isArray(resolvedParams.runDir)
+      ? resolvedParams.runDir[0]
+      : resolvedParams.runDir;
+  }, [resolvedParams]);
 
   useEffect(() => {
     const abortController = new AbortController();

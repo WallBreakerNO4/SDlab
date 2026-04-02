@@ -386,7 +386,6 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
 
   // TanStack Virtual's hook returns functions that React Compiler can't memoize safely.
   // We intentionally keep virtualization here for performance.
-  // eslint-disable-next-line react-hooks/incompatible-library
   const rowVirtualizer = useVirtualizer({
     count: grid.y_indexes.length,
     getScrollElement: () => scrollElementRef.current,
@@ -526,11 +525,12 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
   }, [grid.y_indexes, requestRow, virtualRows]);
 
   useEffect(() => {
+    const requests = rowRequestsRef.current;
     return () => {
-      for (const controller of rowRequestsRef.current.values()) {
+      for (const controller of requests.values()) {
         controller.abort();
       }
-      rowRequestsRef.current.clear();
+      requests.clear();
     };
   }, []);
 
