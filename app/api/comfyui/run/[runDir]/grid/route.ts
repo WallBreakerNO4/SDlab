@@ -27,13 +27,6 @@ type RouteContext = {
   params: Promise<{ runDir: string }>;
 };
 
-type GridMetaRow = {
-  x_columns: JsonValue[] | null;
-  y_indexes: number[] | null;
-  x_count: number | null;
-  y_count: number | null;
-};
-
 function asJsonObject(value: JsonValue): JsonObject | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return null;
@@ -47,15 +40,6 @@ function getNonEmptyString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function parseNonNegativeInt(raw: string | null): number | null {
-  if (!raw) return null;
-  const trimmed = raw.trim();
-  if (!/^[0-9]+$/.test(trimmed)) return null;
-  const value = Number(trimmed);
-  if (!Number.isSafeInteger(value) || value < 0) return null;
-  return value;
-}
-
 function pickXColumn(raw: JsonObject): {
   type: string | null;
   description: JsonObject | null;
@@ -66,7 +50,7 @@ function pickXColumn(raw: JsonObject): {
 }
 
 export async function GET(
-  request: Request,
+  _request: Request,
   context: RouteContext,
 ): Promise<Response> {
   try {
@@ -76,26 +60,47 @@ export async function GET(
     }
 
     const supabase = await createSupabaseAuthClient();
-    const { data: metaData, error: metaError } = await supabase
-      .from("runs")
-      .select("x_columns,y_indexes,x_count,y_count")
-      .eq("run_dir", runDir)
-      .maybeSingle();
+    const PAGE_SIZE = 1000;
+    const allRows: GridCellRow[] = [];
+    let pageOffset = 0;
+    let hasMore = true;
 
-    if (metaError) {
-      return Response.json(
-        { error: "Failed to load run grid" },
-        { status: 500 },
-      );
+    while (hasMore) {
+      const { data: pageData, error: pageError } = await supabase
+        .from("comfyui_grid_cells")
+        .select(
+          "run_dir,x_columns,y_indexes,x_count,y_count,x_index,y_index,batch_index,category,width,height,blurhash",
+        )
+        .eq("run_dir", runDir)
+        .order("y_index", { ascending: true })
+        .order("x_index", { ascending: true })
+        .order("batch_index", { ascending: true })
+        .range(pageOffset, pageOffset + PAGE_SIZE - 1);
+
+      if (pageError) {
+        return Response.json(
+          { error: "Failed to load run grid" },
+          { status: 500 },
+        );
+      }
+
+      const rows = (pageData ?? []) as GridCellRow[];
+      allRows.push(...rows);
+
+      if (rows.length < PAGE_SIZE) {
+        hasMore = false;
+      } else {
+        pageOffset += PAGE_SIZE;
+      }
     }
 
-    const metaRow = (metaData as GridMetaRow | null) ?? null;
-    if (!metaRow) {
+    if (allRows.length === 0) {
       return Response.json({ error: "Run not found" }, { status: 404 });
     }
 
-    const xColumnsRaw = metaRow.x_columns;
-    const yIndexesRaw = metaRow.y_indexes;
+    const firstRow = allRows[0];
+    const xColumnsRaw = firstRow.x_columns;
+    const yIndexesRaw = firstRow.y_indexes;
 
     const x_columns = Array.isArray(xColumnsRaw)
       ? xColumnsRaw
@@ -112,46 +117,13 @@ export async function GET(
       : [];
 
     const x_count =
-      typeof metaRow.x_count === "number" ? metaRow.x_count : x_columns.length;
+      typeof firstRow.x_count === "number"
+        ? firstRow.x_count
+        : x_columns.length;
     const y_count =
-      typeof metaRow.y_count === "number" ? metaRow.y_count : y_indexes.length;
-
-    const url = new URL(request.url);
-    const yOffset = parseNonNegativeInt(url.searchParams.get("y_offset"));
-    const yLimit = parseNonNegativeInt(url.searchParams.get("y_limit"));
-
-    if ((yOffset === null) !== (yLimit === null)) {
-      return Response.json({ error: "Invalid grid range" }, { status: 400 });
-    }
-
-    const selectedYIndexes =
-      yOffset !== null && yLimit !== null
-        ? y_indexes.slice(yOffset, yOffset + Math.min(yLimit, 64))
-        : [];
-
-    let gridRows: GridCellRow[] = [];
-
-    if (selectedYIndexes.length > 0) {
-      const { data: gridData, error: gridError } = await supabase
-        .from("comfyui_grid_cells")
-        .select(
-          "run_dir,x_columns,y_indexes,x_count,y_count,x_index,y_index,batch_index,category,width,height,blurhash",
-        )
-        .eq("run_dir", runDir)
-        .in("y_index", selectedYIndexes)
-        .order("y_index", { ascending: true })
-        .order("x_index", { ascending: true })
-        .order("batch_index", { ascending: true });
-
-      if (gridError) {
-        return Response.json(
-          { error: "Failed to load run grid" },
-          { status: 500 },
-        );
-      }
-
-      gridRows = (gridData ?? []) as GridCellRow[];
-    }
+      typeof firstRow.y_count === "number"
+        ? firstRow.y_count
+        : y_indexes.length;
 
     type BlurhashRow = {
       x_index: number;
@@ -163,7 +135,7 @@ export async function GET(
       blurhash: string | null;
     };
 
-    const blurhash_cells: BlurhashRow[] = gridRows
+    const blurhash_cells: BlurhashRow[] = allRows
       .filter(
         (
           item,
@@ -195,8 +167,6 @@ export async function GET(
       y_count,
       cells: {},
       blurhash_cells,
-      y_offset: yOffset,
-      y_limit: selectedYIndexes.length,
     });
   } catch {
     return Response.json(

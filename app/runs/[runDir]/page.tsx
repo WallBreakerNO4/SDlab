@@ -108,6 +108,37 @@ function isRunDetailResponse(value: unknown): value is RunDetailResponse {
   );
 }
 
+function isRunGridIndexData(value: unknown): value is RunGridIndexData {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  if (!Array.isArray(value.x_columns) || !Array.isArray(value.y_indexes)) {
+    return false;
+  }
+
+  const x_columns = value.x_columns as unknown[];
+  const xColumnsOk = x_columns.every((col) => {
+    if (!isRecord(col)) return false;
+    const type = col.type;
+    const typeOk = typeof type === "string" || type === null;
+    const desc = col.description;
+    const descOk = desc === null || isRecord(desc);
+    return typeOk && descOk;
+  });
+
+  const y_indexes = value.y_indexes as unknown[];
+  const yIndexesOk = y_indexes.every(
+    (item) => typeof item === "number" && Number.isFinite(item) && item >= 0,
+  );
+
+  const hasBlurhashCells = Array.isArray(value.blurhash_cells);
+
+  return (
+    xColumnsOk && yIndexesOk && (hasBlurhashCells || !value.blurhash_cells)
+  );
+}
+
 function formatCreatedAt(createdAt: string): string {
   const date = new Date(createdAt);
 
@@ -179,36 +210,39 @@ export default function RunDetailPage() {
       setLoadState("loading");
 
       try {
-        const detailResponse = await fetch(
-          `/api/comfyui/run/${encodeURIComponent(runDir)}`,
-          {
+        const [detailResponse, gridResponse] = await Promise.all([
+          fetch(`/api/comfyui/run/${encodeURIComponent(runDir)}`, {
             signal: abortController.signal,
-          },
-        );
+          }),
+          fetch(`/api/comfyui/run/${encodeURIComponent(runDir)}/grid`, {
+            signal: abortController.signal,
+          }),
+        ]);
 
-        if (detailResponse.status === 404) {
+        if (detailResponse.status === 404 || gridResponse.status === 404) {
           setDetailData(null);
           setGridData(null);
           setLoadState("not-found");
           return;
         }
 
-        if (!detailResponse.ok) {
+        if (!detailResponse.ok || !gridResponse.ok) {
           throw new Error("Failed to load run detail");
         }
 
-        const detailPayload: unknown = await detailResponse.json();
+        const [detailPayload, gridPayload]: [unknown, unknown] =
+          await Promise.all([detailResponse.json(), gridResponse.json()]);
 
         if (!isRunDetailResponse(detailPayload)) {
           throw new Error("Unexpected run detail payload");
         }
 
+        if (!isRunGridIndexData(gridPayload)) {
+          throw new Error("Unexpected run grid payload");
+        }
+
         setDetailData(detailPayload);
-        setGridData({
-          x_columns: detailPayload.x_columns as RunGridXColumn[],
-          y_indexes: detailPayload.y_indexes,
-          blurhash_cells: [],
-        });
+        setGridData(gridPayload);
         setLoadState("ready");
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
