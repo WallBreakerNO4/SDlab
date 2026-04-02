@@ -29,7 +29,7 @@ prompts:
 # ComfyUI workflow 模板配置。
 workflow:
   # 要注入参数的 KSampler 节点 ID；如果 workflow 里有多个 KSampler，通常需要显式指定。
-  ksampler_node_id: "6"
+  ksampler_node_id: null
 
 # 生成参数：template/base_seed 为必填；其余项用于覆盖 workflow 内默认值。
 # 如果某个字段填 null，就尽量回退到 workflow 里的默认参数。
@@ -43,9 +43,9 @@ generation:
   # 追加到基础负面提示词后面的内容；常用于统一补一段安全/质量相关负面词。
   append_negative_prompt: "nsfw, nipples, pussy, nude,"
   # 输出宽度；覆盖 workflow 的 latent width。
-  width: 1024
+  width: 832
   # 输出高度；覆盖 workflow 的 latent height。
-  height: 1536
+  height: 1216
   # 单次生成张数；覆盖 workflow 的 batch_size。
   batch_size: 1
   # 采样步数；覆盖 KSampler.steps。
