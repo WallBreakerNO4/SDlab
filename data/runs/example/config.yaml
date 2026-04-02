@@ -24,7 +24,7 @@ prompts:
   # X 轴 prompt 表路径。
   x_path: data/prompts/X/common_prompts.yaml
   # Y 轴 prompt 表路径。
-  y_path: data/prompts/Y/300_NAI_Styles_Table-test.yaml
+  y_path: data/prompts/Y/300_NAI_Styles_Table.yaml
 
 # ComfyUI workflow 模板配置。
 workflow:
@@ -42,7 +42,7 @@ generation:
   # 基础负面提示词；设为 null 时优先使用 workflow 中自带的 negative prompt。
   negative_prompt: null
   # 追加到基础负面提示词后面的内容；常用于统一补一段安全/质量相关负面词。
-  append_negative_prompt: "nsfw, nipples, pussy, nude,"
+  append_negative_prompt: "nsfw,nipples,pussy,nude,"
   # 输出宽度；覆盖 workflow 的 latent width。
   width: 832
   # 输出高度；覆盖 workflow 的 latent height。
