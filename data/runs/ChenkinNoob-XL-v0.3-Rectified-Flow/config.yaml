@@ -1,0 +1,73 @@
+# Runner 配置 schema 版本；当前实现只接受 image-run-config/v1。
+schema_version: image-run-config/v1
+
+# 模型元信息：主要用于记录这次 run 绑定的模型身份与说明，便于后续展示/追踪。
+model:
+  # 机器可读的稳定 key；建议保持短且唯一。
+  key: chenkinnoob-xl-v03-rectified-flow
+  # 给人看的展示名。
+  name: ChenkinNoob-XL v0.3 Rectified-Flow
+  # 模型家族/大类，例如 stable-diffusion-xl、novelai 等。
+  family: stable-diffusion-xl
+  # 可选外链；没有就填 null。
+  links:
+    homepage: null
+    huggingface: https://huggingface.co/ChenkinRF/ChenkinNoob-XL-v0.3-Rectified-Flow
+    civitai: https://civitai.com/models/2363696/chenkinnoob-xl-rectified-flow?modelVersionId=2753273
+  # 多语言描述；当前 schema 要求同时提供 zh / en。
+  description:
+    zh: ChenkinRF 0.2 的延续版本，将 Chenkin 0.2 转换为修正流（rectified flow）。RF 使该模型能够摆脱基础 EPS 解决方案的灰暗感，呈现鲜艳色彩并提升光照贴合度，例如处理非常昏暗或对比强烈的场景时表现更佳，且无需像偏移噪声这类训练技巧。同时，它在广泛的 CFG 范围内保持高稳定性，避免了其他基础模型的常见问题。
+    en: A continuation of ChenkinRF 0.2, which is a conversion to rectified flow of the Chenkin 0.2. RF allows this model to get away from greyness of the base EPS solutions, provides vivid colors and unlocks better lighting adherence, like very dark or contrasty scenes, while not requiring training-time tricks like offset noise. It also allows to sustain high stability at wide range of CFG, while not suffering from common downfalls of other base models
+# Prompt 资产路径：X 轴通常是角色等结构化 prompt 表，Y 轴通常是风格/artist 等单列 prompt 表。
+# 这里的路径必须是仓库相对路径，且文件必须实际存在；支持 .yaml/.yml/.json。
+prompts:
+  # X 轴 prompt 表路径。
+  x_path: data/prompts/X/common_prompts.yaml
+  # Y 轴 prompt 表路径。
+  y_path: data/prompts/Y/300_NAI_Styles_Table.yaml
+
+# ComfyUI workflow 模板配置。
+workflow:
+  # 要注入参数的 KSampler 节点 ID；如果 workflow 里有多个 KSampler，通常需要显式指定。
+  ksampler_node_id:
+
+# 生成参数：template/base_seed 为必填；其余项用于覆盖 workflow 内默认值。
+# 如果某个字段填 null，就尽量回退到 workflow 里的默认参数。
+generation:
+  # 正向 prompt 拼装模板；只支持 {quality} / {gender} / {characters} / {series} / {rating} / {y} / {general} 这些占位符。
+  template: "{quality}{rating}{y}{gender}{characters}{series}{general}"
+  quality_prompt: "masterpiece,best quality,aesthetic,"
+  # 基础种子；每个网格单元会基于 base_seed + x/y 索引派生稳定 seed。
+  base_seed: 114514
+  # 基础负面提示词；设为 null 时优先使用 workflow 中自带的 negative prompt。
+  negative_prompt: "worst quality,normal quality,bad anatomy,low resolution,"
+  # 追加到基础负面提示词后面的内容；常用于统一补一段安全/质量相关负面词。
+  append_negative_prompt: "nsfw,nipples,pussy,nude,"
+  # 输出宽度；覆盖 workflow 的 latent width。
+  width: 832
+  # 输出高度；覆盖 workflow 的 latent height。
+  height: 1216
+  # 单次生成张数；覆盖 workflow 的 batch_size。
+  batch_size: 1
+  # 采样步数；覆盖 KSampler.steps。
+  steps: 28
+  # CFG / guidance scale；覆盖 KSampler.cfg。
+  cfg: 4.5
+  # 去噪强度；覆盖 KSampler.denoise。
+  denoise: 1.0
+  # 采样器名称；覆盖 KSampler.sampler_name。
+  sampler_name: euler
+  # 调度器名称；覆盖 KSampler.scheduler。
+  scheduler: simple
+
+# 选择要跑的网格子集；都为 null 时表示跑完整个 X × Y 网格。
+# 若同时设置 indexes 和 limit，会先按 indexes 选，再按 limit 截断。
+selection:
+  # 只取前 N 个 X 行；null 表示不限制。
+  x_limit: null
+  # 只取前 N 个 Y 行；null 表示不限制。
+  y_limit: null
+  # 显式指定要跑的 X 索引列表（从 0 开始）；null 表示不指定。
+  x_indexes: null
+  # 显式指定要跑的 Y 索引列表（从 0 开始）；null 表示不指定。
+  y_indexes: null
