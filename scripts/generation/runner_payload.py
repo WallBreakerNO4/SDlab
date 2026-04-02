@@ -55,6 +55,7 @@ def _build_run_payload(
         "y_json_sha256": _sha256_file(y_path),
         "model": _build_model_snapshot(args),
         "template": args.template,
+        "quality_prompt": getattr(args, "quality_prompt", None),
         "base_seed": args.base_seed,
         "seed_strategy": "sha256(base_seed:x_index:y_index)[:16] mod 18446744073709519872",
         "workflow_api_path": workflow_api_path,
@@ -165,6 +166,7 @@ def _build_config_snapshot(args: argparse.Namespace) -> dict[str, object] | None
         },
         "generation": {
             "template": generation.template,
+            "quality_prompt": generation.quality_prompt,
             "base_seed": generation.base_seed,
             "negative_prompt": generation.negative_prompt,
             "append_negative_prompt": generation.append_negative_prompt,

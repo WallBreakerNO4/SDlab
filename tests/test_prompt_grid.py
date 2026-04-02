@@ -36,12 +36,10 @@ def test_read_x_rows_maps_real_columns_and_ignores_trailing_empty_column():
         "series",
         "rating",
         "general",
-        "quality",
         X_INFO_TYPE_KEY,
     }
     assert first["gender"] == "1girl,"
     assert first["characters"] == "amiya \\(arknights\\),"
-    assert first["quality"] == "masterpiece,high score,great score,absurdres,year 2025,"
     assert first[X_INFO_TYPE_KEY] == "normal"
 
 
@@ -52,6 +50,35 @@ def test_read_y_rows_uses_artists_column_by_default():
     assert rows[0]["y"].startswith("gochisousama")
 
 
+def test_read_x_rows_rejects_legacy_quality_field(tmp_path: Path) -> None:
+    legacy_yaml = tmp_path / "legacy.yaml"
+    legacy_yaml.write_text(
+        """
+schema: ""
+items:
+  - tags:
+      gender:
+        - text: 1girl
+          weight: 1.0
+      quality:
+        - text: masterpiece
+          weight: 1.0
+    info:
+      index: 0
+      type: normal
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    try:
+        read_x_rows(legacy_yaml)
+    except ValueError as exc:
+        assert "tags.quality" in str(exc)
+    else:
+        raise AssertionError("旧 tags.quality 字段应被显式拒绝")
+
+
 def test_render_positive_prompt_template_and_segment_rules():
     x_row = {
         "gender": " 1girl ",
@@ -59,12 +86,11 @@ def test_render_positive_prompt_template_and_segment_rules():
         "series": " arknights, ",
         "rating": "safe",
         "general": "solo, smiling",
-        "quality": " masterpiece, ",
     }
 
-    rendered = render_positive_prompt(x_row, " artist-name ")
+    rendered = render_positive_prompt(x_row, " artist-name ", " masterpiece, ")
 
-    assert rendered == "1girl,arknights,safe,artist-name,solo, smiling,masterpiece,"
+    assert rendered == "masterpiece,1girl,arknights,safe,artist-name,solo, smiling,"
 
 
 def test_normalize_prompt_whitespace_and_comma_rules_keep_case():
@@ -108,7 +134,14 @@ def test_build_prompt_cell_contains_prompt_hash_and_seed():
     x_rows = read_x_rows(X_JSON)
     y_rows = read_y_rows(Y_JSON)
 
-    cell = build_prompt_cell(x_rows[0], y_rows[0], base_seed=123, x_index=0, y_index=0)
+    cell = build_prompt_cell(
+        x_rows[0],
+        y_rows[0],
+        base_seed=123,
+        x_index=0,
+        y_index=0,
+        quality_prompt="masterpiece,",
+    )
     positive_prompt = cell["positive_prompt"]
 
     assert isinstance(positive_prompt, str)

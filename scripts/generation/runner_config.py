@@ -30,6 +30,7 @@ _WORKFLOW_KEYS = {"ksampler_node_id"}
 _WORKFLOW_REQUIRED_KEYS = {"ksampler_node_id"}
 _GENERATION_KEYS = {
     "template",
+    "quality_prompt",
     "base_seed",
     "negative_prompt",
     "append_negative_prompt",
@@ -84,6 +85,7 @@ class WorkflowConfig:
 @dataclass(frozen=True)
 class GenerationConfig:
     template: str
+    quality_prompt: str
     base_seed: int
     negative_prompt: str | None
     append_negative_prompt: str | None
@@ -415,6 +417,9 @@ def _load_generation(payload: object) -> GenerationConfig:
 
     return GenerationConfig(
         template=_require_str(mapping["template"], "generation.template"),
+        quality_prompt=_require_non_empty_str(
+            mapping["quality_prompt"], "generation.quality_prompt"
+        ),
         base_seed=_require_int(mapping["base_seed"], "generation.base_seed"),
         negative_prompt=_optional_str(
             mapping["negative_prompt"], "generation.negative_prompt"

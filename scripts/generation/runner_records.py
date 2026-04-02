@@ -32,7 +32,6 @@ def _build_base_metadata_record(
             "series": x_row.get("series", ""),
             "rating": x_row.get("rating", ""),
             "general": x_row.get("general", ""),
-            "quality": x_row.get("quality", ""),
         },
         "x_info_type": _extract_x_info_type(x_row),
         "y_value": y_value,

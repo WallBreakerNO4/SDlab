@@ -122,7 +122,7 @@ from scripts.generation.workflow_patch import (  # noqa: E402
 
 DEFAULT_X_JSON = "data/prompts/X/common_prompts.yaml"
 DEFAULT_Y_JSON = "data/prompts/Y/300_NAI_Styles_Table-test.yaml"
-DEFAULT_TEMPLATE = "{gender}{characters}{series}{rating}{y}{general}{quality}"
+DEFAULT_TEMPLATE = "{quality}{rating}{y}{gender}{characters}{series}{general}"
 DEFAULT_WORKFLOW_JSON = "data/comfyui-flow/api-json/CKNOOBRF.json"
 DEFAULT_BASE_URL = "http://127.0.0.1:8188"
 DEFAULT_REQUEST_TIMEOUT_S = 30.0
@@ -268,6 +268,7 @@ def _apply_fresh_run_config(args: argparse.Namespace) -> None:
     args.x_json = config.prompts.x.path
     args.y_json = config.prompts.y.path
     args.template = config.generation.template
+    args.quality_prompt = config.generation.quality_prompt
     args.base_seed = config.generation.base_seed
     args.workflow_json = config.workflow.path
     args.workflow_download_json = (
@@ -360,7 +361,12 @@ def run(args: argparse.Namespace) -> int:
     )
 
     total_cells = len(x_selected) * len(y_selected)
-    example_prompt = _build_example_prompt(args.template, x_selected, y_selected)
+    example_prompt = _build_example_prompt(
+        args.template,
+        x_selected,
+        y_selected,
+        quality_prompt=getattr(args, "quality_prompt", None),
+    )
     if args.dry_run:
         print(f"组合总数: {total_cells}")
         print(f"示例正向提示词: {example_prompt}")
@@ -397,7 +403,14 @@ def run(args: argparse.Namespace) -> int:
                     stats=stats,
                     pbar=pbar,
                     writer=writer,
-                    render_prompt=_render_prompt_by_template,
+                    render_prompt=lambda template, x_row, y_value: (
+                        _render_prompt_by_template(
+                            template,
+                            x_row,
+                            y_value,
+                            quality_prompt=getattr(args, "quality_prompt", None),
+                        )
+                    ),
                     compute_prompt_hash=compute_prompt_hash,
                     derive_seed=derive_seed,
                     effective_generation_params=_effective_generation_params,
@@ -498,7 +511,12 @@ def run_retry(args: argparse.Namespace) -> int:
         template=args.template,
         base_seed=args.base_seed,
         workflow_hash=workflow_hash,
-        render_prompt=_render_prompt_by_template,
+        render_prompt=lambda template, x_row, y_value: _render_prompt_by_template(
+            template,
+            x_row,
+            y_value,
+            quality_prompt=getattr(args, "quality_prompt", None),
+        ),
         compute_prompt_hash=compute_prompt_hash,
         derive_seed=derive_seed,
         coerce_int_or_none=_coerce_int_or_none,
@@ -542,7 +560,14 @@ def run_retry(args: argparse.Namespace) -> int:
                     stats=stats,
                     pbar=pbar,
                     writer=writer,
-                    render_prompt=_render_prompt_by_template,
+                    render_prompt=lambda template, x_row, y_value: (
+                        _render_prompt_by_template(
+                            template,
+                            x_row,
+                            y_value,
+                            quality_prompt=getattr(args, "quality_prompt", None),
+                        )
+                    ),
                     compute_prompt_hash=compute_prompt_hash,
                     derive_seed=derive_seed,
                     effective_generation_params=_effective_generation_params,
@@ -693,12 +718,21 @@ def _build_example_prompt(
     template: str,
     x_selected: list[SelectedRow],
     y_selected: list[SelectedRow],
+    *,
+    quality_prompt: str | None,
 ) -> str:
     return _prompt_build_example_prompt(
         template,
         x_selected,
         y_selected,
-        render_prompt_by_template=_render_prompt_by_template,
+        render_prompt_by_template=lambda current_template, x_row, y_value: (
+            _render_prompt_by_template(
+                current_template,
+                x_row,
+                y_value,
+                quality_prompt=quality_prompt,
+            )
+        ),
     )
 
 
@@ -706,12 +740,15 @@ def _render_prompt_by_template(
     template: str,
     x_row: dict[str, str],
     y_value: str,
+    *,
+    quality_prompt: str | None,
 ) -> str:
     return _prompt_render_prompt_by_template(
         template,
         x_row,
         y_value,
         default_template=DEFAULT_TEMPLATE,
+        quality_prompt=quality_prompt,
     )
 
 

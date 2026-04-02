@@ -52,7 +52,6 @@ def _build_plan() -> runner._CellPlan:
             "series": "arknights,",
             "rating": "safe,",
             "general": "solo,",
-            "quality": "masterpiece,",
         },
         y_value="artist-a,",
         positive_prompt="1girl,amiya,",

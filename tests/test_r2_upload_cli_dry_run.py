@@ -76,7 +76,8 @@ def _extended_run_json(
                 "ksampler_node_id": "6",
             },
             "generation": {
-                "template": "{gender}{characters}{series}{rating}{y}{general}{quality}",
+                "template": "{quality}{rating}{y}{gender}{characters}{series}{general}",
+                "quality_prompt": "masterpiece, best quality,",
                 "base_seed": 123,
                 "negative_prompt": None,
                 "append_negative_prompt": "nsfw, nipples, pussy, nude,",

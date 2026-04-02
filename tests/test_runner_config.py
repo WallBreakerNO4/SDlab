@@ -37,6 +37,7 @@ class _WorkflowConfig(Protocol):
 
 class _GenerationConfig(Protocol):
     template: str
+    quality_prompt: str
     base_seed: int
     negative_prompt: str | None
     append_negative_prompt: str | None
@@ -187,7 +188,8 @@ def _valid_config_text(*, schema_version: str = "image-run-config/v1") -> str:
             "workflow:",
             "  ksampler_node_id: '3'",
             "generation:",
-            "  template: '{gender}{y}{quality}'",
+            "  template: '{quality}{gender}{y}'",
+            "  quality_prompt: 'masterpiece, best quality,'",
             "  base_seed: 123",
             "  negative_prompt: bad,",
             "  append_negative_prompt: nsfw, nipples,",
@@ -268,7 +270,8 @@ def test_load_runner_config_happy_path_resolves_repo_relative_paths_and_hashes(
         "civitai": None,
     }
     assert config.model.description == {"zh": "测试模型", "en": "Test model"}
-    assert config.generation.template == "{gender}{y}{quality}"
+    assert config.generation.template == "{quality}{gender}{y}"
+    assert config.generation.quality_prompt == "masterpiece, best quality,"
     assert config.generation.base_seed == 123
     assert config.generation.negative_prompt == "bad,"
     assert config.generation.append_negative_prompt == "nsfw, nipples,"
@@ -341,6 +344,7 @@ def test_load_runner_config_rejects_repo_external_path(tmp_path: Path) -> None:
                 "  ksampler_node_id: null",
                 "generation:",
                 "  template: '{gender}{y}'",
+                "  quality_prompt: 'masterpiece,'",
                 "  base_seed: 1",
                 "  negative_prompt: null",
                 "  append_negative_prompt: null",
@@ -456,6 +460,7 @@ def test_load_runner_config_exposes_compact_model_snapshot_only(tmp_path: Path) 
                 "  ksampler_node_id: null",
                 "generation:",
                 "  template: '{gender}{y}'",
+                "  quality_prompt: 'masterpiece,'",
                 "  base_seed: 1",
                 "  negative_prompt: null",
                 "  append_negative_prompt: null",

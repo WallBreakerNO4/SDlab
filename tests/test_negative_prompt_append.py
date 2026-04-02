@@ -192,7 +192,6 @@ def _build_worker_plan(runner: _RunnerModule, x_info_type: str) -> object:
         "series": "arknights,",
         "rating": "safe,",
         "general": "solo,",
-        "quality": "masterpiece,",
         X_INFO_TYPE_KEY: x_info_type,
     }
     return runner._CellPlan(

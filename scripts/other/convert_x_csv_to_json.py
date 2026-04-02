@@ -20,7 +20,6 @@ X_COLUMN_MAPPING: dict[str, str] = {
     "Series tags": "series",
     "Rating tags": "rating",
     "General tags": "general",
-    "Qulity tags": "quality",
 }
 
 TYPE_COLUMN = "Type"
@@ -38,6 +37,11 @@ def convert_csv_to_yaml(
     items: list[dict[str, object]] = []
     with csv_path.open("r", encoding="utf-8", newline="") as file:
         reader = csv.DictReader(file)
+        fieldnames = reader.fieldnames or []
+        if "Qulity tags" in fieldnames:
+            raise ValueError(
+                "CSV 列 Qulity tags 已移除；请改用 config.yaml 的 generation.quality_prompt"
+            )
         for i, row in enumerate(reader):
             tags: dict[str, list[dict[str, object]]] = {}
             for source_col, key in X_COLUMN_MAPPING.items():
@@ -66,7 +70,9 @@ def convert_csv_to_yaml(
     payload = {"schema": schema, "items": items}
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(
-        yaml.dump(payload, allow_unicode=True, default_flow_style=False, sort_keys=False),
+        yaml.dump(
+            payload, allow_unicode=True, default_flow_style=False, sort_keys=False
+        ),
         encoding="utf-8",
     )
     return len(items)

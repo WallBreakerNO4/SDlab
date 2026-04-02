@@ -22,7 +22,8 @@ def _base_run_payload(x_path: Path, y_path: Path) -> dict[str, object]:
     return {
         "x_json_path": str(x_path),
         "y_json_path": str(y_path),
-        "template": "{gender}{y}{quality}",
+        "template": "{quality}{gender}{y}",
+        "quality_prompt": "masterpiece, best quality,",
         "base_seed": 123,
         "workflow_api_path": "data/workflows/demo.json",
         "x_json_sha256": _sha256_file(x_path),
@@ -70,7 +71,8 @@ def _base_run_payload(x_path: Path, y_path: Path) -> dict[str, object]:
                 "ksampler_node_id": "3",
             },
             "generation": {
-                "template": "{gender}{y}{quality}",
+                "template": "{quality}{gender}{y}",
+                "quality_prompt": "masterpiece, best quality,",
                 "base_seed": 123,
                 "negative_prompt": "bad,",
                 "append_negative_prompt": "nsfw, nipples,",
@@ -112,6 +114,7 @@ def test_load_run_replay_config_reads_optional_new_snapshot_fields(
 
     assert config.x_json_path == x_path
     assert config.y_json_path == y_path
+    assert config.quality_prompt == "masterpiece, best quality,"
     assert config.generation_overrides.negative_prompt == "bad,"
     assert config.generation_overrides.append_negative_prompt == "nsfw, nipples,"
     assert config.ksampler_node_id == "3"

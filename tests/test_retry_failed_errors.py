@@ -170,6 +170,7 @@ def test_retry_failed_with_sha256_mismatch(
         "x_json_path": str(x_json),
         "y_json_path": str(y_json),
         "template": "",
+        "quality_prompt": "masterpiece,",
         "base_seed": 123,
         "workflow_api_path": None,
         "x_json_sha256": "wrong_sha256" * 10,  # 故意错误的 sha256
@@ -245,6 +246,7 @@ def test_retry_failed_with_malformed_metadata_jsonl(
         "x_json_path": str(x_json),
         "y_json_path": str(y_json),
         "template": "",
+        "quality_prompt": "masterpiece,",
         "base_seed": 123,
         "workflow_api_path": None,
         "x_json_sha256": sha256_file(x_json),

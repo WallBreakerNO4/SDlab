@@ -77,7 +77,6 @@ def _write_json_inputs(
                     "series": [{"text": "arknights", "weight": 1.0}],
                     "rating": [{"text": "safe", "weight": 1.0}],
                     "general": [{"text": "solo", "weight": 1.0}],
-                    "quality": [{"text": "masterpiece", "weight": 1.0}],
                 },
                 "info": {"index": 0, "type": x_info_type},
                 "description": {"zh": "示例模型", "en": "Example model"},
@@ -167,7 +166,8 @@ def _fake_runner_config(
             ksampler_node_id="3",
         ),
         generation=SimpleNamespace(
-            template="{gender}{characters}{series}{rating}{y}{general}{quality}",
+            template="{quality}{rating}{y}{gender}{characters}{series}{general}",
+            quality_prompt="masterpiece, best quality,",
             base_seed=123,
             negative_prompt="neg,",
             append_negative_prompt=append_negative_prompt,
@@ -269,8 +269,9 @@ def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
     assert run_payload["y_json_path"] == str(y_path)
     assert (
         run_payload["template"]
-        == "{gender}{characters}{series}{rating}{y}{general}{quality}"
+        == "{quality}{rating}{y}{gender}{characters}{series}{general}"
     )
+    assert run_payload["quality_prompt"] == "masterpiece, best quality,"
     assert run_payload["base_seed"] == 123
     assert run_payload["run_id"] == "run-dry"
     assert run_payload["run_key"] == "run-dry"
@@ -308,7 +309,8 @@ def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
             "ksampler_node_id": "3",
         },
         "generation": {
-            "template": "{gender}{characters}{series}{rating}{y}{general}{quality}",
+            "template": "{quality}{rating}{y}{gender}{characters}{series}{general}",
+            "quality_prompt": "masterpiece, best quality,",
             "base_seed": 123,
             "negative_prompt": "neg,",
             "append_negative_prompt": "app,",
@@ -438,7 +440,8 @@ def test_run_dry_run_ignores_env_append_negative_prompt_in_metadata(
         concurrency=1,
         x_json=str(x_path),
         y_json=str(y_path),
-        template="{gender}{characters}{series}{rating}{y}{general}{quality}",
+        template="{quality}{rating}{y}{gender}{characters}{series}{general}",
+        quality_prompt="masterpiece, best quality,",
         base_seed=123,
         workflow_json=None,
         ksampler_node_id="3",

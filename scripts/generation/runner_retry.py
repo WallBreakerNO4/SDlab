@@ -13,6 +13,7 @@ def _apply_replay_config_to_args(
     args.x_json = str(replay.x_json_path)
     args.y_json = str(replay.y_json_path)
     args.template = replay.template
+    args.quality_prompt = replay.quality_prompt
     args.base_seed = replay.base_seed
     args.workflow_json = replay.workflow_api_path
     args.ksampler_node_id = replay.ksampler_node_id

@@ -57,7 +57,6 @@ def _write_single_cell_inputs(tmp_path: Path) -> tuple[Path, Path]:
                     "series": [{"text": "arknights", "weight": 1.0}],
                     "rating": [{"text": "safe", "weight": 1.0}],
                     "general": [{"text": "solo", "weight": 1.0}],
-                    "quality": [{"text": "masterpiece", "weight": 1.0}],
                 },
                 "info": {"index": 0, "type": "sfw"},
             }
@@ -168,7 +167,8 @@ def _build_runner_args(
         concurrency=1,
         x_json=str(x_json),
         y_json=str(y_json),
-        template="{gender}{characters}{series}{rating}{y}{general}{quality}",
+        template="{quality}{rating}{y}{gender}{characters}{series}{general}",
+        quality_prompt="masterpiece, best quality,",
         base_seed=base_seed,
         workflow_json=workflow_json,
         ksampler_node_id="3",
@@ -243,10 +243,11 @@ def test_resume_hit_keeps_previous_attempt_without_increment(
         "series": "arknights,",
         "rating": "safe,",
         "general": "solo,",
-        "quality": "masterpiece,",
     }
     y_value = "artist-a,"
-    prompt_hash = runner.compute_prompt_hash(render_positive_prompt(x_row, y_value))
+    prompt_hash = runner.compute_prompt_hash(
+        render_positive_prompt(x_row, y_value, "masterpiece, best quality,")
+    )
     seed = derive_seed(100, 0, 0)
     (images_dir / "x0-y0.png").write_bytes(b"png")
 

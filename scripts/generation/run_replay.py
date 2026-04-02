@@ -35,6 +35,7 @@ class RunReplayConfig:
     x_json_path: Path
     y_json_path: Path
     template: str
+    quality_prompt: str
     base_seed: int
     workflow_api_path: str | None
     generation_overrides: ReplayGenerationOverrides
@@ -55,6 +56,7 @@ def load_run_replay_config(
     x_json_path = Path(_require_str(payload, "x_json_path"))
     y_json_path = Path(_require_str(payload, "y_json_path"))
     template = _require_str(payload, "template")
+    quality_prompt = _require_str(payload, "quality_prompt")
     base_seed = _require_int(payload, "base_seed")
     workflow_api_path = _require_optional_str(payload, "workflow_api_path")
     workflow_api_sha256 = _optional_top_level_str(payload, "workflow_api_sha256")
@@ -87,6 +89,7 @@ def load_run_replay_config(
         x_json_path=x_json_path,
         y_json_path=y_json_path,
         template=template,
+        quality_prompt=quality_prompt,
         base_seed=base_seed,
         workflow_api_path=workflow_api_path,
         generation_overrides=generation_overrides,
