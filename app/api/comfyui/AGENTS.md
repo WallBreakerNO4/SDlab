@@ -23,7 +23,7 @@
 - 对外 payload 只保留前端渲染需要的字段；不要透传原始 `run_json` / `metadata` 大对象。
 - `grid/route.ts` 需要分页拉 `images`，否则会撞 PostgREST 默认 `max_rows`。
 - `row/route.ts` 负责把 `image_variants` 映射成展示页缩略图 URL（display/thumb）；公开/私有 URL 都通过 `lib/r2-url.ts`。
-- `runs/route.ts` 当前只返回首页列表所需的基础字段；尽管脚本侧已具备封面图/主页缩略图资产，Web API 这里尚未输出对应字段。
+- `runs/route.ts` 当前除基础字段外，还会返回首页列表所需的 `model`、`assets.cover` 与 `assets.homepage_cards`；这些字段用于首页封面图和主页缩略图展示。
 - `workflow/route.ts` 先从 `runs.workflow_download_r2_key` 取 key，再验证它必须落在 `runs/{runDir}/artifacts/workflow/*.json`，随后通过 `getCloudflareContext().env.R2_PUBLIC_BUCKET` 回源并保留对象 metadata。
 - `catch` 分支只返回固定短文案，避免暴露数据库、路径、环境细节。
 
