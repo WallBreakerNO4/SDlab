@@ -268,9 +268,21 @@ def _resolve_workflow_asset_from_config_dir(
 
 
 def _load_assets(*, run_dir: Path, repo_root: Path) -> AssetsConfig:
-    cover_image_path = run_dir / "image.jpg"
+    cover_image_candidates = sorted(
+        path
+        for path in run_dir.iterdir()
+        if path.is_file()
+        and path.stem == "image"
+        and path.suffix.lower() in _IMAGE_EXTENSIONS
+    )
+
+    if len(cover_image_candidates) > 1:
+        names = ", ".join(path.name for path in cover_image_candidates)
+        raise ValueError(f"run 封面图存在多个 image.* 文件: {names}")
+
     cover_image: AssetRef | None = None
-    if cover_image_path.exists():
+    if cover_image_candidates:
+        cover_image_path = cover_image_candidates[0]
         if not cover_image_path.is_file():
             raise ValueError(f"run 封面图不是文件: {cover_image_path}")
         cover_image = AssetRef(

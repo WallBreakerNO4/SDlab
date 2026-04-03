@@ -115,6 +115,15 @@ def _sample_payload() -> dict[str, object]:
     }
 
 
+def _sample_payload_with_png_run_asset() -> dict[str, object]:
+    payload = _sample_payload()
+    run_assets = cast(list[dict[str, object]], payload["run_assets"])
+    run_assets[0]["source_path"] = "data/runs/example/image.png"
+    metadata = cast(dict[str, object], run_assets[0]["metadata"])
+    metadata["repo_relative_path"] = "data/runs/example/image.png"
+    return payload
+
+
 class _FakeResponse:
     def __init__(self, data: object) -> None:
         self.data = data
@@ -470,6 +479,18 @@ def test_upsert_upload_index_persists_run_assets() -> None:
         "display_webp",
         "thumb_webp",
     }
+
+
+def test_upsert_upload_index_preserves_png_run_asset_paths() -> None:
+    client = _InMemorySupabaseClient(return_upsert_rows=True)
+    writer = SupabaseWriter(client=client, dry_run=False)
+
+    writer.upsert_upload_index(_sample_payload_with_png_run_asset())
+
+    run_asset_row = next(iter(client._tables["run_assets"].values()))
+    assert run_asset_row["source_path"] == "data/runs/example/image.png"
+    metadata = cast(dict[str, object], run_asset_row["metadata"])
+    assert metadata["repo_relative_path"] == "data/runs/example/image.png"
 
 
 def test_upsert_upload_index_fallbacks_to_select_for_ids() -> None:

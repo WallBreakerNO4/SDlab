@@ -142,6 +142,27 @@ def test_build_public_manifest_redacts_private_content_and_keys() -> None:
     assert len(private_images) == 2
 
 
+def test_build_public_manifest_preserves_non_jpg_run_asset_extensions() -> None:
+    payload = _sample_payload()
+    run_json = cast(dict[str, object], payload["run_json"])
+    assets = cast(dict[str, object], run_json["assets"])
+    cover_image = cast(dict[str, object], assets["cover_image"])
+    cover_image["path"] = "/tmp/private/image.png"
+    cover_image["repo_relative_path"] = "data/runs/example/image.png"
+
+    run_assets = cast(list[dict[str, object]], payload["run_assets"])
+    run_assets[0]["source_path"] = "data/runs/example/image.png"
+
+    public_manifest = build_public_manifest(build_run_manifest(payload))
+
+    public_run_assets = cast(list[dict[str, object]], public_manifest["run_assets"])
+    assert public_run_assets[0]["source_path"] == "data/runs/example/image.png"
+    public_run_json = cast(dict[str, object], public_manifest["run_json"])
+    public_assets = cast(dict[str, object], public_run_json["assets"])
+    public_cover = cast(dict[str, object], public_assets["cover_image"])
+    assert public_cover["repo_relative_path"] == "data/runs/example/image.png"
+
+
 def test_manifest_object_key_is_stable_and_contains_required_segments() -> None:
     manifest = build_run_manifest(_sample_payload())
 

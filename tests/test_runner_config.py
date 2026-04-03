@@ -133,9 +133,13 @@ def _sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _write_png(path: Path) -> None:
+def _write_image(path: Path, *, image_format: str = "PNG") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    Image.new("RGB", (8, 6), (120, 80, 40)).save(path, format="PNG")
+    Image.new("RGB", (8, 6), (120, 80, 40)).save(path, format=image_format)
+
+
+def _write_png(path: Path) -> None:
+    _write_image(path, image_format="PNG")
 
 
 def _write_assets(repo_root: Path) -> tuple[Path, Path, Path, Path, Path, Path, Path]:
@@ -144,6 +148,40 @@ def _write_assets(repo_root: Path) -> tuple[Path, Path, Path, Path, Path, Path, 
     workflow_path = repo_root / "data/runs/example/api.json"
     workflow_download_path = repo_root / "data/runs/example/workflow.json"
     cover_image_path = repo_root / "data/runs/example/image.jpg"
+    homepage_first = repo_root / "data/runs/example/images/001.png"
+    homepage_second = repo_root / "data/runs/example/images/002.png"
+    x_path.parent.mkdir(parents=True, exist_ok=True)
+    y_path.parent.mkdir(parents=True, exist_ok=True)
+    workflow_path.parent.mkdir(parents=True, exist_ok=True)
+    x_path.write_text(json.dumps({"schema": "", "items": []}) + "\n", encoding="utf-8")
+    y_path.write_text("schema: prompt-y-table/v2\nitems: []\n", encoding="utf-8")
+    workflow_path.write_text('{"3": {"class_type": "KSampler"}}\n', encoding="utf-8")
+    workflow_download_path.write_text('{"version": 1}\n', encoding="utf-8")
+    _write_png(cover_image_path)
+    _write_png(homepage_first)
+    _write_png(homepage_second)
+    return (
+        x_path,
+        y_path,
+        workflow_path,
+        workflow_download_path,
+        cover_image_path,
+        homepage_first,
+        homepage_second,
+    )
+
+
+def _write_assets_with_cover_extension(
+    repo_root: Path, *, cover_suffix: str
+) -> tuple[Path, Path, Path, Path, Path, Path, Path]:
+    if cover_suffix not in {".png", ".jpg", ".jpeg", ".webp", ".avif"}:
+        raise ValueError(f"不支持的测试封面图扩展名: {cover_suffix}")
+
+    x_path = repo_root / "data/prompts/x.json"
+    y_path = repo_root / "data/prompts/y.yaml"
+    workflow_path = repo_root / "data/runs/example/api.json"
+    workflow_download_path = repo_root / "data/runs/example/workflow.json"
+    cover_image_path = repo_root / f"data/runs/example/image{cover_suffix}"
     homepage_first = repo_root / "data/runs/example/images/001.png"
     homepage_second = repo_root / "data/runs/example/images/002.png"
     x_path.parent.mkdir(parents=True, exist_ok=True)
@@ -287,6 +325,111 @@ def test_load_runner_config_happy_path_resolves_repo_relative_paths_and_hashes(
     assert config.selection.y_limit == 2
     assert config.selection.x_indexes == [0]
     assert config.selection.y_indexes == [1]
+
+
+def test_load_runner_config_accepts_png_cover_image_when_jpg_is_missing(
+    tmp_path: Path,
+) -> None:
+    module = _import_runner_config_module()
+    (
+        x_path,
+        y_path,
+        workflow_path,
+        workflow_download_path,
+        cover_image_path,
+        homepage_first,
+        homepage_second,
+    ) = _write_assets_with_cover_extension(tmp_path, cover_suffix=".png")
+    config_path = tmp_path / "data/runs/example/config.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(_valid_config_text(), encoding="utf-8")
+
+    config = module.load_runner_config(str(config_path), repo_root=tmp_path)
+
+    assert Path(config.prompts.x.path) == x_path
+    assert Path(config.prompts.y.path) == y_path
+    assert Path(config.workflow.path) == workflow_path
+    assert config.workflow.download is not None
+    assert Path(config.workflow.download.path) == workflow_download_path
+    assert config.assets.cover_image is not None
+    assert Path(config.assets.cover_image.path) == cover_image_path
+    assert config.assets.cover_image.repo_relative_path == "data/runs/example/image.png"
+    assert config.assets.cover_image.sha256 == _sha256_file(cover_image_path)
+    assert [asset.repo_relative_path for asset in config.assets.homepage_images] == [
+        "data/runs/example/images/001.png",
+        "data/runs/example/images/002.png",
+    ]
+    assert [Path(asset.path) for asset in config.assets.homepage_images] == [
+        homepage_first,
+        homepage_second,
+    ]
+
+
+def test_load_runner_config_rejects_multiple_cover_image_files(
+    tmp_path: Path,
+) -> None:
+    module = _import_runner_config_module()
+    _ = _write_assets(tmp_path)
+    png_cover_path = tmp_path / "data/runs/example/image.png"
+    _write_png(png_cover_path)
+    config_path = tmp_path / "data/runs/example/config.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(_valid_config_text(), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"多个 image\.\* 文件"):
+        module.load_runner_config(str(config_path), repo_root=tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("cover_suffix", "expected_repo_relative_path"),
+    [
+        (".jpeg", "data/runs/example/image.jpeg"),
+        (".webp", "data/runs/example/image.webp"),
+        (".avif", "data/runs/example/image.avif"),
+    ],
+)
+def test_load_runner_config_accepts_supported_cover_image_extensions(
+    tmp_path: Path,
+    cover_suffix: str,
+    expected_repo_relative_path: str,
+) -> None:
+    module = _import_runner_config_module()
+    (_, _, _, _, cover_image_path, _, _) = _write_assets_with_cover_extension(
+        tmp_path,
+        cover_suffix=cover_suffix,
+    )
+    config_path = tmp_path / "data/runs/example/config.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(_valid_config_text(), encoding="utf-8")
+
+    config = module.load_runner_config(str(config_path), repo_root=tmp_path)
+
+    assert config.assets.cover_image is not None
+    assert Path(config.assets.cover_image.path) == cover_image_path
+    assert config.assets.cover_image.repo_relative_path == expected_repo_relative_path
+    assert config.assets.cover_image.sha256 == _sha256_file(cover_image_path)
+
+
+def test_load_runner_config_accepts_uppercase_cover_image_extension(
+    tmp_path: Path,
+) -> None:
+    module = _import_runner_config_module()
+    (_, _, _, _, _, _, _) = _write_assets_with_cover_extension(
+        tmp_path,
+        cover_suffix=".png",
+    )
+    lowercase_cover = tmp_path / "data/runs/example/image.png"
+    uppercase_cover = tmp_path / "data/runs/example/image.PNG"
+    lowercase_cover.rename(uppercase_cover)
+    config_path = tmp_path / "data/runs/example/config.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(_valid_config_text(), encoding="utf-8")
+
+    config = module.load_runner_config(str(config_path), repo_root=tmp_path)
+
+    assert config.assets.cover_image is not None
+    assert Path(config.assets.cover_image.path) == uppercase_cover
+    assert config.assets.cover_image.repo_relative_path == "data/runs/example/image.PNG"
 
 
 def test_load_runner_config_rejects_unknown_key(tmp_path: Path) -> None:

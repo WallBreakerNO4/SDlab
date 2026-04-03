@@ -28,11 +28,18 @@ def _write_png(path: Path, *, size: tuple[int, int] = (8, 6)) -> None:
     image.save(path, format="PNG")
 
 
+def _write_jpeg(path: Path, *, size: tuple[int, int] = (8, 6)) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    image = Image.new("RGB", size, (10, 20, 30))
+    image.save(path, format="JPEG")
+
+
 def _extended_run_json(
     *,
     run_dir: Path,
     run_dir_value: str | None = None,
     include_run_assets: bool = False,
+    run_assets_payload: dict[str, object] | None = None,
 ) -> dict[str, object]:
     run_name = run_dir_value if run_dir_value is not None else run_dir.name
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -100,7 +107,9 @@ def _extended_run_json(
         "workflow_download_path": str(workflow_download_path),
         "workflow_download_sha256": workflow_download_sha256,
     }
-    if include_run_assets:
+    if run_assets_payload is not None:
+        payload["assets"] = run_assets_payload
+    elif include_run_assets:
         cover_path = ROOT / "data/runs/example/image.jpg"
         homepage_path = ROOT / "data/runs/example/images/1021-832x1216.jpg"
         payload["assets"] = {
@@ -125,6 +134,7 @@ def _write_run_fixture(
     use_multi_paths: bool = False,
     run_json_run_dir: str | None = None,
     include_run_assets: bool = False,
+    run_assets_payload: dict[str, object] | None = None,
 ) -> Path:
     run_dir = root / run_name
     images_dir = run_dir / "images"
@@ -156,6 +166,7 @@ def _write_run_fixture(
                 run_dir=run_dir,
                 run_dir_value=run_json_run_dir,
                 include_run_assets=include_run_assets,
+                run_assets_payload=run_assets_payload,
             ),
             ensure_ascii=False,
         ),
@@ -265,6 +276,51 @@ def test_cli_dry_run_includes_cover_and_homepage_asset_variants(
     ]
     assert any("display_webp.webp" in key for key in asset_keys)
     assert any("thumb_avif.avif" in key for key in asset_keys)
+
+
+def test_cli_dry_run_includes_png_cover_asset_variants_with_original_extension(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    cover_path = tmp_path / "repo-assets/image.png"
+    homepage_path = tmp_path / "repo-assets/images/card.jpeg"
+    _write_png(cover_path)
+    _write_jpeg(homepage_path)
+    run_assets_payload = {
+        "cover_image": {
+            "path": str(cover_path),
+            "repo_relative_path": "data/runs/custom/image.png",
+            "sha256": _sha256_file(cover_path),
+        },
+        "homepage_images": [
+            {
+                "path": str(homepage_path),
+                "repo_relative_path": "data/runs/custom/images/card.jpeg",
+                "sha256": _sha256_file(homepage_path),
+            }
+        ],
+    }
+    run_dir = _write_run_fixture(
+        tmp_path,
+        run_name="png-cover-run",
+        run_assets_payload=run_assets_payload,
+    )
+
+    exit_code = main(["--dry-run", "--run-dir", str(run_dir)])
+
+    assert exit_code == 0
+    payload = _read_stdout_json(capsys)
+    assert payload.get("planned_run_asset_variant_uploads") == 8
+
+    planned_uploads = payload.get("planned_uploads")
+    assert isinstance(planned_uploads, list)
+    planned_asset_keys = [
+        str(cast(dict[str, object], item).get("key"))
+        for item in planned_uploads
+        if isinstance(item, dict)
+    ]
+    assert any("display_webp.webp" in key for key in planned_asset_keys)
+    assert any("thumb_webp.webp" in key for key in planned_asset_keys)
 
 
 def test_build_run_db_fields_extracts_model_structured_fields(tmp_path: Path) -> None:
