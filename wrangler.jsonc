@@ -3,7 +3,10 @@
   "name": "sd-style-lab",
   "main": ".open-next/worker.js",
   "compatibility_date": "2025-02-28",
-  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "compatibility_flags": [
+    "nodejs_compat",
+    "global_fetch_strictly_public"
+  ],
   // 静态资源（OpenNext 构建产物）
   "assets": {
     "directory": ".open-next/assets",
@@ -23,11 +26,12 @@
       "bucket_name": "sdslab-public",
     },
   ],
-  // 非敏感环境变量；私有图签名所需 access key / secret 请通过 wrangler secret 配置
+  // 非敏感环境变量；私有图签名所需 R2_ENDPOINT / access key / secret 请通过 wrangler secret 配置
   "vars": {
     "NEXT_PUBLIC_SUPABASE_URL": "https://pevlrhqutitakzpsvqyc.supabase.co",
     "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_CBYV0tBjm0qaZy2LeJz6_w_EMbT3L5m",
     "R2_PUBLIC_BASE_URL": "https://images.sdlab.wall-breaker-no4.xyz",
     "R2_PRIVATE_BUCKET": "sdslab-private",
+    "R2_SIGNED_URL_TTL_SECONDS": "60",
   },
 }
