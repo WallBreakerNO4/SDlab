@@ -390,7 +390,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
     count: grid.y_indexes.length,
     getScrollElement: () => scrollElementRef.current,
     estimateSize: () => rowHeight,
-    overscan: 4,
+    overscan: 8,
   });
 
   const gridTemplateColumns = useMemo(

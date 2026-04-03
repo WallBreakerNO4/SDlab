@@ -91,7 +91,6 @@ export function GridImage({
               isLoaded ? "opacity-100" : "opacity-0",
             )}
             data-testid="run-grid-image"
-            loading="lazy"
             decoding="async"
             src={src}
             onLoad={() => setIsLoaded(true)}
