@@ -9,11 +9,6 @@ import type {
 export const runtime = "nodejs";
 
 type GridCellRow = {
-  run_dir: string;
-  x_columns: JsonValue[] | null;
-  y_indexes: number[] | null;
-  x_count: number | null;
-  y_count: number | null;
   x_index: number | null;
   y_index: number | null;
   batch_index: number | null;
@@ -21,6 +16,13 @@ type GridCellRow = {
   width: number | null;
   height: number | null;
   blurhash: string | null;
+};
+
+type RunGridMetaRow = {
+  x_columns: JsonValue[] | null;
+  y_indexes: number[] | null;
+  x_count: number | null;
+  y_count: number | null;
 };
 
 type RouteContext = {
@@ -61,16 +63,50 @@ export async function GET(
 
     const supabase = await createSupabaseAuthClient();
     const PAGE_SIZE = 1000;
-    const allRows: GridCellRow[] = [];
-    let pageOffset = 0;
-    let hasMore = true;
+    const [runMetaResult, firstPageResult] = await Promise.all([
+      supabase
+        .from("runs")
+        .select("x_columns,y_indexes,x_count,y_count")
+        .eq("run_dir", runDir)
+        .maybeSingle(),
+      supabase
+        .from("comfyui_grid_cells")
+        .select("x_index,y_index,batch_index,category,width,height,blurhash")
+        .eq("run_dir", runDir)
+        .order("y_index", { ascending: true })
+        .order("x_index", { ascending: true })
+        .order("batch_index", { ascending: true })
+        .range(0, PAGE_SIZE - 1),
+    ]);
+
+    if (runMetaResult.error) {
+      return Response.json(
+        { error: "Failed to load run grid" },
+        { status: 500 },
+      );
+    }
+
+    const runMeta = runMetaResult.data as RunGridMetaRow | null;
+    if (!runMeta) {
+      return Response.json({ error: "Run not found" }, { status: 404 });
+    }
+
+    if (firstPageResult.error) {
+      return Response.json(
+        { error: "Failed to load run grid" },
+        { status: 500 },
+      );
+    }
+
+    const allRows: GridCellRow[] = (firstPageResult.data ??
+      []) as GridCellRow[];
+    let pageOffset = PAGE_SIZE;
+    let hasMore = allRows.length === PAGE_SIZE;
 
     while (hasMore) {
       const { data: pageData, error: pageError } = await supabase
         .from("comfyui_grid_cells")
-        .select(
-          "run_dir,x_columns,y_indexes,x_count,y_count,x_index,y_index,batch_index,category,width,height,blurhash",
-        )
+        .select("x_index,y_index,batch_index,category,width,height,blurhash")
         .eq("run_dir", runDir)
         .order("y_index", { ascending: true })
         .order("x_index", { ascending: true })
@@ -98,9 +134,8 @@ export async function GET(
       return Response.json({ error: "Run not found" }, { status: 404 });
     }
 
-    const firstRow = allRows[0];
-    const xColumnsRaw = firstRow.x_columns;
-    const yIndexesRaw = firstRow.y_indexes;
+    const xColumnsRaw = runMeta.x_columns;
+    const yIndexesRaw = runMeta.y_indexes;
 
     const x_columns = Array.isArray(xColumnsRaw)
       ? xColumnsRaw
@@ -117,13 +152,9 @@ export async function GET(
       : [];
 
     const x_count =
-      typeof firstRow.x_count === "number"
-        ? firstRow.x_count
-        : x_columns.length;
+      typeof runMeta.x_count === "number" ? runMeta.x_count : x_columns.length;
     const y_count =
-      typeof firstRow.y_count === "number"
-        ? firstRow.y_count
-        : y_indexes.length;
+      typeof runMeta.y_count === "number" ? runMeta.y_count : y_indexes.length;
 
     type BlurhashRow = {
       x_index: number;

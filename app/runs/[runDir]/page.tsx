@@ -186,7 +186,8 @@ export default function RunDetailPage({
   params: Promise<{ runDir: string | string[] }>;
 }) {
   const resolvedParams = use(params);
-  const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [detailLoadState, setDetailLoadState] = useState<LoadState>("loading");
+  const [gridLoadState, setGridLoadState] = useState<LoadState>("loading");
   const [detailData, setDetailData] = useState<RunDetailResponse | null>(null);
   const [gridData, setGridData] = useState<RunGridIndexData | null>(null);
 
@@ -203,75 +204,78 @@ export default function RunDetailPage({
   useEffect(() => {
     const abortController = new AbortController();
 
-    async function fetchRunDetail() {
+    async function fetchAll() {
       if (!runDir) {
+        setDetailLoadState("not-found");
+        setGridLoadState("not-found");
         setDetailData(null);
         setGridData(null);
-        setLoadState("not-found");
         return;
       }
 
-      setLoadState("loading");
+      setDetailLoadState("loading");
+      setGridLoadState("loading");
 
-      try {
-        const [detailResponse, gridResponse] = await Promise.all([
-          fetch(`/api/comfyui/run/${encodeURIComponent(runDir)}`, {
-            signal: abortController.signal,
-          }),
-          fetch(`/api/comfyui/run/${encodeURIComponent(runDir)}/grid`, {
-            signal: abortController.signal,
-          }),
-        ]);
+    const detailPromise = fetch(`/api/comfyui/run/${encodeURIComponent(runDir)}`, {
+      signal: abortController.signal,
+    }).then(async (res) => {
+      if (res.status === 404) throw new Error("not-found");
+      if (!res.ok) throw new Error("error");
+      const data = await res.json();
+      if (!isRunDetailResponse(data)) throw new Error("error");
+      return data;
+    });
 
-        if (detailResponse.status === 404 || gridResponse.status === 404) {
-          setDetailData(null);
-          setGridData(null);
-          setLoadState("not-found");
-          return;
-        }
+    const gridPromise = fetch(`/api/comfyui/run/${encodeURIComponent(runDir)}/grid`, {
+      signal: abortController.signal,
+    }).then(async (res) => {
+      if (res.status === 404) throw new Error("not-found");
+      if (!res.ok) throw new Error("error");
+      const data = await res.json();
+      if (!isRunGridIndexData(data)) throw new Error("error");
+      return data;
+    });
 
-        if (!detailResponse.ok || !gridResponse.ok) {
-          throw new Error("Failed to load run detail");
-        }
+    detailPromise
+      .then((data) => {
+        if (abortController.signal.aborted) return;
+        setDetailData(data);
+        setDetailLoadState("ready");
+      })
+      .catch((err) => {
+        if (abortController.signal.aborted) return;
+        if (err.name === "AbortError") return;
+        setDetailLoadState(err.message === "not-found" ? "not-found" : "error");
+      });
 
-        const [detailPayload, gridPayload]: [unknown, unknown] =
-          await Promise.all([detailResponse.json(), gridResponse.json()]);
-
-        if (!isRunDetailResponse(detailPayload)) {
-          throw new Error("Unexpected run detail payload");
-        }
-
-        if (!isRunGridIndexData(gridPayload)) {
-          throw new Error("Unexpected run grid payload");
-        }
-
-        setDetailData(detailPayload);
-        setGridData(gridPayload);
-        setLoadState("ready");
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          return;
-        }
-
-        setDetailData(null);
-        setGridData(null);
-        setLoadState("error");
-      }
+    gridPromise
+      .then((data) => {
+        if (abortController.signal.aborted) return;
+        setGridData(data);
+        setGridLoadState("ready");
+      })
+      .catch((err) => {
+        if (abortController.signal.aborted) return;
+        if (err.name === "AbortError") return;
+        setGridLoadState(err.message === "not-found" ? "not-found" : "error");
+      });
     }
 
-    void fetchRunDetail();
+    void fetchAll();
 
     return () => {
       abortController.abort();
     };
   }, [runDir]);
 
-  const isLoading = loadState === "loading";
-  const isReady =
-    loadState === "ready" && detailData !== null && gridData !== null;
-  const xCount = isReady ? gridData.x_columns.length : 0;
-  const yCount = isReady ? gridData.y_indexes.length : 0;
-  const breadcrumbTitle = isReady
+  const isDetailLoading = detailLoadState === "loading";
+  const isGridLoading = gridLoadState === "loading";
+  const isDetailReady = detailLoadState === "ready" && detailData !== null;
+  const isGridReady = gridLoadState === "ready" && gridData !== null;
+  
+  const xCount = isGridReady ? gridData.x_columns.length : 0;
+  const yCount = isGridReady ? gridData.y_indexes.length : 0;
+  const breadcrumbTitle = isDetailReady
     ? detailData.run.model?.name || detailData.run.run_dir
     : runDir || "(无效路径)";
 
@@ -302,13 +306,13 @@ export default function RunDetailPage({
           </BreadcrumbItem>
         </BreadcrumbList>
       </Breadcrumb>
-      {isLoading ? (
+      {isDetailLoading ? (
         <div data-testid="run-detail-loading">
           <SummarySkeleton />
         </div>
       ) : null}
 
-      {loadState === "not-found" ? (
+      {detailLoadState === "not-found" ? (
         <Empty data-testid="run-not-found">
           <EmptyHeader>
             <EmptyTitle>未找到 run</EmptyTitle>
@@ -319,7 +323,7 @@ export default function RunDetailPage({
         </Empty>
       ) : null}
 
-      {loadState === "error" ? (
+      {detailLoadState === "error" ? (
         <Empty data-testid="run-error">
           <EmptyHeader>
             <EmptyTitle>加载失败</EmptyTitle>
@@ -330,7 +334,7 @@ export default function RunDetailPage({
         </Empty>
       ) : null}
 
-      {isReady
+      {isDetailReady
         ? (() => {
             const modelName =
               detailData.run.model?.name || detailData.run.run_dir;
@@ -380,7 +384,7 @@ export default function RunDetailPage({
                       className="size-4"
                       strokeWidth={2}
                     />
-                    <span>{`${xCount}×${yCount}`}</span>
+                    <span>{isGridReady ? `${xCount}×${yCount}` : "加载中..."}</span>
                   </div>
                   <div className="text-muted-foreground flex items-center gap-1.5">
                     <HugeiconsIcon
@@ -458,9 +462,9 @@ export default function RunDetailPage({
         : null}
 
       <div className="flex min-h-0 flex-1 flex-col">
-        {isLoading ? <GridSkeleton /> : null}
+        {isGridLoading ? <GridSkeleton /> : null}
 
-        {isReady ? (
+        {isGridReady ? (
           <div className="min-h-0 flex-1">
             <VirtualGrid
               runDir={runDir}
@@ -470,7 +474,7 @@ export default function RunDetailPage({
           </div>
         ) : null}
 
-        {loadState === "not-found" || loadState === "error" ? (
+        {(gridLoadState === "not-found" || gridLoadState === "error") && isDetailReady ? (
           <Empty>
             <EmptyHeader>
               <EmptyTitle>暂无网格可展示</EmptyTitle>
