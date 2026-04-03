@@ -58,7 +58,6 @@
 | run 详情页            | `app/runs/[runDir]/page.tsx`                                                     | 并行拉 run + grid，显示 workflow 下载入口                                      |
 | App API 总约定        | `app/api/AGENTS.md`                                                              | `app/api/**/route.ts` 共享约束                                                 |
 | ComfyUI API           | `app/api/comfyui/**/route.ts`                                                    | Node runtime + Supabase 查询 + workflow 下载                                   |
-| R2 私有代理           | `app/api/r2/private/[...r2Key]/route.ts`                                         | 认证后代理 R2 private bucket                                                   |
 | Auth 回调特例         | `app/auth/AGENTS.md`                                                             | PKCE callback 直接交换 session                                                 |
 | 站点壳层 / 登录入口   | `app/layout.tsx`、`components/site-header.tsx`                                   | ThemeProvider + AuthProvider + 登录弹窗入口                                    |
 | Cloudflare / OpenNext | `next.config.ts`、`open-next.config.ts`、`cloudflare-env.d.ts`、`wrangler.jsonc` | 本地 Miniflare + Workers bindings / vars                                       |
@@ -81,7 +80,7 @@
 | `GET`                         | function | `app/api/comfyui/run/[runDir]/grid/route.ts`   | grid + blurhash API |
 | `GET`                         | function | `app/api/comfyui/run/[runDir]/row/route.ts`    | 行级图片 API        |
 | `publicObjectUrl`             | function | `lib/r2-url.ts`                                | 公开变体 URL        |
-| `privateObjectUrl`            | function | `lib/r2-url.ts`                                | 私有代理 URL        |
+| `privateObjectUrl`            | function | `lib/r2-url.ts`                                | 私有图签名 URL      |
 | `isValidRunDir`               | function | `lib/comfyui-types.ts`                         | runDir 形态校验     |
 | `assertSafeRelativeImagePath` | function | `lib/comfyui-path.ts`                          | 相对图片路径校验    |
 
@@ -91,7 +90,7 @@
 - Python：I/O 统一 `pathlib.Path`；生图产物固定为 `run.json` + `metadata.jsonl` + `images/`；写盘后保持 flush/fsync 语义。
 - Python 运行资产：`scripts/generation/runner_config.py` 会把 run 目录下的 `image.*` 识别为封面图、`images/*` 识别为主页缩略图源资产；上传链路会继续把这些 run 级资产写入 R2 + Supabase。
 - API：`app/api/**/route.ts` 保持 `runtime = "nodejs"`；错误响应返回固定短文案，不透出绝对路径、stack、凭证。
-- Supabase：ComfyUI API 与 R2 私有代理统一用 `createSupabaseAuthClient()`；浏览器端认证统一用 `createSupabaseBrowserClient()`；`app/auth/callback/route.ts` 为 PKCE 交换 session 的例外。
+- Supabase：ComfyUI API 统一用 `createSupabaseAuthClient()`；浏览器端认证统一用 `createSupabaseBrowserClient()`；`app/auth/callback/route.ts` 为 PKCE 交换 session 的例外。
 - Middleware 例外：`middleware.ts` 不能 import `lib/supabase-auth.ts`，因为后者依赖 `server-only` + `next/headers`。
 - Cloudflare：本地 `next dev` 通过 `initOpenNextCloudflareForDev()` 提供 Miniflare 绑定；服务端访问 R2 bucket 走 `getCloudflareContext()`。
 - 路径与 URL：API 入口的 `runDir` 先用 `lib/comfyui-types.ts:isValidRunDir()` 判形态；共享路径处理再走 `lib/comfyui-path.ts`；R2 URL 统一走 `lib/r2-url.ts`。

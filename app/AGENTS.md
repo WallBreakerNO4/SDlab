@@ -2,7 +2,7 @@
 
 ## 概览
 
-- 页面层负责 runs / run detail / auth callback 展示与全站 layout 装配；数据从 Supabase API 读取，图片从 R2 公开 URL 或私有代理读取。
+- 页面层负责 runs / run detail / auth callback 展示与全站 layout 装配；数据从 Supabase API 读取，图片从 R2 公开 URL 或私有签名 URL 读取。
 - 术语约定：run 详情页网格里消费的 `display_*` / `thumb_*` 变体叫“展示页缩略图”；run 级 `image.*` 属于封面图，同级 `images/*` 属于主页缩略图集合。当前网页首页尚未接入封面图/主页缩略图。
 
 ## 去哪儿看
@@ -19,22 +19,21 @@
 | API：grid 索引      | `app/api/comfyui/run/[runDir]/grid/route.ts`        | blurhash_cells + 网格索引                                     |
 | API：row 级图片查询 | `app/api/comfyui/run/[runDir]/row/route.ts`         | 变体 URL + metadata                                           |
 | API：workflow 下载  | `app/api/comfyui/run/[runDir]/workflow/route.ts`    | 认证后读取 R2 workflow artifact 并返回下载响应                |
-| API：R2 私有代理    | `app/api/r2/private/[...r2Key]/route.ts`            | 认证后代理 private bucket                                     |
 | 布局与样式入口      | `app/layout.tsx`、`app/globals.css`                 | token / fonts / ThemeProvider / AuthProvider                  |
 | 站点头部与登录入口  | `components/site-header.tsx`                        | ThemeToggle + 登录弹窗 + 用户菜单                             |
 | API 局部约定        | `app/api/comfyui/AGENTS.md`、`app/api/r2/AGENTS.md` | route 细则                                                    |
 
 ## 约定（本目录特有）
 
-- App Router API 保持 `export const runtime = "nodejs"`；R2 私有代理额外设 `dynamic = "force-dynamic"`。
-- ComfyUI API 与 R2 私有代理统一经 `createSupabaseAuthClient()`；`auth/callback` 为 PKCE 特例，直接用 `createServerClient()` 交换 session。
+- App Router API 保持 `export const runtime = "nodejs"`。
+- ComfyUI API 统一经 `createSupabaseAuthClient()`；`auth/callback` 为 PKCE 特例，直接用 `createServerClient()` 交换 session。
 - `app/api/` 负责 route 级共性约束；`app/api/comfyui/` 与 `app/api/r2/` 只补充各自 payload / 代理细节。
 - run 详情页当前除了 summary + grid，还消费 `run.workflow.download_url` 暴露 workflow 下载入口；页面层只消费 URL，不直接接触 R2 bucket 细节。
 - 脚本侧已经适配 run 级封面图与主页缩略图资产，但网页侧当前仍未接线；`app/page.tsx` 与 `/api/comfyui/runs` 还没有对应字段消费。
 - 首页若接入封面图/主页缩略图，需要新增明确的数据字段或 API 输出；不要把 run 详情页的展示页缩略图语义直接挪作首页卡片素材。
 - `app/layout.tsx` 负责挂载 `ThemeProvider`、`AuthProvider`、`SiteHeader`、`SiteFooter`；全站认证/主题入口从这里接入。
 - 页面 fetch 后先做 type guard，再进入渲染状态机；错误态与 not-found 分开处理。
-- 图片路径/对象 key 不在页面层手拼；公开变体走 `publicObjectUrl()`，私有对象走 `/api/r2/private/...`。
+- 图片路径/对象 key 不在页面层手拼；公开变体走 `publicObjectUrl()`，私有对象走 `privateObjectUrl()` 返回的短期签名 URL。
 - 本目录当前不维护本地文件流降级 route；Web 侧以 Supabase + R2 为准。
 
 ## 反模式
@@ -42,4 +41,4 @@
 - 不要在页面或 route 里绕过 `lib/r2-url.ts` / `lib/comfyui-path.ts` 手工拼路径。
 - 不要在 API 响应里返回异常堆栈、本机路径或凭证相关细节。
 - 不要把 `.next/` 或 `types/*.d.ts` 当可编辑源码。
-- 不要在 ComfyUI API 或 R2 私有代理里直接创建裸 `createServerClient()`；统一走 `lib/supabase-auth.ts`。
+- 不要在 ComfyUI API 里直接创建裸 `createServerClient()`；统一走 `lib/supabase-auth.ts`。

@@ -24,7 +24,7 @@
 
 - 业务组件优先复用 `components/ui/*` primitives（Button/Dialog/Card/Table/Skeleton 等）
 - 认证入口统一经 `AuthProvider` + `useAuth()`；客户端组件只消费浏览器端会话，不直接导入 `server-only` 的 Supabase 实现
-- 图片源：优先使用 R2 公开 URL（`lib/r2-url.ts`）；私有图片通过 `/api/r2/private/` 代理
+- 图片源：优先使用 R2 公开 URL（`lib/r2-url.ts`）；私有图片使用 `privateObjectUrl()` 生成的短期签名 URL
 - 性能：大网格依赖虚拟化（`@tanstack/react-virtual`），避免一次性渲染全部 cell
 - Blurhash：图片加载前展示 blurhash 占位（`blurhash-canvas.tsx`），提升感知加载速度
 - 主题切换通过 `next-themes`；按钮类组件需处理 mounted 前后的 hydration 差异
