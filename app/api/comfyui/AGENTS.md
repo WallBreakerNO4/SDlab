@@ -19,6 +19,7 @@
 
 - 每个 `route.ts` 保持 `export const runtime = "nodejs"`。
 - 服务端查询统一走 `createSupabaseAuthClient()`；使用 publishable key + cookie session，受 RLS 约束。
+- 动态 route 统一采用 `context.params: Promise<{ runDir: string }>` 形态；进入 handler 后先 `await context.params`，再做 `isValidRunDir()` 校验。
 - `runDir` 入口先用 `isValidRunDir()` 判形态；非法值直接 404，不继续查库。
 - 对外 payload 只保留前端渲染需要的字段；不要透传原始 `run_json` / `metadata` 大对象。
 - `grid/route.ts` 需要分页拉 `images`，否则会撞 PostgREST 默认 `max_rows`。

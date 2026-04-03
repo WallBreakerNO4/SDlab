@@ -17,6 +17,7 @@
 
 - route 统一保持 `export const runtime = "nodejs"`；不要把本目录迁到 Edge runtime。
 - 需要用户态的 route 统一走 `createSupabaseAuthClient()`；`app/auth/callback/route.ts` 不属于本目录里的共性约束。
+- Next 16 / React 19：动态 route handler 常见 `context.params: Promise<...>` 形态；在 handler 内统一 `await context.params`，不要按旧版同步对象写法假设。
 - 对外错误响应保持固定短文案；不要透出 SQL、路径、bucket、凭证、堆栈。
 - 进入查询前先校验输入：`runDir` 先做 type guard；不要在 route 内自由拼接路径或对象 key。
 - 子目录文档优先级高于本文件：`comfyui/` 讲 payload 收敛。

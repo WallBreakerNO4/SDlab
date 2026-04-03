@@ -1,8 +1,8 @@
 # Agent Guide (sd-style-lab/images-script)
 
-**生成时间:** 2026-03-31T00:00:00+08:00
-**Commit:** b174fc7
-**分支:** feat/model's-display-image-and-introduction
+**生成时间:** 2026-04-04T00:00:00+08:00
+**Commit:** 29cc3ef
+**分支:** refactor/optimize-requests-number
 本文件给仓库级 agent 使用；子目录 `AGENTS.md` 只补充局部知识，不重复根规则。
 
 ## 概览
@@ -10,7 +10,8 @@
 - 仓库分两条主线：Next.js 站点负责展示 runs / grid / 图片；Python 脚本负责生图、上传 R2、写入 Supabase。
 - 当前网站数据链路以 Supabase + R2 为准；不要假设 Web 侧仍有本地文件降级读取。
 - 术语约定：当前已接入、由上传脚本生成的 `display_*` / `thumb_*` 变体统一称为“展示页缩略图”；run 级 `image.*` 统一称为“封面图”，同级 `images/*` 统一称为“主页缩略图”。三者不是同一套资源，讨论与实现时必须明确区分。
-- 现状约定：脚本侧已经识别并上传封面图/主页缩略图资产；网页侧目前仍只稳定消费展示页缩略图，首页 `app/page.tsx` 与 `/api/comfyui/runs` 尚未完成对应重构/接线。
+- 现状约定：脚本侧已经识别并上传封面图/主页缩略图资产；网页首页当前通过 `/api/comfyui/runs` 消费 `assets.cover` / `assets.homepage_cards`，run 详情页的 grid/row 仍独立消费“展示页缩略图”。
+- Next 16 / React 19 约定：本仓库的动态页面与 route handler 普遍使用 `params: Promise<...>` 形态；客户端页面侧常见 `use(params)`，服务端 route 侧常见 `await context.params`。
 - 认证链路走 Supabase SSR：浏览器端 `lib/supabase-browser.ts`，服务端 `lib/supabase-auth.ts`，会话刷新在 `middleware.ts`。
 - Web 部署目标是 OpenNext + Cloudflare：本地 `next dev` 会启 Miniflare，部分服务端能力通过 Workers bindings 读取。
 
@@ -20,7 +21,6 @@
 ./
 ├── app/                    # App Router 页面与 API route
 │   ├── api/comfyui/        # runs/run/grid/row + workflow 下载
-│   ├── api/r2/private/     # R2 私有对象代理
 │   └── auth/               # Supabase PKCE callback
 ├── components/             # 业务组件 + UI primitives + auth provider
 │   ├── comfyui/            # 虚拟网格/图片预览/blurhash
@@ -54,7 +54,7 @@
 | 上传规划              | `scripts/r2_upload/upload_planner.py`                                            | 多变体规划 + 并发编码；也处理 run 级静态图片资产上传                           |
 | 资产转换脚本          | `scripts/other/convert_*.py`                                                     | 文件名遗留 `json`，实际输出 YAML 资产                                          |
 | run 配置示例          | `data/runs/example.yaml`                                                         | `image-run-config/v1` 示例                                                     |
-| 网站首页              | `app/page.tsx`                                                                   | 读取 runs 列表；脚本侧图片资产已就绪，但当前首页尚未消费封面图/主页缩略图      |
+| 网站首页              | `app/page.tsx`                                                                   | 读取 `/api/comfyui/runs`；消费 `assets.cover` / `assets.homepage_cards`        |
 | run 详情页            | `app/runs/[runDir]/page.tsx`                                                     | 并行拉 run + grid，显示 workflow 下载入口                                      |
 | App API 总约定        | `app/api/AGENTS.md`                                                              | `app/api/**/route.ts` 共享约束                                                 |
 | ComfyUI API           | `app/api/comfyui/**/route.ts`                                                    | Node runtime + Supabase 查询 + workflow 下载                                   |
@@ -95,9 +95,10 @@
 - Cloudflare：本地 `next dev` 通过 `initOpenNextCloudflareForDev()` 提供 Miniflare 绑定；服务端访问 R2 bucket 走 `getCloudflareContext()`。
 - 路径与 URL：API 入口的 `runDir` 先用 `lib/comfyui-types.ts:isValidRunDir()` 判形态；共享路径处理再走 `lib/comfyui-path.ts`；R2 URL 统一走 `lib/r2-url.ts`。
 - 前端：大网格必须虚拟化；图片优先消费 R2 display/thumb 变体并配合 blurhash 占位，这套变体统一称为“展示页缩略图”。
-- 前端首页：当前 `/api/comfyui/runs` 仍未输出封面图/主页缩略图字段；不要把 run 详情页的展示页缩略图直接挪作首页卡片素材。
+- 前端首页：`/api/comfyui/runs` 当前会输出封面图/主页缩略图字段；不要把 run 详情页的展示页缩略图直接挪作首页卡片素材。
 - 工具链：Python 用 `uv` + `pytest`（>=3.13）；Web 用 `pnpm` + Next 16 + React 19；E2E 用 Playwright。
 - Supabase CLI：本仓库默认直接使用系统安装的 `supabase ...` 命令；既然已通过 `.deb` 安装 CLI，就不要再混用 `pnpm dlx supabase ...` 或 `npx supabase ...`。
+- CI 现状：当前仓库没有 `.github/workflows/`；变更后的验证依赖本地 `uv` / `pnpm` / `supabase` 命令串联完成。
 - 协作文档与 git commit message 默认使用中文；涉及环境变量示例时优先更新 `.env.example`，不要直接读取/修改真实 `.env`。
 
 ## 反模式
@@ -146,7 +147,6 @@ supabase migration new <name>
 - `app/AGENTS.md`：App Router 页面与 API 的局部规则。
 - `app/api/AGENTS.md`：`app/api/**/route.ts` 共性约定。
 - `app/api/comfyui/AGENTS.md`：ComfyUI 查询 / workflow 下载 API 约定。
-- `app/api/r2/AGENTS.md`：R2 私有对象代理、鉴权与 range/HEAD 约定。
 - `app/auth/AGENTS.md`：Supabase PKCE callback 的局部特例。
 - `components/AGENTS.md` / `components/ui/AGENTS.md` / `components/comfyui/AGENTS.md`：组件分层、UI primitives、网格性能约定。
 - `lib/AGENTS.md`：Supabase/R2/路径安全/共享类型边界。
