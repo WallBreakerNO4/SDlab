@@ -4,6 +4,8 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { AuthLoginDialog } from "@/components/auth-login-dialog";
+import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,8 +15,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { GridImage } from "./grid-image";
-import { useAuth } from "@/components/auth-provider";
-import { AuthLoginDialog } from "@/components/auth-login-dialog";
 
 export type VariantUrls = {
   webp?: string;
@@ -824,16 +824,16 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
 
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
             <div className="space-y-2">
-              {currentDisplayVariants ? (
+              {currentDownloadUrl ? (
                 <div className="bg-muted/20 h-[62vh] w-full rounded-sm border">
                   <picture>
-                    {currentDisplayVariants.avif ? (
+                    {currentDisplayVariants?.avif ? (
                       <source
                         srcSet={currentDisplayVariants.avif}
                         type="image/avif"
                       />
                     ) : null}
-                    {currentDisplayVariants.webp ? (
+                    {currentDisplayVariants?.webp ? (
                       <source
                         srcSet={currentDisplayVariants.webp}
                         type="image/webp"
@@ -847,11 +847,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                       }
                       className="h-full w-full object-contain"
                       decoding="async"
-                      src={
-                        currentDisplayVariants.webp ??
-                        currentDisplayVariants.avif ??
-                        ""
-                      }
+                      src={currentDownloadUrl}
                     />
                   </picture>
                 </div>

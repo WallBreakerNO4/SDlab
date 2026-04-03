@@ -1,23 +1,29 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { cn } from "@/lib/utils"
-import { BlurhashCanvas } from "./blurhash-canvas"
+import { useState } from "react";
+import { cn } from "@/lib/utils";
+import { BlurhashCanvas } from "./blurhash-canvas";
 
-import { type VariantUrls } from "./virtual-grid"
+import type { VariantUrls } from "./virtual-grid";
 
 type GridImageProps = {
-  thumbVariants: VariantUrls | null
-  blurhash: string | null
-  alt: string
+  thumbVariants: VariantUrls | null;
+  blurhash: string | null;
+  alt: string;
   /** When true, show only the blurhash with a lock overlay instead of the real image. */
-  locked?: boolean
+  locked?: boolean;
   /** Callback when the locked overlay is clicked. */
-  onLockedClick?: () => void
-}
+  onLockedClick?: () => void;
+};
 
-export function GridImage({ thumbVariants, blurhash, alt, locked, onLockedClick }: GridImageProps) {
-  const [isLoaded, setIsLoaded] = useState(false)
+export function GridImage({
+  thumbVariants,
+  blurhash,
+  alt,
+  locked,
+  onLockedClick,
+}: GridImageProps) {
+  const [isLoaded, setIsLoaded] = useState(false);
 
   if (locked) {
     return (
@@ -54,8 +60,10 @@ export function GridImage({ thumbVariants, blurhash, alt, locked, onLockedClick 
           </span>
         </button>
       </div>
-    )
+    );
   }
+
+  const src = thumbVariants?.webp ?? thumbVariants?.avif;
 
   return (
     <div className="relative h-full w-full overflow-hidden">
@@ -64,30 +72,32 @@ export function GridImage({ thumbVariants, blurhash, alt, locked, onLockedClick 
           blurhash={blurhash}
           className={cn(
             "absolute inset-0 h-full w-full object-cover blur-md transition-opacity duration-500",
-            isLoaded ? "opacity-0" : "opacity-100"
+            isLoaded ? "opacity-0" : "opacity-100",
           )}
         />
       )}
-      <picture>
-        {thumbVariants?.avif ? (
-          <source srcSet={thumbVariants.avif} type="image/avif" />
-        ) : null}
-        {thumbVariants?.webp ? (
-          <source srcSet={thumbVariants.webp} type="image/webp" />
-        ) : null}
-        <img
-          alt={alt}
-          className={cn(
-            "relative z-10 h-full w-full object-contain transition-opacity duration-500",
-            isLoaded ? "opacity-100" : "opacity-0"
-          )}
-          data-testid="run-grid-image"
-          loading="lazy"
-          decoding="async"
-          src={thumbVariants?.webp ?? thumbVariants?.avif ?? ""}
-          onLoad={() => setIsLoaded(true)}
-        />
-      </picture>
+      {src ? (
+        <picture>
+          {thumbVariants?.avif ? (
+            <source srcSet={thumbVariants.avif} type="image/avif" />
+          ) : null}
+          {thumbVariants?.webp ? (
+            <source srcSet={thumbVariants.webp} type="image/webp" />
+          ) : null}
+          <img
+            alt={alt}
+            className={cn(
+              "relative z-10 h-full w-full object-contain transition-opacity duration-500",
+              isLoaded ? "opacity-100" : "opacity-0",
+            )}
+            data-testid="run-grid-image"
+            loading="lazy"
+            decoding="async"
+            src={src}
+            onLoad={() => setIsLoaded(true)}
+          />
+        </picture>
+      ) : null}
     </div>
-  )
+  );
 }
