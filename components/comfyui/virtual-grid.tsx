@@ -327,7 +327,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
       const label = getXLabel(col, index);
       const type = getNonEmptyString(col.type) ?? "x";
       return {
-        key: `${type}:${label}`,
+        key: `${index}:${type}:${label}`,
         label,
       };
     });
