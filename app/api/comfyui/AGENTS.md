@@ -9,7 +9,7 @@
 
 | 场景           | 位置                             | 备注                                                      |
 | -------------- | -------------------------------- | --------------------------------------------------------- |
-| runs 列表      | `runs/route.ts`                  | 读取 `runs` 表并收敛 summary                              |
+| runs 列表      | `runs/route.ts`                  | 读取 `run_list_items` projection 并收敛 summary           |
 | run 详情       | `run/[runDir]/route.ts`          | 返回 run 基础信息 + x/y labels + `x_columns`/`y_indexes`  |
 | grid 索引      | `run/[runDir]/grid/route.ts`     | 返回 `blurhash_cells`，按页规避 PostgREST `max_rows`      |
 | row 级图片查询 | `run/[runDir]/row/route.ts`      | 返回每个 cell 的展示页缩略图 URL（display/thumb）         |
@@ -22,8 +22,8 @@
 - 动态 route 统一采用 `context.params: Promise<{ runDir: string }>` 形态；进入 handler 后先 `await context.params`，再做 `isValidRunDir()` 校验。
 - `runDir` 入口先用 `isValidRunDir()` 判形态；非法值直接 404，不继续查库。
 - 对外 payload 只保留前端渲染需要的字段；不要透传原始 `run_json` / `metadata` 大对象。
-- `grid/route.ts` 需要分页拉 `images`，否则会撞 PostgREST 默认 `max_rows`。
-- `row/route.ts` 负责把 `image_variants` 映射成展示页缩略图 URL（display/thumb）；公开/私有 URL 都通过 `lib/r2-url.ts`。
+- `grid/route.ts` 读取 `run_grid_cells` projection；若结果较多仍需分页拉取，避免撞 PostgREST 默认 `max_rows`。
+- `row/route.ts` 读取 `run_grid_items` projection，并把其中预整形的展示页缩略图 key 映射成 URL；公开/私有 URL 都通过 `lib/r2-url.ts`。
 - `runs/route.ts` 当前除基础字段外，还会返回首页列表所需的 `model`、`assets.cover` 与 `assets.homepage_cards`；这些字段用于首页封面图和主页缩略图展示。
 - `workflow/route.ts` 先从 `runs.workflow_download_r2_key` 取 key，再验证它必须落在 `runs/{runDir}/artifacts/workflow/*.json`，随后通过 `getCloudflareContext().env.R2_PUBLIC_BUCKET` 回源并保留对象 metadata。
 - `catch` 分支只返回固定短文案，避免暴露数据库、路径、环境细节。

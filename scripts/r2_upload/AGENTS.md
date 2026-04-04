@@ -44,7 +44,7 @@ r2_keys.py → 生成 R2 key + 确定 bucket（public/private）
   ↓
 upload_executor.py + r2_client.py → 并发上传到 R2
   ↓
-supabase_writer.py → 批量 upsert 到 Supabase（runs + images + variants）
+supabase_writer.py → 批量 upsert 到 Supabase（runs + snapshots + projection tables）
 ```
 
 ## 错误处理体系

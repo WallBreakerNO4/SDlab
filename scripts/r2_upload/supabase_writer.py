@@ -119,7 +119,6 @@ class SupabaseRemoteError(SupabaseWriterError):
 class SupabaseWriter:
     _upsert_batch_size: int
     _upsert_max_bytes: int
-    _db_concurrency: int
 
     def __init__(
         self,
@@ -128,13 +127,11 @@ class SupabaseWriter:
         dry_run: bool,
         upsert_batch_size: int = 100,
         upsert_max_bytes: int = 4_000_000,
-        db_concurrency: int = 1,
     ) -> None:
         self._client: SupabaseClientLike | None = client
         self.dry_run: bool = dry_run
         self._upsert_batch_size = upsert_batch_size
         self._upsert_max_bytes = upsert_max_bytes
-        self._db_concurrency = db_concurrency
 
         if not self.dry_run and self._client is None:
             raise SupabaseConfigError(
@@ -179,18 +176,11 @@ class SupabaseWriter:
                 "invalid supabase batch configuration",
                 code="invalid_batch_max_bytes",
             )
-        db_concurrency = _optional_env_int_value("SUPABASE_DB_CONCURRENCY", default=1)
-        if db_concurrency < 1:
-            raise SupabaseConfigError(
-                "invalid supabase db concurrency",
-                code="invalid_db_concurrency",
-            )
         return cls(
             client=client,
             dry_run=False,
             upsert_batch_size=upsert_batch_size,
             upsert_max_bytes=upsert_max_bytes,
-            db_concurrency=db_concurrency,
         )
 
     def upsert_upload_index(
@@ -662,313 +652,6 @@ class SupabaseWriter:
             return None
         return str(seed)
 
-    def _build_image_row(
-        self,
-        run_id: str,
-        image: Mapping[str, object],
-        *,
-        run_dir: str,
-    ) -> tuple[
-        dict[str, object],
-        dict[str, object],
-        tuple[object, object, object, object],
-        list[Mapping[str, object]],
-    ]:
-        x_index = required_int(image, "x_index")
-        y_index = required_int(image, "y_index")
-        batch_index = int_with_default(image, "batch_index", default=0)
-        category = required_str(image, "category")
-        metadata = required_json_object(image, "metadata")
-        safe_context: dict[str, object] = {
-            "run_dir_hash12": hash12(run_dir),
-            "x_index": x_index,
-            "y_index": y_index,
-            "batch_index": batch_index,
-        }
-        row: dict[str, object] = {
-            "run_id": run_id,
-            "x_index": x_index,
-            "y_index": y_index,
-            "batch_index": batch_index,
-            "category": category,
-            "metadata": dict(metadata),
-        }
-        seed = _optional_int_field(image, "seed")
-        if seed is None:
-            seed = optional_int(metadata.get("seed"), field="metadata.seed")
-        if seed is not None:
-            row["seed"] = str(seed)
-
-        prompt_hash = _optional_required_string(
-            image.get("prompt_hash")
-        ) or _optional_required_string(metadata.get("prompt_hash"))
-        if prompt_hash is not None:
-            row["prompt_hash"] = prompt_hash
-
-        positive_prompt = _optional_required_string(
-            image.get("positive_prompt")
-        ) or _optional_required_string(metadata.get("positive_prompt"))
-        if positive_prompt is not None:
-            row["positive_prompt"] = positive_prompt
-
-        y_value = _optional_required_string(
-            image.get("y_value")
-        ) or _optional_required_string(metadata.get("y_value"))
-        if y_value is not None:
-            row["y_value"] = y_value
-
-        width = optional_int(image.get("width"), field="width")
-        height = optional_int(image.get("height"), field="height")
-        blurhash = optional_str(image.get("blurhash"), field="blurhash")
-        if width is not None:
-            row["width"] = width
-        if height is not None:
-            row["height"] = height
-        if blurhash is not None:
-            row["blurhash"] = blurhash
-        variants = optional_object_list(
-            image.get("variants"), field="images[].variants"
-        )
-        return (
-            row,
-            safe_context,
-            (run_id, x_index, y_index, batch_index),
-            variants,
-        )
-
-    def _build_variant_row(
-        self,
-        image_id: str,
-        variant: Mapping[str, object],
-        *,
-        run_dir: str,
-    ) -> dict[str, object]:
-        _ = run_dir
-        variant_name = required_str(variant, "variant")
-        bucket = required_str(variant, "bucket")
-        r2_key = required_str(variant, "r2_key")
-        content_type = required_str(variant, "content_type")
-        row: dict[str, object] = {
-            "image_id": image_id,
-            "variant": variant_name,
-            "bucket": bucket,
-            "r2_key": r2_key,
-            "content_type": content_type,
-        }
-        byte_size = optional_int(variant.get("byte_size"), field="byte_size")
-        width = optional_int(variant.get("width"), field="width")
-        height = optional_int(variant.get("height"), field="height")
-        webp_quality = optional_int(variant.get("webp_quality"), field="webp_quality")
-        avif_quality = optional_int(variant.get("avif_quality"), field="avif_quality")
-        avif_speed = optional_int(variant.get("avif_speed"), field="avif_speed")
-        sha256 = optional_str(variant.get("sha256"), field="sha256")
-        if byte_size is not None:
-            row["byte_size"] = byte_size
-        if width is not None:
-            row["width"] = width
-        if height is not None:
-            row["height"] = height
-        if webp_quality is not None:
-            row["webp_quality"] = webp_quality
-        if avif_quality is not None:
-            row["avif_quality"] = avif_quality
-        if avif_speed is not None:
-            row["avif_speed"] = avif_speed
-        if sha256 is not None:
-            row["sha256"] = sha256
-        return row
-
-    def _build_run_asset_row(
-        self,
-        run_id: str,
-        run_asset: Mapping[str, object],
-        *,
-        run_dir: str,
-    ) -> tuple[
-        dict[str, object],
-        dict[str, object],
-        tuple[object, object, object],
-        list[Mapping[str, object]],
-    ]:
-        asset_role = required_str(run_asset, "asset_role")
-        asset_index = int_with_default(run_asset, "asset_index", default=0)
-        source_path = required_str(run_asset, "source_path")
-        source_sha256 = required_str(run_asset, "source_sha256")
-        metadata = required_json_object(run_asset, "metadata")
-        safe_context: dict[str, object] = {
-            "run_dir_hash12": hash12(run_dir),
-            "asset_role": asset_role,
-            "asset_index": asset_index,
-        }
-        row: dict[str, object] = {
-            "run_id": run_id,
-            "asset_role": asset_role,
-            "asset_index": asset_index,
-            "source_path": source_path,
-            "source_sha256": source_sha256,
-            "metadata": dict(metadata),
-        }
-        width = optional_int(run_asset.get("width"), field="width")
-        height = optional_int(run_asset.get("height"), field="height")
-        blurhash = optional_str(run_asset.get("blurhash"), field="blurhash")
-        blurhash_width = optional_int(
-            run_asset.get("blurhash_width"), field="blurhash_width"
-        )
-        blurhash_height = optional_int(
-            run_asset.get("blurhash_height"), field="blurhash_height"
-        )
-        if width is not None:
-            row["width"] = width
-        if height is not None:
-            row["height"] = height
-        if blurhash is not None:
-            row["blurhash"] = blurhash
-        if blurhash_width is not None:
-            row["blurhash_width"] = blurhash_width
-        if blurhash_height is not None:
-            row["blurhash_height"] = blurhash_height
-        variants = optional_object_list(
-            run_asset.get("variants"), field="run_assets[].variants"
-        )
-        return row, safe_context, (run_id, asset_role, asset_index), variants
-
-    def _build_run_asset_variant_row(
-        self,
-        run_asset_id: str,
-        variant: Mapping[str, object],
-        *,
-        run_dir: str,
-    ) -> dict[str, object]:
-        _ = run_dir
-        row = self._build_variant_row(
-            run_asset_id,
-            variant,
-            run_dir=run_dir,
-        )
-        row["run_asset_id"] = row.pop("image_id")
-        return row
-
-    def _upsert_images_batch(
-        self,
-        rows: list[dict[str, object]],
-    ) -> dict[tuple[object, object, object, object], str]:
-        if not rows:
-            return {}
-        mapped: dict[tuple[object, object, object, object], str] = {}
-        for chunk in self._iter_row_chunks(rows):
-            normalized_chunk = _normalize_rows_for_postgrest(chunk)
-            data = self._execute_upsert(
-                table_name="images",
-                row_or_rows=normalized_chunk,
-                on_conflict="run_id,x_index,y_index,batch_index",
-                select_columns="id,run_id,x_index,y_index,batch_index",
-                returning_mode="representation",
-                context={"chunk_size": len(normalized_chunk)},
-            )
-            for row in extract_rows_from_data(data):
-                key = (
-                    row.get("run_id"),
-                    row.get("x_index"),
-                    row.get("y_index"),
-                    row.get("batch_index"),
-                )
-                row_id = row.get("id")
-                if isinstance(row_id, str) and row_id:
-                    mapped[key] = row_id
-        return mapped
-
-    def _upsert_variants_batch(self, rows: list[dict[str, object]]) -> None:
-        if not rows:
-            return
-        chunks = list(self._iter_row_chunks(rows))
-        if self._db_concurrency <= 1 or len(chunks) <= 1:
-            for chunk in chunks:
-                normalized_chunk = _normalize_rows_for_postgrest(chunk)
-                _ = self._execute_upsert(
-                    table_name="image_variants",
-                    row_or_rows=normalized_chunk,
-                    on_conflict="image_id,variant",
-                    select_columns=None,
-                    returning_mode="minimal",
-                    context={"chunk_size": len(normalized_chunk)},
-                )
-            return
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-
-        with ThreadPoolExecutor(max_workers=self._db_concurrency) as pool:
-            futures = [
-                pool.submit(
-                    self._execute_upsert,
-                    table_name="image_variants",
-                    row_or_rows=_normalize_rows_for_postgrest(chunk),
-                    on_conflict="image_id,variant",
-                    select_columns=None,
-                    returning_mode="minimal",
-                    context={"chunk_size": len(chunk)},
-                )
-                for chunk in chunks
-            ]
-            for future in as_completed(futures):
-                _ = future.result()
-
-    def _upsert_run_assets_batch(
-        self,
-        rows: list[dict[str, object]],
-    ) -> dict[tuple[object, object, object], str]:
-        if not rows:
-            return {}
-        mapped: dict[tuple[object, object, object], str] = {}
-        for chunk in self._iter_row_chunks(rows):
-            normalized_chunk = _normalize_rows_for_postgrest(chunk)
-            data = self._execute_upsert(
-                table_name="run_assets",
-                row_or_rows=normalized_chunk,
-                on_conflict="run_id,asset_role,asset_index",
-                select_columns="id,run_id,asset_role,asset_index",
-                returning_mode="representation",
-                context={"chunk_size": len(normalized_chunk)},
-            )
-            for row in extract_rows_from_data(data):
-                key = (row.get("run_id"), row.get("asset_role"), row.get("asset_index"))
-                row_id = row.get("id")
-                if isinstance(row_id, str) and row_id:
-                    mapped[key] = row_id
-        return mapped
-
-    def _upsert_run_asset_variants_batch(self, rows: list[dict[str, object]]) -> None:
-        if not rows:
-            return
-        chunks = list(self._iter_row_chunks(rows))
-        if self._db_concurrency <= 1 or len(chunks) <= 1:
-            for chunk in chunks:
-                normalized_chunk = _normalize_rows_for_postgrest(chunk)
-                _ = self._execute_upsert(
-                    table_name="run_asset_variants",
-                    row_or_rows=normalized_chunk,
-                    on_conflict="run_asset_id,variant",
-                    select_columns=None,
-                    returning_mode="minimal",
-                    context={"chunk_size": len(normalized_chunk)},
-                )
-            return
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-
-        with ThreadPoolExecutor(max_workers=self._db_concurrency) as pool:
-            futures = [
-                pool.submit(
-                    self._execute_upsert,
-                    table_name="run_asset_variants",
-                    row_or_rows=_normalize_rows_for_postgrest(chunk),
-                    on_conflict="run_asset_id,variant",
-                    select_columns=None,
-                    returning_mode="minimal",
-                    context={"chunk_size": len(chunk)},
-                )
-                for chunk in chunks
-            ]
-            for future in as_completed(futures):
-                _ = future.result()
-
     def _execute_upsert(
         self,
         *,
@@ -1204,12 +887,6 @@ def _required_int_list_field(obj: Mapping[str, object], key: str) -> list[int]:
 
 def _optional_int_field(obj: Mapping[str, object], key: str) -> int | None:
     return optional_int(obj.get(key), field=key)
-
-
-def _optional_object_list_field(
-    obj: Mapping[str, object], key: str
-) -> list[Mapping[str, object]]:
-    return optional_object_list(obj.get(key), field=key)
 
 
 def _required_object_list_field(

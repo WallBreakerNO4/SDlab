@@ -6,13 +6,13 @@
 
 ## 去哪儿看
 
-| 场景                  | 位置                                                          | 备注                                   |
-| --------------------- | ------------------------------------------------------------- | -------------------------------------- |
-| Supabase 项目配置     | `config.toml`                                                 | 端口/Auth/Storage 等本地开发配置       |
-| 数据库迁移            | `migrations/`                                                 | 时间戳命名的 SQL 迁移文件              |
-| ComfyUI schema 初始化 | `migrations/20260311075715_init_comfyui_schema_and_views.sql` | runs/images/image_variants 与只读 view |
-| 种子数据              | `seed.sql`                                                    | 本地开发用的测试数据                   |
-| CLI 临时状态          | `.temp/`、`.branches/`                                        | `supabase` CLI 生成；不要当源码修改    |
+| 场景                  | 位置                                                          | 备注                                               |
+| --------------------- | ------------------------------------------------------------- | -------------------------------------------------- |
+| Supabase 项目配置     | `config.toml`                                                 | 端口/Auth/Storage 等本地开发配置                   |
+| 数据库迁移            | `migrations/`                                                 | 时间戳命名的 SQL 迁移文件                          |
+| ComfyUI schema 初始化 | `migrations/20260311075715_init_comfyui_schema_and_views.sql` | 早期 schema 起点；最终态以最新 projection 迁移为准 |
+| 种子数据              | `seed.sql`                                                    | 本地开发用的测试数据                               |
+| CLI 临时状态          | `.temp/`、`.branches/`                                        | `supabase` CLI 生成；不要当源码修改                |
 
 ## 约定（本目录特有）
 
