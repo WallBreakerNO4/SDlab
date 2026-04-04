@@ -4,19 +4,10 @@ import type {
   ImageCategory,
   JsonObject,
   JsonValue,
+  SupabaseRunGridCellRow,
 } from "@/lib/supabase-types";
 
 export const runtime = "nodejs";
-
-type GridCellRow = {
-  x_index: number | null;
-  y_index: number | null;
-  batch_index: number | null;
-  category: ImageCategory | null;
-  width: number | null;
-  height: number | null;
-  blurhash: string | null;
-};
 
 type RunGridMetaRow = {
   x_columns: JsonValue[] | null;
@@ -70,12 +61,13 @@ export async function GET(
         .eq("run_dir", runDir)
         .maybeSingle(),
       supabase
-        .from("comfyui_grid_cells")
-        .select("x_index,y_index,batch_index,category,width,height,blurhash")
+        .from("run_grid_cells")
+        .select(
+          "x_index,y_index,representative_batch_index,category,width,height,blurhash",
+        )
         .eq("run_dir", runDir)
         .order("y_index", { ascending: true })
         .order("x_index", { ascending: true })
-        .order("batch_index", { ascending: true })
         .range(0, PAGE_SIZE - 1),
     ]);
 
@@ -98,19 +90,48 @@ export async function GET(
       );
     }
 
-    const allRows: GridCellRow[] = (firstPageResult.data ??
-      []) as GridCellRow[];
-    let pageOffset = PAGE_SIZE;
-    let hasMore = allRows.length === PAGE_SIZE;
+    const rows: SupabaseRunGridCellRow[] =
+      (firstPageResult.data as SupabaseRunGridCellRow[] | null) ?? [];
+    const blurhash_cells: Array<{
+      x_index: number;
+      y_index: number;
+      batch_index: number;
+      category: ImageCategory;
+      width: number | null;
+      height: number | null;
+      blurhash: string | null;
+    }> = [];
 
+    for (const row of rows) {
+      if (
+        typeof row.x_index === "number" &&
+        typeof row.y_index === "number" &&
+        typeof row.representative_batch_index === "number" &&
+        typeof row.category === "string"
+      ) {
+        blurhash_cells.push({
+          x_index: row.x_index,
+          y_index: row.y_index,
+          batch_index: row.representative_batch_index,
+          category: row.category,
+          width: row.width,
+          height: row.height,
+          blurhash: row.blurhash,
+        });
+      }
+    }
+
+    let pageOffset = PAGE_SIZE;
+    let hasMore = rows.length === PAGE_SIZE;
     while (hasMore) {
       const { data: pageData, error: pageError } = await supabase
-        .from("comfyui_grid_cells")
-        .select("x_index,y_index,batch_index,category,width,height,blurhash")
+        .from("run_grid_cells")
+        .select(
+          "x_index,y_index,representative_batch_index,category,width,height,blurhash",
+        )
         .eq("run_dir", runDir)
         .order("y_index", { ascending: true })
         .order("x_index", { ascending: true })
-        .order("batch_index", { ascending: true })
         .range(pageOffset, pageOffset + PAGE_SIZE - 1);
 
       if (pageError) {
@@ -120,17 +141,34 @@ export async function GET(
         );
       }
 
-      const rows = (pageData ?? []) as GridCellRow[];
-      allRows.push(...rows);
+      const pageRows = (pageData as SupabaseRunGridCellRow[] | null) ?? [];
+      for (const row of pageRows) {
+        if (
+          typeof row.x_index === "number" &&
+          typeof row.y_index === "number" &&
+          typeof row.representative_batch_index === "number" &&
+          typeof row.category === "string"
+        ) {
+          blurhash_cells.push({
+            x_index: row.x_index,
+            y_index: row.y_index,
+            batch_index: row.representative_batch_index,
+            category: row.category,
+            width: row.width,
+            height: row.height,
+            blurhash: row.blurhash,
+          });
+        }
+      }
 
-      if (rows.length < PAGE_SIZE) {
+      if (pageRows.length < PAGE_SIZE) {
         hasMore = false;
       } else {
         pageOffset += PAGE_SIZE;
       }
     }
 
-    if (allRows.length === 0) {
+    if (blurhash_cells.length === 0) {
       return Response.json({ error: "Run not found" }, { status: 404 });
     }
 
@@ -156,41 +194,6 @@ export async function GET(
     const y_count =
       typeof runMeta.y_count === "number" ? runMeta.y_count : y_indexes.length;
 
-    type BlurhashRow = {
-      x_index: number;
-      y_index: number;
-      batch_index: number;
-      category: ImageCategory;
-      width: number | null;
-      height: number | null;
-      blurhash: string | null;
-    };
-
-    const blurhash_cells: BlurhashRow[] = allRows
-      .filter(
-        (
-          item,
-        ): item is GridCellRow & {
-          x_index: number;
-          y_index: number;
-          batch_index: number;
-          category: ImageCategory;
-        } =>
-          typeof item.x_index === "number" &&
-          typeof item.y_index === "number" &&
-          typeof item.batch_index === "number" &&
-          typeof item.category === "string",
-      )
-      .map((item) => ({
-        x_index: item.x_index,
-        y_index: item.y_index,
-        batch_index: item.batch_index,
-        category: item.category,
-        width: item.width,
-        height: item.height,
-        blurhash: item.blurhash,
-      }));
-
     return Response.json({
       x_columns,
       y_indexes,
@@ -200,11 +203,6 @@ export async function GET(
       blurhash_cells,
     });
   } catch {
-    return Response.json(
-      {
-        error: "Failed to load run grid",
-      },
-      { status: 500 },
-    );
+    return Response.json({ error: "Failed to load run grid" }, { status: 500 });
   }
 }

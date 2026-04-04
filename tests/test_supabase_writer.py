@@ -136,17 +136,16 @@ class _InMemorySupabaseClient:
         self.select_execute_calls = 0
         self._tables: dict[str, dict[tuple[object, ...], dict[str, object]]] = {
             "runs": {},
-            "images": {},
-            "image_variants": {},
-            "run_assets": {},
-            "run_asset_variants": {},
+            "run_snapshots": {},
+            "run_list_items": {},
+            "run_grid_items": {},
+            "run_grid_item_snapshots": {},
+            "run_grid_cells": {},
         }
         self._next_id = {
             "runs": 1,
-            "images": 1,
-            "image_variants": 1,
-            "run_assets": 1,
-            "run_asset_variants": 1,
+            "run_grid_items": 1,
+            "run_grid_cells": 1,
         }
 
     def table(self, table_name: str) -> "_InMemoryQuery":
@@ -174,11 +173,17 @@ class _InMemorySupabaseClient:
 
         existing = table.get(unique_key)
         if existing is None:
-            row_id = f"{table_name}-{self._next_id[table_name]}"
-            self._next_id[table_name] += 1
-            merged = {**row, "id": row_id}
+            merged = dict(row)
+            if table_name in self._next_id:
+                row_id = f"{table_name}-{self._next_id[table_name]}"
+                self._next_id[table_name] += 1
+                merged["id"] = row_id
+            if table_name == "runs" and "created_at" not in merged:
+                merged["created_at"] = "1970-01-01T00:00:00+00:00"
         else:
-            merged = {**existing, **row, "id": existing["id"]}
+            merged = {**existing, **row}
+            if "id" in existing:
+                merged["id"] = existing["id"]
 
         table[unique_key] = merged
         self.upsert_calls.append(
@@ -206,7 +211,7 @@ class _InMemorySupabaseClient:
                     ok = False
                     break
             if ok:
-                matched.append({"id": row["id"]})
+                matched.append(dict(row))
 
         if limit is not None:
             return matched[:limit]
@@ -386,17 +391,17 @@ def test_upsert_upload_index_is_idempotent() -> None:
     writer.upsert_upload_index(payload)
 
     assert client.row_count("runs") == 1
-    assert client.row_count("images") == 1
-    assert client.row_count("image_variants") == 2
-    assert client.row_count("run_assets") == 1
-    assert client.row_count("run_asset_variants") == 2
+    assert client.row_count("run_snapshots") == 1
+    assert client.row_count("run_list_items") == 1
+    assert client.row_count("run_grid_items") == 1
+    assert client.row_count("run_grid_item_snapshots") == 1
+    assert client.row_count("run_grid_cells") == 1
 
     on_conflicts = {str(call["on_conflict"]) for call in client.upsert_calls}
     assert "run_dir" in on_conflicts
+    assert "run_id" in on_conflicts
     assert "run_id,x_index,y_index,batch_index" in on_conflicts
-    assert "image_id,variant" in on_conflicts
-    assert "run_id,asset_role,asset_index" in on_conflicts
-    assert "run_asset_id,variant" in on_conflicts
+    assert "run_id,x_index,y_index" in on_conflicts
 
 
 def test_upsert_upload_index_extracts_structured_columns() -> None:
@@ -453,7 +458,10 @@ def test_upsert_upload_index_extracts_structured_columns() -> None:
     assert run_row["model_description_en"] == "Example config"
     assert run_row["model_huggingface"] == "https://huggingface.co/example"
 
-    image_row = next(iter(client._tables["images"].values()))
+    run_list_item = next(iter(client._tables["run_list_items"].values()))
+    assert run_list_item["created_at"] == "1970-01-01T00:00:00+00:00"
+
+    image_row = next(iter(client._tables["run_grid_items"].values()))
     assert image_row["seed"] == "42"
     assert image_row["prompt_hash"] == "hash-1"
     assert image_row["positive_prompt"] == "hello"
@@ -466,19 +474,14 @@ def test_upsert_upload_index_persists_run_assets() -> None:
 
     writer.upsert_upload_index(_sample_payload())
 
-    run_asset_row = next(iter(client._tables["run_assets"].values()))
-    assert run_asset_row["asset_role"] == "cover"
-    assert run_asset_row["asset_index"] == 0
-    assert run_asset_row["source_path"] == "data/runs/example/image.jpg"
-    assert run_asset_row["blurhash_width"] == 100
-    assert run_asset_row["blurhash_height"] == 75
-
-    run_asset_variant_rows = list(client._tables["run_asset_variants"].values())
-    assert len(run_asset_variant_rows) == 2
-    assert {row["variant"] for row in run_asset_variant_rows} == {
-        "display_webp",
-        "thumb_webp",
-    }
+    run_list_item = next(iter(client._tables["run_list_items"].values()))
+    cover = cast(dict[str, object], run_list_item["cover"])
+    assert cover["width"] == 1024
+    assert cover["height"] == 1536
+    assert cover["blurhash_width"] == 100
+    assert cover["blurhash_height"] == 75
+    assert cover["display_webp_r2_key"] == "runs/r/cover-display.webp"
+    assert cover["thumb_webp_r2_key"] == "runs/r/cover-thumb.webp"
 
 
 def test_upsert_upload_index_preserves_png_run_asset_paths() -> None:
@@ -487,10 +490,10 @@ def test_upsert_upload_index_preserves_png_run_asset_paths() -> None:
 
     writer.upsert_upload_index(_sample_payload_with_png_run_asset())
 
-    run_asset_row = next(iter(client._tables["run_assets"].values()))
-    assert run_asset_row["source_path"] == "data/runs/example/image.png"
-    metadata = cast(dict[str, object], run_asset_row["metadata"])
-    assert metadata["repo_relative_path"] == "data/runs/example/image.png"
+    run_list_item = next(iter(client._tables["run_list_items"].values()))
+    cover = cast(dict[str, object], run_list_item["cover"])
+    assert cover["display_webp_r2_key"] == "runs/r/cover-display.webp"
+    assert cover["thumb_webp_r2_key"] == "runs/r/cover-thumb.webp"
 
 
 def test_upsert_upload_index_fallbacks_to_select_for_ids() -> None:
@@ -500,11 +503,12 @@ def test_upsert_upload_index_fallbacks_to_select_for_ids() -> None:
     writer.upsert_upload_index(_sample_payload())
 
     assert client.row_count("runs") == 1
-    assert client.row_count("images") == 1
-    assert client.row_count("image_variants") == 2
-    assert client.row_count("run_assets") == 1
-    assert client.row_count("run_asset_variants") == 2
-    assert client.select_execute_calls >= 3
+    assert client.row_count("run_snapshots") == 1
+    assert client.row_count("run_list_items") == 1
+    assert client.row_count("run_grid_items") == 1
+    assert client.row_count("run_grid_item_snapshots") == 1
+    assert client.row_count("run_grid_cells") == 1
+    assert client.select_execute_calls >= 2
 
 
 def test_upsert_upload_index_preserves_large_seed_as_string() -> None:
@@ -539,7 +543,7 @@ def test_upsert_upload_index_preserves_large_seed_as_string() -> None:
 
     writer.upsert_upload_index(cast(dict[str, object], payload))
 
-    image_row = next(iter(client._tables["images"].values()))
+    image_row = next(iter(client._tables["run_grid_items"].values()))
     assert image_row["seed"] == "18020657621215222860"
 
 

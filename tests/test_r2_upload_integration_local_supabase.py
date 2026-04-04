@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, cast
@@ -16,7 +17,7 @@ sys.path.insert(0, str(ROOT))
 from scripts.r2_upload.upload_images_to_r2 import main
 
 _RUN_FLAG = "SDSL_RUN_LOCAL_SUPABASE_INTEGRATION"
-_RUN_DIR_ARG = "tests/fixtures/run_minimal"
+_RUN_FIXTURE_DIR = ROOT / "tests/fixtures/run_minimal"
 _RUN_DIR_NAME = "local-supabase-run"
 
 
@@ -65,7 +66,24 @@ def _require_local_supabase_env() -> tuple[str, str]:
     return supabase_url, service_role_key
 
 
-def _query_counts(client: object) -> tuple[int, int, int]:
+def _prepare_run_dir(tmp_path: Path) -> Path:
+    target = tmp_path / _RUN_DIR_NAME
+    shutil.copytree(_RUN_FIXTURE_DIR, target)
+    (target / "run.json").write_text(
+        json.dumps(
+            {
+                "run_id": _RUN_DIR_NAME,
+                "run_key": _RUN_DIR_NAME,
+                "run_dir": _RUN_DIR_NAME,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return target
+
+
+def _query_counts(client: object) -> tuple[int, int, int, int, int]:
     typed_client = cast(Any, client)
     runs_response = (
         typed_client.table("runs").select("id").eq("run_dir", _RUN_DIR_NAME).execute()
@@ -79,36 +97,61 @@ def _query_counts(client: object) -> tuple[int, int, int]:
     run_id = run_row.get("id")
     assert isinstance(run_id, str) and run_id
 
-    images_response = (
-        typed_client.table("images").select("id").eq("run_id", run_id).execute()
+    snapshots_response = (
+        typed_client.table("run_snapshots")
+        .select("run_id")
+        .eq("run_id", run_id)
+        .execute()
     )
-    image_rows = getattr(images_response, "data", None)
-    assert isinstance(image_rows, list)
-    assert len(image_rows) >= 1
+    snapshot_rows = getattr(snapshots_response, "data", None)
+    assert isinstance(snapshot_rows, list)
+    assert len(snapshot_rows) == 1
 
-    image_ids: list[str] = []
-    for image_row in image_rows:
-        assert isinstance(image_row, dict)
-        image_id = image_row.get("id")
-        assert isinstance(image_id, str) and image_id
-        image_ids.append(image_id)
+    run_list_items_response = (
+        typed_client.table("run_list_items")
+        .select("run_id")
+        .eq("run_id", run_id)
+        .execute()
+    )
+    run_list_item_rows = getattr(run_list_items_response, "data", None)
+    assert isinstance(run_list_item_rows, list)
+    assert len(run_list_item_rows) == 1
 
-    variant_count = 0
-    for image_id in image_ids:
-        variants_response = (
-            typed_client.table("image_variants")
-            .select("id")
-            .eq("image_id", image_id)
-            .execute()
-        )
-        variant_rows = getattr(variants_response, "data", None)
-        assert isinstance(variant_rows, list)
-        variant_count += len(variant_rows)
+    grid_items_response = (
+        typed_client.table("run_grid_items").select("id").eq("run_id", run_id).execute()
+    )
+    grid_item_rows = getattr(grid_items_response, "data", None)
+    assert isinstance(grid_item_rows, list)
+    assert len(grid_item_rows) >= 1
 
-    return len(run_rows), len(image_rows), variant_count
+    grid_cells_response = (
+        typed_client.table("run_grid_cells").select("id").eq("run_id", run_id).execute()
+    )
+    grid_cell_rows = getattr(grid_cells_response, "data", None)
+    assert isinstance(grid_cell_rows, list)
+    assert len(grid_cell_rows) >= 1
+
+    grid_snapshots_response = (
+        typed_client.table("run_grid_item_snapshots")
+        .select("run_id")
+        .eq("run_id", run_id)
+        .execute()
+    )
+    grid_snapshot_rows = getattr(grid_snapshots_response, "data", None)
+    assert isinstance(grid_snapshot_rows, list)
+    assert len(grid_snapshot_rows) >= 1
+
+    return (
+        len(run_rows),
+        len(snapshot_rows),
+        len(run_list_item_rows),
+        len(grid_item_rows),
+        len(grid_cell_rows),
+    )
 
 
 def test_local_supabase_integration_with_fake_r2_is_idempotent(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -122,6 +165,7 @@ def test_local_supabase_integration_with_fake_r2_is_idempotent(
     supabase_client = _default_client_factory(supabase_url, service_role_key)
 
     fake_r2 = _FakeR2Client()
+    run_dir = _prepare_run_dir(tmp_path)
     monkeypatch.setenv("R2_PUBLIC_BUCKET", "itest-public")
     monkeypatch.setenv("R2_PRIVATE_BUCKET", "itest-private")
     monkeypatch.setattr(
@@ -129,31 +173,49 @@ def test_local_supabase_integration_with_fake_r2_is_idempotent(
         classmethod(lambda cls, dry_run, **kwargs: fake_r2),
     )
 
-    first_exit = main(["--run-dir", _RUN_DIR_ARG])
+    first_exit = main(["--run-dir", str(run_dir)])
     first_payload = _read_stdout_json(capsys)
     assert first_exit == 0
     assert first_payload.get("mode") == "execute"
 
-    first_run_count, first_image_count, first_variant_count = _query_counts(
-        supabase_client
-    )
+    (
+        first_run_count,
+        first_snapshot_count,
+        first_run_list_count,
+        first_grid_item_count,
+        first_grid_cell_count,
+    ) = _query_counts(supabase_client)
     assert first_run_count == 1
-    assert first_image_count >= 1
-    assert first_variant_count >= 1
+    assert first_snapshot_count == 1
+    assert first_run_list_count == 1
+    assert first_grid_item_count >= 1
+    assert first_grid_cell_count >= 1
 
     uploaded_after_first = fake_r2.upload_calls
 
-    second_exit = main(["--run-dir", _RUN_DIR_ARG])
+    second_exit = main(["--run-dir", str(run_dir)])
     second_payload = _read_stdout_json(capsys)
     assert second_exit == 0
     assert second_payload.get("mode") == "execute"
 
-    second_run_count, second_image_count, second_variant_count = _query_counts(
-        supabase_client
-    )
-    assert (second_run_count, second_image_count, second_variant_count) == (
+    (
+        second_run_count,
+        second_snapshot_count,
+        second_run_list_count,
+        second_grid_item_count,
+        second_grid_cell_count,
+    ) = _query_counts(supabase_client)
+    assert (
+        second_run_count,
+        second_snapshot_count,
+        second_run_list_count,
+        second_grid_item_count,
+        second_grid_cell_count,
+    ) == (
         first_run_count,
-        first_image_count,
-        first_variant_count,
+        first_snapshot_count,
+        first_run_list_count,
+        first_grid_item_count,
+        first_grid_cell_count,
     )
     assert fake_r2.upload_calls == uploaded_after_first

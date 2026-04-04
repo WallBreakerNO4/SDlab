@@ -213,102 +213,70 @@ class SupabaseWriter:
             if progress_callback is not None:
                 progress_callback()
 
+        def _tick_progress_many(count: int) -> None:
+            for _ in range(count):
+                _tick_progress()
+
         if self.dry_run:
             return
         try:
             run_row = self._build_run_row(payload, run_dir=run_dir, run_json=run_json)
         except PayloadValidationError as exc:
             raise _to_argument_error(exc) from exc
-        run_id = self._upsert_run(run_row, run_dir=run_dir)
+        run_id, created_at = self._upsert_run(run_row, run_dir=run_dir)
         _tick_progress()
-        image_rows: list[dict[str, object]] = []
-        image_contexts: list[dict[str, object]] = []
-        image_variant_lists: list[list[Mapping[str, object]]] = []
-        image_lookup_keys: list[tuple[object, object, object, object]] = []
+
+        try:
+            run_snapshot_row = self._build_run_snapshot_row(
+                run_id,
+                run_dir=run_dir,
+                run_json=run_json,
+            )
+        except PayloadValidationError as exc:
+            raise _to_argument_error(exc) from exc
+        self._upsert_run_snapshot(run_snapshot_row)
+        _tick_progress()
+
+        try:
+            run_list_item_row = self._build_run_list_item_row(
+                payload,
+                run_id=run_id,
+                run_dir=run_dir,
+                created_at=created_at,
+                run_assets=run_assets,
+            )
+        except PayloadValidationError as exc:
+            raise _to_argument_error(exc) from exc
+        self._upsert_run_list_item(run_list_item_row)
+        _tick_progress()
+
+        grid_item_rows: list[dict[str, object]] = []
+        grid_item_snapshot_rows: list[dict[str, object]] = []
         for image in images:
             try:
-                row, context, lookup_key, variants = self._build_image_row(
+                row, snapshot_row = self._build_grid_item_row(
                     run_id,
                     image,
                     run_dir=run_dir,
                 )
             except PayloadValidationError as exc:
                 raise _to_argument_error(exc) from exc
-            image_rows.append(row)
-            image_contexts.append(context)
-            image_variant_lists.append(variants)
-            image_lookup_keys.append(lookup_key)
-        image_ids_by_key = self._upsert_images_batch(image_rows)
-        variant_rows: list[dict[str, object]] = []
-        for index, variants in enumerate(image_variant_lists):
-            lookup_key = image_lookup_keys[index]
-            image_id = image_ids_by_key.get(lookup_key)
-            if image_id is None:
-                image_id = self._lookup_id(
-                    table_name="images",
-                    filters=(
-                        ("run_id", run_id),
-                        ("x_index", lookup_key[1]),
-                        ("y_index", lookup_key[2]),
-                        ("batch_index", lookup_key[3]),
-                    ),
-                    context=image_contexts[index],
-                )
-            _tick_progress()
-            for variant in variants:
-                try:
-                    row = self._build_variant_row(image_id, variant, run_dir=run_dir)
-                except PayloadValidationError as exc:
-                    raise _to_argument_error(exc) from exc
-                variant_rows.append(row)
-                _tick_progress()
-        self._upsert_variants_batch(variant_rows)
+            grid_item_rows.append(row)
+            grid_item_snapshot_rows.append(snapshot_row)
 
-        run_asset_rows: list[dict[str, object]] = []
-        run_asset_contexts: list[dict[str, object]] = []
-        run_asset_variant_lists: list[list[Mapping[str, object]]] = []
-        run_asset_lookup_keys: list[tuple[object, object, object]] = []
-        for run_asset in run_assets:
-            try:
-                row, context, lookup_key, variants = self._build_run_asset_row(
-                    run_id,
-                    run_asset,
-                    run_dir=run_dir,
-                )
-            except PayloadValidationError as exc:
-                raise _to_argument_error(exc) from exc
-            run_asset_rows.append(row)
-            run_asset_contexts.append(context)
-            run_asset_variant_lists.append(variants)
-            run_asset_lookup_keys.append(lookup_key)
-        run_asset_ids_by_key = self._upsert_run_assets_batch(run_asset_rows)
-        run_asset_variant_rows: list[dict[str, object]] = []
-        for index, variants in enumerate(run_asset_variant_lists):
-            lookup_key = run_asset_lookup_keys[index]
-            run_asset_id = run_asset_ids_by_key.get(lookup_key)
-            if run_asset_id is None:
-                run_asset_id = self._lookup_id(
-                    table_name="run_assets",
-                    filters=(
-                        ("run_id", run_id),
-                        ("asset_role", lookup_key[1]),
-                        ("asset_index", lookup_key[2]),
-                    ),
-                    context=run_asset_contexts[index],
-                )
-            _tick_progress()
-            for variant in variants:
-                try:
-                    row = self._build_run_asset_variant_row(
-                        run_asset_id,
-                        variant,
-                        run_dir=run_dir,
-                    )
-                except PayloadValidationError as exc:
-                    raise _to_argument_error(exc) from exc
-                run_asset_variant_rows.append(row)
-                _tick_progress()
-        self._upsert_run_asset_variants_batch(run_asset_variant_rows)
+        self._upsert_run_grid_items_batch(grid_item_rows)
+        _tick_progress_many(len(grid_item_rows))
+
+        self._upsert_run_grid_item_snapshots_batch(grid_item_snapshot_rows)
+        _tick_progress_many(len(grid_item_snapshot_rows))
+
+        grid_cell_rows = self._build_run_grid_cells_rows(
+            run_id=run_id,
+            run_dir=run_dir,
+            grid_item_rows=grid_item_rows,
+        )
+        self._upsert_run_grid_cells_batch(grid_cell_rows)
+        _tick_progress_many(len(grid_cell_rows))
 
     def _build_run_row(
         self,
@@ -325,7 +293,6 @@ class SupabaseWriter:
 
         row: dict[str, object] = {
             "run_dir": run_dir,
-            "run_json": dict(run_json),
             "run_id": required_str(payload, "run_id"),
             "x_columns": x_columns,
             "y_indexes": y_indexes,
@@ -357,9 +324,14 @@ class SupabaseWriter:
                 field="workflow_download_sha256",
             ),
         }
+        created_at = _optional_required_string(run_json.get("created_at"))
+        if created_at is not None:
+            row["created_at"] = created_at
         return row
 
-    def _upsert_run(self, row: Mapping[str, object], *, run_dir: str) -> str:
+    def _upsert_run(
+        self, row: Mapping[str, object], *, run_dir: str
+    ) -> tuple[str, str]:
         safe_context = {
             "run_dir_hash12": hash12(run_dir),
             "run_dir_len": len(run_dir),
@@ -368,18 +340,327 @@ class SupabaseWriter:
             table_name="runs",
             row_or_rows=dict(row),
             on_conflict="run_dir",
-            select_columns="id",
+            select_columns="id,created_at",
             returning_mode="representation",
             context=safe_context,
         )
-        run_id = extract_id_from_data(data)
-        if run_id is not None:
-            return run_id
-        return self._lookup_id(
+        rows = extract_rows_from_data(data)
+        if rows:
+            first_row = rows[0]
+            run_id = first_row.get("id")
+            created_at = first_row.get("created_at")
+            if isinstance(run_id, str) and run_id:
+                if isinstance(created_at, str) and created_at.strip():
+                    return run_id, created_at
+                return run_id, self._lookup_string_field(
+                    table_name="runs",
+                    field_name="created_at",
+                    filters=(("run_dir", run_dir),),
+                    context=safe_context,
+                )
+        run_id = self._lookup_id(
             table_name="runs",
             filters=(("run_dir", run_dir),),
             context=safe_context,
         )
+        return run_id, self._lookup_string_field(
+            table_name="runs",
+            field_name="created_at",
+            filters=(("run_dir", run_dir),),
+            context=safe_context,
+        )
+
+    def _build_run_snapshot_row(
+        self,
+        run_id: str,
+        *,
+        run_dir: str,
+        run_json: Mapping[str, object],
+    ) -> dict[str, object]:
+        return {
+            "run_id": run_id,
+            "run_dir": run_dir,
+            "run_json": dict(run_json),
+        }
+
+    def _build_run_list_item_row(
+        self,
+        payload: Mapping[str, object],
+        *,
+        run_id: str,
+        run_dir: str,
+        created_at: str,
+        run_assets: list[Mapping[str, object]],
+    ) -> dict[str, object]:
+        x_count = required_int(payload, "x_count")
+        y_count = required_int(payload, "y_count")
+        total_cells = required_int(payload, "total_cells")
+
+        cover: dict[str, object] | None = None
+        homepage_cards_with_index: list[tuple[int, dict[str, object]]] = []
+        for run_asset in run_assets:
+            asset_role = required_str(run_asset, "asset_role")
+            asset_index = int_with_default(run_asset, "asset_index", default=0)
+            summary = self._build_run_asset_summary(run_asset)
+            if asset_role == "cover":
+                if cover is None:
+                    cover = summary
+                continue
+            if asset_role == "homepage_card":
+                homepage_cards_with_index.append((asset_index, summary))
+
+        homepage_cards_with_index.sort(key=lambda item: item[0])
+
+        row: dict[str, object] = {
+            "run_id": run_id,
+            "run_dir": run_dir,
+            "created_at": created_at,
+            "x_count": x_count,
+            "y_count": y_count,
+            "total_cells": total_cells,
+            "model_name": optional_str(payload.get("model_name"), field="model_name"),
+            "model_description_zh": optional_str(
+                payload.get("model_description_zh"),
+                field="model_description_zh",
+            ),
+            "model_description_en": optional_str(
+                payload.get("model_description_en"),
+                field="model_description_en",
+            ),
+            "model_homepage": optional_str(
+                payload.get("model_homepage"),
+                field="model_homepage",
+            ),
+            "model_huggingface": optional_str(
+                payload.get("model_huggingface"),
+                field="model_huggingface",
+            ),
+            "model_civitai": optional_str(
+                payload.get("model_civitai"),
+                field="model_civitai",
+            ),
+            "cover": cover,
+            "homepage_cards": [summary for _, summary in homepage_cards_with_index],
+        }
+        return row
+
+    def _build_run_asset_summary(
+        self,
+        run_asset: Mapping[str, object],
+    ) -> dict[str, object]:
+        variants = optional_object_list(
+            run_asset.get("variants"), field="run_assets[].variants"
+        )
+        variant_lookup = self._variant_lookup(variants)
+        return {
+            "width": optional_int(run_asset.get("width"), field="width"),
+            "height": optional_int(run_asset.get("height"), field="height"),
+            "blurhash": optional_str(run_asset.get("blurhash"), field="blurhash"),
+            "blurhash_width": optional_int(
+                run_asset.get("blurhash_width"), field="blurhash_width"
+            ),
+            "blurhash_height": optional_int(
+                run_asset.get("blurhash_height"), field="blurhash_height"
+            ),
+            "thumb_webp_r2_key": self._variant_r2_key(variant_lookup, "thumb_webp"),
+            "thumb_avif_r2_key": self._variant_r2_key(variant_lookup, "thumb_avif"),
+            "display_webp_r2_key": self._variant_r2_key(variant_lookup, "display_webp"),
+            "display_avif_r2_key": self._variant_r2_key(variant_lookup, "display_avif"),
+        }
+
+    def _build_grid_item_row(
+        self,
+        run_id: str,
+        image: Mapping[str, object],
+        *,
+        run_dir: str,
+    ) -> tuple[dict[str, object], dict[str, object]]:
+        x_index = required_int(image, "x_index")
+        y_index = required_int(image, "y_index")
+        batch_index = int_with_default(image, "batch_index", default=0)
+        category = required_str(image, "category")
+        metadata = required_json_object(image, "metadata")
+        variants = optional_object_list(
+            image.get("variants"), field="images[].variants"
+        )
+        variant_lookup = self._variant_lookup(variants)
+
+        row: dict[str, object] = {
+            "run_id": run_id,
+            "run_dir": run_dir,
+            "x_index": x_index,
+            "y_index": y_index,
+            "batch_index": batch_index,
+            "category": category,
+            "width": optional_int(image.get("width"), field="width"),
+            "height": optional_int(image.get("height"), field="height"),
+            "blurhash": optional_str(image.get("blurhash"), field="blurhash"),
+            "seed": self._read_seed_string(image, metadata),
+            "prompt_hash": _optional_required_string(image.get("prompt_hash"))
+            or _optional_required_string(metadata.get("prompt_hash")),
+            "positive_prompt": _optional_required_string(image.get("positive_prompt"))
+            or _optional_required_string(metadata.get("positive_prompt")),
+            "y_value": _optional_required_string(image.get("y_value"))
+            or _optional_required_string(metadata.get("y_value")),
+            "thumb_webp_bucket": self._variant_bucket(variant_lookup, "thumb_webp"),
+            "thumb_webp_r2_key": self._variant_r2_key(variant_lookup, "thumb_webp"),
+            "thumb_avif_bucket": self._variant_bucket(variant_lookup, "thumb_avif"),
+            "thumb_avif_r2_key": self._variant_r2_key(variant_lookup, "thumb_avif"),
+            "display_webp_bucket": self._variant_bucket(variant_lookup, "display_webp"),
+            "display_webp_r2_key": self._variant_r2_key(variant_lookup, "display_webp"),
+            "display_avif_bucket": self._variant_bucket(variant_lookup, "display_avif"),
+            "display_avif_r2_key": self._variant_r2_key(variant_lookup, "display_avif"),
+        }
+        snapshot_row: dict[str, object] = {
+            "run_id": run_id,
+            "run_dir": run_dir,
+            "x_index": x_index,
+            "y_index": y_index,
+            "batch_index": batch_index,
+            "metadata": dict(metadata),
+        }
+        return row, snapshot_row
+
+    def _build_run_grid_cells_rows(
+        self,
+        *,
+        run_id: str,
+        run_dir: str,
+        grid_item_rows: list[dict[str, object]],
+    ) -> list[dict[str, object]]:
+        representatives: dict[tuple[int, int], dict[str, object]] = {}
+        for row in grid_item_rows:
+            x_index = row.get("x_index")
+            y_index = row.get("y_index")
+            batch_index = row.get("batch_index")
+            if not isinstance(x_index, int) or not isinstance(y_index, int):
+                continue
+            if not isinstance(batch_index, int):
+                continue
+            key = (x_index, y_index)
+            existing = representatives.get(key)
+            representative_batch_index = (
+                existing.get("representative_batch_index")
+                if existing is not None
+                else None
+            )
+            if existing is None or (
+                not isinstance(representative_batch_index, int)
+                or batch_index < representative_batch_index
+            ):
+                representatives[key] = {
+                    "run_id": run_id,
+                    "run_dir": run_dir,
+                    "x_index": x_index,
+                    "y_index": y_index,
+                    "representative_batch_index": batch_index,
+                    "category": row.get("category"),
+                    "width": row.get("width"),
+                    "height": row.get("height"),
+                    "blurhash": row.get("blurhash"),
+                }
+        return list(representatives.values())
+
+    def _upsert_run_snapshot(self, row: Mapping[str, object]) -> None:
+        _ = self._execute_upsert(
+            table_name="run_snapshots",
+            row_or_rows=dict(row),
+            on_conflict="run_id",
+            select_columns=None,
+            returning_mode="minimal",
+            context={"run_dir": row.get("run_dir")},
+        )
+
+    def _upsert_run_list_item(self, row: Mapping[str, object]) -> None:
+        _ = self._execute_upsert(
+            table_name="run_list_items",
+            row_or_rows=dict(row),
+            on_conflict="run_id",
+            select_columns=None,
+            returning_mode="minimal",
+            context={"run_dir": row.get("run_dir")},
+        )
+
+    def _upsert_run_grid_items_batch(self, rows: list[dict[str, object]]) -> None:
+        if not rows:
+            return
+        for chunk in self._iter_row_chunks(rows):
+            normalized_chunk = _normalize_rows_for_postgrest(chunk)
+            _ = self._execute_upsert(
+                table_name="run_grid_items",
+                row_or_rows=normalized_chunk,
+                on_conflict="run_id,x_index,y_index,batch_index",
+                select_columns=None,
+                returning_mode="minimal",
+                context={"chunk_size": len(normalized_chunk)},
+            )
+
+    def _upsert_run_grid_item_snapshots_batch(
+        self, rows: list[dict[str, object]]
+    ) -> None:
+        if not rows:
+            return
+        for chunk in self._iter_row_chunks(rows):
+            normalized_chunk = _normalize_rows_for_postgrest(chunk)
+            _ = self._execute_upsert(
+                table_name="run_grid_item_snapshots",
+                row_or_rows=normalized_chunk,
+                on_conflict="run_id,x_index,y_index,batch_index",
+                select_columns=None,
+                returning_mode="minimal",
+                context={"chunk_size": len(normalized_chunk)},
+            )
+
+    def _upsert_run_grid_cells_batch(self, rows: list[dict[str, object]]) -> None:
+        if not rows:
+            return
+        for chunk in self._iter_row_chunks(rows):
+            normalized_chunk = _normalize_rows_for_postgrest(chunk)
+            _ = self._execute_upsert(
+                table_name="run_grid_cells",
+                row_or_rows=normalized_chunk,
+                on_conflict="run_id,x_index,y_index",
+                select_columns=None,
+                returning_mode="minimal",
+                context={"chunk_size": len(normalized_chunk)},
+            )
+
+    def _variant_lookup(
+        self, variants: list[Mapping[str, object]]
+    ) -> dict[str, Mapping[str, object]]:
+        lookup: dict[str, Mapping[str, object]] = {}
+        for variant in variants:
+            variant_name = required_str(variant, "variant")
+            lookup[variant_name] = variant
+        return lookup
+
+    def _variant_bucket(
+        self, lookup: Mapping[str, Mapping[str, object]], variant_name: str
+    ) -> str | None:
+        variant = lookup.get(variant_name)
+        if variant is None:
+            return None
+        return optional_str(variant.get("bucket"), field=f"{variant_name}.bucket")
+
+    def _variant_r2_key(
+        self, lookup: Mapping[str, Mapping[str, object]], variant_name: str
+    ) -> str | None:
+        variant = lookup.get(variant_name)
+        if variant is None:
+            return None
+        return optional_str(variant.get("r2_key"), field=f"{variant_name}.r2_key")
+
+    def _read_seed_string(
+        self,
+        image: Mapping[str, object],
+        metadata: Mapping[str, object],
+    ) -> str | None:
+        seed = _optional_int_field(image, "seed")
+        if seed is None:
+            seed = optional_int(metadata.get("seed"), field="metadata.seed")
+        if seed is None:
+            return None
+        return str(seed)
 
     def _build_image_row(
         self,
@@ -767,6 +1048,35 @@ class SupabaseWriter:
             )
         return row_id
 
+    def _lookup_string_field(
+        self,
+        *,
+        table_name: str,
+        field_name: str,
+        filters: tuple[tuple[str, object], ...],
+        context: Mapping[str, object],
+    ) -> str:
+        query = self._require_client().table(table_name).select(field_name)
+        for key, value in filters:
+            query = query.eq(key, value)
+        query = query.limit(1)
+        data = self._execute_query(
+            query,
+            table_name=table_name,
+            operation=f"select_{field_name}",
+            context=context,
+        )
+        rows = extract_rows_from_data(data)
+        if rows:
+            value = rows[0].get(field_name)
+            if isinstance(value, str) and value.strip():
+                return value
+        raise SupabaseRemoteError(
+            "failed to resolve field after upsert",
+            code="field_lookup_failed",
+            context={"table": table_name, "field": field_name, **context},
+        )
+
     def _execute_query(
         self,
         query: SupabaseQueryLike,
@@ -810,6 +1120,16 @@ def upsert_upload_index(
     SupabaseWriter.from_env(dry_run=False).upsert_upload_index(
         payload, progress_callback=progress_callback
     )
+
+
+def estimate_upload_index_records(payload: Mapping[str, object]) -> int:
+    images = optional_object_list(payload.get("images"), field="images")
+    unique_grid_cells: set[tuple[int, int]] = set()
+    for image in images:
+        x_index = int_with_default(image, "x_index", default=0)
+        y_index = int_with_default(image, "y_index", default=0)
+        unique_grid_cells.add((x_index, y_index))
+    return 3 + len(images) + len(images) + len(unique_grid_cells)
 
 
 def _default_client_factory(

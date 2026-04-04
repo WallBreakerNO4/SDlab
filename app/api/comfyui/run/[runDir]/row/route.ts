@@ -1,35 +1,16 @@
 import { isValidRunDir } from "@/lib/comfyui-types";
 import { privateObjectUrl, publicObjectUrl } from "@/lib/r2-url";
 import { createSupabaseAuthClient } from "@/lib/supabase-auth";
-import type { ImageCategory, R2Bucket } from "@/lib/supabase-types";
+import type {
+  ImageCategory,
+  R2Bucket,
+  SupabaseRunGridItemRow,
+} from "@/lib/supabase-types";
 
 export const runtime = "nodejs";
 
 type RouteContext = {
   params: Promise<{ runDir: string }>;
-};
-
-type DbImageRow = {
-  run_dir: string;
-  x_index: number;
-  y_index: number;
-  batch_index: number;
-  category: ImageCategory;
-  width: number | null;
-  height: number | null;
-  blurhash: string | null;
-  seed: string | number | null;
-  prompt_hash: string | null;
-  positive_prompt: string | null;
-  y_value: string | null;
-  thumb_webp_bucket: R2Bucket | null;
-  thumb_webp_r2_key: string | null;
-  thumb_avif_bucket: R2Bucket | null;
-  thumb_avif_r2_key: string | null;
-  display_webp_bucket: R2Bucket | null;
-  display_webp_r2_key: string | null;
-  display_avif_bucket: R2Bucket | null;
-  display_avif_r2_key: string | null;
 };
 
 type RowMeta = {
@@ -76,7 +57,7 @@ function parseNonNegativeInt(raw: string | null): number | null {
   return n;
 }
 
-function parseSeed(value: number | string | null): string | null {
+function parseSeed(value: number | string | null | undefined): string | null {
   if (
     typeof value === "number" &&
     Number.isFinite(value) &&
@@ -91,7 +72,7 @@ function parseSeed(value: number | string | null): string | null {
   return null;
 }
 
-function buildMeta(image: DbImageRow): RowMeta {
+function buildMeta(image: SupabaseRunGridItemRow): RowMeta {
   return {
     seed: parseSeed(image.seed),
     prompt_hash: getNonEmptyString(image.prompt_hash),
@@ -105,8 +86,8 @@ function urlFromVariant(bucket: R2Bucket, r2Key: string): string {
 }
 
 function nullableUrl(
-  bucket: R2Bucket | null,
-  r2Key: string | null,
+  bucket: R2Bucket | null | undefined,
+  r2Key: string | null | undefined,
 ): string | null {
   if (!bucket || !r2Key) return null;
   return urlFromVariant(bucket, r2Key);
@@ -131,7 +112,7 @@ export async function GET(
     const supabase = await createSupabaseAuthClient();
 
     const { data: imagesData, error: imagesError } = await supabase
-      .from("comfyui_row_items")
+      .from("run_grid_items")
       .select(
         "run_dir,x_index,y_index,batch_index,category,width,height,blurhash,seed,prompt_hash,positive_prompt,y_value,thumb_webp_bucket,thumb_webp_r2_key,thumb_avif_bucket,thumb_avif_r2_key,display_webp_bucket,display_webp_r2_key,display_avif_bucket,display_avif_r2_key",
       )
@@ -147,7 +128,7 @@ export async function GET(
       );
     }
 
-    const images = (imagesData ?? []) as DbImageRow[];
+    const images = (imagesData as SupabaseRunGridItemRow[] | null) ?? [];
     if (images.length === 0) {
       const { data: runRow, error: runError } = await supabase
         .from("runs")

@@ -10,7 +10,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from .r2_client import R2Client, UploadPlan
-from .supabase_writer import SupabaseWriter
+from .supabase_writer import SupabaseWriter, estimate_upload_index_records
 from .upload_contracts import BucketScope, PlannedUpload, RunPlan
 
 LOG = logging.getLogger(__name__)
@@ -130,23 +130,7 @@ def _execute(
 
     total_db_records = 0
     for plan in plans:
-        images_raw = plan.upload_index_payload.get("images")
-        images_list = images_raw if isinstance(images_raw, list) else []
-        run_assets_raw = plan.upload_index_payload.get("run_assets")
-        run_assets_list = run_assets_raw if isinstance(run_assets_raw, list) else []
-        total_db_records += 1 + len(images_list) + len(run_assets_list)
-        for image in images_list:
-            if not isinstance(image, dict):
-                continue
-            variants_raw = image.get("variants")
-            variants_list = variants_raw if isinstance(variants_raw, list) else []
-            total_db_records += len(variants_list)
-        for run_asset in run_assets_list:
-            if not isinstance(run_asset, dict):
-                continue
-            variants_raw = run_asset.get("variants")
-            variants_list = variants_raw if isinstance(variants_raw, list) else []
-            total_db_records += len(variants_list)
+        total_db_records += estimate_upload_index_records(plan.upload_index_payload)
 
     LOG.info(
         "start upload execution: run_count=%s image_upload_count=%s artifact_upload_count=%s db_record_count=%s upload_concurrency=%s",

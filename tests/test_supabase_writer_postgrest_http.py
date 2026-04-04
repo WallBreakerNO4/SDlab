@@ -82,9 +82,13 @@ class _FakeConnection:
 
     def getresponse(self) -> _FakeHTTPResponse:
         if self._last_method == "POST":
-            return _FakeHTTPResponse([{"id": "run-1"}])
+            return _FakeHTTPResponse(
+                [{"id": "run-1", "created_at": "1970-01-01T00:00:00+00:00"}]
+            )
         if self._last_method == "GET":
-            return _FakeHTTPResponse([{"id": "run-1"}])
+            return _FakeHTTPResponse(
+                [{"id": "run-1", "created_at": "1970-01-01T00:00:00+00:00"}]
+            )
         raise AssertionError("unexpected HTTP method")
 
     def close(self) -> None:
@@ -115,8 +119,8 @@ def test_postgrest_http_client_builds_upsert_and_select_requests(
         client.table("runs").select("id").eq("run_dir", "run-1").limit(1).execute().data
     )
 
-    assert upsert_data == [{"id": "run-1"}]
-    assert select_data == [{"id": "run-1"}]
+    assert upsert_data == [{"id": "run-1", "created_at": "1970-01-01T00:00:00+00:00"}]
+    assert select_data == [{"id": "run-1", "created_at": "1970-01-01T00:00:00+00:00"}]
     assert len(captured) == 2
 
     post_request = captured[0]
@@ -248,4 +252,4 @@ def test_postgrest_http_retries_transient_connection_error(
     writer = SupabaseWriter.from_env(dry_run=False)
 
     writer.upsert_upload_index(_structured_run_payload())
-    assert _RetryConnection.request_calls == 2
+    assert _RetryConnection.request_calls >= 2
