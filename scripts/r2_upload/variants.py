@@ -60,13 +60,15 @@ def _compute_blurhash_from_thumb(thumb_image: Image.Image) -> tuple[str, int, in
             semantic_rgb.resize(target_size, Image.Resampling.LANCZOS),
         )
 
-    rows: list[list[tuple[int, int, int]]] = []
-    for y in range(semantic_rgb.height):
-        row: list[tuple[int, int, int]] = []
-        for x in range(semantic_rgb.width):
-            r, g, b = cast(tuple[int, int, int], semantic_rgb.getpixel((x, y)))
-            row.append((int(r), int(g), int(b)))
-        rows.append(row)
+    raw_pixels = semantic_rgb.tobytes()
+    flat_pixels = [
+        (raw_pixels[index], raw_pixels[index + 1], raw_pixels[index + 2])
+        for index in range(0, len(raw_pixels), 3)
+    ]
+    rows = [
+        flat_pixels[offset : offset + semantic_rgb.width]
+        for offset in range(0, len(flat_pixels), semantic_rgb.width)
+    ]
     return (blurhash_encode(rows), semantic_rgb.width, semantic_rgb.height)
 
 

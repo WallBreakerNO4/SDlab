@@ -59,8 +59,8 @@ def build_parser() -> argparse.ArgumentParser:
     _ = parser.add_argument(
         "--concurrency",
         type=int,
-        default=1,
-        help="Image planning worker count fallback when R2_IMAGE_WORKERS is unset.",
+        default=None,
+        help="Image planning worker count fallback when R2_IMAGE_WORKERS is unset. Defaults to available CPU count.",
     )
     _ = parser.add_argument(
         "--limit",

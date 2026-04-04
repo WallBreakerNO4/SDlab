@@ -42,19 +42,17 @@ def _load_run_json(run_dir: Path) -> dict[str, object]:
 def _load_metadata_records(run_dir: Path) -> list[dict[str, object]]:
     metadata_path = run_dir / "metadata.jsonl"
     rows: list[dict[str, object]] = []
-    for line_number, raw_line in enumerate(
-        metadata_path.read_text(encoding="utf-8").splitlines(),
-        start=1,
-    ):
-        stripped = raw_line.strip()
-        if not stripped:
-            continue
-        parsed = cast(object, json.loads(stripped))
-        if not isinstance(parsed, dict):
-            raise ValueError(
-                f"metadata.jsonl 第 {line_number} 行必须是对象: {metadata_path}"
-            )
-        rows.append(cast(dict[str, object], parsed))
+    with metadata_path.open("r", encoding="utf-8") as handle:
+        for line_number, raw_line in enumerate(handle, start=1):
+            stripped = raw_line.strip()
+            if not stripped:
+                continue
+            parsed = cast(object, json.loads(stripped))
+            if not isinstance(parsed, dict):
+                raise ValueError(
+                    f"metadata.jsonl 第 {line_number} 行必须是对象: {metadata_path}"
+                )
+            rows.append(cast(dict[str, object], parsed))
     return rows
 
 
@@ -77,12 +75,8 @@ def _write_intermediate_variant(
     safe_variant = variant.replace("/", "_")
     output_name = f"{original_sha256}-{batch_index:06d}-{safe_variant}{_variant_extension(variant)}"
     output_path = run_intermediate_dir / output_name
-    if output_path.exists():
-        cached_sha256 = _sha256_file(output_path)
-        return output_path, cached_sha256
-
-    output_path.write_bytes(body_bytes)
     written_sha256 = _sha256_hex(body_bytes)
+    output_path.write_bytes(body_bytes)
     return output_path, written_sha256
 
 
@@ -96,3 +90,32 @@ def _intermediate_variant_path(
     safe_variant = variant.replace("/", "_")
     output_name = f"{original_sha256}-{batch_index:06d}-{safe_variant}{_variant_extension(variant)}"
     return run_intermediate_dir / output_name
+
+
+def _intermediate_cache_metadata_path(
+    *,
+    run_intermediate_dir: Path,
+    batch_index: int,
+    source_key: str,
+) -> Path:
+    return run_intermediate_dir / f"cache-{batch_index:06d}-{source_key}.json"
+
+
+def _load_intermediate_cache_metadata(path: Path) -> dict[str, object] | None:
+    if not path.exists() or not path.is_file():
+        return None
+
+    try:
+        parsed = cast(object, json.loads(path.read_text(encoding="utf-8")))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    return cast(dict[str, object], parsed)
+
+
+def _write_intermediate_cache_metadata(
+    path: Path,
+    payload: Mapping[str, object],
+) -> None:
+    path.write_text(_to_json_line(payload), encoding="utf-8")

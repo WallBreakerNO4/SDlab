@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import logging
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -34,17 +36,28 @@ from .upload_contracts import (
 )
 from .upload_discovery import _resolve_run_dir_name, _resolve_selected_run_dirs
 from .upload_io import (
+    _intermediate_cache_metadata_path,
     _intermediate_variant_path,
+    _load_intermediate_cache_metadata,
     _load_metadata_records,
     _load_run_json,
     _sha256_file,
     _to_json_line,
+    _write_intermediate_cache_metadata,
     _write_intermediate_variant,
 )
 from .variants import inspect_image_metadata, plan_image_variants
 
 LOG = logging.getLogger(__name__)
 _RUN_ASSET_PUBLIC_BUCKET: BucketScope = "public"
+
+
+@dataclass(frozen=True)
+class _CachedVariantBundle:
+    original_sha256: str
+    metadata: dict[str, object]
+    variant_lookup: dict[str, dict[str, object]]
+    cached_variant_paths: dict[str, Path]
 
 
 def _int_with_default(value: object, *, default: int = 0) -> int:
@@ -366,6 +379,259 @@ def _sanitize_asset_ref(asset: dict[str, object]) -> dict[str, object] | None:
     return sanitized
 
 
+def _encoder_params_for_variant(variant: str) -> dict[str, object]:
+    if variant == "display_webp":
+        return webp_params("display")
+    if variant == "thumb_webp":
+        return webp_params("thumb")
+    if variant == "display_avif":
+        return avif_params("display")
+    if variant == "thumb_avif":
+        return avif_params("thumb")
+    raise ValueError(f"unsupported variant: {variant}")
+
+
+def _source_signature(image_path: Path) -> tuple[str, int, int]:
+    resolved_path = image_path.resolve()
+    stat_result = resolved_path.stat()
+    return str(resolved_path), stat_result.st_size, stat_result.st_mtime_ns
+
+
+def _source_cache_key(image_path: Path) -> str:
+    resolved = str(image_path.resolve()).encode("utf-8")
+    return hashlib.sha256(resolved).hexdigest()[:16]
+
+
+def _variant_lookup_from_rows(
+    variant_rows: list[dict[str, object]],
+) -> dict[str, dict[str, object]]:
+    lookup: dict[str, dict[str, object]] = {}
+    for row in variant_rows:
+        variant_name = _non_empty_str(row.get("variant"))
+        if variant_name is None or variant_name not in _IMAGE_VARIANTS:
+            continue
+        lookup[variant_name] = dict(row)
+    return lookup
+
+
+def _build_metadata_snapshot(
+    *,
+    variant_rows: list[dict[str, object]],
+    blurhash_value: str | None,
+    blurhash_width: int | None = None,
+    blurhash_height: int | None = None,
+) -> dict[str, object]:
+    variant_lookup = _variant_lookup_from_rows(variant_rows)
+    display_row = variant_lookup.get("display_webp") or variant_lookup.get(
+        "display_avif"
+    )
+    thumb_row = variant_lookup.get("thumb_webp") or variant_lookup.get("thumb_avif")
+    if display_row is None or thumb_row is None:
+        raise ValueError("variant rows missing display/thumb metadata")
+
+    display_width = display_row.get("width")
+    display_height = display_row.get("height")
+    thumb_width = thumb_row.get("width")
+    thumb_height = thumb_row.get("height")
+    if not all(
+        isinstance(value, int)
+        for value in (display_width, display_height, thumb_width, thumb_height)
+    ):
+        raise ValueError("variant rows missing width/height")
+
+    snapshot: dict[str, object] = {
+        "display_width": display_width,
+        "display_height": display_height,
+        "thumb_width": thumb_width,
+        "thumb_height": thumb_height,
+    }
+    if blurhash_value is not None:
+        snapshot["blurhash"] = blurhash_value
+    if blurhash_width is not None:
+        snapshot["blurhash_width"] = blurhash_width
+    if blurhash_height is not None:
+        snapshot["blurhash_height"] = blurhash_height
+    return snapshot
+
+
+def _build_variant_cache_entry(row: dict[str, object]) -> dict[str, object]:
+    variant_name = _non_empty_str(row.get("variant"))
+    if variant_name is None or variant_name not in _IMAGE_VARIANTS:
+        raise ValueError("variant row missing variant name")
+
+    byte_size = row.get("byte_size")
+    sha256 = _non_empty_str(row.get("sha256"))
+    width = row.get("width")
+    height = row.get("height")
+    if not isinstance(byte_size, int) or sha256 is None:
+        raise ValueError("variant row missing cache metadata")
+
+    entry: dict[str, object] = {
+        "variant": variant_name,
+        "byte_size": byte_size,
+        "sha256": sha256,
+        "encoder_params": _encoder_params_for_variant(variant_name),
+    }
+    if isinstance(width, int):
+        entry["width"] = width
+    if isinstance(height, int):
+        entry["height"] = height
+    return entry
+
+
+def _write_variant_cache_sidecar(
+    *,
+    run_intermediate_dir: Path,
+    batch_index: int,
+    image_path: Path,
+    original_sha256: str,
+    metadata: dict[str, object],
+    variant_rows: list[dict[str, object]],
+) -> None:
+    source_path, source_size, source_mtime_ns = _source_signature(image_path)
+    cache_metadata_path = _intermediate_cache_metadata_path(
+        run_intermediate_dir=run_intermediate_dir,
+        batch_index=batch_index,
+        source_key=_source_cache_key(image_path),
+    )
+    payload: dict[str, object] = {
+        "schema_version": 1,
+        "source": {
+            "path": source_path,
+            "size": source_size,
+            "mtime_ns": source_mtime_ns,
+            "sha256": original_sha256,
+        },
+        "metadata": dict(metadata),
+        "variants": [_build_variant_cache_entry(row) for row in variant_rows],
+    }
+    _write_intermediate_cache_metadata(cache_metadata_path, payload)
+
+
+def _load_cached_variant_bundle(
+    *,
+    run_intermediate_dir: Path,
+    image_path: Path,
+    batch_index: int,
+) -> _CachedVariantBundle | None:
+    cache_metadata_path = _intermediate_cache_metadata_path(
+        run_intermediate_dir=run_intermediate_dir,
+        batch_index=batch_index,
+        source_key=_source_cache_key(image_path),
+    )
+    payload = _load_intermediate_cache_metadata(cache_metadata_path)
+    if payload is None or payload.get("schema_version") != 1:
+        return None
+
+    source = _json_object(payload.get("source"))
+    metadata = _json_object(payload.get("metadata"))
+    if source is None or metadata is None:
+        return None
+
+    source_path, source_size, source_mtime_ns = _source_signature(image_path)
+    cached_source_path = _non_empty_str(source.get("path"))
+    cached_sha256 = _non_empty_str(source.get("sha256"))
+    if (
+        cached_source_path != source_path
+        or not isinstance(source.get("size"), int)
+        or not isinstance(source.get("mtime_ns"), int)
+        or source.get("size") != source_size
+        or source.get("mtime_ns") != source_mtime_ns
+        or cached_sha256 is None
+    ):
+        return None
+
+    cached_variant_paths: dict[str, Path] = {}
+    variant_lookup: dict[str, dict[str, object]] = {}
+    for row in _json_object_list(payload.get("variants")):
+        variant_name = _non_empty_str(row.get("variant"))
+        cached_variant_sha256 = _non_empty_str(row.get("sha256"))
+        byte_size = row.get("byte_size")
+        width = row.get("width")
+        height = row.get("height")
+        encoder_params = _json_object(row.get("encoder_params"))
+        if (
+            variant_name is None
+            or variant_name not in _IMAGE_VARIANTS
+            or cached_variant_sha256 is None
+            or not isinstance(byte_size, int)
+            or encoder_params != _encoder_params_for_variant(variant_name)
+        ):
+            return None
+        if width is not None and not isinstance(width, int):
+            return None
+        if height is not None and not isinstance(height, int):
+            return None
+
+        variant_path = _intermediate_variant_path(
+            run_intermediate_dir=run_intermediate_dir,
+            original_sha256=cached_sha256,
+            batch_index=batch_index,
+            variant=variant_name,
+        )
+        if not variant_path.exists() or not variant_path.is_file():
+            return None
+        if variant_path.stat().st_size != byte_size:
+            return None
+
+        cached_variant_paths[variant_name] = variant_path
+        variant_lookup[variant_name] = dict(row)
+
+    if set(variant_lookup) != set(_DERIVED_IMAGE_VARIANTS):
+        return None
+
+    return _CachedVariantBundle(
+        original_sha256=cached_sha256,
+        metadata=dict(metadata),
+        variant_lookup=variant_lookup,
+        cached_variant_paths=cached_variant_paths,
+    )
+
+
+def _append_cached_variant_payloads(
+    *,
+    run_dir_name: str,
+    original_sha256: str,
+    uploads: list[PlannedUpload],
+    variant_rows: list[dict[str, object]],
+    cached_variant_paths: dict[str, Path],
+    cached_variant_lookup: dict[str, dict[str, object]],
+    bucket_scope_for_variant: Callable[[str], BucketScope],
+) -> None:
+    for variant_name in _DERIVED_IMAGE_VARIANTS:
+        cached_row = cached_variant_lookup[variant_name]
+        cached_path = cached_variant_paths[variant_name]
+        byte_size = cast(int, cached_row["byte_size"])
+        scope = bucket_scope_for_variant(variant_name)
+        key = object_key(run_dir_name, original_sha256, variant_name)
+        upload = _build_variant_upload(
+            variant=variant_name,
+            bucket_scope=scope,
+            key=key,
+            byte_size=byte_size,
+            local_path=cached_path,
+        )
+        uploads.append(upload)
+
+        payload: dict[str, object] = {
+            "variant": variant_name,
+            "bucket": scope,
+            "r2_key": key,
+            "content_type": upload.content_type,
+            "cache_control": upload.cache_control,
+            "byte_size": byte_size,
+            "sha256": cached_row["sha256"],
+        }
+        width = cached_row.get("width")
+        height = cached_row.get("height")
+        if isinstance(width, int):
+            payload["width"] = width
+        if isinstance(height, int):
+            payload["height"] = height
+        payload.update(_encoding_fields_for_variant(variant_name))
+        variant_rows.append(payload)
+
+
 def _collect_public_variant_payloads(
     *,
     run_dir_name: str,
@@ -377,6 +643,7 @@ def _collect_public_variant_payloads(
     variant_rows: list[dict[str, object]],
     cached_variant_paths: dict[str, Path],
     all_cached: bool,
+    cached_bundle: _CachedVariantBundle | None,
     plan_image_variants_fn: Callable[[Path], list[dict[str, object]]],
     inspect_image_metadata_fn: Callable[[Path], dict[str, object]],
 ) -> tuple[int | None, int | None, str | None, int | None, int | None]:
@@ -385,6 +652,30 @@ def _collect_public_variant_payloads(
     blurhash_height: int | None = None
     width: int | None = None
     height: int | None = None
+
+    if cached_bundle is not None:
+        metadata = cached_bundle.metadata
+        display_width = cast(int, metadata["display_width"])
+        display_height = cast(int, metadata["display_height"])
+        thumb_width = cast(int, metadata["thumb_width"])
+        thumb_height = cast(int, metadata["thumb_height"])
+        blurhash_candidate = metadata.get("blurhash")
+        if isinstance(blurhash_candidate, str) and blurhash_candidate:
+            blurhash_value = blurhash_candidate
+        blurhash_width = cast(int | None, metadata.get("blurhash_width"))
+        blurhash_height = cast(int | None, metadata.get("blurhash_height"))
+        width = display_width
+        height = display_height
+        _append_cached_variant_payloads(
+            run_dir_name=run_dir_name,
+            original_sha256=original_sha256,
+            uploads=uploads,
+            variant_rows=variant_rows,
+            cached_variant_paths=cached_bundle.cached_variant_paths,
+            cached_variant_lookup=cached_bundle.variant_lookup,
+            bucket_scope_for_variant=lambda _: _RUN_ASSET_PUBLIC_BUCKET,
+        )
+        return width, height, blurhash_value, blurhash_width, blurhash_height
 
     if all_cached:
         metadata = inspect_image_metadata_fn(image_path)
@@ -431,6 +722,15 @@ def _collect_public_variant_payloads(
             }
             cached_variant_payload.update(_encoding_fields_for_variant(variant_raw))
             variant_rows.append(cached_variant_payload)
+
+        _write_variant_cache_sidecar(
+            run_intermediate_dir=run_intermediate_dir,
+            batch_index=batch_index,
+            image_path=image_path,
+            original_sha256=original_sha256,
+            metadata=dict(metadata),
+            variant_rows=variant_rows,
+        )
 
         return width, height, blurhash_value, blurhash_width, blurhash_height
 
@@ -499,6 +799,20 @@ def _collect_public_variant_payloads(
         derived_variant_payload.update(_encoding_fields_for_variant(variant_raw))
         variant_rows.append(derived_variant_payload)
 
+    _write_variant_cache_sidecar(
+        run_intermediate_dir=run_intermediate_dir,
+        batch_index=batch_index,
+        image_path=image_path,
+        original_sha256=original_sha256,
+        metadata=_build_metadata_snapshot(
+            variant_rows=variant_rows,
+            blurhash_value=blurhash_value,
+            blurhash_width=blurhash_width,
+            blurhash_height=blurhash_height,
+        ),
+        variant_rows=variant_rows,
+    )
+
     return width, height, blurhash_value, blurhash_width, blurhash_height
 
 
@@ -518,8 +832,6 @@ def _build_run_asset_payload(
     ] = inspect_image_metadata,
 ) -> tuple[dict[str, object], list[PlannedUpload]]:
     source_path = _resolve_run_asset_source_path(asset)
-    source_sha256 = _sha256_file(source_path)
-    _validate_run_asset_sha256(asset, actual_sha256=source_sha256)
     source_label = _resolve_run_asset_source_label(asset, source_path)
 
     (
@@ -528,6 +840,7 @@ def _build_run_asset_payload(
         variant_rows,
         cached_variant_paths,
         all_cached,
+        cached_bundle,
     ) = _prepare_image_payload_inputs(
         run_dir_name=run_dir_name,
         run_intermediate_dir=run_intermediate_dir,
@@ -535,8 +848,8 @@ def _build_run_asset_payload(
         category="normal",
         batch_index=batch_index,
     )
-    if original_sha256 != source_sha256:
-        raise ValueError("run 级静态资源 sha256 计算不一致")
+    source_sha256 = original_sha256
+    _validate_run_asset_sha256(asset, actual_sha256=source_sha256)
 
     (
         width,
@@ -554,6 +867,7 @@ def _build_run_asset_payload(
         variant_rows=variant_rows,
         cached_variant_paths=cached_variant_paths,
         all_cached=all_cached,
+        cached_bundle=cached_bundle,
         plan_image_variants_fn=plan_image_variants_fn,
         inspect_image_metadata_fn=inspect_image_metadata_fn,
     )
@@ -707,10 +1021,33 @@ def _prepare_image_payload_inputs(
     image_path: Path,
     category: Category,
     batch_index: int,
-) -> tuple[str, list[PlannedUpload], list[dict[str, object]], dict[str, Path], bool]:
-    original_sha256 = _sha256_file(image_path)
+) -> tuple[
+    str,
+    list[PlannedUpload],
+    list[dict[str, object]],
+    dict[str, Path],
+    bool,
+    _CachedVariantBundle | None,
+]:
     uploads: list[PlannedUpload] = []
     variant_rows: list[dict[str, object]] = []
+
+    cached_bundle = _load_cached_variant_bundle(
+        run_intermediate_dir=run_intermediate_dir,
+        image_path=image_path,
+        batch_index=batch_index,
+    )
+    if cached_bundle is not None:
+        return (
+            cached_bundle.original_sha256,
+            uploads,
+            variant_rows,
+            dict(cached_bundle.cached_variant_paths),
+            True,
+            cached_bundle,
+        )
+
+    original_sha256 = _sha256_file(image_path)
 
     cached_variant_paths: dict[str, Path] = {
         variant: _intermediate_variant_path(
@@ -722,7 +1059,14 @@ def _prepare_image_payload_inputs(
         for variant in _DERIVED_IMAGE_VARIANTS
     }
     all_cached = all(path.exists() for path in cached_variant_paths.values())
-    return original_sha256, uploads, variant_rows, cached_variant_paths, all_cached
+    return (
+        original_sha256,
+        uploads,
+        variant_rows,
+        cached_variant_paths,
+        all_cached,
+        None,
+    )
 
 
 def _collect_derived_variant_payloads(
@@ -737,12 +1081,35 @@ def _collect_derived_variant_payloads(
     variant_rows: list[dict[str, object]],
     cached_variant_paths: dict[str, Path],
     all_cached: bool,
+    cached_bundle: _CachedVariantBundle | None,
     plan_image_variants_fn: Callable[[Path], list[dict[str, object]]],
     inspect_image_metadata_fn: Callable[[Path], dict[str, object]],
 ) -> tuple[int | None, int | None, str | None]:
     blurhash_value: str | None = None
     width: int | None = None
     height: int | None = None
+
+    if cached_bundle is not None:
+        metadata = cached_bundle.metadata
+        display_width = cast(int, metadata["display_width"])
+        display_height = cast(int, metadata["display_height"])
+        blurhash_candidate = metadata.get("blurhash")
+        if isinstance(blurhash_candidate, str) and blurhash_candidate:
+            blurhash_value = blurhash_candidate
+        width = display_width
+        height = display_height
+        _append_cached_variant_payloads(
+            run_dir_name=run_dir_name,
+            original_sha256=original_sha256,
+            uploads=uploads,
+            variant_rows=variant_rows,
+            cached_variant_paths=cached_bundle.cached_variant_paths,
+            cached_variant_lookup=cached_bundle.variant_lookup,
+            bucket_scope_for_variant=lambda variant_name: bucket_for(
+                category, variant_name
+            ),
+        )
+        return width, height, blurhash_value
 
     if all_cached:
         metadata = inspect_image_metadata_fn(image_path)
@@ -788,6 +1155,15 @@ def _collect_derived_variant_payloads(
             }
             cached_variant_payload.update(_encoding_fields_for_variant(variant_raw))
             variant_rows.append(cached_variant_payload)
+
+        _write_variant_cache_sidecar(
+            run_intermediate_dir=run_intermediate_dir,
+            batch_index=batch_index,
+            image_path=image_path,
+            original_sha256=original_sha256,
+            metadata=dict(metadata),
+            variant_rows=variant_rows,
+        )
 
         return width, height, blurhash_value
 
@@ -851,6 +1227,18 @@ def _collect_derived_variant_payloads(
         derived_variant_payload.update(_encoding_fields_for_variant(variant_raw))
         variant_rows.append(derived_variant_payload)
 
+    _write_variant_cache_sidecar(
+        run_intermediate_dir=run_intermediate_dir,
+        batch_index=batch_index,
+        image_path=image_path,
+        original_sha256=original_sha256,
+        metadata=_build_metadata_snapshot(
+            variant_rows=variant_rows,
+            blurhash_value=blurhash_value,
+        ),
+        variant_rows=variant_rows,
+    )
+
     return width, height, blurhash_value
 
 
@@ -903,6 +1291,7 @@ def _build_image_payload(
         variant_rows,
         cached_variant_paths,
         all_cached,
+        cached_bundle,
     ) = _prepare_image_payload_inputs(
         run_dir_name=run_dir_name,
         run_intermediate_dir=run_intermediate_dir,
@@ -922,6 +1311,7 @@ def _build_image_payload(
         variant_rows=variant_rows,
         cached_variant_paths=cached_variant_paths,
         all_cached=all_cached,
+        cached_bundle=cached_bundle,
         plan_image_variants_fn=plan_image_variants_fn,
         inspect_image_metadata_fn=inspect_image_metadata_fn,
     )
@@ -944,6 +1334,7 @@ def _build_run_plan(
     category_override: Category | None,
     remaining_limit: int | None,
     image_workers: int,
+    on_images_discovered: Callable[[int], None] | None = None,
     on_image_planned: Callable[[], None] | None = None,
     thread_pool_cls: type[ThreadPoolExecutor] = ThreadPoolExecutor,
     plan_image_variants_fn: Callable[
@@ -989,6 +1380,9 @@ def _build_run_plan(
                 )
             )
             processed_images += 1
+
+    if on_images_discovered is not None and image_tasks:
+        on_images_discovered(len(image_tasks))
 
     images_rows: list[dict[str, object]] = []
     image_uploads: list[PlannedUpload] = []
@@ -1099,27 +1493,6 @@ def _build_run_plan(
     )
 
 
-def _estimate_image_count_for_run(run_dir: Path, *, remaining_limit: int | None) -> int:
-    normalized_run_dir = normalize_run_dir(run_dir)
-    metadata_records = _load_metadata_records(normalized_run_dir)
-    estimated_images = 0
-
-    for metadata_record in metadata_records:
-        if remaining_limit is not None and estimated_images >= remaining_limit:
-            break
-
-        image_paths = resolve_metadata_image_paths(normalized_run_dir, metadata_record)
-        if not image_paths:
-            continue
-
-        allowed = len(image_paths)
-        if remaining_limit is not None:
-            allowed = min(allowed, remaining_limit - estimated_images)
-        estimated_images += allowed
-
-    return estimated_images
-
-
 def _build_plans(
     args: argparse.Namespace,
     *,
@@ -1137,23 +1510,9 @@ def _build_plans(
     category_override = cast(Category | None, getattr(args, "category", None))
     limit_value = cast(int | None, getattr(args, "limit", None))
 
-    remaining_for_estimate = limit_value
-    estimated_images = 0
-    for run_dir in selected_run_dirs:
-        if remaining_for_estimate is not None and remaining_for_estimate <= 0:
-            break
-        estimated_for_run = _estimate_image_count_for_run(
-            run_dir,
-            remaining_limit=remaining_for_estimate,
-        )
-        estimated_images += estimated_for_run
-        if remaining_for_estimate is not None:
-            remaining_for_estimate = max(0, remaining_for_estimate - estimated_for_run)
-
     LOG.info(
-        "building upload plans: run_count=%s estimated_images=%s limit=%s intermediate_root=%s image_workers=%s",
+        "building upload plans: run_count=%s limit=%s intermediate_root=%s image_workers=%s",
         len(selected_run_dirs),
-        estimated_images,
         limit_value,
         intermediate_root,
         image_workers,
@@ -1163,11 +1522,16 @@ def _build_plans(
     remaining = limit_value
     with logging_redirect_tqdm():
         with tqdm(
-            total=estimated_images,
+            total=0,
             desc="构建计划",
             unit="image",
             dynamic_ncols=True,
         ) as pbar:
+
+            def _grow_image_total(count: int) -> None:
+                current_total = pbar.total or 0
+                pbar.total = current_total + count
+                pbar.refresh()
 
             def _tick_image_progress() -> None:
                 pbar.update(1)
@@ -1181,6 +1545,7 @@ def _build_plans(
                     category_override=category_override,
                     remaining_limit=remaining,
                     image_workers=image_workers,
+                    on_images_discovered=_grow_image_total,
                     on_image_planned=_tick_image_progress,
                     thread_pool_cls=thread_pool_cls,
                     plan_image_variants_fn=plan_image_variants_fn,

@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from argparse import Namespace
+from contextlib import contextmanager
+from collections.abc import Iterator
 import json
 import hashlib
+import os
 import sys
 from pathlib import Path
 from typing import cast
@@ -16,6 +20,7 @@ sys.path.insert(0, str(ROOT))
 
 from scripts.r2_upload.upload_images_to_r2 import main
 from scripts.r2_upload.upload_planner import _build_run_db_fields
+from scripts.r2_upload.upload_runtime import _resolve_image_workers
 
 
 def _sha256_file(path: Path) -> str:
@@ -110,16 +115,20 @@ def _extended_run_json(
     if run_assets_payload is not None:
         payload["assets"] = run_assets_payload
     elif include_run_assets:
-        cover_path = ROOT / "data/runs/example/image.jpg"
-        homepage_path = ROOT / "data/runs/example/images/1021-832x1216.jpg"
+        cover_path = run_dir / "repo-assets/image.jpg"
+        homepage_path = run_dir / "repo-assets/images/homepage.jpg"
+        _write_jpeg(cover_path)
+        _write_jpeg(homepage_path)
         payload["assets"] = {
             "cover_image": {
+                "path": str(cover_path),
                 "repo_relative_path": "data/runs/example/image.jpg",
                 "sha256": _sha256_file(cover_path),
             },
             "homepage_images": [
                 {
-                    "repo_relative_path": "data/runs/example/images/1021-832x1216.jpg",
+                    "path": str(homepage_path),
+                    "repo_relative_path": "data/runs/example/images/homepage.jpg",
                     "sha256": _sha256_file(homepage_path),
                 }
             ],
@@ -174,6 +183,26 @@ def _write_run_fixture(
     )
     (run_dir / "metadata.jsonl").write_text(
         json.dumps(metadata_record, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return run_dir
+
+
+def _write_run_fixture_with_metadata_records(
+    root: Path,
+    *,
+    run_name: str,
+    metadata_records: list[dict[str, object]],
+) -> Path:
+    run_dir = root / run_name
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "run.json").write_text(
+        json.dumps(_extended_run_json(run_dir=run_dir), ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (run_dir / "metadata.jsonl").write_text(
+        "\n".join(json.dumps(record, ensure_ascii=False) for record in metadata_records)
+        + "\n",
         encoding="utf-8",
     )
     return run_dir
@@ -516,9 +545,10 @@ def test_cli_dry_run_writes_intermediate_variants_to_env_dir(
     assert payload.get("intermediate_dirs") == [str(expected_run_intermediate)]
 
     files = [item for item in expected_run_intermediate.iterdir() if item.is_file()]
-    assert len(files) == 4
-    suffixes = {item.suffix for item in files}
-    assert suffixes == {".webp", ".avif"}
+    variant_files = [item for item in files if item.suffix in {".webp", ".avif"}]
+    sidecar_files = [item for item in files if item.suffix == ".json"]
+    assert len(variant_files) == 4
+    assert len(sidecar_files) == 1
 
 
 def test_cli_dry_run_reuses_cached_variants_without_reencoding(
@@ -535,15 +565,130 @@ def test_cli_dry_run_reuses_cached_variants_without_reencoding(
     def _fail_reencode(_: Path) -> list[dict[str, object]]:
         raise AssertionError("plan_image_variants should not run when cache exists")
 
+    def _fail_metadata(_: Path) -> dict[str, object]:
+        raise AssertionError(
+            "inspect_image_metadata should not run when cache sidecar exists"
+        )
+
     monkeypatch.setattr(
         "scripts.r2_upload.upload_images_to_r2.plan_image_variants",
         _fail_reencode,
+    )
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_planner.inspect_image_metadata",
+        _fail_metadata,
     )
 
     second_exit = main(["--dry-run", "--run-dir", str(run_dir)])
     assert second_exit == 0
     payload = _read_stdout_json(capsys)
     assert payload.get("processed_grid_images") == 1
+
+
+def test_cli_dry_run_loads_metadata_once_per_run(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scripts.r2_upload import upload_planner as upload_planner_module
+
+    run_dir = _write_run_fixture(tmp_path, run_name="metadata-once-run")
+    original_loader = upload_planner_module._load_metadata_records
+    load_count = 0
+
+    def _counting_loader(run_path: Path) -> list[dict[str, object]]:
+        nonlocal load_count
+        load_count += 1
+        return original_loader(run_path)
+
+    monkeypatch.setattr(
+        upload_planner_module, "_load_metadata_records", _counting_loader
+    )
+
+    exit_code = main(["--dry-run", "--run-dir", str(run_dir)])
+
+    assert exit_code == 0
+    _ = _read_stdout_json(capsys)
+    assert load_count == 1
+
+
+def test_cli_dry_run_cache_sidecars_do_not_collide_for_repeated_batch_index(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_dir = tmp_path / "duplicate-batch-run"
+    images_dir = run_dir / "images"
+    images_dir.mkdir(parents=True)
+    _write_png(images_dir / "a.png", size=(8, 6))
+    _write_png(images_dir / "b.png", size=(10, 8))
+    run_dir = _write_run_fixture_with_metadata_records(
+        tmp_path,
+        run_name="duplicate-batch-run",
+        metadata_records=[
+            {
+                "status": "success",
+                "x_index": 0,
+                "y_index": 0,
+                "batch_index": 0,
+                "local_image_path": "images/a.png",
+            },
+            {
+                "status": "success",
+                "x_index": 1,
+                "y_index": 0,
+                "batch_index": 0,
+                "local_image_path": "images/b.png",
+            },
+        ],
+    )
+
+    first_exit = main(["--dry-run", "--run-dir", str(run_dir)])
+    assert first_exit == 0
+    first_payload = _read_stdout_json(capsys)
+    assert first_payload.get("processed_grid_images") == 2
+
+    second_exit = main(["--dry-run", "--run-dir", str(run_dir)])
+    assert second_exit == 0
+    second_payload = _read_stdout_json(capsys)
+    assert second_payload.get("processed_grid_images") == 2
+
+    intermediate_dir = Path(cast(list[str], second_payload["intermediate_dirs"])[0])
+    sidecars = sorted(item.name for item in intermediate_dir.glob("cache-*.json"))
+    assert len(sidecars) == 2
+    assert sidecars[0] != sidecars[1]
+
+
+def test_cli_dry_run_rebuilds_cache_when_source_file_changes(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_dir = _write_run_fixture(tmp_path, run_name="invalidate-cache-run")
+
+    first_exit = main(["--dry-run", "--run-dir", str(run_dir)])
+    assert first_exit == 0
+    _ = _read_stdout_json(capsys)
+
+    image_path = run_dir / "images/x0-y0.png"
+    _write_png(image_path, size=(12, 10))
+
+    from scripts.r2_upload import upload_images_to_r2 as upload_cli_module
+
+    original_plan = upload_cli_module.plan_image_variants
+    plan_calls = 0
+
+    def _count_reencode(path: Path) -> list[dict[str, object]]:
+        nonlocal plan_calls
+        plan_calls += 1
+        return original_plan(path)
+
+    monkeypatch.setattr(upload_cli_module, "plan_image_variants", _count_reencode)
+
+    second_exit = main(["--dry-run", "--run-dir", str(run_dir)])
+    assert second_exit == 0
+    payload = _read_stdout_json(capsys)
+    assert payload.get("processed_grid_images") == 1
+    assert plan_calls == 1
 
 
 def test_cli_uses_r2_image_workers_from_env(
@@ -576,3 +721,63 @@ def test_cli_rejects_invalid_r2_image_workers_env(
     assert payload.get("mode") == "error"
     assert payload.get("category") == "config"
     assert payload.get("exit_code") == 3
+
+
+def test_resolve_image_workers_defaults_to_available_cpu_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("R2_IMAGE_WORKERS", raising=False)
+    monkeypatch.setattr(os, "sched_getaffinity", lambda _: {0, 1, 2, 3})
+
+    assert _resolve_image_workers(Namespace(concurrency=None)) == 4
+
+
+def test_cli_dry_run_restores_visible_planning_progress_bar(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scripts.r2_upload import upload_planner as upload_planner_module
+
+    run_dir = _write_run_fixture(tmp_path, run_name="progress-bar-run")
+
+    class _FakeTqdm:
+        instances: list["_FakeTqdm"] = []
+
+        def __init__(
+            self, *args: object, total: int | None = None, **kwargs: object
+        ) -> None:
+            _ = (args, kwargs)
+            self.total = total
+            self.n = 0
+            self.refreshed_totals: list[int | None] = []
+            self.__class__.instances.append(self)
+
+        def __enter__(self) -> "_FakeTqdm":
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            _ = (exc_type, exc, tb)
+
+        def update(self, step: int = 1) -> None:
+            self.n += step
+
+        def refresh(self) -> None:
+            self.refreshed_totals.append(self.total)
+
+    @contextmanager
+    def _noop_redirect() -> Iterator[None]:
+        yield None
+
+    monkeypatch.setattr(upload_planner_module, "tqdm", _FakeTqdm)
+    monkeypatch.setattr(upload_planner_module, "logging_redirect_tqdm", _noop_redirect)
+
+    exit_code = main(["--dry-run", "--run-dir", str(run_dir)])
+
+    assert exit_code == 0
+    _ = _read_stdout_json(capsys)
+    assert len(_FakeTqdm.instances) == 1
+    progress = _FakeTqdm.instances[0]
+    assert progress.total == 1
+    assert progress.n == 1
+    assert progress.refreshed_totals == [1]

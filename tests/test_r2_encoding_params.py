@@ -32,6 +32,10 @@ def test_avif_params_keep_display_higher_quality_than_thumb() -> None:
     assert cast(int, display["speed"]) < cast(int, thumb["speed"])
     assert display["subsampling"] == "4:2:0"
     assert thumb["subsampling"] == "4:2:0"
+    assert display["max_threads"] == 2
+    assert thumb["max_threads"] == 2
+    assert display["codec"] == "auto"
+    assert thumb["codec"] == "auto"
 
 
 def test_encoding_params_return_defensive_copies() -> None:

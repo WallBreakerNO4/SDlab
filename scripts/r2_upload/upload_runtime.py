@@ -65,6 +65,16 @@ def _parse_env_optional_int(name: str) -> int | None:
         ) from exc
 
 
+def _available_cpu_count() -> int:
+    try:
+        affinity = os.sched_getaffinity(0)
+    except AttributeError:
+        affinity = None
+    if affinity is not None:
+        return max(1, len(affinity))
+    return max(1, os.cpu_count() or 1)
+
+
 def _resolve_intermediate_root(args: argparse.Namespace) -> Path:
     env_value = os.getenv("R2_UPLOAD_INTERMEDIATE_DIR")
     if isinstance(env_value, str) and env_value.strip():
@@ -86,7 +96,11 @@ def _resolve_image_workers(args: argparse.Namespace) -> int:
             )
         return env_workers
 
-    cli_workers = int(getattr(args, "concurrency", 1))
+    cli_workers_raw = getattr(args, "concurrency", None)
+    if cli_workers_raw is None:
+        return _available_cpu_count()
+
+    cli_workers = int(cli_workers_raw)
     if cli_workers < 1:
         raise UploadScriptError("--concurrency 必须 >= 1", category="argument")
     return cli_workers
@@ -124,8 +138,8 @@ def _require_bucket_names() -> dict[BucketScope, str]:
 
 
 def _validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
-    concurrency = int(getattr(args, "concurrency", 1))
-    if concurrency < 1:
+    concurrency = getattr(args, "concurrency", None)
+    if concurrency is not None and int(concurrency) < 1:
         parser.error("--concurrency 必须 >= 1")
 
     limit = getattr(args, "limit", None)
