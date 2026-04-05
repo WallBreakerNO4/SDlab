@@ -30,7 +30,13 @@ export function useAuth() {
   return ctx;
 }
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export function AuthProvider({
+  children,
+  initialUser,
+}: {
+  children: React.ReactNode;
+  initialUser?: User | null;
+}) {
   const supabase = useMemo(() => {
     try {
       return createSupabaseBrowserClient();
@@ -40,31 +46,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(!!supabase);
+  const [user, setUser] = useState<User | null>(initialUser ?? null);
+  const [loading, setLoading] = useState(
+    initialUser === undefined && !!supabase,
+  );
 
   useEffect(() => {
     if (!supabase) {
       return;
     }
 
-    // Fetch initial session
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user ?? null);
-      setLoading(false);
-    });
+    if (initialUser === undefined) {
+      void supabase.auth
+        .getUser()
+        .then(({ data }) => {
+          setUser(data.user ?? null);
+        })
+        .catch(() => {
+          setUser(null);
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    }
 
-    // Listen for auth state changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "INITIAL_SESSION" && initialUser !== undefined) {
+        return;
+      }
       setUser(session?.user ?? null);
+      setLoading(false);
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [supabase]);
+  }, [supabase, initialUser]);
 
   const signInWithGitHub = useCallback(async () => {
     if (!supabase) return;
