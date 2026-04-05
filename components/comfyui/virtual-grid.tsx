@@ -441,7 +441,10 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
       try {
         const response = await fetch(
           `/api/comfyui/run/${encodeURIComponent(runDir)}/row?y_index=${encodeURIComponent(String(yIndex))}`,
-          { signal: controller.signal },
+          {
+            cache: "no-store",
+            signal: controller.signal,
+          },
         );
 
         if (response.status === 404) {

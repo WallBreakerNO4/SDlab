@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
+
 import "./globals.css";
+
 import { AuthProvider } from "@/components/auth-provider";
-import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
+import { SiteHeader } from "@/components/site-header";
+import { UserPreferencesProvider } from "@/components/user-preferences-provider";
 import { createSupabaseAuthClient } from "@/lib/supabase-auth";
+import { getViewerShowNsfwPreference } from "@/lib/server-user-preferences";
 import type { User } from "@supabase/supabase-js";
 
 const jetbrainsMono = JetBrains_Mono({
@@ -35,10 +39,14 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   let initialUser: User | null | undefined;
+  let initialShowNsfw = false;
   try {
     const supabase = await createSupabaseAuthClient();
     const { data } = await supabase.auth.getUser();
     initialUser = data.user ?? null;
+    if (initialUser) {
+      initialShowNsfw = await getViewerShowNsfwPreference(supabase);
+    }
   } catch {
     initialUser = undefined;
   }
@@ -66,11 +74,13 @@ export default async function RootLayout({
           disableTransitionOnChange
         >
           <AuthProvider key={authSnapshotKey} initialUser={initialUser}>
-            <div className="flex h-dvh flex-col overflow-hidden">
-              <SiteHeader />
-              <div className="min-h-0 flex-1">{children}</div>
-              <SiteFooter />
-            </div>
+            <UserPreferencesProvider initialShowNsfw={initialShowNsfw}>
+              <div className="flex h-dvh flex-col overflow-hidden">
+                <SiteHeader />
+                <div className="min-h-0 flex-1">{children}</div>
+                <SiteFooter />
+              </div>
+            </UserPreferencesProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

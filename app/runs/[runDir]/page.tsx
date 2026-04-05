@@ -1,6 +1,8 @@
 "use client";
 
 import { use, useEffect, useMemo, useState } from "react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import Link from "next/link";
 
 import {
   type BlurhashCell,
@@ -8,7 +10,7 @@ import {
   type RunGridXColumn,
   VirtualGrid,
 } from "@/components/comfyui/virtual-grid";
-import Link from "next/link";
+import { useUserPreferences } from "@/components/user-preferences-provider";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -17,7 +19,6 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { HugeiconsIcon } from "@hugeicons/react";
 import {
   FileIcon,
   Clock01Icon,
@@ -186,6 +187,7 @@ export default function RunDetailPage({
   params: Promise<{ runDir: string | string[] }>;
 }) {
   const resolvedParams = use(params);
+  const { showNsfw } = useUserPreferences();
   const [detailLoadState, setDetailLoadState] = useState<LoadState>("loading");
   const [gridLoadState, setGridLoadState] = useState<LoadState>("loading");
   const [detailData, setDetailData] = useState<RunDetailResponse | null>(null);
@@ -203,6 +205,7 @@ export default function RunDetailPage({
 
   useEffect(() => {
     const abortController = new AbortController();
+    const preferenceRequestKey = showNsfw ? "nsfw-on" : "nsfw-off";
 
     async function fetchAll() {
       if (!runDir) {
@@ -216,49 +219,59 @@ export default function RunDetailPage({
       setDetailLoadState("loading");
       setGridLoadState("loading");
 
-    const detailPromise = fetch(`/api/comfyui/run/${encodeURIComponent(runDir)}`, {
-      signal: abortController.signal,
-    }).then(async (res) => {
-      if (res.status === 404) throw new Error("not-found");
-      if (!res.ok) throw new Error("error");
-      const data = await res.json();
-      if (!isRunDetailResponse(data)) throw new Error("error");
-      return data;
-    });
-
-    const gridPromise = fetch(`/api/comfyui/run/${encodeURIComponent(runDir)}/grid`, {
-      signal: abortController.signal,
-    }).then(async (res) => {
-      if (res.status === 404) throw new Error("not-found");
-      if (!res.ok) throw new Error("error");
-      const data = await res.json();
-      if (!isRunGridIndexData(data)) throw new Error("error");
-      return data;
-    });
-
-    detailPromise
-      .then((data) => {
-        if (abortController.signal.aborted) return;
-        setDetailData(data);
-        setDetailLoadState("ready");
-      })
-      .catch((err) => {
-        if (abortController.signal.aborted) return;
-        if (err.name === "AbortError") return;
-        setDetailLoadState(err.message === "not-found" ? "not-found" : "error");
+      const detailPromise = fetch(
+        `/api/comfyui/run/${encodeURIComponent(runDir)}?viewer_nsfw=${preferenceRequestKey}`,
+        {
+          cache: "no-store",
+          signal: abortController.signal,
+        },
+      ).then(async (res) => {
+        if (res.status === 404) throw new Error("not-found");
+        if (!res.ok) throw new Error("error");
+        const data = await res.json();
+        if (!isRunDetailResponse(data)) throw new Error("error");
+        return data;
       });
 
-    gridPromise
-      .then((data) => {
-        if (abortController.signal.aborted) return;
-        setGridData(data);
-        setGridLoadState("ready");
-      })
-      .catch((err) => {
-        if (abortController.signal.aborted) return;
-        if (err.name === "AbortError") return;
-        setGridLoadState(err.message === "not-found" ? "not-found" : "error");
+      const gridPromise = fetch(
+        `/api/comfyui/run/${encodeURIComponent(runDir)}/grid?viewer_nsfw=${preferenceRequestKey}`,
+        {
+          cache: "no-store",
+          signal: abortController.signal,
+        },
+      ).then(async (res) => {
+        if (res.status === 404) throw new Error("not-found");
+        if (!res.ok) throw new Error("error");
+        const data = await res.json();
+        if (!isRunGridIndexData(data)) throw new Error("error");
+        return data;
       });
+
+      detailPromise
+        .then((data) => {
+          if (abortController.signal.aborted) return;
+          setDetailData(data);
+          setDetailLoadState("ready");
+        })
+        .catch((err) => {
+          if (abortController.signal.aborted) return;
+          if (err.name === "AbortError") return;
+          setDetailLoadState(
+            err.message === "not-found" ? "not-found" : "error",
+          );
+        });
+
+      gridPromise
+        .then((data) => {
+          if (abortController.signal.aborted) return;
+          setGridData(data);
+          setGridLoadState("ready");
+        })
+        .catch((err) => {
+          if (abortController.signal.aborted) return;
+          if (err.name === "AbortError") return;
+          setGridLoadState(err.message === "not-found" ? "not-found" : "error");
+        });
     }
 
     void fetchAll();
@@ -266,13 +279,13 @@ export default function RunDetailPage({
     return () => {
       abortController.abort();
     };
-  }, [runDir]);
+  }, [runDir, showNsfw]);
 
   const isDetailLoading = detailLoadState === "loading";
   const isGridLoading = gridLoadState === "loading";
   const isDetailReady = detailLoadState === "ready" && detailData !== null;
   const isGridReady = gridLoadState === "ready" && gridData !== null;
-  
+
   const xCount = isGridReady ? gridData.x_columns.length : 0;
   const yCount = isGridReady ? gridData.y_indexes.length : 0;
   const breadcrumbTitle = isDetailReady
@@ -384,7 +397,9 @@ export default function RunDetailPage({
                       className="size-4"
                       strokeWidth={2}
                     />
-                    <span>{isGridReady ? `${xCount}×${yCount}` : "加载中..."}</span>
+                    <span>
+                      {isGridReady ? `${xCount}×${yCount}` : "加载中..."}
+                    </span>
                   </div>
                   <div className="text-muted-foreground flex items-center gap-1.5">
                     <HugeiconsIcon
@@ -467,6 +482,7 @@ export default function RunDetailPage({
         {isGridReady ? (
           <div className="min-h-0 flex-1">
             <VirtualGrid
+              key={showNsfw ? "nsfw" : "sfw"}
               runDir={runDir}
               grid={gridData}
               blurhashMap={blurhashMap}
@@ -474,7 +490,8 @@ export default function RunDetailPage({
           </div>
         ) : null}
 
-        {(gridLoadState === "not-found" || gridLoadState === "error") && isDetailReady ? (
+        {(gridLoadState === "not-found" || gridLoadState === "error") &&
+        isDetailReady ? (
           <Empty>
             <EmptyHeader>
               <EmptyTitle>暂无网格可展示</EmptyTitle>

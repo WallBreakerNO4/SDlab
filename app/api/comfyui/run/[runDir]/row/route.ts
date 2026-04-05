@@ -1,5 +1,7 @@
 import { isValidRunDir } from "@/lib/comfyui-types";
 import { privateObjectUrl, publicObjectUrl } from "@/lib/r2-url";
+import { buildVisibleRunGridColumns } from "@/lib/run-grid-visibility";
+import { getViewerShowNsfwPreference } from "@/lib/server-user-preferences";
 import { createSupabaseAuthClient } from "@/lib/supabase-auth";
 import type {
   ImageCategory,
@@ -110,6 +112,32 @@ export async function GET(
     }
 
     const supabase = await createSupabaseAuthClient();
+    const showNsfw = await getViewerShowNsfwPreference(supabase);
+
+    const { data: runMeta, error: runMetaError } = await supabase
+      .from("runs")
+      .select("x_columns")
+      .eq("run_dir", runDir)
+      .maybeSingle();
+
+    if (runMetaError) {
+      return Response.json(
+        { error: "Failed to load run row" },
+        { status: 500 },
+      );
+    }
+
+    if (!runMeta) {
+      return Response.json({ error: "Run not found" }, { status: 404 });
+    }
+
+    const visibleColumns = buildVisibleRunGridColumns(runMeta.x_columns, {
+      showNsfw,
+    });
+
+    if (visibleColumns.allowedOriginalXIndexes.length === 0) {
+      return Response.json({ run_dir: runDir, y_index: yIndex, cells: [] });
+    }
 
     const { data: imagesData, error: imagesError } = await supabase
       .from("run_grid_items")
@@ -118,6 +146,7 @@ export async function GET(
       )
       .eq("run_dir", runDir)
       .eq("y_index", yIndex)
+      .in("x_index", visibleColumns.allowedOriginalXIndexes)
       .order("x_index", { ascending: true })
       .order("batch_index", { ascending: true });
 
@@ -191,12 +220,17 @@ export async function GET(
         display: Object.keys(display).length > 0 ? display : null,
       };
 
-      const existing = byXIndex.get(image.x_index);
+      const remappedXIndex = visibleColumns.remapOriginalXIndex(image.x_index);
+      if (remappedXIndex === null) {
+        continue;
+      }
+
+      const existing = byXIndex.get(remappedXIndex);
       if (existing) {
         existing.items.push(item);
       } else {
-        byXIndex.set(image.x_index, {
-          x_index: image.x_index,
+        byXIndex.set(remappedXIndex, {
+          x_index: remappedXIndex,
           y_index: yIndex,
           items: [item],
         });

@@ -1,8 +1,9 @@
 import { isValidRunDir } from "@/lib/comfyui-types";
+import { buildVisibleRunGridColumns } from "@/lib/run-grid-visibility";
+import { getViewerShowNsfwPreference } from "@/lib/server-user-preferences";
 import { createSupabaseAuthClient } from "@/lib/supabase-auth";
 import type {
   ImageCategory,
-  JsonObject,
   JsonValue,
   SupabaseRunGridCellRow,
 } from "@/lib/supabase-types";
@@ -20,28 +21,6 @@ type RouteContext = {
   params: Promise<{ runDir: string }>;
 };
 
-function asJsonObject(value: JsonValue): JsonObject | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return null;
-  }
-  return value as JsonObject;
-}
-
-function getNonEmptyString(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function pickXColumn(raw: JsonObject): {
-  type: string | null;
-  description: JsonObject | null;
-} {
-  const type = getNonEmptyString(raw.type);
-  const description = asJsonObject(raw.description as JsonValue);
-  return { type, description };
-}
-
 export async function GET(
   _request: Request,
   context: RouteContext,
@@ -53,23 +32,13 @@ export async function GET(
     }
 
     const supabase = await createSupabaseAuthClient();
+    const showNsfw = await getViewerShowNsfwPreference(supabase);
     const PAGE_SIZE = 1000;
-    const [runMetaResult, firstPageResult] = await Promise.all([
-      supabase
-        .from("runs")
-        .select("x_columns,y_indexes,x_count,y_count")
-        .eq("run_dir", runDir)
-        .maybeSingle(),
-      supabase
-        .from("run_grid_cells")
-        .select(
-          "x_index,y_index,representative_batch_index,category,width,height,blurhash",
-        )
-        .eq("run_dir", runDir)
-        .order("y_index", { ascending: true })
-        .order("x_index", { ascending: true })
-        .range(0, PAGE_SIZE - 1),
-    ]);
+    const runMetaResult = await supabase
+      .from("runs")
+      .select("x_columns,y_indexes,x_count,y_count")
+      .eq("run_dir", runDir)
+      .maybeSingle();
 
     if (runMetaResult.error) {
       return Response.json(
@@ -82,6 +51,24 @@ export async function GET(
     if (!runMeta) {
       return Response.json({ error: "Run not found" }, { status: 404 });
     }
+
+    const visibleColumns = buildVisibleRunGridColumns(runMeta.x_columns, {
+      showNsfw,
+    });
+
+    const firstPageResult =
+      visibleColumns.allowedOriginalXIndexes.length === 0
+        ? { data: [] satisfies SupabaseRunGridCellRow[], error: null }
+        : await supabase
+            .from("run_grid_cells")
+            .select(
+              "x_index,y_index,representative_batch_index,category,width,height,blurhash",
+            )
+            .eq("run_dir", runDir)
+            .in("x_index", visibleColumns.allowedOriginalXIndexes)
+            .order("y_index", { ascending: true })
+            .order("x_index", { ascending: true })
+            .range(0, PAGE_SIZE - 1);
 
     if (firstPageResult.error) {
       return Response.json(
@@ -103,14 +90,17 @@ export async function GET(
     }> = [];
 
     for (const row of rows) {
+      const remappedXIndex = visibleColumns.remapOriginalXIndex(
+        row.x_index ?? -1,
+      );
       if (
-        typeof row.x_index === "number" &&
+        remappedXIndex !== null &&
         typeof row.y_index === "number" &&
         typeof row.representative_batch_index === "number" &&
         typeof row.category === "string"
       ) {
         blurhash_cells.push({
-          x_index: row.x_index,
+          x_index: remappedXIndex,
           y_index: row.y_index,
           batch_index: row.representative_batch_index,
           category: row.category,
@@ -130,6 +120,7 @@ export async function GET(
           "x_index,y_index,representative_batch_index,category,width,height,blurhash",
         )
         .eq("run_dir", runDir)
+        .in("x_index", visibleColumns.allowedOriginalXIndexes)
         .order("y_index", { ascending: true })
         .order("x_index", { ascending: true })
         .range(pageOffset, pageOffset + PAGE_SIZE - 1);
@@ -143,14 +134,17 @@ export async function GET(
 
       const pageRows = (pageData as SupabaseRunGridCellRow[] | null) ?? [];
       for (const row of pageRows) {
+        const remappedXIndex = visibleColumns.remapOriginalXIndex(
+          row.x_index ?? -1,
+        );
         if (
-          typeof row.x_index === "number" &&
+          remappedXIndex !== null &&
           typeof row.y_index === "number" &&
           typeof row.representative_batch_index === "number" &&
           typeof row.category === "string"
         ) {
           blurhash_cells.push({
-            x_index: row.x_index,
+            x_index: remappedXIndex,
             y_index: row.y_index,
             batch_index: row.representative_batch_index,
             category: row.category,
@@ -168,19 +162,7 @@ export async function GET(
       }
     }
 
-    if (blurhash_cells.length === 0) {
-      return Response.json({ error: "Run not found" }, { status: 404 });
-    }
-
-    const xColumnsRaw = runMeta.x_columns;
     const yIndexesRaw = runMeta.y_indexes;
-
-    const x_columns = Array.isArray(xColumnsRaw)
-      ? xColumnsRaw
-          .map((item) => asJsonObject(item as JsonValue))
-          .filter((item): item is JsonObject => item !== null)
-          .map(pickXColumn)
-      : [];
 
     const y_indexes: number[] = Array.isArray(yIndexesRaw)
       ? yIndexesRaw.filter(
@@ -189,13 +171,12 @@ export async function GET(
         )
       : [];
 
-    const x_count =
-      typeof runMeta.x_count === "number" ? runMeta.x_count : x_columns.length;
+    const x_count = visibleColumns.columns.length;
     const y_count =
       typeof runMeta.y_count === "number" ? runMeta.y_count : y_indexes.length;
 
     return Response.json({
-      x_columns,
+      x_columns: visibleColumns.columns,
       y_indexes,
       x_count,
       y_count,

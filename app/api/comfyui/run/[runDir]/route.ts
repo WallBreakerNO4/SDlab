@@ -1,23 +1,14 @@
 import { isValidRunDir } from "@/lib/comfyui-types";
+import { buildVisibleRunGridColumns } from "@/lib/run-grid-visibility";
+import { getViewerShowNsfwPreference } from "@/lib/server-user-preferences";
 import { createSupabaseAuthClient } from "@/lib/supabase-auth";
-import type {
-  JsonObject,
-  JsonValue,
-  SupabaseRunRow,
-} from "@/lib/supabase-types";
+import type { SupabaseRunRow } from "@/lib/supabase-types";
 
 export const runtime = "nodejs";
 
 type RouteContext = {
   params: Promise<{ runDir: string }>;
 };
-
-function asJsonObject(value: JsonValue): JsonObject | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return null;
-  }
-  return value as JsonObject;
-}
 
 function getNonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -67,6 +58,7 @@ export async function GET(
     }
 
     const supabase = await createSupabaseAuthClient();
+    const showNsfw = await getViewerShowNsfwPreference(supabase);
     const { data, error } = await supabase
       .from("runs")
       .select(
@@ -90,10 +82,9 @@ export async function GET(
     }
 
     const runId = getNonEmptyString(row.run_id);
-    const xColumnsRaw = row.x_columns;
     const yIndexesRaw = row.y_indexes;
 
-    if (!runId || !Array.isArray(xColumnsRaw) || !Array.isArray(yIndexesRaw)) {
+    if (!runId || !Array.isArray(yIndexesRaw)) {
       return Response.json(
         {
           error: "Failed to load run detail",
@@ -102,11 +93,9 @@ export async function GET(
       );
     }
 
-    const x_columns: JsonObject[] = Array.isArray(xColumnsRaw)
-      ? xColumnsRaw
-          .map((item) => asJsonObject(item as JsonValue))
-          .filter((item): item is JsonObject => item !== null)
-      : [];
+    const visibleColumns = buildVisibleRunGridColumns(row.x_columns, {
+      showNsfw,
+    });
 
     const y_indexes: number[] = Array.isArray(yIndexesRaw)
       ? yIndexesRaw.filter((item): item is number => typeof item === "number")
@@ -123,9 +112,8 @@ export async function GET(
       );
     }
 
-    const xLabels = x_columns.map((col, index) => {
-      const desc = asJsonObject(col.description as JsonValue);
-      const zh = desc ? getNonEmptyString(desc.zh) : null;
+    const xLabels = visibleColumns.columns.map((col, index) => {
+      const zh = col.description ? getNonEmptyString(col.description.zh) : null;
       return zh ?? `X${index}`;
     });
 
@@ -144,7 +132,7 @@ export async function GET(
       },
       xLabels,
       yLabels,
-      x_columns,
+      x_columns: visibleColumns.columns,
       y_indexes,
     });
   } catch {

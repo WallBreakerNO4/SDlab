@@ -1,43 +1,48 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { useCallback, useState } from "react"
-import { useAuth } from "@/components/auth-provider"
-import { AuthLoginDialog } from "@/components/auth-login-dialog"
-import { ThemeToggle } from "@/components/theme-toggle"
-import { Button } from "@/components/ui/button"
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
+import Link from "next/link";
+
+import { useCallback, useState } from "react";
+import { AuthLoginDialog } from "@/components/auth-login-dialog";
+import { useAuth } from "@/components/auth-provider";
+import { useUserPreferences } from "@/components/user-preferences-provider";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
 
 function getInitials(name: string | undefined | null): string {
-  if (!name) return "?"
-  const parts = name.trim().split(/\s+/)
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
   if (parts.length >= 2) {
-    return (parts[0][0] + parts[1][0]).toUpperCase()
+    return (parts[0][0] + parts[1][0]).toUpperCase();
   }
-  return name.slice(0, 2).toUpperCase()
+  return name.slice(0, 2).toUpperCase();
 }
 
 export function SiteHeader() {
-  const { user, loading, signOut } = useAuth()
-  const [loginDialogOpen, setLoginDialogOpen] = useState(false)
+  const { user, loading, signOut } = useAuth();
+  const { showNsfw, setShowNsfw } = useUserPreferences();
+  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
 
   const handleSignOut = useCallback(async () => {
-    await signOut()
-  }, [signOut])
+    await signOut();
+  }, [signOut]);
 
   const displayName =
     user?.user_metadata?.full_name ??
     user?.user_metadata?.name ??
     user?.email ??
-    "用户"
-  const avatarUrl = user?.user_metadata?.avatar_url as string | undefined
+    "用户";
+  const avatarUrl = user?.user_metadata?.avatar_url as string | undefined;
 
   return (
     <>
@@ -91,9 +96,21 @@ export function SiteHeader() {
                   <div className="px-2 py-1.5 text-xs">
                     <p className="truncate font-medium">{displayName}</p>
                     {user.email ? (
-                      <p className="text-muted-foreground truncate">{user.email}</p>
+                      <p className="text-muted-foreground truncate">
+                        {user.email}
+                      </p>
                     ) : null}
                   </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuCheckboxItem
+                    checked={showNsfw}
+                    onCheckedChange={(checked) => {
+                      void setShowNsfw(checked === true);
+                    }}
+                  >
+                    显示 NSFW
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => void handleSignOut()}>
                     退出登录
                   </DropdownMenuItem>
@@ -109,5 +126,5 @@ export function SiteHeader() {
         onOpenChange={setLoginDialogOpen}
       />
     </>
-  )
+  );
 }
