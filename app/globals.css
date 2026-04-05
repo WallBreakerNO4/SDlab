@@ -130,6 +130,48 @@
   }
 }
 
+@layer components {
+  .prose-custom {
+    @apply max-w-3xl mx-auto text-sm text-foreground/90;
+  }
+  .prose-custom h1 {
+    @apply text-2xl font-bold mt-8 mb-4 tracking-tight text-foreground;
+  }
+  .prose-custom h2 {
+    @apply text-xl font-semibold mt-6 mb-3 tracking-tight text-foreground;
+  }
+  .prose-custom h3 {
+    @apply text-lg font-medium mt-4 mb-2 tracking-tight text-foreground;
+  }
+  .prose-custom p {
+    @apply mb-4 leading-relaxed;
+  }
+  .prose-custom a {
+    @apply text-primary font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm;
+  }
+  .prose-custom ul {
+    @apply list-disc pl-6 mb-4 space-y-1;
+  }
+  .prose-custom ol {
+    @apply list-decimal pl-6 mb-4 space-y-1;
+  }
+  .prose-custom li::marker {
+    @apply text-muted-foreground;
+  }
+  .prose-custom blockquote {
+    @apply border-l-4 border-muted pl-4 italic text-muted-foreground mb-4;
+  }
+  .prose-custom code {
+    @apply bg-muted/50 rounded-md px-1.5 py-0.5 font-mono text-[0.85em];
+  }
+  .prose-custom pre {
+    @apply bg-muted/50 rounded-lg p-4 mb-4 overflow-x-auto;
+  }
+  .prose-custom pre code {
+    @apply bg-transparent p-0 text-[0.85em];
+  }
+}
+
 /* ── Custom Animations ── */
 
 @keyframes fade-in {
