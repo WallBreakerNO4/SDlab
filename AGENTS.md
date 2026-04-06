@@ -1,8 +1,8 @@
 # Agent Guide (sd-style-lab/images-script)
 
-**生成时间:** 2026-04-04T00:00:00+08:00
-**Commit:** 29cc3ef
-**分支:** refactor/optimize-requests-number
+**生成时间:** 2026-04-06T00:00:00+08:00
+**Commit:** e9e3fdf
+**分支:** feat/info-page
 本文件给仓库级 agent 使用；子目录 `AGENTS.md` 只补充局部知识，不重复根规则。
 
 ## 概览
@@ -14,6 +14,7 @@
 - Next 16 / React 19 约定：本仓库的动态页面与 route handler 普遍使用 `params: Promise<...>` 形态；客户端页面侧常见 `use(params)`，服务端 route 侧常见 `await context.params`。
 - 认证链路走 Supabase SSR：浏览器端 `lib/supabase-browser.ts`，服务端 `lib/supabase-auth.ts`，会话刷新在 `middleware.ts`。
 - Web 部署目标是 OpenNext + Cloudflare：本地 `next dev` 会启 Miniflare，部分服务端能力通过 Workers bindings 读取。
+- 当前分层知识文件已经覆盖主要强边界目录；像 `app/api/comfyui/run/[runDir]/` 这类 leaf route 继续继承父级规则，不再单开 `AGENTS.md`。
 
 ## 结构
 
@@ -144,11 +145,8 @@ supabase migration new <name>
 
 ## 分层文档
 
-- `app/AGENTS.md`：App Router 页面与 API 的局部规则。
-- `app/api/AGENTS.md`：`app/api/**/route.ts` 共性约定。
-- `app/api/comfyui/AGENTS.md`：ComfyUI 查询 / workflow 下载 API 约定。
-- `app/auth/AGENTS.md`：Supabase PKCE callback 的局部特例。
-- `components/AGENTS.md` / `components/ui/AGENTS.md` / `components/comfyui/AGENTS.md`：组件分层、UI primitives、网格性能约定。
+- `app/AGENTS.md`、`app/api/AGENTS.md`、`app/api/comfyui/AGENTS.md`、`app/auth/AGENTS.md`：页面/API/Auth 的分层规则与 PKCE 特例。
+- `components/AGENTS.md`、`components/ui/AGENTS.md`、`components/comfyui/AGENTS.md`：业务组件、UI primitives、虚拟网格/图片渲染约定。
 - `lib/AGENTS.md`：Supabase/R2/路径安全/共享类型边界。
-- `scripts/AGENTS.md` / `scripts/generation/AGENTS.md` / `scripts/r2_upload/AGENTS.md` / `scripts/cli/AGENTS.md` / `scripts/other/AGENTS.md`：Python 主代码域。
-- `tests/AGENTS.md`、`e2e/AGENTS.md`、`supabase/AGENTS.md`、`data/AGENTS.md`、`hooks/AGENTS.md`、`types/AGENTS.md`：各自目录局部规则。
+- `scripts/AGENTS.md`、`scripts/generation/AGENTS.md`、`scripts/r2_upload/AGENTS.md`、`scripts/cli/AGENTS.md`、`scripts/other/AGENTS.md`：Python 主代码域与子系统边界。
+- `tests/AGENTS.md`、`e2e/AGENTS.md`、`supabase/AGENTS.md`、`data/AGENTS.md`、`hooks/AGENTS.md`、`types/AGENTS.md`：测试、迁移、资产、hooks、生成类型的局部规则。
