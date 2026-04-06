@@ -327,10 +327,7 @@ export default function Page() {
 
                 const coverAsset = run.assets?.cover;
                 const coverSource = resolvePreferredImageSource(coverAsset);
-                const homepageCards = (run.assets?.homepage_cards || []).slice(
-                  0,
-                  5,
-                );
+                const homepageCards = run.assets?.homepage_cards || [];
 
                 const coverRatio =
                   coverAsset?.width && coverAsset?.height
