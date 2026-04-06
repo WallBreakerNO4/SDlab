@@ -290,6 +290,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
   const [copiedField, setCopiedField] = useState<"prompt" | "seed" | null>(
     null,
   );
+  const [copiedRow, setCopiedRow] = useState<number | null>(null);
   const rowCacheRef = useRef<Map<number, CachedRow>>(new Map());
   const rowRequestsRef = useRef<Map<number, AbortController>>(new Map());
   const [rowCacheVersion, setRowCacheVersion] = useState(0);
@@ -585,6 +586,18 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
     [],
   );
 
+  const copyRowLabel = useCallback(async (yIndex: number, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedRow(yIndex);
+      setTimeout(() => {
+        setCopiedRow((current) => (current === yIndex ? null : current));
+      }, 2000);
+    } catch {
+      setCopiedRow(null);
+    }
+  }, []);
+
   const showPreviousImage = useCallback(() => {
     setCurrentImageIndex((index) => {
       if (index <= 0) {
@@ -675,7 +688,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                       className="bg-background/95 sticky left-0 z-20 flex h-full w-full border-r px-3 py-2 text-xs backdrop-blur supports-[backdrop-filter]:bg-background/80 overflow-hidden"
                       data-testid="run-grid-y-label"
                     >
-                      <div className="flex items-center w-full max-h-full">
+                      <div className="flex flex-col items-start justify-between w-full max-h-full gap-1">
                         <p
                           className="text-muted-foreground text-[10px] leading-tight break-words w-full"
                           style={{
@@ -683,7 +696,12 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                             WebkitBoxOrient: "vertical",
                             WebkitLineClamp: Math.max(
                               1,
-                              Math.floor((virtualRow.size - 16) / 14),
+                              Math.floor(
+                                (virtualRow.size -
+                                  16 -
+                                  (yLabel.trim().length > 0 ? 16 : 0)) /
+                                  14,
+                              ),
                             ),
                             overflow: "hidden",
                           }}
@@ -694,6 +712,21 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                               ? "加载失败"
                               : yLabel}
                         </p>
+                        {yLabel.trim().length > 0 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            aria-label="复制提示词"
+                            data-testid={`run-grid-copy-row-${yIndex}`}
+                            className="h-auto p-0 shrink-0 text-[10px] text-muted-foreground hover:text-foreground hover:bg-transparent underline decoration-dashed underline-offset-2 transition-colors"
+                            onClick={() => {
+                              void copyRowLabel(yIndex, yLabel);
+                            }}
+                          >
+                            {copiedRow === yIndex ? "已复制" : "复制"}
+                          </Button>
+                        )}
                       </div>
                     </div>
 
