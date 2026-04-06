@@ -112,14 +112,11 @@ function getSeedString(value: unknown): string | null {
   return getNonEmptyString(value);
 }
 
-function getXLabel(
-  column: RunGridXColumn | null | undefined,
-  index: number,
-): string {
+function getXLabel(column: RunGridXColumn | null | undefined): string {
   const raw = column?.description;
   const zh =
     raw && typeof raw.zh === "string" ? getNonEmptyString(raw.zh) : null;
-  return zh ?? `X${index}`;
+  return zh ?? "";
 }
 
 function pickBestVariants(
@@ -324,7 +321,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
 
   const xHeaders = useMemo(() => {
     return grid.x_columns.map((col, index) => {
-      const label = getXLabel(col, index);
+      const label = getXLabel(col);
       const type = getNonEmptyString(col.type) ?? "x";
       return {
         key: `${index}:${type}:${label}`,
@@ -635,16 +632,13 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
               <div
                 className="bg-background/95 sticky left-0 z-40 border-r px-3 py-2 text-xs font-semibold backdrop-blur supports-[backdrop-filter]:bg-background/80"
                 data-testid="run-grid-corner"
-              >
-                Y\X
-              </div>
-              {xHeaders.map((header, xIndex) => (
+              ></div>
+              {xHeaders.map((header) => (
                 <div
                   key={header.key}
                   className="border-r px-3 py-2 text-xs font-semibold"
                 >
-                  <p className="truncate">{`X${xIndex}`}</p>
-                  <p className="text-muted-foreground mt-1 truncate text-[10px] font-normal">
+                  <p className="text-muted-foreground truncate text-[10px] font-normal">
                     {header.label}
                   </p>
                 </div>
@@ -663,7 +657,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
               const yLabel =
                 cachedRow && cachedRow.status === "ready" && cachedRow.yValue
                   ? cachedRow.yValue
-                  : `Y${yIndex}`;
+                  : "";
 
               return (
                 <div
@@ -681,9 +675,8 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                       className="bg-background/95 sticky left-0 z-20 flex h-full border-r px-3 py-2 text-xs backdrop-blur supports-[backdrop-filter]:bg-background/80"
                       data-testid="run-grid-y-label"
                     >
-                      <div>
-                        <p className="font-semibold">{`Y${yIndex}`}</p>
-                        <p className="text-muted-foreground mt-1 line-clamp-3 text-[10px]">
+                      <div className="flex items-center">
+                        <p className="text-muted-foreground line-clamp-3 text-[10px]">
                           {cachedRow && cachedRow.status === "ready"
                             ? (cachedRow.yValue ?? "-")
                             : cachedRow && cachedRow.status === "error"
@@ -753,7 +746,11 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                           <GridImage
                             thumbVariants={thumbVariants}
                             blurhash={effectiveBlurhash}
-                            alt={`${yLabel} × ${xLabel}`}
+                            alt={
+                              yLabel && xLabel
+                                ? `${yLabel} × ${xLabel}`
+                                : yLabel || xLabel || "图片预览"
+                            }
                             locked={isLocked}
                             onLockedClick={() => setLoginDialogOpen(true)}
                           />
@@ -776,7 +773,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                           {canOpenDialog && !isLocked ? (
                             <button
                               type="button"
-                              aria-label={`打开单元格 X${xIndex} Y${yIndex} 预览`}
+                              aria-label="打开单元格预览"
                               className="focus-visible:ring-ring rounded text-left focus-visible:outline-none focus-visible:ring-2"
                               onClick={() => {
                                 if (!rowCell) return;
@@ -795,7 +792,6 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                             previewNode
                           )}
                           <div className="space-y-0.5 text-[10px] leading-tight">
-                            <p className="truncate font-medium">{`X${xIndex} · Y${yIndex}`}</p>
                             {seed !== null && seed !== undefined ? (
                               <p className="text-muted-foreground truncate">{`seed ${seed}`}</p>
                             ) : null}
@@ -817,11 +813,9 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
           data-testid="cell-dialog"
         >
           <DialogHeader>
-            <DialogTitle>{`单元格 X${selectedCell?.xIndex ?? "-"} · Y${selectedCell?.yIndex ?? "-"}`}</DialogTitle>
-            <DialogDescription>
-              {selectedCell
-                ? `${selectedCell.yLabel} × ${selectedCell.xLabel}`
-                : "-"}
+            <DialogTitle>单元格预览</DialogTitle>
+            <DialogDescription className="sr-only">
+              单元格图片预览
             </DialogDescription>
           </DialogHeader>
 
@@ -844,8 +838,11 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                     ) : null}
                     <img
                       alt={
-                        selectedCell
-                          ? `${selectedCell.yLabel} × ${selectedCell.xLabel}`
+                        selectedCell &&
+                        (selectedCell.yLabel || selectedCell.xLabel)
+                          ? [selectedCell.yLabel, selectedCell.xLabel]
+                              .filter(Boolean)
+                              .join(" × ")
                           : "cell preview"
                       }
                       className="h-full w-full object-contain"
