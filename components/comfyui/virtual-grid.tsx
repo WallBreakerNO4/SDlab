@@ -636,9 +636,9 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
               {xHeaders.map((header) => (
                 <div
                   key={header.key}
-                  className="border-r px-3 py-2 text-xs font-semibold"
+                  className="border-r px-3 py-2 text-xs font-semibold flex items-center"
                 >
-                  <p className="text-muted-foreground truncate text-[10px] font-normal">
+                  <p className="text-muted-foreground text-[10px] font-normal leading-tight break-words max-w-full">
                     {header.label}
                   </p>
                 </div>
@@ -672,11 +672,22 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                 >
                   <div className="grid h-full" style={{ gridTemplateColumns }}>
                     <div
-                      className="bg-background/95 sticky left-0 z-20 flex h-full border-r px-3 py-2 text-xs backdrop-blur supports-[backdrop-filter]:bg-background/80"
+                      className="bg-background/95 sticky left-0 z-20 flex h-full w-full border-r px-3 py-2 text-xs backdrop-blur supports-[backdrop-filter]:bg-background/80 overflow-hidden"
                       data-testid="run-grid-y-label"
                     >
-                      <div className="flex items-center">
-                        <p className="text-muted-foreground line-clamp-3 text-[10px]">
+                      <div className="flex items-center w-full max-h-full">
+                        <p
+                          className="text-muted-foreground text-[10px] leading-tight break-words w-full"
+                          style={{
+                            display: "-webkit-box",
+                            WebkitBoxOrient: "vertical",
+                            WebkitLineClamp: Math.max(
+                              1,
+                              Math.floor((virtualRow.size - 16) / 14),
+                            ),
+                            overflow: "hidden",
+                          }}
+                        >
                           {cachedRow && cachedRow.status === "ready"
                             ? (cachedRow.yValue ?? "-")
                             : cachedRow && cachedRow.status === "error"
