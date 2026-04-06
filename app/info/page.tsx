@@ -22,9 +22,11 @@ export default async function InfoPage() {
   }
 
   return (
-    <main className="container mx-auto px-4 py-12 md:py-24">
-      <div className="prose-custom max-w-3xl mx-auto">
-        <ReactMarkdown>{content}</ReactMarkdown>
+    <main className="h-full w-full overflow-y-auto">
+      <div className="container mx-auto px-4 py-12 md:py-24">
+        <div className="prose-custom max-w-3xl mx-auto">
+          <ReactMarkdown>{content}</ReactMarkdown>
+        </div>
       </div>
     </main>
   );
