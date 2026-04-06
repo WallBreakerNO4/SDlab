@@ -19,13 +19,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import {
-  FileIcon,
-  Clock01Icon,
-  GridIcon,
-  Image01Icon,
-  LinkSquare02Icon,
-} from "@hugeicons/core-free-icons";
+import { FileIcon, LinkSquare02Icon } from "@hugeicons/core-free-icons";
 import {
   Empty,
   EmptyDescription,
@@ -136,19 +130,6 @@ function isRunGridIndexData(value: unknown): value is RunGridIndexData {
   return (
     xColumnsOk && yIndexesOk && (hasBlurhashCells || !value.blurhash_cells)
   );
-}
-
-function formatCreatedAt(createdAt: string): string {
-  const date = new Date(createdAt);
-
-  if (Number.isNaN(date.getTime())) {
-    return createdAt;
-  }
-
-  return new Intl.DateTimeFormat("zh-CN", {
-    dateStyle: "medium",
-    timeStyle: "medium",
-  }).format(date);
 }
 
 function SummarySkeleton() {
@@ -286,8 +267,6 @@ export default function RunDetailPage({
   const isDetailReady = detailLoadState === "ready" && detailData !== null;
   const isGridReady = gridLoadState === "ready" && gridData !== null;
 
-  const xCount = isGridReady ? gridData.x_columns.length : 0;
-  const yCount = isGridReady ? gridData.y_indexes.length : 0;
   const breadcrumbTitle = isDetailReady
     ? detailData.run.model?.name || detailData.run.run_dir
     : runDir || "(无效路径)";
@@ -382,32 +361,6 @@ export default function RunDetailPage({
                     <span className="font-mono text-xs">
                       {detailData.run.run_dir}
                     </span>
-                  </div>
-                  <div className="text-muted-foreground flex items-center gap-1.5">
-                    <HugeiconsIcon
-                      icon={Clock01Icon}
-                      className="size-4"
-                      strokeWidth={2}
-                    />
-                    <span>{formatCreatedAt(detailData.run.created_at)}</span>
-                  </div>
-                  <div className="text-muted-foreground flex items-center gap-1.5">
-                    <HugeiconsIcon
-                      icon={GridIcon}
-                      className="size-4"
-                      strokeWidth={2}
-                    />
-                    <span>
-                      {isGridReady ? `${xCount}×${yCount}` : "加载中..."}
-                    </span>
-                  </div>
-                  <div className="text-muted-foreground flex items-center gap-1.5">
-                    <HugeiconsIcon
-                      icon={Image01Icon}
-                      className="size-4"
-                      strokeWidth={2}
-                    />
-                    <span>{`${detailData.run.selection.total_cells} 张`}</span>
                   </div>
 
                   {links &&
