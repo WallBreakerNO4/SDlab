@@ -2,7 +2,14 @@
 
 import { useVirtualizer } from "@tanstack/react-virtual";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { AuthLoginDialog } from "@/components/auth-login-dialog";
 import { useAuth } from "@/components/auth-provider";
@@ -82,10 +89,19 @@ type VirtualGridProps = {
 const CELL_MIN_WIDTH = 184;
 const LEFT_COLUMN_WIDTH = 220;
 const DEV_IMAGE_DOM_CAP_NOTE = 300;
+const SCROLL_ANCHOR_STORAGE_VERSION = 1;
+const SCROLL_ANCHOR_STORAGE_PREFIX = "sd-style-lab:run-grid-anchor:";
+const MAX_ROW_OFFSET_RATIO = 0.999999;
 
 const CELL_PADDING_PX = 8;
 const CELL_GAP_PX = 4;
 const CELL_META_HEIGHT_PX = 28;
+
+type SavedScrollAnchor = {
+  version: typeof SCROLL_ANCHOR_STORAGE_VERSION;
+  yIndex: number;
+  rowOffsetRatio: number;
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -99,6 +115,127 @@ function getNonEmptyString(value: unknown): string | null {
 
 function getFiniteNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getScrollAnchorStorageKey(runDir: string): string {
+  return `${SCROLL_ANCHOR_STORAGE_PREFIX}${runDir}`;
+}
+
+function parseSavedScrollAnchor(raw: string | null): SavedScrollAnchor | null {
+  if (!raw) return null;
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed)) return null;
+    const version = getFiniteNumber(parsed.version);
+    const yIndex = getFiniteNumber(parsed.yIndex);
+    const rowOffsetRatio = getFiniteNumber(parsed.rowOffsetRatio);
+    if (
+      version !== SCROLL_ANCHOR_STORAGE_VERSION ||
+      yIndex === null ||
+      yIndex < 0 ||
+      rowOffsetRatio === null
+    ) {
+      return null;
+    }
+
+    return {
+      version: SCROLL_ANCHOR_STORAGE_VERSION,
+      yIndex,
+      rowOffsetRatio: clampNumber(rowOffsetRatio, 0, MAX_ROW_OFFSET_RATIO),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function loadSavedScrollAnchor(runDir: string): SavedScrollAnchor | null {
+  if (typeof window === "undefined" || runDir.trim().length === 0) {
+    return null;
+  }
+
+  try {
+    return parseSavedScrollAnchor(
+      window.sessionStorage.getItem(getScrollAnchorStorageKey(runDir)),
+    );
+  } catch {
+    return null;
+  }
+}
+
+function saveScrollAnchor(runDir: string, anchor: SavedScrollAnchor): void {
+  if (typeof window === "undefined" || runDir.trim().length === 0) {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(
+      getScrollAnchorStorageKey(runDir),
+      JSON.stringify(anchor),
+    );
+  } catch {
+    // Ignore storage failures (private mode / quota / disabled storage).
+  }
+}
+
+function buildScrollAnchor(
+  scrollOffset: number,
+  yIndexes: number[],
+  rowHeight: number,
+): SavedScrollAnchor | null {
+  if (
+    !Number.isFinite(scrollOffset) ||
+    !Number.isFinite(rowHeight) ||
+    rowHeight <= 0 ||
+    yIndexes.length === 0
+  ) {
+    return null;
+  }
+
+  const listIndex = clampNumber(
+    Math.floor(scrollOffset / rowHeight),
+    0,
+    yIndexes.length - 1,
+  );
+  const yIndex = yIndexes[listIndex];
+  if (typeof yIndex !== "number" || !Number.isFinite(yIndex) || yIndex < 0) {
+    return null;
+  }
+
+  const rowOffsetRatio = clampNumber(
+    (scrollOffset - listIndex * rowHeight) / rowHeight,
+    0,
+    MAX_ROW_OFFSET_RATIO,
+  );
+
+  return {
+    version: SCROLL_ANCHOR_STORAGE_VERSION,
+    yIndex,
+    rowOffsetRatio,
+  };
+}
+
+function resolveScrollOffsetFromAnchor(
+  anchor: SavedScrollAnchor,
+  yIndexes: number[],
+  rowHeight: number,
+): number | null {
+  if (!Number.isFinite(rowHeight) || rowHeight <= 0 || yIndexes.length === 0) {
+    return null;
+  }
+
+  let listIndex = yIndexes.indexOf(anchor.yIndex);
+  if (listIndex < 0) {
+    const nextIndex = yIndexes.findIndex((value) => value > anchor.yIndex);
+    listIndex =
+      nextIndex === -1 ? yIndexes.length - 1 : Math.max(0, nextIndex - 1);
+  }
+
+  return listIndex * rowHeight + anchor.rowOffsetRatio * rowHeight;
 }
 
 function getSeedString(value: unknown): string | null {
@@ -279,6 +416,7 @@ function formatValue(value: string | number | null | undefined): string {
 
 export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
   const scrollElementRef = useRef<HTMLDivElement | null>(null);
+  const didRestoreScrollRef = useRef(false);
   const [scrollViewportWidth, setScrollViewportWidth] = useState<number | null>(
     null,
   );
@@ -426,6 +564,85 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
     void rowHeight;
     rowVirtualizer.measure();
   }, [rowHeight, rowVirtualizer]);
+
+  const persistCurrentScrollAnchor = useCallback(() => {
+    const scrollElement = scrollElementRef.current;
+    if (!scrollElement) return;
+
+    const anchor = buildScrollAnchor(
+      scrollElement.scrollTop,
+      grid.y_indexes,
+      rowHeight,
+    );
+    if (!anchor) return;
+
+    saveScrollAnchor(runDir, anchor);
+  }, [grid.y_indexes, rowHeight, runDir]);
+
+  useLayoutEffect(() => {
+    if (didRestoreScrollRef.current) {
+      return;
+    }
+
+    if (scrollViewportWidth === null) {
+      return;
+    }
+
+    didRestoreScrollRef.current = true;
+    const anchor = loadSavedScrollAnchor(runDir);
+    if (!anchor) {
+      return;
+    }
+
+    const targetOffset = resolveScrollOffsetFromAnchor(
+      anchor,
+      grid.y_indexes,
+      rowHeight,
+    );
+    if (targetOffset === null) {
+      return;
+    }
+
+    rowVirtualizer.scrollToOffset(targetOffset);
+  }, [grid.y_indexes, rowHeight, rowVirtualizer, runDir, scrollViewportWidth]);
+
+  useEffect(() => {
+    const element = scrollElementRef.current;
+    if (!element) {
+      return;
+    }
+
+    let frameId: number | null = null;
+
+    const persistOnNextFrame = () => {
+      if (frameId !== null) {
+        return;
+      }
+
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        persistCurrentScrollAnchor();
+      });
+    };
+
+    element.addEventListener("scroll", persistOnNextFrame, { passive: true });
+
+    return () => {
+      element.removeEventListener("scroll", persistOnNextFrame);
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      persistCurrentScrollAnchor();
+    };
+  }, [persistCurrentScrollAnchor]);
+
+  useEffect(() => {
+    if (!didRestoreScrollRef.current) {
+      return;
+    }
+
+    persistCurrentScrollAnchor();
+  }, [persistCurrentScrollAnchor]);
 
   const requestRow = useCallback(
     async (yIndex: number) => {

@@ -435,7 +435,7 @@ export default function RunDetailPage({
         {isGridReady ? (
           <div className="min-h-0 flex-1">
             <VirtualGrid
-              key={showNsfw ? "nsfw" : "sfw"}
+              key={`${runDir}:${showNsfw ? "nsfw" : "sfw"}`}
               runDir={runDir}
               grid={gridData}
               blurhashMap={blurhashMap}
