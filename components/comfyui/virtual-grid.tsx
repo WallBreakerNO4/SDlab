@@ -837,7 +837,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col overflow-hidden border rounded-sm"
+      className="flex h-full min-h-0 flex-col overflow-hidden border border-border/40 rounded-sm"
       data-testid="run-grid"
       data-row-count={grid.y_indexes.length}
       data-row-height={rowHeight}
@@ -857,18 +857,18 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
         data-testid="run-grid-scroll"
       >
         <div className="relative" style={{ minWidth: gridMinWidth }}>
-          <div className="bg-background/95 sticky top-0 z-30 border-b backdrop-blur supports-[backdrop-filter]:bg-background/80">
+          <div className="bg-background/95 sticky top-0 z-30 border-b backdrop-blur supports-backdrop-filter:bg-background/80">
             <div className="grid" style={{ gridTemplateColumns }}>
               <div
-                className="bg-background/95 sticky left-0 z-40 border-r px-3 py-2 text-xs font-semibold backdrop-blur supports-[backdrop-filter]:bg-background/80"
+                className="bg-background/95 sticky left-0 z-40 border-r border-border/40 px-3 py-2 text-xs font-semibold backdrop-blur supports-backdrop-filter:bg-background/80"
                 data-testid="run-grid-corner"
               ></div>
               {xHeaders.map((header) => (
                 <div
                   key={header.key}
-                  className="border-r px-3 py-2 text-xs font-semibold flex items-center"
+                  className="border-r border-border/40 bg-muted/10 px-3 py-2 flex items-start"
                 >
-                  <p className="text-muted-foreground text-[10px] font-normal leading-tight break-words max-w-full">
+                  <p className="text-muted-foreground text-[10px] font-medium leading-relaxed tracking-wide wrap-break-word max-w-full">
                     {header.label}
                   </p>
                 </div>
@@ -892,7 +892,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
               return (
                 <div
                   key={virtualRow.key}
-                  className="absolute left-0 top-0 w-full border-b"
+                  className="absolute left-0 top-0 w-full border-b border-border/40"
                   data-testid="run-grid-row"
                   data-row-index={yIndex}
                   style={{
@@ -902,47 +902,72 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                 >
                   <div className="grid h-full" style={{ gridTemplateColumns }}>
                     <div
-                      className="bg-background/95 sticky left-0 z-20 flex h-full w-full border-r px-3 py-2 text-xs backdrop-blur supports-[backdrop-filter]:bg-background/80 overflow-hidden"
+                      className="bg-background/95 sticky left-0 z-20 flex h-full w-full border-r border-border/40 px-3 py-2 text-xs backdrop-blur supports-backdrop-filter:bg-background/80 overflow-hidden"
                       data-testid="run-grid-y-label"
                     >
-                      <div className="flex flex-col items-start justify-between w-full max-h-full gap-1">
-                        <p
-                          className="text-muted-foreground text-[10px] leading-tight break-words w-full"
-                          style={{
-                            display: "-webkit-box",
-                            WebkitBoxOrient: "vertical",
-                            WebkitLineClamp: Math.max(
-                              1,
-                              Math.floor(
-                                (virtualRow.size -
-                                  16 -
-                                  (yLabel.trim().length > 0 ? 16 : 0)) /
-                                  14,
-                              ),
-                            ),
-                            overflow: "hidden",
-                          }}
-                        >
-                          {cachedRow && cachedRow.status === "ready"
-                            ? (cachedRow.yValue ?? "-")
-                            : cachedRow && cachedRow.status === "error"
-                              ? "加载失败"
-                              : yLabel}
-                        </p>
+                      <div className="flex flex-col items-start justify-between w-full h-full gap-1 relative group/y-label">
+                        <div className="flex-1 w-full overflow-hidden">
+                          {(() => {
+                            const labelText =
+                              cachedRow && cachedRow.status === "ready"
+                                ? cachedRow.yValue ?? "-"
+                                : cachedRow && cachedRow.status === "error"
+                                  ? "加载失败"
+                                  : yLabel;
+
+                            if (!labelText || labelText === "-") {
+                              return (
+                                <span className="text-muted-foreground/50 text-[10px]">
+                                  -
+                                </span>
+                              );
+                            }
+
+                            if (labelText.includes(",")) {
+                              const parts = labelText
+                                .split(",")
+                                .map((p) => p.trim())
+                                .filter(Boolean);
+                              return (
+                                <div className="flex flex-wrap gap-1 content-start max-h-full">
+                                  {parts.map((part, i) => (
+                                    <span
+                                      key={i}
+                                      className="inline-block bg-muted/40 text-muted-foreground border border-border/40 rounded px-1.5 py-0.5 text-[9px] font-mono leading-none truncate max-w-full"
+                                    >
+                                      {part}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <p className="text-muted-foreground text-[10px] leading-relaxed wrap-break-word w-full">
+                                {labelText}
+                              </p>
+                            );
+                          })()}
+                        </div>
+                        <div className="absolute bottom-4 left-0 right-0 h-8 bg-linear-to-t from-background/95 to-transparent pointer-events-none" />
                         {yLabel.trim().length > 0 && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            aria-label="复制提示词"
-                            data-testid={`run-grid-copy-row-${yIndex}`}
-                            className="h-auto p-0 shrink-0 text-[10px] text-muted-foreground hover:text-foreground hover:bg-transparent underline decoration-dashed underline-offset-2 transition-colors"
-                            onClick={() => {
-                              void copyRowLabel(yIndex, yLabel);
-                            }}
-                          >
-                            {copiedRow === yIndex ? "已复制" : "复制"}
-                          </Button>
+                          <div className="shrink-0 w-full pt-1 z-10 bg-background/95">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              aria-label="复制"
+                              data-testid={`run-grid-copy-row-${yIndex}`}
+                              className="h-auto w-full justify-start p-0 text-[10px] text-muted-foreground hover:text-foreground hover:bg-transparent transition-colors"
+                              onClick={() => {
+                                void copyRowLabel(yIndex, yLabel);
+                              }}
+                            >
+                              <span className="underline decoration-dashed underline-offset-2">
+                                {copiedRow === yIndex ? "已复制" : "复制"}
+                              </span>
+                            </Button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1001,24 +1026,27 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
 
                       const previewNode = showImage ? (
                         <div
-                          className="w-full rounded border"
+                          className="w-full rounded border border-border/40 overflow-hidden relative"
                           style={{ height: previewHeight }}
                         >
-                          <GridImage
-                            thumbVariants={thumbVariants}
-                            blurhash={effectiveBlurhash}
-                            alt={
-                              yLabel && xLabel
-                                ? `${yLabel} × ${xLabel}`
-                                : yLabel || xLabel || "图片预览"
-                            }
-                            locked={isLocked}
-                            onLockedClick={() => setLoginDialogOpen(true)}
-                          />
+                          <div className="w-full h-full transition-transform duration-500 ease-out group-hover/cell:scale-[1.03]">
+                            <GridImage
+                              thumbVariants={thumbVariants}
+                              blurhash={effectiveBlurhash}
+                              alt={
+                                yLabel && xLabel
+                                  ? `${yLabel} × ${xLabel}`
+                                  : yLabel || xLabel || "图片预览"
+                              }
+                              locked={isLocked}
+                              onLockedClick={() => setLoginDialogOpen(true)}
+                            />
+                          </div>
+                          <div className="absolute inset-0 bg-foreground/0 transition-colors duration-300 pointer-events-none group-hover/cell:bg-foreground/5" />
                         </div>
                       ) : (
                         <div
-                          className="bg-muted/40 text-muted-foreground flex items-center justify-center rounded border border-dashed text-[10px] font-medium"
+                          className="bg-muted/40 text-muted-foreground flex items-center justify-center rounded border border-border/40 border-dashed text-[10px] font-medium"
                           data-testid="run-grid-placeholder"
                           style={{ height: previewHeight }}
                         >
@@ -1029,7 +1057,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                       return (
                         <div
                           key={`${xKey}-${yIndex}`}
-                          className="flex h-full flex-col gap-1 border-r p-2 transition-colors hover:bg-muted/30"
+                          className="flex h-full flex-col gap-1 border-r border-border/40 p-2 transition-colors hover:bg-muted/20 group/cell"
                         >
                           {canOpenDialog && !isLocked ? (
                             <button

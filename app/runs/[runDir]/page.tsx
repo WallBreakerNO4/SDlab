@@ -337,93 +337,93 @@ export default function RunDetailPage({
             const workflow = detailData.run.workflow;
 
             return (
-              <div className="animate-fade-in-up bg-card text-card-foreground flex flex-col gap-4 rounded-xl border p-6 shadow-sm">
-                <div className="flex flex-col gap-2">
-                  <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">
-                    {modelName}
-                  </h1>
-                  {modelDesc ? (
-                    <div className="bg-muted/30 border-l-2 border-primary/30 my-2 py-3 pl-4 pr-3">
-                      <p className="text-muted-foreground text-sm leading-relaxed md:text-base">
-                        {modelDesc}
-                      </p>
+              <div className="animate-fade-in-up flex flex-col gap-3 py-2 px-1">
+                <div className="flex items-end justify-between gap-4 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <h1 className="text-xl font-semibold tracking-tight">
+                      {modelName}
+                    </h1>
+                    <div className="text-muted-foreground flex items-center gap-1.5 bg-muted/30 px-2 py-0.5 rounded-md border border-border/40">
+                      <HugeiconsIcon
+                        icon={FileIcon}
+                        className="size-3.5"
+                        strokeWidth={2}
+                      />
+                      <span className="font-mono text-xs">
+                        {detailData.run.run_dir}
+                      </span>
                     </div>
-                  ) : null}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
-                  <div className="text-muted-foreground flex items-center gap-1.5">
-                    <HugeiconsIcon
-                      icon={FileIcon}
-                      className="size-4"
-                      strokeWidth={2}
-                    />
-                    <span className="font-mono text-xs">
-                      {detailData.run.run_dir}
-                    </span>
                   </div>
 
-                  {links &&
-                  (links.homepage || links.huggingface || links.civitai) ? (
-                    <div className="flex items-center gap-2 border-l pl-6">
-                      {links.homepage ? (
-                        <a
-                          href={links.homepage}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label="打开模型官网"
-                          className="hover:text-primary text-muted-foreground inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors"
-                        >
-                          <HugeiconsIcon
-                            icon={LinkSquare02Icon}
-                            className="size-4"
-                            strokeWidth={2}
-                          />
-                          官网
-                        </a>
-                      ) : null}
-                      {links.huggingface ? (
-                        <a
-                          href={links.huggingface}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label="打开 Hugging Face 页面"
-                          className="hover:text-primary text-muted-foreground inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors"
-                        >
-                          Hugging Face
-                        </a>
-                      ) : null}
-                      {links.civitai ? (
-                        <a
-                          href={links.civitai}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label="打开 Civitai 页面"
-                          className="hover:text-primary text-muted-foreground inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors"
-                        >
-                          Civitai
-                        </a>
-                      ) : null}
-                    </div>
-                  ) : null}
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    {links &&
+                    (links.homepage || links.huggingface || links.civitai) ? (
+                      <div className="flex items-center gap-1.5">
+                        {links.homepage ? (
+                          <a
+                            href={links.homepage}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label="打开模型官网"
+                            className="hover:bg-primary/10 hover:text-primary text-muted-foreground inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/50 px-2 py-1 font-medium transition-colors backdrop-blur-sm"
+                          >
+                            <HugeiconsIcon
+                              icon={LinkSquare02Icon}
+                              className="size-3"
+                              strokeWidth={2}
+                            />
+                            官网
+                          </a>
+                        ) : null}
+                        {links.huggingface ? (
+                          <a
+                            href={links.huggingface}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label="打开 Hugging Face 页面"
+                            className="hover:bg-primary/10 hover:text-primary text-muted-foreground inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/50 px-2 py-1 font-medium transition-colors backdrop-blur-sm"
+                          >
+                            Hugging Face
+                          </a>
+                        ) : null}
+                        {links.civitai ? (
+                          <a
+                            href={links.civitai}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label="打开 Civitai 页面"
+                            className="hover:bg-primary/10 hover:text-primary text-muted-foreground inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/50 px-2 py-1 font-medium transition-colors backdrop-blur-sm"
+                          >
+                            Civitai
+                          </a>
+                        ) : null}
+                      </div>
+                    ) : null}
 
-                  {workflow?.download_url ? (
-                    <div className="flex items-center gap-2 border-l pl-6">
+                    {workflow?.download_url ? (
                       <a
                         href={workflow.download_url}
                         download
-                        className="hover:text-primary text-muted-foreground inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors"
+                        className="hover:bg-primary/10 hover:text-primary text-muted-foreground inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/50 px-2 py-1 font-medium transition-colors backdrop-blur-sm"
                       >
                         <HugeiconsIcon
                           icon={FileIcon}
-                          className="size-4"
+                          className="size-3"
                           strokeWidth={2}
                         />
                         下载工作流
                       </a>
-                    </div>
-                  ) : null}
+                    ) : null}
+                  </div>
                 </div>
+
+                {modelDesc ? (
+                  <div className="group relative">
+                    <p className="text-muted-foreground/80 text-xs leading-relaxed line-clamp-1 group-hover:line-clamp-none transition-all duration-300">
+                      {modelDesc}
+                    </p>
+                  </div>
+                ) : null}
               </div>
             );
           })()
