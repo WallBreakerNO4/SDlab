@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { GridImage } from "./grid-image";
+import { toast } from "sonner";
 
 export type VariantUrls = {
   webp?: string;
@@ -428,7 +429,6 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
   const [copiedField, setCopiedField] = useState<"prompt" | "seed" | null>(
     null,
   );
-  const [copiedRow, setCopiedRow] = useState<number | null>(null);
   const rowCacheRef = useRef<Map<number, CachedRow>>(new Map());
   const rowRequestsRef = useRef<Map<number, AbortController>>(new Map());
   const [rowCacheVersion, setRowCacheVersion] = useState(0);
@@ -803,15 +803,12 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
     [],
   );
 
-  const copyRowLabel = useCallback(async (yIndex: number, value: string) => {
+  const copyRowLabel = useCallback(async (value: string) => {
     try {
       await navigator.clipboard.writeText(value);
-      setCopiedRow(yIndex);
-      setTimeout(() => {
-        setCopiedRow((current) => (current === yIndex ? null : current));
-      }, 2000);
+      toast.success("已复制画师串");
     } catch {
-      setCopiedRow(null);
+      toast.error("复制失败");
     }
   }, []);
 
@@ -860,9 +857,13 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
           <div className="bg-background/95 sticky top-0 z-30 border-b backdrop-blur supports-backdrop-filter:bg-background/80">
             <div className="grid" style={{ gridTemplateColumns }}>
               <div
-                className="bg-background/95 sticky left-0 z-40 border-r border-border/40 px-3 py-2 text-xs font-semibold backdrop-blur supports-backdrop-filter:bg-background/80"
+                className="bg-background/95 sticky left-0 z-40 flex items-end border-r border-border/40 px-3 py-2 backdrop-blur supports-backdrop-filter:bg-background/80"
                 data-testid="run-grid-corner"
-              ></div>
+              >
+                <span className="text-muted-foreground/60 text-[10px] font-medium leading-none">
+                  点击文本可复制
+                </span>
+              </div>
               {xHeaders.map((header) => (
                 <div
                   key={header.key}
@@ -929,7 +930,15 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                                 .map((p) => p.trim())
                                 .filter(Boolean);
                               return (
-                                <div className="flex flex-wrap gap-1 content-start max-h-full">
+                                <div
+                                  className="flex flex-wrap gap-1 content-start max-h-full cursor-pointer hover:opacity-80 transition-opacity"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    void copyRowLabel(yLabel || labelText);
+                                  }}
+                                  title="点击复制"
+                                >
                                   {parts.map((part, i) => (
                                     <span
                                       key={i}
@@ -943,32 +952,22 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                             }
 
                             return (
-                              <p className="text-muted-foreground text-[10px] leading-relaxed wrap-break-word w-full">
+                              <p
+                                className="text-muted-foreground text-[10px] leading-relaxed wrap-break-word w-full cursor-pointer hover:opacity-80 transition-opacity"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  void copyRowLabel(yLabel || labelText);
+                                }}
+                                title="点击复制"
+                              >
                                 {labelText}
                               </p>
                             );
                           })()}
                         </div>
                         <div className="absolute bottom-4 left-0 right-0 h-8 bg-linear-to-t from-background/95 to-transparent pointer-events-none" />
-                        {yLabel.trim().length > 0 && (
-                          <div className="shrink-0 w-full pt-1 z-10 bg-background/95">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              aria-label="复制"
-                              data-testid={`run-grid-copy-row-${yIndex}`}
-                              className="h-auto w-full justify-start p-0 text-[10px] text-muted-foreground hover:text-foreground hover:bg-transparent transition-colors"
-                              onClick={() => {
-                                void copyRowLabel(yIndex, yLabel);
-                              }}
-                            >
-                              <span className="underline decoration-dashed underline-offset-2">
-                                {copiedRow === yIndex ? "已复制" : "复制"}
-                              </span>
-                            </Button>
-                          </div>
-                        )}
+
                       </div>
                     </div>
 
