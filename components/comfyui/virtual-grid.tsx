@@ -861,7 +861,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                 data-testid="run-grid-corner"
               >
                 <span className="text-muted-foreground/60 text-[10px] font-medium leading-none">
-                  点击文本可复制
+                  点击画师串可直接复制
                 </span>
               </div>
               {xHeaders.map((header) => (

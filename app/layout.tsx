@@ -8,6 +8,7 @@ import { AuthProvider } from "@/components/auth-provider";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { UserPreferencesProvider } from "@/components/user-preferences-provider";
+import { Toaster } from "@/components/ui/sonner";
 import { createSupabaseAuthClient } from "@/lib/supabase-auth";
 import { getViewerShowNsfwPreference } from "@/lib/server-user-preferences";
 import type { User } from "@supabase/supabase-js";
@@ -80,6 +81,7 @@ export default async function RootLayout({
                 <div className="min-h-0 flex-1">{children}</div>
                 <SiteFooter />
               </div>
+              <Toaster position="bottom-left" />
             </UserPreferencesProvider>
           </AuthProvider>
         </ThemeProvider>
