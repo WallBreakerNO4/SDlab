@@ -97,8 +97,6 @@ const SCROLL_ANCHOR_STORAGE_PREFIX = "sd-style-lab:run-grid-anchor:";
 const MAX_ROW_OFFSET_RATIO = 0.999999;
 
 const CELL_PADDING_PX = 8;
-const CELL_GAP_PX = 4;
-const CELL_META_HEIGHT_PX = 28;
 
 type SavedScrollAnchor = {
   version: typeof SCROLL_ANCHOR_STORAGE_VERSION;
@@ -520,9 +518,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
   }, [cellWidth, preferredAspectRatio]);
 
   const rowHeight = useMemo(() => {
-    return (
-      CELL_PADDING_PX * 2 + previewHeight + CELL_GAP_PX + CELL_META_HEIGHT_PX
-    );
+    return CELL_PADDING_PX * 2 + previewHeight;
   }, [previewHeight]);
 
   // TanStack Virtual's hook returns functions that React Compiler can't memoize safely.
@@ -1082,7 +1078,6 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                           : null;
 
                       const representativeItem = rowCell?.items[0] ?? null;
-                      const seed = representativeItem?.meta.seed ?? null;
                       const thumbVariants = representativeItem
                         ? pickBestVariants(
                           representativeItem.thumb,
@@ -1157,7 +1152,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                       return (
                         <div
                           key={`${xKey}-${yIndex}`}
-                          className="flex h-full flex-col gap-1 border-r border-border/40 p-2 transition-colors hover:bg-muted/20 group/cell"
+                          className="flex h-full flex-col border-r border-border/40 p-2 transition-colors hover:bg-muted/20 group/cell"
                         >
                           {canOpenDialog && !isLocked ? (
                             <button
@@ -1180,11 +1175,6 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                           ) : (
                             previewNode
                           )}
-                          <div className="space-y-0.5 text-[10px] leading-tight">
-                            {seed !== null && seed !== undefined ? (
-                              <p className="text-muted-foreground truncate">{`seed ${seed}`}</p>
-                            ) : null}
-                          </div>
                         </div>
                       );
                     })}
