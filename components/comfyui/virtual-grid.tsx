@@ -1015,7 +1015,9 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                           })()}
                         </div>
                         <div className="absolute bottom-4 left-0 right-0 h-8 bg-linear-to-t from-background/95 to-transparent pointer-events-none" />
-
+                        <div className="absolute -bottom-1 -right-1 text-[10px] font-mono text-muted-foreground/30 select-none pointer-events-none">
+                          #{virtualRow.index + 1}
+                        </div>
                       </div>
                     </div>
 
