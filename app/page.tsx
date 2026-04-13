@@ -123,9 +123,8 @@ function CardImage({
           blurhash={blurhash}
           width={blurhashWidth || 32}
           height={blurhashHeight || 32}
-          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ease-out ${
-            isLoaded ? "opacity-0" : "opacity-100"
-          }`}
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ease-out ${isLoaded ? "opacity-0" : "opacity-100"
+            }`}
         />
       ) : null}
       {src ? (
@@ -140,9 +139,8 @@ function CardImage({
             }}
             src={src}
             alt={alt}
-            className={`${imgClassName || ""} ${
-              isLoaded ? "opacity-100" : "opacity-0"
-            }`}
+            className={`${imgClassName || ""} ${isLoaded ? "opacity-100" : "opacity-0"
+              }`}
             loading="lazy"
             onLoad={() => setIsLoaded(true)}
           />
