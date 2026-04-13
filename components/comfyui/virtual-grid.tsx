@@ -979,8 +979,8 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                                     const hue = Math.round(220 - 220 * ratio);
                                     // Smoothly increase font weight from 400 to 800+
                                     const fontWeight = Math.min(Math.round(400 + (weight - 1) * 400), 900);
-                                    
-                                    const style = { 
+
+                                    const style = {
                                       "--weight-hue": hue,
                                       fontWeight
                                     } as React.CSSProperties;

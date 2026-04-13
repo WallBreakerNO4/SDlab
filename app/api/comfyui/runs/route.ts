@@ -68,16 +68,16 @@ function readAssetProjection(
   const thumb =
     thumbWebp || thumbAvif
       ? {
-          webp: thumbWebp ?? undefined,
-          avif: thumbAvif ?? undefined,
-        }
+        webp: thumbWebp ?? undefined,
+        avif: thumbAvif ?? undefined,
+      }
       : null;
   const display =
     displayWebp || displayAvif
       ? {
-          webp: displayWebp ?? undefined,
-          avif: displayAvif ?? undefined,
-        }
+        webp: displayWebp ?? undefined,
+        avif: displayAvif ?? undefined,
+      }
       : null;
 
   return {
@@ -148,9 +148,9 @@ export async function GET(): Promise<Response> {
         assets:
           cover || homepageCards
             ? {
-                cover,
-                homepage_cards: homepageCards,
-              }
+              cover,
+              homepage_cards: homepageCards,
+            }
             : null,
       });
     }

@@ -60,15 +60,15 @@ export async function GET(
       visibleColumns.allowedOriginalXIndexes.length === 0
         ? { data: [] satisfies SupabaseRunGridCellRow[], error: null }
         : await supabase
-            .from("run_grid_cells")
-            .select(
-              "x_index,y_index,representative_batch_index,category,width,height,blurhash",
-            )
-            .eq("run_dir", runDir)
-            .in("x_index", visibleColumns.allowedOriginalXIndexes)
-            .order("y_index", { ascending: true })
-            .order("x_index", { ascending: true })
-            .range(0, PAGE_SIZE - 1);
+          .from("run_grid_cells")
+          .select(
+            "x_index,y_index,representative_batch_index,category,width,height,blurhash",
+          )
+          .eq("run_dir", runDir)
+          .in("x_index", visibleColumns.allowedOriginalXIndexes)
+          .order("y_index", { ascending: true })
+          .order("x_index", { ascending: true })
+          .range(0, PAGE_SIZE - 1);
 
     if (firstPageResult.error) {
       return Response.json(
@@ -166,9 +166,9 @@ export async function GET(
 
     const y_indexes: number[] = Array.isArray(yIndexesRaw)
       ? yIndexesRaw.filter(
-          (item): item is number =>
-            typeof item === "number" && Number.isFinite(item),
-        )
+        (item): item is number =>
+          typeof item === "number" && Number.isFinite(item),
+      )
       : [];
 
     const x_count = visibleColumns.columns.length;

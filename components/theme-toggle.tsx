@@ -6,7 +6,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { SunIcon, MoonIcon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 
-const emptySubscribe = () => () => {};
+const emptySubscribe = () => () => { };
 
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();

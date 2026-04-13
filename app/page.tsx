@@ -158,7 +158,7 @@ function RunsSkeleton() {
           key={id}
           className="flex flex-col overflow-hidden rounded-none border-border/40 bg-card/50 break-inside-avoid mb-8"
         >
-          <Skeleton className="aspect-[16/10] w-full rounded-none" />
+          <Skeleton className="aspect-16/10 w-full rounded-none" />
           <CardContent className="flex flex-1 flex-col justify-between space-y-6 p-6">
             <div className="space-y-3">
               <Skeleton className="h-7 w-3/4" />
@@ -233,11 +233,11 @@ export default function Page() {
     <main className="relative h-full w-full flex flex-col items-center selection:bg-primary/20 selection:text-primary overflow-y-auto">
       {/* Decorative Grid Background - refined opacity */}
       <div className="pointer-events-none absolute inset-0 flex justify-center z-[-1]">
-        <div className="w-full h-full bg-[linear-gradient(to_right,var(--color-border)_1px,transparent_1px),linear-gradient(to_bottom,var(--color-border)_1px,transparent_1px)] bg-[size:32px_32px] opacity-20 [mask-image:radial-gradient(ellipse_70%_60%_at_50%_0%,#000_60%,transparent_100%)]"></div>
+        <div className="w-full h-full bg-[linear-gradient(to_right,var(--color-border)_1px,transparent_1px),linear-gradient(to_bottom,var(--color-border)_1px,transparent_1px)] bg-size-[32px_32px] opacity-20 mask-[radial-gradient(ellipse_70%_60%_at_50%_0%,#000_60%,transparent_100%)]"></div>
       </div>
 
       {/* Decorative Glow */}
-      <div className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] opacity-10 dark:opacity-20 mix-blend-screen blur-[100px] rounded-full bg-primary/30 z-[-1]"></div>
+      <div className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-200 h-100 opacity-10 dark:opacity-20 mix-blend-screen blur-[100px] rounded-full bg-primary/30 z-[-1]"></div>
 
       <div className="w-full max-w-7xl px-4 md:px-8 py-24 md:py-32 flex flex-col gap-32">
         {/* Hero Section */}
@@ -255,7 +255,7 @@ export default function Page() {
 
             <h1 className="text-5xl md:text-7xl font-black tracking-tight leading-[1.05] text-foreground">
               AI 图像风格
-              <span className="block mt-1 bg-gradient-to-br from-primary to-primary/40 bg-clip-text text-transparent">
+              <span className="block mt-1 bg-linear-to-br from-primary to-primary/40 bg-clip-text text-transparent">
                 实验室
               </span>
             </h1>
@@ -345,7 +345,7 @@ export default function Page() {
                   >
                     <Card className="flex flex-col transition-all duration-300 hover:ring-1 hover:ring-primary/40 hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:hover:shadow-[0_8px_30px_rgba(255,255,255,0.02)] border-border/40 bg-card/80 backdrop-blur-sm rounded-none overflow-hidden relative">
                       {/* Top accent line */}
-                      <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-primary/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-10" />
+                      <div className="absolute top-0 left-0 w-full h-0.5 bg-linear-to-r from-transparent via-primary/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-10" />
 
                       {/* Image Area */}
                       <div
@@ -364,7 +364,7 @@ export default function Page() {
                         />
 
                         {/* Overlay Gradient for contrast */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-background/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                        <div className="absolute inset-0 bg-linear-to-t from-background/80 via-background/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
                         <div className="absolute bottom-4 right-4 translate-x-2 opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-all duration-300 ease-out text-primary">
                           <span className="font-bold text-xl leading-none">
