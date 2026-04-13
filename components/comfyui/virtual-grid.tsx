@@ -12,6 +12,7 @@ import {
 } from "react";
 
 import { AuthLoginDialog } from "@/components/auth-login-dialog";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import {
@@ -434,6 +435,9 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
   const [rowCacheVersion, setRowCacheVersion] = useState(0);
   const { user } = useAuth();
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
+  const [isJumpInputOpen, setIsJumpInputOpen] = useState(false);
+  const [jumpInputValue, setJumpInputValue] = useState("");
+  const jumpInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const element = scrollElementRef.current;
@@ -857,12 +861,57 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
           <div className="bg-background/95 sticky top-0 z-30 border-b backdrop-blur supports-backdrop-filter:bg-background/80">
             <div className="grid" style={{ gridTemplateColumns }}>
               <div
-                className="bg-background/95 sticky left-0 z-40 flex items-end border-r border-border/40 px-3 py-2 backdrop-blur supports-backdrop-filter:bg-background/80"
+                className="bg-background/95 sticky left-0 z-40 flex items-end justify-between border-r border-border/40 px-3 py-2 backdrop-blur supports-backdrop-filter:bg-background/80"
                 data-testid="run-grid-corner"
               >
-                <span className="text-muted-foreground/60 text-[10px] font-medium leading-none">
+                <span className="text-muted-foreground/50 text-[10px] font-medium leading-none pb-0.5">
                   点击画师串可直接复制
                 </span>
+                <div className="flex items-center -mb-1 -mr-1">
+                  {isJumpInputOpen ? (
+                    <form
+                      className="flex items-center w-16 relative"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const lineNum = parseInt(jumpInputValue, 10);
+                        if (!isNaN(lineNum) && lineNum >= 1 && lineNum <= grid.y_indexes.length) {
+                          rowVirtualizer.scrollToIndex(lineNum - 1, { align: "start" });
+                          setIsJumpInputOpen(false);
+                        } else {
+                          toast.error(`行号必须在 1 到 ${grid.y_indexes.length} 之间`);
+                        }
+                      }}
+                    >
+                      <Input
+                        ref={jumpInputRef}
+                        type="number"
+                        min={1}
+                        max={grid.y_indexes.length}
+                        className="h-5 pl-1.5 pr-4 py-0 text-[10px] w-full bg-background/50 rounded-[3px] shadow-none focus-visible:ring-1 focus-visible:ring-ring/30 border-border/50 placeholder:text-muted-foreground/30 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                        placeholder="行号"
+                        value={jumpInputValue}
+                        onChange={(e) => setJumpInputValue(e.target.value)}
+                        onBlur={() => setIsJumpInputOpen(false)}
+                      />
+                      <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground/30 text-[9px] pointer-events-none">
+                        ↵
+                      </span>
+                    </form>
+                  ) : (
+                    <button
+                      type="button"
+                      className="text-muted-foreground/40 hover:text-foreground/80 hover:bg-muted/50 rounded px-1.5 py-0.5 text-[10px] font-medium transition-all"
+                      onClick={() => {
+                        setIsJumpInputOpen(true);
+                        setJumpInputValue("");
+                        setTimeout(() => jumpInputRef.current?.focus(), 0);
+                      }}
+                      title="跳转到指定行"
+                    >
+                      点此跳转
+                    </button>
+                  )}
+                </div>
               </div>
               {xHeaders.map((header) => (
                 <div
