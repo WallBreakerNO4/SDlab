@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/dialog";
 import { GridImage } from "./grid-image";
 import { toast } from "sonner";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Tick01Icon, Copy01Icon, Download01Icon } from "@hugeicons/core-free-icons";
 
 export type VariantUrls = {
   webp?: string;
@@ -797,6 +799,9 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
       try {
         await navigator.clipboard.writeText(value);
         setCopiedField(field);
+        setTimeout(() => {
+          setCopiedField((current) => (current === field ? null : current));
+        }, 2000);
       } catch {
         setCopiedField(null);
       }
@@ -1261,85 +1266,98 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
               ) : null}
             </div>
 
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <p className="text-muted-foreground text-xs font-medium">
-                  positive prompt
-                </p>
-                <p
-                  className="bg-muted/30 max-h-52 overflow-auto rounded border p-2 text-xs whitespace-pre-wrap"
+            <div className="flex flex-col gap-6">
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-muted-foreground text-xs font-medium">
+                    Positive Prompt
+                  </p>
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    variant="ghost"
+                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                    data-testid="cell-dialog-copy-prompt"
+                    onClick={() => {
+                      void copyText("prompt", selectedCell?.positivePrompt ?? "");
+                    }}
+                    disabled={!selectedCell}
+                    title="复制 Prompt"
+                  >
+                    {copiedField === "prompt" ? (
+                      <HugeiconsIcon icon={Tick01Icon} className="h-3 w-3" />
+                    ) : (
+                      <HugeiconsIcon icon={Copy01Icon} className="h-3 w-3" />
+                    )}
+                  </Button>
+                </div>
+                <div
+                  className="bg-muted/30 max-h-64 overflow-auto rounded-md border p-3 text-xs leading-relaxed whitespace-pre-wrap"
                   data-testid="cell-dialog-prompt"
                 >
                   {selectedCell?.positivePrompt ?? "（无 positive prompt）"}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-muted-foreground text-xs font-medium">
+                  Parameters
                 </p>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  data-testid="cell-dialog-copy-prompt"
-                  onClick={() => {
-                    void copyText("prompt", selectedCell?.positivePrompt ?? "");
-                  }}
-                  disabled={!selectedCell}
-                >
-                  {copiedField === "prompt" ? "已复制 prompt" : "复制 prompt"}
-                </Button>
+                <div className="bg-muted/20 rounded-md border p-3 text-xs">
+                  <div className="flex flex-col gap-y-4">
+                    <div className="space-y-1.5">
+                      <p className="text-muted-foreground font-medium">Seed</p>
+                      <div className="group flex items-start gap-2">
+                        <p
+                          className="break-all font-mono"
+                          data-testid="cell-dialog-seed"
+                        >
+                          {formatValue(selectedCell?.seed)}
+                        </p>
+                        <Button
+                          type="button"
+                          size="icon-xs"
+                          variant="ghost"
+                          className="h-5 w-5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                          data-testid="cell-dialog-copy-seed"
+                          onClick={() => {
+                            void copyText(
+                              "seed",
+                              selectedCell && selectedCell.seed !== null
+                                ? String(selectedCell.seed)
+                                : "",
+                            );
+                          }}
+                          disabled={!selectedCell || selectedCell.seed === null}
+                          title="复制 Seed"
+                        >
+                          {copiedField === "seed" ? (
+                            <HugeiconsIcon icon={Tick01Icon} className="h-3 w-3" />
+                          ) : (
+                            <HugeiconsIcon icon={Copy01Icon} className="h-3 w-3" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <p className="text-muted-foreground font-medium">Size</p>
+                      <p className="font-mono">{sizeText}</p>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div className="space-y-2 text-xs">
-                <div className="grid grid-cols-[64px_1fr] gap-2">
-                  <p className="text-muted-foreground">seed</p>
-                  <p data-testid="cell-dialog-seed">
-                    {formatValue(selectedCell?.seed)}
-                  </p>
-                </div>
-                <div className="grid grid-cols-[64px_1fr] gap-2">
-                  <p className="text-muted-foreground">prompt_hash</p>
-                  <p>{formatValue(selectedCell?.promptHash)}</p>
-                </div>
-                <div className="grid grid-cols-[64px_1fr] gap-2">
-                  <p className="text-muted-foreground">batch</p>
-                  <p>
-                    {formatValue(
-                      totalImages > 0
-                        ? `${currentImageIndex + 1}/${totalImages}`
-                        : null,
-                    )}
-                  </p>
-                </div>
-                <div className="grid grid-cols-[64px_1fr] gap-2">
-                  <p className="text-muted-foreground">size</p>
-                  <p>{sizeText}</p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  data-testid="cell-dialog-copy-seed"
-                  onClick={() => {
-                    void copyText(
-                      "seed",
-                      selectedCell && selectedCell.seed !== null
-                        ? String(selectedCell.seed)
-                        : "",
-                    );
-                  }}
-                  disabled={!selectedCell || selectedCell.seed === null}
-                >
-                  {copiedField === "seed" ? "已复制 seed" : "复制 seed"}
-                </Button>
-
+              <div className="mt-auto pt-4">
                 {currentDownloadUrl ? (
-                  <Button asChild size="sm" variant="outline">
+                  <Button asChild className="w-full" size="sm">
                     <a href={currentDownloadUrl} download>
+                      <HugeiconsIcon icon={Download01Icon} className="mr-2 h-4 w-4" />
                       下载图片
                     </a>
                   </Button>
                 ) : (
-                  <Button size="sm" variant="outline" disabled>
+                  <Button className="w-full" size="sm" disabled>
+                    <HugeiconsIcon icon={Download01Icon} className="mr-2 h-4 w-4" />
                     下载图片
                   </Button>
                 )}
