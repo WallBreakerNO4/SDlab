@@ -316,17 +316,17 @@ type SelectedCellPreview = {
 
 type CachedRow =
   | {
-      status: "ready";
-      yIndex: number;
-      yValue: string | null;
-      representativeMeta: RowMeta | null;
-      cellsByX: Map<number, RowCell>;
-    }
+    status: "ready";
+    yIndex: number;
+    yValue: string | null;
+    representativeMeta: RowMeta | null;
+    cellsByX: Map<number, RowCell>;
+  }
   | {
-      status: "error";
-      yIndex: number;
-      error: string;
-    };
+    status: "error";
+    yIndex: number;
+    error: string;
+  };
 
 function parseVariantUrls(value: unknown): VariantUrls | null {
   if (!isRecord(value)) return null;
@@ -366,37 +366,37 @@ function normalizeRowPayload(
   const rawCells = raw.cells;
   const cells: RowCell[] = Array.isArray(rawCells)
     ? rawCells
-        .map((cell) => {
-          if (!isRecord(cell)) return null;
-          const xIndex = getFiniteNumber(cell.x_index);
-          const yIndex = getFiniteNumber(cell.y_index);
-          if (xIndex === null || yIndex === null) return null;
-          const itemsRaw = cell.items;
-          const items: RowItem[] = Array.isArray(itemsRaw)
-            ? itemsRaw
-                .map((item) => {
-                  if (!isRecord(item)) return null;
-                  const batchIndex = getFiniteNumber(item.batch_index);
-                  if (batchIndex === null) return null;
-                  const meta = parseRowMeta(item.meta);
-                  return {
-                    batch_index: batchIndex,
-                    category: getNonEmptyString(item.category),
-                    width: getFiniteNumber(item.width),
-                    height: getFiniteNumber(item.height),
-                    blurhash: getNonEmptyString(item.blurhash),
-                    meta,
-                    thumb: parseVariantUrls(item.thumb),
-                    display: parseVariantUrls(item.display),
-                  };
-                })
-                .filter((v): v is RowItem => v !== null)
-            : [];
+      .map((cell) => {
+        if (!isRecord(cell)) return null;
+        const xIndex = getFiniteNumber(cell.x_index);
+        const yIndex = getFiniteNumber(cell.y_index);
+        if (xIndex === null || yIndex === null) return null;
+        const itemsRaw = cell.items;
+        const items: RowItem[] = Array.isArray(itemsRaw)
+          ? itemsRaw
+            .map((item) => {
+              if (!isRecord(item)) return null;
+              const batchIndex = getFiniteNumber(item.batch_index);
+              if (batchIndex === null) return null;
+              const meta = parseRowMeta(item.meta);
+              return {
+                batch_index: batchIndex,
+                category: getNonEmptyString(item.category),
+                width: getFiniteNumber(item.width),
+                height: getFiniteNumber(item.height),
+                blurhash: getNonEmptyString(item.blurhash),
+                meta,
+                thumb: parseVariantUrls(item.thumb),
+                display: parseVariantUrls(item.display),
+              };
+            })
+            .filter((v): v is RowItem => v !== null)
+          : [];
 
-          items.sort((a, b) => a.batch_index - b.batch_index);
-          return { x_index: xIndex, y_index: yIndex, items };
-        })
-        .filter((v): v is RowCell => v !== null)
+        items.sort((a, b) => a.batch_index - b.batch_index);
+        return { x_index: xIndex, y_index: yIndex, items };
+      })
+      .filter((v): v is RowCell => v !== null)
     : [];
 
   const yIndexValue = getFiniteNumber(raw.y_index) ?? requestedYIndex;
@@ -546,10 +546,10 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
     currentDisplayVariants?.webp ?? currentDisplayVariants?.avif ?? null;
   const sizeText =
     currentItem &&
-    typeof currentItem.width === "number" &&
-    typeof currentItem.height === "number" &&
-    Number.isFinite(currentItem.width) &&
-    Number.isFinite(currentItem.height)
+      typeof currentItem.width === "number" &&
+      typeof currentItem.height === "number" &&
+      Number.isFinite(currentItem.width) &&
+      Number.isFinite(currentItem.height)
       ? `${currentItem.width}×${currentItem.height}`
       : "-";
 
@@ -939,14 +939,62 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                                   }}
                                   title="点击复制"
                                 >
-                                  {parts.map((part, i) => (
-                                    <span
-                                      key={i}
-                                      className="inline-block bg-muted/40 text-muted-foreground border border-border/40 rounded px-1.5 py-0.5 text-[9px] font-mono leading-none truncate max-w-full"
-                                    >
-                                      {part}
-                                    </span>
-                                  ))}
+                                  {parts.map((part, i) => {
+                                    let weight = 1;
+                                    const match = part.match(/:([0-9.]+)[)\]}]*$/);
+                                    if (match) {
+                                      const w = parseFloat(match[1]);
+                                      if (!isNaN(w)) {
+                                        weight = w;
+                                      }
+                                    }
+
+                                    if (weight === 1) {
+                                      return (
+                                        <span
+                                          key={i}
+                                          className="inline-block border bg-muted/60 text-muted-foreground border-border/50 rounded px-1.5 py-0.5 text-[10px] font-mono leading-none truncate max-w-full transition-all"
+                                        >
+                                          {part}
+                                        </span>
+                                      );
+                                    }
+
+                                    if (weight < 1) {
+                                      const opacity = Math.max(0.3, weight);
+                                      return (
+                                        <span
+                                          key={i}
+                                          className="inline-block border bg-muted/30 text-muted-foreground border-border/20 rounded px-1.5 py-0.5 text-[10px] font-mono leading-none truncate max-w-full transition-all"
+                                          style={{ opacity }}
+                                        >
+                                          {part}
+                                        </span>
+                                      );
+                                    }
+
+                                    // weight > 1
+                                    const ratio = Math.min(Math.max((weight - 1) / 1, 0), 1);
+                                    // Hue from 220 (blue) down to 0 (red)
+                                    const hue = Math.round(220 - 220 * ratio);
+                                    // Smoothly increase font weight from 400 to 800+
+                                    const fontWeight = Math.min(Math.round(400 + (weight - 1) * 400), 900);
+                                    
+                                    const style = { 
+                                      "--weight-hue": hue,
+                                      fontWeight
+                                    } as React.CSSProperties;
+
+                                    return (
+                                      <span
+                                        key={i}
+                                        className="inline-block border rounded px-1.5 py-0.5 text-[10px] font-mono leading-none truncate max-w-full transition-all bg-[hsla(var(--weight-hue),80%,50%,0.15)] border-[hsla(var(--weight-hue),80%,50%,0.3)] text-[hsl(var(--weight-hue),80%,40%)] dark:text-[hsl(var(--weight-hue),80%,65%)]"
+                                        style={style}
+                                      >
+                                        {part}
+                                      </span>
+                                    );
+                                  })}
                                 </div>
                               );
                             }
@@ -984,9 +1032,9 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                       const seed = representativeItem?.meta.seed ?? null;
                       const thumbVariants = representativeItem
                         ? pickBestVariants(
-                            representativeItem.thumb,
-                            representativeItem.display,
-                          )
+                          representativeItem.thumb,
+                          representativeItem.display,
+                        )
                         : null;
 
                       // Always use pre-loaded blurhash from the grid-level map as the
@@ -1127,10 +1175,10 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                     <img
                       alt={
                         selectedCell &&
-                        (selectedCell.yLabel || selectedCell.xLabel)
+                          (selectedCell.yLabel || selectedCell.xLabel)
                           ? [selectedCell.yLabel, selectedCell.xLabel]
-                              .filter(Boolean)
-                              .join(" × ")
+                            .filter(Boolean)
+                            .join(" × ")
                           : "cell preview"
                       }
                       className="h-full w-full object-contain"
