@@ -20,6 +20,13 @@ function getNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function readYLabels(yIndexes: number[], rawLabels: unknown): string[] {
+  const labels = Array.isArray(rawLabels)
+    ? rawLabels.map((value) => getNonEmptyString(value) ?? "")
+    : [];
+  return yIndexes.map((yIndex, index) => labels[index] ?? `Y${yIndex}`);
+}
+
 function readModelMetadata(row: SupabaseRunRow) {
   return {
     name: getNonEmptyString(row.model_name),
@@ -62,7 +69,7 @@ export async function GET(
     const { data, error } = await supabase
       .from("runs")
       .select(
-        "run_id, run_dir, created_at, x_columns, y_indexes, x_count, y_count, total_cells, model_name, model_description_zh, model_description_en, model_homepage, model_huggingface, model_civitai, workflow_download_r2_key, workflow_download_sha256",
+        "run_id, run_dir, created_at, x_columns, y_indexes, y_labels, x_count, y_count, total_cells, model_name, model_description_zh, model_description_en, model_homepage, model_huggingface, model_civitai, workflow_download_r2_key, workflow_download_sha256",
       )
       .eq("run_dir", runDir)
       .maybeSingle();
@@ -117,7 +124,7 @@ export async function GET(
       return zh ?? `X${index}`;
     });
 
-    const yLabels = y_indexes.map((yIndex) => `Y${yIndex}`);
+    const yLabels = readYLabels(y_indexes, row.y_labels);
 
     return Response.json({
       run: {

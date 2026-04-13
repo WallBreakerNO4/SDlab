@@ -210,7 +210,12 @@ class SupabaseWriter:
         if self.dry_run:
             return
         try:
-            run_row = self._build_run_row(payload, run_dir=run_dir, run_json=run_json)
+            run_row = self._build_run_row(
+                payload,
+                run_dir=run_dir,
+                run_json=run_json,
+                images=images,
+            )
         except PayloadValidationError as exc:
             raise _to_argument_error(exc) from exc
         run_id, created_at = self._upsert_run(run_row, run_dir=run_dir)
@@ -274,9 +279,11 @@ class SupabaseWriter:
         *,
         run_dir: str,
         run_json: Mapping[str, object],
+        images: list[Mapping[str, object]],
     ) -> dict[str, object]:
         x_columns = _required_object_list_field(payload, "x_columns")
         y_indexes = _required_int_list_field(payload, "y_indexes")
+        y_labels = self._build_y_labels(y_indexes=y_indexes, images=images)
         x_count = required_int(payload, "x_count")
         y_count = required_int(payload, "y_count")
         total_cells = required_int(payload, "total_cells")
@@ -286,6 +293,7 @@ class SupabaseWriter:
             "run_id": required_str(payload, "run_id"),
             "x_columns": x_columns,
             "y_indexes": y_indexes,
+            "y_labels": y_labels,
             "x_count": x_count,
             "y_count": y_count,
             "total_cells": total_cells,
@@ -318,6 +326,27 @@ class SupabaseWriter:
         if created_at is not None:
             row["created_at"] = created_at
         return row
+
+    def _build_y_labels(
+        self,
+        *,
+        y_indexes: list[int],
+        images: list[Mapping[str, object]],
+    ) -> list[str]:
+        labels_by_index: dict[int, str] = {}
+
+        for image in images:
+            y_index = required_int(image, "y_index")
+            metadata = required_json_object(image, "metadata")
+            y_value = optional_str(image.get("y_value"), field="y_value") or optional_str(
+                metadata.get("y_value"),
+                field="metadata.y_value",
+            )
+            if y_value is None:
+                continue
+            labels_by_index.setdefault(y_index, y_value)
+
+        return [labels_by_index.get(y_index, "") for y_index in y_indexes]
 
     def _upsert_run(
         self, row: Mapping[str, object], *, run_dir: str

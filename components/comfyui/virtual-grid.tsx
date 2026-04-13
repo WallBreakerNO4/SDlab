@@ -78,6 +78,7 @@ export type BlurhashCell = {
 export type RunGridIndexData = {
   x_columns: RunGridXColumn[];
   y_indexes: number[];
+  y_labels?: string[];
   blurhash_cells: BlurhashCell[];
 };
 
@@ -934,10 +935,11 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
               const yIndex =
                 grid.y_indexes[virtualRow.index] ?? virtualRow.index;
               const cachedRow = rowCacheRef.current.get(yIndex);
+              const preloadedYLabel = grid.y_labels?.[virtualRow.index] ?? "";
               const yLabel =
-                cachedRow && cachedRow.status === "ready" && cachedRow.yValue
-                  ? cachedRow.yValue
-                  : "";
+                cachedRow && cachedRow.status === "ready"
+                  ? (cachedRow.yValue ?? preloadedYLabel)
+                  : preloadedYLabel;
 
               return (
                 <div
@@ -960,9 +962,9 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                           {(() => {
                             const labelText =
                               cachedRow && cachedRow.status === "ready"
-                                ? cachedRow.yValue ?? "-"
+                                ? ((cachedRow.yValue ?? preloadedYLabel) || "-")
                                 : cachedRow && cachedRow.status === "error"
-                                  ? "加载失败"
+                                  ? (preloadedYLabel || "加载失败")
                                   : yLabel;
 
                             if (!labelText || labelText === "-") {
@@ -984,7 +986,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                                   onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
-                                    void copyRowLabel(yLabel || labelText);
+                                    void copyRowLabel(labelText);
                                   }}
                                   title="点击复制"
                                 >
@@ -1054,7 +1056,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
-                                  void copyRowLabel(yLabel || labelText);
+                                  void copyRowLabel(labelText);
                                 }}
                                 title="点击复制"
                               >

@@ -450,6 +450,7 @@ def test_upsert_upload_index_extracts_structured_columns() -> None:
     assert run_row["y_count"] == 2
     assert run_row["total_cells"] == 2
     assert run_row["y_indexes"] == [0, 1]
+    assert run_row["y_labels"] == ["", "Y1"]
     assert run_row["x_columns"] == [
         {"type": "quality", "description": {"zh": "高质量"}}
     ]

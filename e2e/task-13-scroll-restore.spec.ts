@@ -74,6 +74,7 @@ test.describe("task 13: run detail scroll restoration", () => {
           json: {
             x_columns: MOCK_X_COLUMNS,
             y_indexes: MOCK_Y_INDEXES,
+            y_labels: MOCK_Y_INDEXES.map((yIndex) => `第 ${yIndex} 行`),
             x_count: MOCK_X_COLUMNS.length,
             y_count: MOCK_Y_INDEXES.length,
             cells: {},
@@ -98,6 +99,7 @@ test.describe("task 13: run detail scroll restoration", () => {
       async (route) => {
         const requestUrl = new URL(route.request().url());
         const yIndex = Number(requestUrl.searchParams.get("y_index") ?? "0");
+        await new Promise((resolve) => setTimeout(resolve, 1500));
         await route.fulfill({
           json: buildRowPayload(Number.isFinite(yIndex) ? yIndex : 0),
         });
@@ -110,6 +112,7 @@ test.describe("task 13: run detail scroll restoration", () => {
     const scrollEl = page.getByTestId("run-grid-scroll");
 
     await expect(grid).toBeVisible();
+    await expect(page.getByTestId("run-grid-y-label").first()).toContainText("第 0 行");
     await expect
       .poll(
         async () =>

@@ -13,9 +13,23 @@ export const runtime = "nodejs";
 type RunGridMetaRow = {
   x_columns: JsonValue[] | null;
   y_indexes: number[] | null;
+  y_labels: string[] | null;
   x_count: number | null;
   y_count: number | null;
 };
+
+function getNonEmptyString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function readYLabels(yIndexes: number[], rawLabels: unknown): string[] {
+  const labels = Array.isArray(rawLabels)
+    ? rawLabels.map((value) => getNonEmptyString(value) ?? "")
+    : [];
+  return yIndexes.map((_, index) => labels[index] ?? "");
+}
 
 type RouteContext = {
   params: Promise<{ runDir: string }>;
@@ -36,7 +50,7 @@ export async function GET(
     const PAGE_SIZE = 1000;
     const runMetaResult = await supabase
       .from("runs")
-      .select("x_columns,y_indexes,x_count,y_count")
+      .select("x_columns,y_indexes,y_labels,x_count,y_count")
       .eq("run_dir", runDir)
       .maybeSingle();
 
@@ -170,6 +184,7 @@ export async function GET(
           typeof item === "number" && Number.isFinite(item),
       )
       : [];
+    const y_labels = readYLabels(y_indexes, runMeta.y_labels);
 
     const x_count = visibleColumns.columns.length;
     const y_count =
@@ -178,6 +193,7 @@ export async function GET(
     return Response.json({
       x_columns: visibleColumns.columns,
       y_indexes,
+      y_labels,
       x_count,
       y_count,
       cells: {},

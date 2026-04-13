@@ -124,11 +124,16 @@ function isRunGridIndexData(value: unknown): value is RunGridIndexData {
   const yIndexesOk = y_indexes.every(
     (item) => typeof item === "number" && Number.isFinite(item) && item >= 0,
   );
+  const yLabelsOk =
+    value.y_labels === undefined || isStringArray(value.y_labels);
 
   const hasBlurhashCells = Array.isArray(value.blurhash_cells);
 
   return (
-    xColumnsOk && yIndexesOk && (hasBlurhashCells || !value.blurhash_cells)
+    xColumnsOk &&
+    yIndexesOk &&
+    yLabelsOk &&
+    (hasBlurhashCells || !value.blurhash_cells)
   );
 }
 

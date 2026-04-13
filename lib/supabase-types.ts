@@ -15,6 +15,7 @@ export interface SupabaseRunRow {
   created_at: string;
   x_columns?: JsonValue[] | null;
   y_indexes?: number[] | null;
+  y_labels?: string[] | null;
   x_count?: number | null;
   y_count?: number | null;
   total_cells?: number | null;
