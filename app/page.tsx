@@ -266,17 +266,7 @@ export default function Page() {
             模型评估平台。通过结构化参数网格与风格组合实验，沉淀可复现的生成数据与最优实践。
           </p>
 
-          <div className="flex flex-wrap items-center gap-3 mt-2">
-            <div className="flex items-center gap-2 text-xs font-mono border border-border/50 bg-background/50 backdrop-blur-sm px-4 py-2 text-muted-foreground">
-              <span className="text-primary font-bold">⊞</span> 结构化网格
-            </div>
-            <div className="flex items-center gap-2 text-xs font-mono border border-border/50 bg-background/50 backdrop-blur-sm px-4 py-2 text-muted-foreground">
-              <span className="text-primary font-bold">⌘</span> 多维对比
-            </div>
-            <div className="flex items-center gap-2 text-xs font-mono border border-border/50 bg-background/50 backdrop-blur-sm px-4 py-2 text-muted-foreground">
-              <span className="text-primary font-bold">⎋</span> 数据沉淀
-            </div>
-          </div>
+
         </section>
 
         {/* Runs Section */}
