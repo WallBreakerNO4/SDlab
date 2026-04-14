@@ -192,7 +192,7 @@ function RunsSkeleton() {
       {[1, 2, 3].map((id) => (
         <Card
           key={id}
-          className="flex flex-col overflow-hidden rounded-none border-border/40 bg-card/50 break-inside-avoid mb-8"
+          className="flex flex-col overflow-hidden rounded-none border-border/40 bg-card/50 break-inside-avoid mb-8 p-0 gap-0"
         >
           <Skeleton className="aspect-16/10 w-full rounded-none" />
           <CardContent className="flex flex-1 flex-col justify-between space-y-6 p-6">
@@ -360,7 +360,7 @@ export default function Page() {
                       animationDelay: `${index * 80}ms`,
                     }}
                   >
-                    <Card className="flex flex-col transition-all duration-300 hover:ring-1 hover:ring-primary/40 hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:hover:shadow-[0_8px_30px_rgba(255,255,255,0.02)] border-border/40 bg-card/80 backdrop-blur-sm rounded-none overflow-hidden relative">
+                    <Card className="flex flex-col transition-all duration-300 hover:ring-1 hover:ring-primary/40 hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:hover:shadow-[0_8px_30px_rgba(255,255,255,0.02)] border-border/40 bg-card/80 backdrop-blur-sm rounded-none overflow-hidden relative p-0 gap-0">
                       {/* Top accent line */}
                       <div className="absolute top-0 left-0 w-full h-0.5 bg-linear-to-r from-transparent via-primary/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-10" />
 
