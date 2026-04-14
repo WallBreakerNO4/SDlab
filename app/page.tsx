@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { BlurhashCanvas } from "@/components/comfyui/blurhash-canvas";
 import { Badge } from "@/components/ui/badge";
@@ -135,6 +135,54 @@ function CardImage({
         </picture>
       ) : null}
     </>
+  );
+}
+
+function ExpandableDescription({ text }: { text: string }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isTruncated, setIsTruncated] = useState(false);
+  const textRef = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    if (textRef.current) {
+      setIsTruncated(textRef.current.scrollHeight > textRef.current.clientHeight);
+    }
+  }, [text]);
+
+  return (
+    <div className="relative">
+      <p
+        ref={textRef}
+        className={`text-sm text-muted-foreground/70 leading-relaxed ${isExpanded ? "pb-6" : "line-clamp-2"
+          }`}
+      >
+        {text}
+      </p>
+      {isTruncated && (
+        <div
+          className={`absolute bottom-0 right-0 flex items-center justify-end ${isExpanded
+            ? ""
+            : "w-20 h-6 bg-linear-to-r from-transparent via-card/90 to-card"
+            }`}
+        >
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsExpanded((prev) => !prev);
+            }}
+            className="flex items-center justify-center p-1 text-muted-foreground hover:text-primary transition-colors focus:outline-none cursor-pointer"
+            title={isExpanded ? "收起" : "展开"}
+          >
+            {isExpanded ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6" /></svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+            )}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -350,9 +398,7 @@ export default function Page() {
                           </h3>
 
                           {modelDesc ? (
-                            <p className="text-sm text-muted-foreground/70 line-clamp-2 leading-relaxed">
-                              {modelDesc}
-                            </p>
+                            <ExpandableDescription text={modelDesc} />
                           ) : null}
                         </div>
 
