@@ -13,6 +13,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 import type { RunAssetSummary, RunSummary } from "@/lib/comfyui-types";
 
@@ -213,9 +214,88 @@ function RunsSkeleton() {
   );
 }
 
+function getFullResUrl(asset: RunAssetSummary | null | undefined): string | null {
+  if (!asset) return null;
+  return asset.display?.webp || asset.display?.avif || asset.thumb?.webp || asset.thumb?.avif || null;
+}
+
+function HorizontalScrollList({ assets, onImageClick }: { assets: RunAssetSummary[], onImageClick: (url: string) => void }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const scroll = (direction: "left" | "right", e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (scrollRef.current) {
+      const scrollAmount = direction === "left" ? -200 : 200;
+      scrollRef.current.scrollBy({ left: scrollAmount, behavior: "smooth" });
+    }
+  };
+
+  return (
+    <div className="relative group/list flex items-center">
+      {/* Left button */}
+      <button
+        onClick={(e) => scroll("left", e)}
+        className="absolute left-0 z-20 bg-background/80 hover:bg-background text-foreground shadow-sm rounded-r-md p-1 opacity-0 group-hover/list:opacity-100 transition-opacity cursor-pointer"
+        aria-label="Scroll left"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+      </button>
+
+      <div ref={scrollRef} className="flex gap-2 overflow-x-auto pb-1 pt-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] snap-x w-full">
+        {assets.map((thumbAsset, idx) => {
+          const thumbSource = resolvePreferredImageSource(thumbAsset);
+          if (!thumbSource?.imgSrc) return null;
+
+          const thumbRatio =
+            thumbAsset.width && thumbAsset.height
+              ? `${thumbAsset.width} / ${thumbAsset.height}`
+              : "2/3";
+
+          return (
+            <div
+              key={thumbSource.imgSrc || idx}
+              className="relative h-20 shrink-0 overflow-hidden bg-muted/30 border border-border/40 snap-center group/thumb cursor-zoom-in"
+              style={{ aspectRatio: thumbRatio }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const url = getFullResUrl(thumbAsset);
+                if (url) onImageClick(url);
+              }}
+              title="查看大图"
+            >
+              <CardImage
+                src={thumbSource.imgSrc}
+                avif={thumbSource.avifSrc}
+                webp={thumbSource.webpSrc}
+                alt=""
+                blurhash={thumbAsset.blurhash}
+                blurhashWidth={thumbAsset.blurhash_width}
+                blurhashHeight={thumbAsset.blurhash_height}
+                imgClassName="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover/thumb:scale-110"
+              />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Right button */}
+      <button
+        onClick={(e) => scroll("right", e)}
+        className="absolute right-0 z-20 bg-background/80 hover:bg-background text-foreground shadow-sm rounded-l-md p-1 opacity-0 group-hover/list:opacity-100 transition-opacity cursor-pointer"
+        aria-label="Scroll right"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+      </button>
+    </div>
+  );
+}
+
 export default function Page() {
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -366,8 +446,15 @@ export default function Page() {
 
                       {/* Image Area */}
                       <div
-                        className="relative w-full overflow-hidden bg-muted/40 border-b border-border/40"
+                        className="relative w-full overflow-hidden bg-muted/40 border-b border-border/40 cursor-zoom-in"
                         style={{ aspectRatio: coverRatio }}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const url = getFullResUrl(coverAsset);
+                          if (url) setPreviewImage(url);
+                        }}
+                        title="查看大图"
                       >
                         <CardImage
                           src={coverSource?.imgSrc}
@@ -405,39 +492,7 @@ export default function Page() {
                         <div className="space-y-6">
                           {/* Mini Previews */}
                           {homepageCards.length > 0 && (
-                            <div className="flex gap-2 overflow-x-auto pb-1 pt-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] snap-x">
-                              {homepageCards.map((thumbAsset, idx) => {
-                                const thumbSource =
-                                  resolvePreferredImageSource(thumbAsset);
-                                if (!thumbSource?.imgSrc) return null;
-
-                                const thumbRatio =
-                                  thumbAsset.width && thumbAsset.height
-                                    ? `${thumbAsset.width} / ${thumbAsset.height}`
-                                    : "2/3";
-
-                                return (
-                                  <div
-                                    key={thumbSource.imgSrc || idx}
-                                    className="relative h-20 shrink-0 overflow-hidden bg-muted/30 border border-border/40 snap-center group/thumb"
-                                    style={{ aspectRatio: thumbRatio }}
-                                  >
-                                    <CardImage
-                                      src={thumbSource.imgSrc}
-                                      avif={thumbSource.avifSrc}
-                                      webp={thumbSource.webpSrc}
-                                      alt=""
-                                      blurhash={thumbAsset.blurhash}
-                                      blurhashWidth={thumbAsset.blurhash_width}
-                                      blurhashHeight={
-                                        thumbAsset.blurhash_height
-                                      }
-                                      imgClassName="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover/thumb:scale-110"
-                                    />
-                                  </div>
-                                );
-                              })}
-                            </div>
+                            <HorizontalScrollList assets={homepageCards} onImageClick={setPreviewImage} />
                           )}
                         </div>
                       </CardContent>
@@ -449,6 +504,21 @@ export default function Page() {
           ) : null}
         </section>
       </div>
+
+      <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
+        <DialogContent className="sm:max-w-[90vw] md:max-w-[80vw] lg:max-w-300 w-fit p-0 border-none bg-transparent shadow-none" showCloseButton={false}>
+          <DialogTitle className="sr-only">查看大图</DialogTitle>
+          {previewImage && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={previewImage}
+              alt="Preview"
+              className="max-h-[90vh] w-auto object-contain rounded-md cursor-zoom-out"
+              onClick={() => setPreviewImage(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }
