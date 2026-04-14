@@ -123,9 +123,8 @@ function CardImage({
           blurhash={blurhash}
           width={blurhashWidth || 32}
           height={blurhashHeight || 32}
-          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ease-out ${
-            isLoaded ? "opacity-0" : "opacity-100"
-          }`}
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ease-out ${isLoaded ? "opacity-0" : "opacity-100"
+            }`}
         />
       ) : null}
       {src ? (
@@ -140,9 +139,8 @@ function CardImage({
             }}
             src={src}
             alt={alt}
-            className={`${imgClassName || ""} ${
-              isLoaded ? "opacity-100" : "opacity-0"
-            }`}
+            className={`${imgClassName || ""} ${isLoaded ? "opacity-100" : "opacity-0"
+              }`}
             loading="lazy"
             onLoad={() => setIsLoaded(true)}
           />
@@ -258,7 +256,7 @@ export default function Page() {
 
           <p className="text-lg md:text-xl text-muted-foreground leading-relaxed max-w-2xl font-light">
             系统化的 Stable Diffusion
-            模型评估平台。通过结构化参数网格与风格组合实验，沉淀可复现的生成数据与最优实践。
+            模型画风评估平台。通过可复现的测试与画风组合实验，展示可对比的画风实验。
           </p>
         </section>
 
@@ -267,7 +265,7 @@ export default function Page() {
           <div className="flex flex-col sm:flex-row sm:items-end justify-between border-b border-border/40 pb-5 gap-4">
             <div className="space-y-1">
               <h2 className="text-2xl md:text-3xl font-bold tracking-tight">
-                最新实验记录
+                最新对比记录
               </h2>
               <p className="text-sm text-muted-foreground">
                 浏览最近运行的模型评测与风格网格
@@ -288,7 +286,7 @@ export default function Page() {
             <Empty className="py-24 border border-dashed border-border/50 bg-background/30 backdrop-blur-sm">
               <EmptyHeader>
                 <EmptyTitle className="text-xl">
-                  {loadState === "error" ? "加载失败" : "暂无实验记录"}
+                  {loadState === "error" ? "加载失败" : "暂无对比记录"}
                 </EmptyTitle>
                 <EmptyDescription className="text-sm max-w-sm mx-auto">
                   {loadState === "error"
