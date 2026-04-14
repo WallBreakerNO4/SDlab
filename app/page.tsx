@@ -221,6 +221,54 @@ function getFullResUrl(asset: RunAssetSummary | null | undefined): string | null
 
 function HorizontalScrollList({ assets, onImageClick }: { assets: RunAssetSummary[], onImageClick: (url: string) => void }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  // Helper variables for infinite looping
+  const copyCount = Math.max(5, Math.ceil(20 / Math.max(assets.length, 1)));
+  const displayAssets = Array.from({ length: copyCount }, () => assets).flat();
+  const middleCopyIndex = Math.floor(copyCount / 2);
+
+  useEffect(() => {
+    if (scrollRef.current && assets.length > 0) {
+      const el = scrollRef.current;
+      const items = el.querySelectorAll<HTMLElement>(':scope > div.group\\/thumb');
+      if (items.length >= assets.length * copyCount) {
+        const firstItem = items[0];
+        const middleItem = items[assets.length * middleCopyIndex];
+        if (firstItem && middleItem) {
+          const shift = middleItem.offsetLeft - firstItem.offsetLeft;
+          el.scrollLeft = shift;
+        }
+      }
+    }
+  }, [assets.length, copyCount, middleCopyIndex]);
+
+  const handleScrollEvent = () => {
+    if (!scrollRef.current || assets.length === 0) return;
+    const el = scrollRef.current;
+
+    if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+
+    scrollTimeout.current = setTimeout(() => {
+      if (!el) return;
+      const items = el.querySelectorAll<HTMLElement>(':scope > div.group\\/thumb');
+      if (items.length < assets.length * 2) return;
+
+      const firstItem = items[0];
+      const secondBlockItem = items[assets.length];
+      const segmentWidth = secondBlockItem.offsetLeft - firstItem.offsetLeft;
+
+      if (segmentWidth <= 0) return;
+
+      const centerPos = segmentWidth * middleCopyIndex;
+      // If the scroll drifts more than 1 segment from the center, snap it back
+      if (Math.abs(el.scrollLeft - centerPos) > segmentWidth) {
+        const offset = centerPos - el.scrollLeft;
+        const K = Math.round(offset / segmentWidth);
+        el.scrollLeft += K * segmentWidth;
+      }
+    }, 150);
+  };
 
   const scroll = (direction: "left" | "right", e: React.MouseEvent) => {
     e.preventDefault();
@@ -230,6 +278,8 @@ function HorizontalScrollList({ assets, onImageClick }: { assets: RunAssetSummar
       scrollRef.current.scrollBy({ left: scrollAmount, behavior: "smooth" });
     }
   };
+
+  if (!assets.length) return null;
 
   return (
     <div className="relative group/list flex items-center">
@@ -242,8 +292,12 @@ function HorizontalScrollList({ assets, onImageClick }: { assets: RunAssetSummar
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
       </button>
 
-      <div ref={scrollRef} className="flex gap-2 overflow-x-auto pb-1 pt-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] snap-x w-full">
-        {assets.map((thumbAsset, idx) => {
+      <div
+        ref={scrollRef}
+        onScroll={handleScrollEvent}
+        className="flex gap-2 overflow-x-auto pb-1 pt-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] snap-x w-full relative"
+      >
+        {displayAssets.map((thumbAsset, idx) => {
           const thumbSource = resolvePreferredImageSource(thumbAsset);
           if (!thumbSource?.imgSrc) return null;
 
@@ -254,7 +308,7 @@ function HorizontalScrollList({ assets, onImageClick }: { assets: RunAssetSummar
 
           return (
             <div
-              key={thumbSource.imgSrc || idx}
+              key={`${thumbSource.imgSrc || ''}-${idx}`}
               className="relative h-32 shrink-0 overflow-hidden bg-muted/30 border border-border/40 snap-center group/thumb cursor-zoom-in"
               style={{ aspectRatio: thumbRatio }}
               onClick={(e) => {
