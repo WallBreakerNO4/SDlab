@@ -3,6 +3,7 @@
 import { use, useEffect, useMemo, useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import Link from "next/link";
+import { HuggingFace, Civitai, ComfyUI } from "@lobehub/icons";
 
 import {
   type BlurhashCell,
@@ -388,6 +389,7 @@ export default function RunDetailPage({
                           aria-label="打开 Hugging Face 页面"
                           className="hover:bg-primary/10 hover:text-primary text-muted-foreground inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/50 px-2 py-1 font-medium transition-colors backdrop-blur-sm"
                         >
+                          <HuggingFace.Color className="size-3" />
                           Hugging Face 链接
                         </a>
                       ) : null}
@@ -399,6 +401,7 @@ export default function RunDetailPage({
                           aria-label="打开 Civitai 页面"
                           className="hover:bg-primary/10 hover:text-primary text-muted-foreground inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/50 px-2 py-1 font-medium transition-colors backdrop-blur-sm"
                         >
+                          <Civitai.Color className="size-3" />
                           Civitai 链接
                         </a>
                       ) : null}
@@ -411,11 +414,7 @@ export default function RunDetailPage({
                       download
                       className="hover:bg-primary/10 hover:text-primary text-muted-foreground inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/50 px-2 py-1 font-medium transition-colors backdrop-blur-sm"
                     >
-                      <HugeiconsIcon
-                        icon={FileIcon}
-                        className="size-3"
-                        strokeWidth={2}
-                      />
+                      <ComfyUI.Color className="size-3" />
                       下载 Comfy UI 工作流
                     </a>
                   ) : null}
