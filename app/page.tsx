@@ -57,18 +57,6 @@ function isRunSummary(value: unknown): value is RunSummary {
   return true;
 }
 
-function formatCreatedAt(createdAt: string): string {
-  const date = new Date(createdAt);
-  if (Number.isNaN(date.getTime())) {
-    return createdAt;
-  }
-  return new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  }).format(date);
-}
-
 function resolvePreferredImageSource(
   asset: RunAssetSummary | null | undefined,
 ) {
@@ -357,14 +345,9 @@ export default function Page() {
                       {/* Content Area */}
                       <CardContent className="flex flex-1 flex-col justify-between p-6 gap-6">
                         <div className="space-y-3">
-                          <div className="space-y-1">
-                            <h3 className="text-xl font-bold tracking-tight group-hover:text-primary transition-colors line-clamp-1">
-                              {modelName}
-                            </h3>
-                            <div className="text-muted-foreground/50 font-mono text-[10px] truncate uppercase tracking-widest">
-                              {run.run_dir}
-                            </div>
-                          </div>
+                          <h3 className="text-xl font-bold tracking-tight group-hover:text-primary transition-colors wrap-break-word">
+                            {modelName}
+                          </h3>
 
                           {modelDesc ? (
                             <p className="text-sm text-muted-foreground/70 line-clamp-2 leading-relaxed">
