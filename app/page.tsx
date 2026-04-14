@@ -203,9 +203,9 @@ function RunsSkeleton() {
               <Skeleton className="h-4 w-5/6" />
             </div>
             <div className="flex gap-2 overflow-hidden pt-4">
-              <Skeleton className="h-20 w-16 shrink-0" />
-              <Skeleton className="h-20 w-16 shrink-0" />
-              <Skeleton className="h-20 w-16 shrink-0" />
+              <Skeleton className="h-32 w-24 shrink-0" />
+              <Skeleton className="h-32 w-24 shrink-0" />
+              <Skeleton className="h-32 w-24 shrink-0" />
             </div>
           </CardContent>
         </Card>
@@ -226,7 +226,7 @@ function HorizontalScrollList({ assets, onImageClick }: { assets: RunAssetSummar
     e.preventDefault();
     e.stopPropagation();
     if (scrollRef.current) {
-      const scrollAmount = direction === "left" ? -200 : 200;
+      const scrollAmount = direction === "left" ? -300 : 300;
       scrollRef.current.scrollBy({ left: scrollAmount, behavior: "smooth" });
     }
   };
@@ -255,7 +255,7 @@ function HorizontalScrollList({ assets, onImageClick }: { assets: RunAssetSummar
           return (
             <div
               key={thumbSource.imgSrc || idx}
-              className="relative h-20 shrink-0 overflow-hidden bg-muted/30 border border-border/40 snap-center group/thumb cursor-zoom-in"
+              className="relative h-32 shrink-0 overflow-hidden bg-muted/30 border border-border/40 snap-center group/thumb cursor-zoom-in"
               style={{ aspectRatio: thumbRatio }}
               onClick={(e) => {
                 e.preventDefault();
