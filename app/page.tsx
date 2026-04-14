@@ -123,8 +123,9 @@ function CardImage({
           blurhash={blurhash}
           width={blurhashWidth || 32}
           height={blurhashHeight || 32}
-          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ease-out ${isLoaded ? "opacity-0" : "opacity-100"
-            }`}
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ease-out ${
+            isLoaded ? "opacity-0" : "opacity-100"
+          }`}
         />
       ) : null}
       {src ? (
@@ -139,8 +140,9 @@ function CardImage({
             }}
             src={src}
             alt={alt}
-            className={`${imgClassName || ""} ${isLoaded ? "opacity-100" : "opacity-0"
-              }`}
+            className={`${imgClassName || ""} ${
+              isLoaded ? "opacity-100" : "opacity-0"
+            }`}
             loading="lazy"
             onLoad={() => setIsLoaded(true)}
           />
@@ -169,13 +171,6 @@ function RunsSkeleton() {
               <Skeleton className="h-20 w-16 shrink-0" />
               <Skeleton className="h-20 w-16 shrink-0" />
               <Skeleton className="h-20 w-16 shrink-0" />
-            </div>
-            <div className="flex items-center justify-between pt-4 border-t border-border/40 mt-2">
-              <div className="flex gap-2">
-                <Skeleton className="h-6 w-16" />
-                <Skeleton className="h-6 w-16" />
-              </div>
-              <Skeleton className="h-4 w-24" />
             </div>
           </CardContent>
         </Card>
@@ -265,8 +260,6 @@ export default function Page() {
             系统化的 Stable Diffusion
             模型评估平台。通过结构化参数网格与风格组合实验，沉淀可复现的生成数据与最优实践。
           </p>
-
-
         </section>
 
         {/* Runs Section */}
@@ -419,24 +412,6 @@ export default function Page() {
                               })}
                             </div>
                           )}
-
-                          {/* Footer Info */}
-                          <div className="flex items-center justify-between pt-4 border-t border-border/30">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-mono text-[10px] px-2 py-0.5 bg-muted/50 border border-border/40 text-foreground">
-                                {run.x_count}×{run.y_count}
-                              </span>
-                              <span className="font-mono text-[10px] px-2 py-0.5 border border-border/30 text-muted-foreground">
-                                {run.total_cells} ITEMS
-                              </span>
-                            </div>
-                            <time
-                              dateTime={run.created_at}
-                              className="text-muted-foreground/70 font-mono text-[10px] tracking-wider uppercase"
-                            >
-                              {formatCreatedAt(run.created_at)}
-                            </time>
-                          </div>
                         </div>
                       </CardContent>
                     </Card>
