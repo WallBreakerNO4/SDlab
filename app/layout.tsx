@@ -32,6 +32,15 @@ export const metadata: Metadata = {
   title: "SD Style Lab — AI 风格实验室",
   description:
     "AI 图像风格探索平台，使用 ComfyUI 生成 Stable Diffusion 风格对比网格。",
+  icons: {
+    icon: [
+      { url: "/favicon/favicon-96x96.png", sizes: "96x96", type: "image/png" },
+      { url: "/favicon/favicon.svg", type: "image/svg+xml" },
+    ],
+    shortcut: "/favicon/favicon.ico",
+    apple: "/favicon/apple-touch-icon.png",
+  },
+  manifest: "/favicon/site.webmanifest",
 };
 
 export default async function RootLayout({
