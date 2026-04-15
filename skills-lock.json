@@ -6,6 +6,11 @@
       "sourceType": "github",
       "computedHash": "ea2ac97c0f3a5afe4d0196969840d383a30882b8e00a4da895e4ea6eaa32af09"
     },
+    "nextjs-supabase-auth": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "computedHash": "a500cb0b508e60b36ac15ba330d34975d2e71e47e72201fc974e3440645d0389"
+    },
     "playwright-e2e-testing": {
       "source": "bobmatnyc/claude-mpm-skills",
       "sourceType": "github",
