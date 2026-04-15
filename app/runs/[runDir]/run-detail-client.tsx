@@ -406,7 +406,7 @@ export function RunDetailClientPage({ runDir }: { runDir: string }) {
                           className="hover:bg-primary/10 hover:text-primary text-muted-foreground inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/50 px-2 py-1 font-medium transition-colors backdrop-blur-sm"
                         >
                           <ComfyUI.Color className="size-3" />
-                          登录后下载 Comfy UI 工作流
+                          下载 Comfy UI 工作流
                         </button>
                       )
                     ) : null}
