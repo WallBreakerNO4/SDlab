@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import type { User } from "@supabase/supabase-js";
+import { toast } from "sonner";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 type AuthContextValue = {
@@ -21,6 +22,39 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const AUTH_ERROR_QUERY_PARAM = "auth_error";
+
+function getAuthErrorMessage(code: string | null): string {
+  switch (code) {
+    case "auth_not_configured":
+      return "当前环境尚未配置登录功能。";
+    case "oauth_cancelled":
+      return "登录已取消，你可以在准备好后重新尝试。";
+    case "oauth_callback_failed":
+      return "登录未完成，请重新尝试。";
+    case "oauth_start_failed":
+      return "登录启动失败，请稍后重试。";
+    default:
+      return "登录失败，请稍后重试。";
+  }
+}
+
+function buildAuthCallbackUrl(): string {
+  const currentUrl = new URL(window.location.href);
+  currentUrl.searchParams.delete(AUTH_ERROR_QUERY_PARAM);
+
+  const nextPath =
+    currentUrl.pathname === "/auth/callback"
+      ? "/"
+      : `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}` || "/";
+
+  const redirectUrl = new URL("/auth/callback", window.location.origin);
+  if (nextPath !== "/") {
+    redirectUrl.searchParams.set("next", nextPath);
+  }
+
+  return redirectUrl.toString();
+}
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
@@ -50,6 +84,23 @@ export function AuthProvider({
   const [loading, setLoading] = useState(
     initialUser === undefined && !!supabase,
   );
+
+  useEffect(() => {
+    const currentUrl = new URL(window.location.href);
+    const authError = currentUrl.searchParams.get(AUTH_ERROR_QUERY_PARAM);
+
+    if (!authError) {
+      return;
+    }
+
+    toast.error(getAuthErrorMessage(authError));
+    currentUrl.searchParams.delete(AUTH_ERROR_QUERY_PARAM);
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`,
+    );
+  }, []);
 
   useEffect(() => {
     if (!supabase) {
@@ -85,40 +136,61 @@ export function AuthProvider({
     };
   }, [supabase, initialUser]);
 
+  const signInWithOAuth = useCallback(
+    async (
+      provider: "github" | "google" | "azure",
+      providerLabel: string,
+      scopes?: string,
+    ) => {
+      if (!supabase) {
+        toast.error(getAuthErrorMessage("auth_not_configured"));
+        return;
+      }
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: buildAuthCallbackUrl(),
+          ...(scopes ? { scopes } : {}),
+        },
+      });
+
+      if (error) {
+        console.error(
+          `[auth] Failed to start ${providerLabel} OAuth:`,
+          error.message,
+        );
+        toast.error(`${providerLabel} 登录启动失败，请稍后重试。`);
+      }
+    },
+    [supabase],
+  );
+
   const signInWithGitHub = useCallback(async () => {
-    if (!supabase) return;
-    await supabase.auth.signInWithOAuth({
-      provider: "github",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-  }, [supabase]);
+    await signInWithOAuth("github", "GitHub");
+  }, [signInWithOAuth]);
 
   const signInWithGoogle = useCallback(async () => {
-    if (!supabase) return;
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-  }, [supabase]);
+    await signInWithOAuth("google", "Google");
+  }, [signInWithOAuth]);
 
   const signInWithMicrosoft = useCallback(async () => {
-    if (!supabase) return;
-    await supabase.auth.signInWithOAuth({
-      provider: "azure",
-      options: {
-        scopes: "email",
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-  }, [supabase]);
+    await signInWithOAuth("azure", "Microsoft", "email");
+  }, [signInWithOAuth]);
 
   const signOut = useCallback(async () => {
-    if (!supabase) return;
-    await supabase.auth.signOut();
+    if (!supabase) {
+      toast.error("当前环境尚未配置登录功能。");
+      return;
+    }
+
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error("[auth] Failed to sign out:", error.message);
+      toast.error("退出登录失败，请稍后重试。");
+      return;
+    }
+
     setUser(null);
   }, [supabase]);
 

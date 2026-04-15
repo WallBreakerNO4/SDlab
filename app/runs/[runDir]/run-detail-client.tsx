@@ -5,6 +5,8 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import Link from "next/link";
 import { HuggingFace, Civitai, ComfyUI } from "@lobehub/icons";
 
+import { AuthLoginDialog } from "@/components/auth-login-dialog";
+import { useAuth } from "@/components/auth-provider";
 import {
   type BlurhashCell,
   type RunGridIndexData,
@@ -169,11 +171,13 @@ function GridSkeleton() {
 }
 
 export function RunDetailClientPage({ runDir }: { runDir: string }) {
+  const { user } = useAuth();
   const { showNsfw } = useUserPreferences();
   const [detailLoadState, setDetailLoadState] = useState<LoadState>("loading");
   const [gridLoadState, setGridLoadState] = useState<LoadState>("loading");
   const [detailData, setDetailData] = useState<RunDetailResponse | null>(null);
   const [gridData, setGridData] = useState<RunGridIndexData | null>(null);
+  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -386,14 +390,25 @@ export function RunDetailClientPage({ runDir }: { runDir: string }) {
                     ) : null}
 
                     {workflow?.download_url ? (
-                      <a
-                        href={workflow.download_url}
-                        download
-                        className="hover:bg-primary/10 hover:text-primary text-muted-foreground inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/50 px-2 py-1 font-medium transition-colors backdrop-blur-sm"
-                      >
-                        <ComfyUI.Color className="size-3" />
-                        下载 Comfy UI 工作流
-                      </a>
+                      user ? (
+                        <a
+                          href={workflow.download_url}
+                          download
+                          className="hover:bg-primary/10 hover:text-primary text-muted-foreground inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/50 px-2 py-1 font-medium transition-colors backdrop-blur-sm"
+                        >
+                          <ComfyUI.Color className="size-3" />
+                          下载 Comfy UI 工作流
+                        </a>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setLoginDialogOpen(true)}
+                          className="hover:bg-primary/10 hover:text-primary text-muted-foreground inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/50 px-2 py-1 font-medium transition-colors backdrop-blur-sm"
+                        >
+                          <ComfyUI.Color className="size-3" />
+                          登录后下载 Comfy UI 工作流
+                        </button>
+                      )
                     ) : null}
                   </div>
                 </div>
@@ -436,6 +451,11 @@ export function RunDetailClientPage({ runDir }: { runDir: string }) {
           </Empty>
         ) : null}
       </div>
+
+      <AuthLoginDialog
+        open={loginDialogOpen}
+        onOpenChange={setLoginDialogOpen}
+      />
     </main>
   );
 }

@@ -20,6 +20,14 @@ function isValidWorkflowArtifactKey(runDir: string, r2Key: string): boolean {
   );
 }
 
+function isMissingAuthSessionError(error: Error | null): boolean {
+  if (!error) {
+    return false;
+  }
+
+  return error.message.toLowerCase().includes("auth session missing");
+}
+
 export async function GET(
   _request: Request,
   context: RouteContext,
@@ -31,6 +39,23 @@ export async function GET(
     }
 
     const supabase = await createSupabaseAuthClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError) {
+      if (isMissingAuthSessionError(userError)) {
+        return jsonError(401, "Authentication required");
+      }
+
+      return jsonError(500, "Failed to download workflow");
+    }
+
+    if (!user) {
+      return jsonError(401, "Authentication required");
+    }
+
     const { data, error } = await supabase
       .from("runs")
       .select("workflow_download_r2_key")
@@ -62,9 +87,10 @@ export async function GET(
       "Content-Disposition",
       `attachment; filename="${runDir}-workflow.json"`,
     );
-    headers.set("Cache-Control", "public, max-age=31536000, immutable");
+    headers.set("Cache-Control", "private, no-store, max-age=0");
     headers.set("Content-Length", String(object.size));
     headers.set("ETag", object.httpEtag);
+    headers.set("Vary", "Cookie");
 
     return new Response(object.body, { status: 200, headers });
   } catch {
