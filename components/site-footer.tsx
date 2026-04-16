@@ -13,6 +13,13 @@ export function SiteFooter() {
       >
         关于
       </Link>
+      <span className="hidden sm:inline">·</span>
+      <Link
+        href="/privacy-policy"
+        className="hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded-[2px]"
+      >
+        隐私权政策
+      </Link>
     </footer>
   );
 }
