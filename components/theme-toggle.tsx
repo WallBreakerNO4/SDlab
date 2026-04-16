@@ -5,6 +5,11 @@ import { useSyncExternalStore } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { SunIcon, MoonIcon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
+import {
+  THEME_COOKIE_MAX_AGE,
+  THEME_COOKIE_NAME,
+  type ThemePreference,
+} from "@/lib/theme";
 
 const emptySubscribe = () => () => { };
 
@@ -29,7 +34,13 @@ export function ThemeToggle() {
       variant="ghost"
       size="icon"
       aria-label="切换主题"
-      onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+      onClick={() => {
+        const nextTheme: ThemePreference =
+          resolvedTheme === "dark" ? "light" : "dark";
+
+        document.cookie = `${THEME_COOKIE_NAME}=${encodeURIComponent(nextTheme)}; path=/; max-age=${THEME_COOKIE_MAX_AGE}; samesite=lax`;
+        setTheme(nextTheme);
+      }}
     >
       {resolvedTheme === "dark" ? (
         <HugeiconsIcon icon={SunIcon} className="size-4" />

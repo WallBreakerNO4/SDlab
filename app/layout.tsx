@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, JetBrains_Mono } from "next/font/google";
+import { cookies } from "next/headers";
+import Script from "next/script";
 import { ThemeProvider } from "next-themes";
 
 import "./globals.css";
@@ -9,6 +11,12 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { UserPreferencesProvider } from "@/components/user-preferences-provider";
 import { Toaster } from "@/components/ui/sonner";
+import {
+  THEME_COOKIE_NAME,
+  THEME_STORAGE_KEY,
+  getThemeBootstrapScript,
+  parseThemePreference,
+} from "@/lib/theme";
 import { createSupabaseAuthClient } from "@/lib/supabase-auth";
 import { getViewerShowNsfwPreference } from "@/lib/server-user-preferences";
 import type { User } from "@supabase/supabase-js";
@@ -48,6 +56,10 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cookieStore = await cookies();
+  const initialTheme = parseThemePreference(
+    cookieStore.get(THEME_COOKIE_NAME)?.value,
+  );
   let initialUser: User | null | undefined;
   let initialShowNsfw = false;
   try {
@@ -71,17 +83,28 @@ export default async function RootLayout({
   return (
     <html
       lang="zh-CN"
-      className={jetbrainsMono.variable}
+      className={
+        initialTheme
+          ? `${jetbrainsMono.variable} ${initialTheme}`
+          : jetbrainsMono.variable
+      }
+      style={initialTheme ? { colorScheme: initialTheme } : undefined}
       suppressHydrationWarning
     >
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <Script id="theme-bootstrap" strategy="beforeInteractive">
+          {getThemeBootstrapScript()}
+        </Script>
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
+          defaultTheme={initialTheme ?? "system"}
           enableSystem
+          enableColorScheme
           disableTransitionOnChange
+          storageKey={THEME_STORAGE_KEY}
+          scriptProps={{ "data-cfasync": "false" }}
         >
           <AuthProvider key={authSnapshotKey} initialUser={initialUser}>
             <UserPreferencesProvider initialShowNsfw={initialShowNsfw}>
