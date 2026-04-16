@@ -1,0 +1,73 @@
+# Runner 配置 schema 版本；当前实现只接受 image-run-config/v1。
+schema_version: image-run-config/v1
+
+# 模型元信息：主要用于记录这次 run 绑定的模型身份与说明，便于后续展示/追踪。
+model:
+  # 机器可读的稳定 key；建议保持短且唯一。
+  key: chenkinnoob-xl-v05
+  # 给人看的展示名。
+  name: ChenkinNoob-XL v0.5
+  # 模型家族/大类，例如 stable-diffusion-xl、novelai 等。
+  family: stable-diffusion-xl
+  # 可选外链；没有就填 null。
+  links:
+    homepage: null
+    huggingface: https://huggingface.co/ChenkinNoob/ChenkinNoob-XL-V0.5
+    civitai: https://civitai.com/models/2167995?modelVersionId=2841101
+  # 多语言描述；当前 schema 要求同时提供 zh / en。
+  description:
+    zh: 经过漫长的底层重构与千万级数据的洗礼，ChenkinNoob-XL-V0.5 终于正式发布！作为 ckn 主干实验室（Mainline Lab）的最新大版本里程碑，V0.5 彻底摆脱了传统二次元模型的“廉价 AI 味”，并真正走向了工业级生产力的标准。本次更新不仅在数据知识量上大幅领先，更在构图张力以及光影质感上实现了质的飞跃。
+    en: After a long period of underlying refactoring and a baptism of tens of millions of data points, ChenkinNoob-XL-V0.5 is officially released! As the latest major milestone from the ckn Mainline Lab, V0.5 completely shakes off the "cheap AI-generated look" of traditional anime models and truly steps into the standard of industrial-grade productivity. This update not only takes a massive lead in data knowledge base but also achieves a qualitative leap in compositional tension and lighting texture.
+# Prompt 资产路径：X 轴通常是角色等结构化 prompt 表，Y 轴通常是风格/artist 等单列 prompt 表。
+# 这里的路径必须是仓库相对路径，且文件必须实际存在；支持 .yaml/.yml/.json。
+prompts:
+  # X 轴 prompt 表路径。
+  x_path: data/prompts/X/common_prompts.yaml
+  # Y 轴 prompt 表路径。
+  y_path: data/prompts/Y/300_NAI_Styles_Table.yaml
+
+# ComfyUI workflow 模板配置。
+workflow:
+  # 要注入参数的 KSampler 节点 ID；如果 workflow 里有多个 KSampler，通常需要显式指定。
+  ksampler_node_id:
+
+# 生成参数：template/base_seed 为必填；其余项用于覆盖 workflow 内默认值。
+# 如果某个字段填 null，就尽量回退到 workflow 里的默认参数。
+generation:
+  # 正向 prompt 拼装模板；只支持 {quality} / {gender} / {characters} / {series} / {rating} / {y} / {general} 这些占位符。
+  template: "{quality}{rating}{y}{gender}{characters}{series}{general}"
+  quality_prompt: "masterpiece, best quality, newest, high resolution, aesthetic, excellent, year 2026,"
+  # 基础种子；每个网格单元会基于 base_seed + x/y 索引派生稳定 seed。
+  base_seed: 114514
+  # 基础负面提示词；设为 null 时优先使用 workflow 中自带的 negative prompt。
+  negative_prompt: "worst quality, old, early, low quality, lowres, signature, username, logo, bad hands, mutated hands,"
+  # 追加到基础负面提示词后面的内容；常用于统一补一段安全/质量相关负面词。
+  append_negative_prompt: "nsfw, nipples, pussy, nude,"
+  # 输出宽度；覆盖 workflow 的 latent width。
+  width: 832
+  # 输出高度；覆盖 workflow 的 latent height。
+  height: 1216
+  # 单次生成张数；覆盖 workflow 的 batch_size。
+  batch_size: 1
+  # 采样步数；覆盖 KSampler.steps。
+  steps: 28
+  # CFG / guidance scale；覆盖 KSampler.cfg。
+  cfg: 5.5
+  # 去噪强度；覆盖 KSampler.denoise。
+  denoise: 1.0
+  # 采样器名称；覆盖 KSampler.sampler_name。
+  sampler_name: euler
+  # 调度器名称；覆盖 KSampler.scheduler。
+  scheduler: karras
+
+# 选择要跑的网格子集；都为 null 时表示跑完整个 X × Y 网格。
+# 若同时设置 indexes 和 limit，会先按 indexes 选，再按 limit 截断。
+selection:
+  # 只取前 N 个 X 行；null 表示不限制。
+  x_limit: null
+  # 只取前 N 个 Y 行；null 表示不限制。
+  y_limit: null
+  # 显式指定要跑的 X 索引列表（从 0 开始）；null 表示不指定。
+  x_indexes: null
+  # 显式指定要跑的 Y 索引列表（从 0 开始）；null 表示不指定。
+  y_indexes: null
