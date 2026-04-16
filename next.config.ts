@@ -14,7 +14,7 @@ const markdownLoaderPath = path.join(
   "info",
   "markdown-source-loader.cjs",
 );
-const infoPageMarkdownPattern = /info-page\.md$/i;
+const contentPageMarkdownPattern = /(^|[\\/])data[\\/].*-page\.md$/i;
 
 const nextConfig: NextConfig = {
   images: {
@@ -27,7 +27,7 @@ const nextConfig: NextConfig = {
   },
   webpack(config) {
     config.module.rules.push({
-      test: infoPageMarkdownPattern,
+      test: contentPageMarkdownPattern,
       use: [markdownLoaderPath],
     });
 
@@ -37,7 +37,7 @@ const nextConfig: NextConfig = {
     rules: {
       "*.md": {
         condition: {
-          path: infoPageMarkdownPattern,
+          path: contentPageMarkdownPattern,
         },
         loaders: [markdownLoaderPath],
         as: "*.js",
