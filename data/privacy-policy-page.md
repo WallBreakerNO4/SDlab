@@ -206,7 +206,6 @@
 如果你对本政策有疑问，或希望就与你相关的信息提出请求，可以通过以下公开渠道联系维护者：
 
 - 项目仓库：[https://github.com/WallBreakerNO4/SDlab](https://github.com/WallBreakerNO4/SDlab)
-- 作者主页：[https://github.com/WallBreakerNO4](https://github.com/WallBreakerNO4)
-- 博客：[https://blog.wall-breaker-no4.xyz/](https://blog.wall-breaker-no4.xyz/)
+- 作者链接：[https://github.com/WallBreakerNO4](https://github.com/WallBreakerNO4)
 
 为保护你的隐私，请尽量不要在公开 issue 或公开评论中直接提交敏感个人信息。你可以先留下最小必要信息，并通过更合适的方式继续沟通。
