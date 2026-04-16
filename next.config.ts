@@ -10,8 +10,7 @@ initOpenNextCloudflareForDev();
 const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 const markdownLoaderPath = path.join(
   repoRoot,
-  "app",
-  "info",
+  "loaders",
   "markdown-source-loader.cjs",
 );
 const contentPageMarkdownPattern = /(^|[\\/])data[\\/].*-page\.md$/i;
