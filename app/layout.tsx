@@ -15,6 +15,8 @@ import {
   THEME_COOKIE_NAME,
   THEME_STORAGE_KEY,
   getThemeBootstrapScript,
+  getThemeCriticalCss,
+  getThemeInlineStyle,
   parseThemePreference,
 } from "@/lib/theme";
 import { createSupabaseAuthClient } from "@/lib/supabase-auth";
@@ -60,6 +62,9 @@ export default async function RootLayout({
   const initialTheme = parseThemePreference(
     cookieStore.get(THEME_COOKIE_NAME)?.value,
   );
+  const initialThemeStyle = initialTheme
+    ? getThemeInlineStyle(initialTheme)
+    : undefined;
   let initialUser: User | null | undefined;
   let initialShowNsfw = false;
   try {
@@ -88,11 +93,22 @@ export default async function RootLayout({
           ? `${jetbrainsMono.variable} ${initialTheme}`
           : jetbrainsMono.variable
       }
-      style={initialTheme ? { colorScheme: initialTheme } : undefined}
+      style={initialThemeStyle}
       suppressHydrationWarning
     >
+      <head>
+        <style id="theme-critical">{getThemeCriticalCss()}</style>
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        style={
+          initialThemeStyle
+            ? {
+                backgroundColor: initialThemeStyle.backgroundColor,
+                color: initialThemeStyle.color,
+              }
+            : undefined
+        }
       >
         <Script id="theme-bootstrap" strategy="beforeInteractive">
           {getThemeBootstrapScript()}
