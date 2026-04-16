@@ -101,14 +101,6 @@ export default async function RootLayout({
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        style={
-          initialThemeStyle
-            ? {
-                backgroundColor: initialThemeStyle.backgroundColor,
-                color: initialThemeStyle.color,
-              }
-            : undefined
-        }
       >
         <Script id="theme-bootstrap" strategy="beforeInteractive">
           {getThemeBootstrapScript()}

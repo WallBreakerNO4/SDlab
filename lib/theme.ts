@@ -66,6 +66,11 @@ export function getThemeCriticalCss(): string {
       color: ${DARK_THEME_FOREGROUND};
       color-scheme: dark;
     }
+
+    body {
+      background-color: inherit;
+      color: inherit;
+    }
   `;
 }
 
@@ -103,20 +108,6 @@ export function getThemeBootstrapScript(): string {
         root.style.colorScheme = theme;
         root.style.backgroundColor = background;
         root.style.color = foreground;
-
-        var applyBodyTheme = function () {
-          if (!document.body) {
-            return;
-          }
-
-          document.body.style.backgroundColor = background;
-          document.body.style.color = foreground;
-        };
-
-        applyBodyTheme();
-        document.addEventListener("DOMContentLoaded", applyBodyTheme, {
-          once: true,
-        });
       } catch (_error) {}
     })();
   `;
