@@ -63,7 +63,7 @@ def test_main_propagates_invalid_args_exit_code() -> None:
         _ = main_module.main(["--invalid-arg"])
 
     assert exc_info.value.code == 2
-def test_main_help_recommends_data_runs(
+def test_main_help_recommends_data_models(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     main_module = _import_main_module()
@@ -73,5 +73,5 @@ def test_main_help_recommends_data_runs(
 
     assert exc_info.value.code == 0
     out, _ = capsys.readouterr()
-    assert "data/runs/" in out
+    assert "data/models/" in out
     assert "推荐" in out or "recommend" in out.lower()

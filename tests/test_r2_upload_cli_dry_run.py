@@ -57,7 +57,7 @@ def _extended_run_json(
         "run_dir": run_name,
         "dry_run": False,
         "config_schema_version": "image-run-config/v1",
-        "config_path": "data/runs/example/config.yaml",
+        "config_path": "data/models/example/config.yaml",
         "config_sha256": "deadbeef" * 8,
         "model": {
             "key": "chenkinnoob-xl-rf",
@@ -81,9 +81,9 @@ def _extended_run_json(
                 "y_sha256": "b" * 64,
             },
             "workflow": {
-                "api_path": "data/runs/example/api.json",
+                "api_path": "data/models/example/api.json",
                 "api_sha256": "c" * 64,
-                "download_path": "data/runs/example/workflow.json",
+                "download_path": "data/models/example/workflow.json",
                 "download_sha256": workflow_download_sha256,
                 "ksampler_node_id": "6",
             },
@@ -122,13 +122,13 @@ def _extended_run_json(
         payload["assets"] = {
             "cover_image": {
                 "path": str(cover_path),
-                "repo_relative_path": "data/runs/example/image.jpg",
+                "repo_relative_path": "data/models/example/image.jpg",
                 "sha256": _sha256_file(cover_path),
             },
             "homepage_images": [
                 {
                     "path": str(homepage_path),
-                    "repo_relative_path": "data/runs/example/images/homepage.jpg",
+                    "repo_relative_path": "data/models/example/images/homepage.jpg",
                     "sha256": _sha256_file(homepage_path),
                 }
             ],
@@ -318,13 +318,13 @@ def test_cli_dry_run_includes_png_cover_asset_variants_with_original_extension(
     run_assets_payload = {
         "cover_image": {
             "path": str(cover_path),
-            "repo_relative_path": "data/runs/custom/image.png",
+            "repo_relative_path": "data/models/custom/image.png",
             "sha256": _sha256_file(cover_path),
         },
         "homepage_images": [
             {
                 "path": str(homepage_path),
-                "repo_relative_path": "data/runs/custom/images/card.jpeg",
+                "repo_relative_path": "data/models/custom/images/card.jpeg",
                 "sha256": _sha256_file(homepage_path),
             }
         ],

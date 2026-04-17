@@ -145,11 +145,11 @@ def _write_png(path: Path) -> None:
 def _write_assets(repo_root: Path) -> tuple[Path, Path, Path, Path, Path, Path, Path]:
     x_path = repo_root / "data/prompts/x.json"
     y_path = repo_root / "data/prompts/y.yaml"
-    workflow_path = repo_root / "data/runs/example/api.json"
-    workflow_download_path = repo_root / "data/runs/example/workflow.json"
-    cover_image_path = repo_root / "data/runs/example/image.jpg"
-    homepage_first = repo_root / "data/runs/example/images/001.png"
-    homepage_second = repo_root / "data/runs/example/images/002.png"
+    workflow_path = repo_root / "data/models/example/api.json"
+    workflow_download_path = repo_root / "data/models/example/workflow.json"
+    cover_image_path = repo_root / "data/models/example/image.jpg"
+    homepage_first = repo_root / "data/models/example/images/001.png"
+    homepage_second = repo_root / "data/models/example/images/002.png"
     x_path.parent.mkdir(parents=True, exist_ok=True)
     y_path.parent.mkdir(parents=True, exist_ok=True)
     workflow_path.parent.mkdir(parents=True, exist_ok=True)
@@ -179,11 +179,11 @@ def _write_assets_with_cover_extension(
 
     x_path = repo_root / "data/prompts/x.json"
     y_path = repo_root / "data/prompts/y.yaml"
-    workflow_path = repo_root / "data/runs/example/api.json"
-    workflow_download_path = repo_root / "data/runs/example/workflow.json"
-    cover_image_path = repo_root / f"data/runs/example/image{cover_suffix}"
-    homepage_first = repo_root / "data/runs/example/images/001.png"
-    homepage_second = repo_root / "data/runs/example/images/002.png"
+    workflow_path = repo_root / "data/models/example/api.json"
+    workflow_download_path = repo_root / "data/models/example/workflow.json"
+    cover_image_path = repo_root / f"data/models/example/image{cover_suffix}"
+    homepage_first = repo_root / "data/models/example/images/001.png"
+    homepage_second = repo_root / "data/models/example/images/002.png"
     x_path.parent.mkdir(parents=True, exist_ok=True)
     y_path.parent.mkdir(parents=True, exist_ok=True)
     workflow_path.parent.mkdir(parents=True, exist_ok=True)
@@ -262,14 +262,14 @@ def test_load_runner_config_happy_path_resolves_repo_relative_paths_and_hashes(
         homepage_first,
         homepage_second,
     ) = _write_assets(tmp_path)
-    config_path = tmp_path / "data/runs/example/config.yaml"
+    config_path = tmp_path / "data/models/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(_valid_config_text(), encoding="utf-8")
 
     config = module.load_runner_config(str(config_path), repo_root=tmp_path)
 
     assert config.schema_version == "image-run-config/v1"
-    assert config.config_path == "data/runs/example/config.yaml"
+    assert config.config_path == "data/models/example/config.yaml"
     assert config.config_sha256 == _sha256_file(config_path)
     assert Path(config.prompts.x.path) == x_path
     assert Path(config.prompts.y.path) == y_path
@@ -278,22 +278,23 @@ def test_load_runner_config_happy_path_resolves_repo_relative_paths_and_hashes(
     assert config.prompts.x.sha256 == _sha256_file(x_path)
     assert config.prompts.y.sha256 == _sha256_file(y_path)
     assert Path(config.workflow.path) == workflow_path
-    assert config.workflow.repo_relative_path == "data/runs/example/api.json"
+    assert config.workflow.repo_relative_path == "data/models/example/api.json"
     assert config.workflow.sha256 == _sha256_file(workflow_path)
     assert config.workflow.download is not None
     assert Path(config.workflow.download.path) == workflow_download_path
     assert (
-        config.workflow.download.repo_relative_path == "data/runs/example/workflow.json"
+        config.workflow.download.repo_relative_path
+        == "data/models/example/workflow.json"
     )
     assert config.workflow.download.sha256 == _sha256_file(workflow_download_path)
     assert config.workflow.ksampler_node_id == "3"
     assert config.assets.cover_image is not None
     assert Path(config.assets.cover_image.path) == cover_image_path
-    assert config.assets.cover_image.repo_relative_path == "data/runs/example/image.jpg"
+    assert config.assets.cover_image.repo_relative_path == "data/models/example/image.jpg"
     assert config.assets.cover_image.sha256 == _sha256_file(cover_image_path)
     assert [asset.repo_relative_path for asset in config.assets.homepage_images] == [
-        "data/runs/example/images/001.png",
-        "data/runs/example/images/002.png",
+        "data/models/example/images/001.png",
+        "data/models/example/images/002.png",
     ]
     assert [Path(asset.path) for asset in config.assets.homepage_images] == [
         homepage_first,
@@ -340,7 +341,7 @@ def test_load_runner_config_accepts_png_cover_image_when_jpg_is_missing(
         homepage_first,
         homepage_second,
     ) = _write_assets_with_cover_extension(tmp_path, cover_suffix=".png")
-    config_path = tmp_path / "data/runs/example/config.yaml"
+    config_path = tmp_path / "data/models/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(_valid_config_text(), encoding="utf-8")
 
@@ -353,11 +354,11 @@ def test_load_runner_config_accepts_png_cover_image_when_jpg_is_missing(
     assert Path(config.workflow.download.path) == workflow_download_path
     assert config.assets.cover_image is not None
     assert Path(config.assets.cover_image.path) == cover_image_path
-    assert config.assets.cover_image.repo_relative_path == "data/runs/example/image.png"
+    assert config.assets.cover_image.repo_relative_path == "data/models/example/image.png"
     assert config.assets.cover_image.sha256 == _sha256_file(cover_image_path)
     assert [asset.repo_relative_path for asset in config.assets.homepage_images] == [
-        "data/runs/example/images/001.png",
-        "data/runs/example/images/002.png",
+        "data/models/example/images/001.png",
+        "data/models/example/images/002.png",
     ]
     assert [Path(asset.path) for asset in config.assets.homepage_images] == [
         homepage_first,
@@ -370,9 +371,9 @@ def test_load_runner_config_rejects_multiple_cover_image_files(
 ) -> None:
     module = _import_runner_config_module()
     _ = _write_assets(tmp_path)
-    png_cover_path = tmp_path / "data/runs/example/image.png"
+    png_cover_path = tmp_path / "data/models/example/image.png"
     _write_png(png_cover_path)
-    config_path = tmp_path / "data/runs/example/config.yaml"
+    config_path = tmp_path / "data/models/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(_valid_config_text(), encoding="utf-8")
 
@@ -383,9 +384,9 @@ def test_load_runner_config_rejects_multiple_cover_image_files(
 @pytest.mark.parametrize(
     ("cover_suffix", "expected_repo_relative_path"),
     [
-        (".jpeg", "data/runs/example/image.jpeg"),
-        (".webp", "data/runs/example/image.webp"),
-        (".avif", "data/runs/example/image.avif"),
+        (".jpeg", "data/models/example/image.jpeg"),
+        (".webp", "data/models/example/image.webp"),
+        (".avif", "data/models/example/image.avif"),
     ],
 )
 def test_load_runner_config_accepts_supported_cover_image_extensions(
@@ -398,7 +399,7 @@ def test_load_runner_config_accepts_supported_cover_image_extensions(
         tmp_path,
         cover_suffix=cover_suffix,
     )
-    config_path = tmp_path / "data/runs/example/config.yaml"
+    config_path = tmp_path / "data/models/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(_valid_config_text(), encoding="utf-8")
 
@@ -418,10 +419,10 @@ def test_load_runner_config_accepts_uppercase_cover_image_extension(
         tmp_path,
         cover_suffix=".png",
     )
-    lowercase_cover = tmp_path / "data/runs/example/image.png"
-    uppercase_cover = tmp_path / "data/runs/example/image.PNG"
+    lowercase_cover = tmp_path / "data/models/example/image.png"
+    uppercase_cover = tmp_path / "data/models/example/image.PNG"
     lowercase_cover.rename(uppercase_cover)
-    config_path = tmp_path / "data/runs/example/config.yaml"
+    config_path = tmp_path / "data/models/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(_valid_config_text(), encoding="utf-8")
 
@@ -429,13 +430,13 @@ def test_load_runner_config_accepts_uppercase_cover_image_extension(
 
     assert config.assets.cover_image is not None
     assert Path(config.assets.cover_image.path) == uppercase_cover
-    assert config.assets.cover_image.repo_relative_path == "data/runs/example/image.PNG"
+    assert config.assets.cover_image.repo_relative_path == "data/models/example/image.PNG"
 
 
 def test_load_runner_config_rejects_unknown_key(tmp_path: Path) -> None:
     module = _import_runner_config_module()
     _ = _write_assets(tmp_path)
-    config_path = tmp_path / "data/runs/example/config.yaml"
+    config_path = tmp_path / "data/models/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         "schema_version: image-run-config/v1\nunknown_key: true\n",
@@ -449,7 +450,7 @@ def test_load_runner_config_rejects_unknown_key(tmp_path: Path) -> None:
 def test_load_runner_config_rejects_invalid_schema_version(tmp_path: Path) -> None:
     module = _import_runner_config_module()
     _ = _write_assets(tmp_path)
-    config_path = tmp_path / "data/runs/example/config.yaml"
+    config_path = tmp_path / "data/models/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         _valid_config_text(schema_version="image-run-config/v999"), encoding="utf-8"
@@ -463,7 +464,7 @@ def test_load_runner_config_rejects_repo_external_path(tmp_path: Path) -> None:
     module = _import_runner_config_module()
     outside = tmp_path.parent / "outside.json"
     outside.write_text("{}\n", encoding="utf-8")
-    config_path = tmp_path / "data/runs/example/config.yaml"
+    config_path = tmp_path / "data/models/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         "\n".join(
@@ -519,7 +520,7 @@ def test_load_runner_config_rejects_absolute_asset_path_inside_repo(
 ) -> None:
     module = _import_runner_config_module()
     x_path, *_ = _write_assets(tmp_path)
-    config_path = tmp_path / "data/runs/example/config.yaml"
+    config_path = tmp_path / "data/models/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         _valid_config_text().replace("data/prompts/x.json", str(x_path)),
@@ -533,7 +534,7 @@ def test_load_runner_config_rejects_absolute_asset_path_inside_repo(
 def test_load_runner_config_rejects_empty_model_key(tmp_path: Path) -> None:
     module = _import_runner_config_module()
     _ = _write_assets(tmp_path)
-    config_path = tmp_path / "data/runs/example/config.yaml"
+    config_path = tmp_path / "data/models/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         _valid_config_text().replace("  key: nai-4-full", "  key: ''"),
@@ -547,7 +548,7 @@ def test_load_runner_config_rejects_empty_model_key(tmp_path: Path) -> None:
 def test_load_runner_config_rejects_non_slug_model_key(tmp_path: Path) -> None:
     module = _import_runner_config_module()
     _ = _write_assets(tmp_path)
-    config_path = tmp_path / "data/runs/example/config.yaml"
+    config_path = tmp_path / "data/models/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         _valid_config_text().replace("  key: nai-4-full", "  key: NAI_4_FULL"),
@@ -579,7 +580,7 @@ def test_fresh_run_rejects_deprecated_business_env_before_loading_config(
 def test_load_runner_config_exposes_compact_model_snapshot_only(tmp_path: Path) -> None:
     module = _import_runner_config_module()
     _ = _write_assets(tmp_path)
-    config_path = tmp_path / "data/runs/example/config.yaml"
+    config_path = tmp_path / "data/models/example/config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         "\n".join(
@@ -638,11 +639,11 @@ def test_load_runner_config_accepts_run_directory_and_reads_config_yaml(
 ) -> None:
     module = _import_runner_config_module()
     _ = _write_assets(tmp_path)
-    config_dir = tmp_path / "data/runs/example"
+    config_dir = tmp_path / "data/models/example"
     config_dir.mkdir(parents=True, exist_ok=True)
     config_path = config_dir / "config.yaml"
     config_path.write_text(_valid_config_text(), encoding="utf-8")
 
-    config = module.load_runner_config("data/runs/example", repo_root=tmp_path)
+    config = module.load_runner_config("data/models/example", repo_root=tmp_path)
 
-    assert config.config_path == "data/runs/example/config.yaml"
+    assert config.config_path == "data/models/example/config.yaml"

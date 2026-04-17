@@ -40,14 +40,14 @@ def _sample_payload() -> dict[str, object]:
             {
                 "asset_role": "cover",
                 "asset_index": 0,
-                "source_path": "data/runs/example/image.jpg",
+                "source_path": "data/models/example/image.jpg",
                 "source_sha256": "feed" * 16,
                 "width": 1024,
                 "height": 1536,
                 "blurhash": "L5H2EC=PM+yV0g-mq.wG9c010J}I",
                 "blurhash_width": 100,
                 "blurhash_height": 75,
-                "metadata": {"repo_relative_path": "data/runs/example/image.jpg"},
+                "metadata": {"repo_relative_path": "data/models/example/image.jpg"},
                 "variants": [
                     {
                         "variant": "display_webp",
@@ -118,9 +118,9 @@ def _sample_payload() -> dict[str, object]:
 def _sample_payload_with_png_run_asset() -> dict[str, object]:
     payload = _sample_payload()
     run_assets = cast(list[dict[str, object]], payload["run_assets"])
-    run_assets[0]["source_path"] = "data/runs/example/image.png"
+    run_assets[0]["source_path"] = "data/models/example/image.png"
     metadata = cast(dict[str, object], run_assets[0]["metadata"])
-    metadata["repo_relative_path"] = "data/runs/example/image.png"
+    metadata["repo_relative_path"] = "data/models/example/image.png"
     return payload
 
 

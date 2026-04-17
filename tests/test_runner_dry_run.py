@@ -129,7 +129,7 @@ def _fake_runner_config(
     workflow_download_path.write_text('{"version": 1}\n', encoding="utf-8")
     return SimpleNamespace(
         schema_version="image-run-config/v1",
-        config_path="data/runs/example/config.yaml",
+        config_path="data/models/example/config.yaml",
         config_sha256=_sha256_file(config_path),
         model=SimpleNamespace(
             key="nai-4-full",
@@ -157,11 +157,11 @@ def _fake_runner_config(
         workflow=SimpleNamespace(
             path=str(workflow_path),
             sha256=_sha256_file(workflow_path),
-            repo_relative_path="data/runs/example/api.json",
+            repo_relative_path="data/models/example/api.json",
             download=SimpleNamespace(
                 path=str(workflow_download_path),
                 sha256=_sha256_file(workflow_download_path),
-                repo_relative_path="data/runs/example/workflow.json",
+                repo_relative_path="data/models/example/workflow.json",
             ),
             ksampler_node_id="3",
         ),
@@ -279,7 +279,7 @@ def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
     assert run_payload["generation_overrides"]["negative_prompt"] == "neg,"
     assert run_payload["generation_overrides"]["append_negative_prompt"] == "app,"
     assert run_payload["config_schema_version"] == "image-run-config/v1"
-    assert run_payload["config_path"] == "data/runs/example/config.yaml"
+    assert run_payload["config_path"] == "data/models/example/config.yaml"
     assert run_payload["config_sha256"] == _sha256_file(config_path)
     assert run_payload["model"] == {
         "key": "nai-4-full",
@@ -300,9 +300,9 @@ def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
             "y_sha256": _sha256_file(y_path),
         },
         "workflow": {
-            "api_path": "data/runs/example/api.json",
+            "api_path": "data/models/example/api.json",
             "api_sha256": run_payload["config_snapshot"]["workflow"]["api_sha256"],
-            "download_path": "data/runs/example/workflow.json",
+            "download_path": "data/models/example/workflow.json",
             "download_sha256": run_payload["config_snapshot"]["workflow"][
                 "download_sha256"
             ],

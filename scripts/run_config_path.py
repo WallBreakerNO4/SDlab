@@ -3,16 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 
 
-DATA_RUNS_DIR = Path("data/runs")
+DATA_MODELS_DIR = Path("data/models")
 DEFAULT_RUN_CONFIG_NAME = "config.yaml"
 
 
-def iter_run_config_files(data_runs_dir: Path = DATA_RUNS_DIR) -> list[Path]:
-    if not data_runs_dir.exists():
+def iter_run_config_files(data_models_dir: Path = DATA_MODELS_DIR) -> list[Path]:
+    if not data_models_dir.exists():
         return []
 
     config_files: list[Path] = []
-    for child in sorted(data_runs_dir.iterdir(), key=lambda path: path.as_posix()):
+    for child in sorted(data_models_dir.iterdir(), key=lambda path: path.as_posix()):
         if not child.is_dir():
             continue
 
@@ -39,7 +39,7 @@ def resolve_run_config_path(config_path: str, *, repo_root: Path) -> Path:
 
 
 __all__ = [
-    "DATA_RUNS_DIR",
+    "DATA_MODELS_DIR",
     "DEFAULT_RUN_CONFIG_NAME",
     "iter_run_config_files",
     "resolve_run_config_path",

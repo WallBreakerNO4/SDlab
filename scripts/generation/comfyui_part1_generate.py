@@ -164,7 +164,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--config",
-        help="Runner YAML 配置文件路径。推荐将 per-run 配置放在 data/runs/ 目录下以便 Git 追踪。",
+        help="Runner YAML 配置文件路径。推荐将 per-run 配置放在 data/models/ 目录下以便 Git 追踪。",
     )
     parser.add_argument("--run-dir")
     parser.add_argument(

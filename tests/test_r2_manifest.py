@@ -30,7 +30,7 @@ def _sample_payload() -> dict[str, object]:
             "assets": {
                 "cover_image": {
                     "path": "/tmp/private/image.jpg",
-                    "repo_relative_path": "data/runs/example/image.jpg",
+                    "repo_relative_path": "data/models/example/image.jpg",
                     "sha256": "a" * 64,
                 }
             },
@@ -39,7 +39,7 @@ def _sample_payload() -> dict[str, object]:
             {
                 "asset_role": "cover",
                 "asset_index": 0,
-                "source_path": "data/runs/example/image.jpg",
+                "source_path": "data/models/example/image.jpg",
                 "variants": [
                     {
                         "variant": "display_webp",
@@ -114,7 +114,7 @@ def test_build_public_manifest_redacts_private_content_and_keys() -> None:
     run_asset_variants = cast(list[dict[str, object]], run_assets[0]["variants"])
     assert len(run_asset_variants) == 1
     assert run_asset_variants[0]["bucket"] == "public"
-    assert run_assets[0]["source_path"] == "data/runs/example/image.jpg"
+    assert run_assets[0]["source_path"] == "data/models/example/image.jpg"
 
     run_json = cast(dict[str, object], public_manifest["run_json"])
     assert "workflow_download_path" not in run_json
@@ -122,7 +122,7 @@ def test_build_public_manifest_redacts_private_content_and_keys() -> None:
     public_assets = cast(dict[str, object], run_json["assets"])
     public_cover = cast(dict[str, object], public_assets["cover_image"])
     assert "path" not in public_cover
-    assert public_cover["repo_relative_path"] == "data/runs/example/image.jpg"
+    assert public_cover["repo_relative_path"] == "data/models/example/image.jpg"
 
     variants = cast(list[dict[str, object]], images[0]["variants"])
     assert len(variants) == 1
@@ -148,19 +148,19 @@ def test_build_public_manifest_preserves_non_jpg_run_asset_extensions() -> None:
     assets = cast(dict[str, object], run_json["assets"])
     cover_image = cast(dict[str, object], assets["cover_image"])
     cover_image["path"] = "/tmp/private/image.png"
-    cover_image["repo_relative_path"] = "data/runs/example/image.png"
+    cover_image["repo_relative_path"] = "data/models/example/image.png"
 
     run_assets = cast(list[dict[str, object]], payload["run_assets"])
-    run_assets[0]["source_path"] = "data/runs/example/image.png"
+    run_assets[0]["source_path"] = "data/models/example/image.png"
 
     public_manifest = build_public_manifest(build_run_manifest(payload))
 
     public_run_assets = cast(list[dict[str, object]], public_manifest["run_assets"])
-    assert public_run_assets[0]["source_path"] == "data/runs/example/image.png"
+    assert public_run_assets[0]["source_path"] == "data/models/example/image.png"
     public_run_json = cast(dict[str, object], public_manifest["run_json"])
     public_assets = cast(dict[str, object], public_run_json["assets"])
     public_cover = cast(dict[str, object], public_assets["cover_image"])
-    assert public_cover["repo_relative_path"] == "data/runs/example/image.png"
+    assert public_cover["repo_relative_path"] == "data/models/example/image.png"
 
 
 def test_manifest_object_key_is_stable_and_contains_required_segments() -> None:

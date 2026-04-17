@@ -14,7 +14,7 @@ from scripts.generation.comfyui_part1_generate import (
 )
 from scripts.r2_upload.upload_images_to_r2 import build_parser as build_upload_parser
 from scripts.r2_upload.upload_runtime import _resolve_default_run_root
-from scripts.run_config_path import DATA_RUNS_DIR, iter_run_config_files
+from scripts.run_config_path import DATA_MODELS_DIR, iter_run_config_files
 
 from .io import MenuIO
 from .registry import ScriptMain, get_entry, load_entrypoint
@@ -115,7 +115,7 @@ def run_menu(io: MenuIO) -> int:
     backend = QuestionaryMenuBackend(io)
     backend.write("")
     backend.write("脚本菜单：生图 / 上传 / 其他")
-    backend.write("生图会先选择 data/runs/ 下的配置；上传会先选择生成结果。")
+    backend.write("生图会先选择 data/models/ 下的配置；上传会先选择生成结果。")
     backend.write("")
 
     try:
@@ -152,13 +152,13 @@ def _load_questionary() -> Any:
 def _handle_generate(backend: QuestionaryMenuBackend) -> None:
     config_files = _list_config_files()
     if not config_files:
-        backend.write("未找到 data/runs/ 下的运行配置。")
+        backend.write("未找到 data/models/ 下的运行配置。")
         return
 
     selected = backend.select(
         "选择运行配置",
         [
-            MenuChoice(path.as_posix(), path.relative_to(DATA_RUNS_DIR).as_posix())
+            MenuChoice(path.as_posix(), path.relative_to(DATA_MODELS_DIR).as_posix())
             for path in config_files
         ],
         allow_back=True,
@@ -441,7 +441,7 @@ def _prompt_upload_advanced_args(backend: QuestionaryMenuBackend) -> list[str]:
 
 
 def _list_config_files() -> list[Path]:
-    return iter_run_config_files(DATA_RUNS_DIR)
+    return iter_run_config_files(DATA_MODELS_DIR)
 
 
 def _list_run_dirs(run_root: Path) -> list[Path]:

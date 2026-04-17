@@ -104,9 +104,9 @@ def _write_minimal_run_json(
         "y_json_sha256": _sha256_file(y_json),
         "config_snapshot": {
             "workflow": {
-                "api_path": "data/runs/example/api.json",
+                "api_path": "data/models/example/api.json",
                 "api_sha256": "wf-hash",
-                "download_path": "data/runs/example/workflow.json",
+                "download_path": "data/models/example/workflow.json",
                 "download_sha256": "download-sha",
                 "ksampler_node_id": None,
             }
