@@ -124,6 +124,40 @@ function clampNumber(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
+function parseLineNumberFromHash(
+  rawHash: string,
+  maxLineNumber: number,
+): number | null {
+  if (typeof rawHash !== "string" || maxLineNumber < 1) {
+    return null;
+  }
+
+  const rawValue = rawHash.startsWith("#") ? rawHash.slice(1) : rawHash;
+  if (rawValue.length === 0) {
+    return null;
+  }
+
+  try {
+    const decodedValue = decodeURIComponent(rawValue).trim();
+    if (!/^\d+$/.test(decodedValue)) {
+      return null;
+    }
+
+    const lineNumber = Number(decodedValue);
+    if (
+      !Number.isSafeInteger(lineNumber) ||
+      lineNumber < 1 ||
+      lineNumber > maxLineNumber
+    ) {
+      return null;
+    }
+
+    return lineNumber;
+  } catch {
+    return null;
+  }
+}
+
 function getScrollAnchorStorageKey(runDir: string): string {
   return `${SCROLL_ANCHOR_STORAGE_PREFIX}${runDir}`;
 }
@@ -568,6 +602,48 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
     rowVirtualizer.measure();
   }, [rowHeight, rowVirtualizer]);
 
+  const scrollToLineNumber = useCallback(
+    (lineNumber: number): boolean => {
+      if (
+        !Number.isSafeInteger(lineNumber) ||
+        lineNumber < 1 ||
+        lineNumber > grid.y_indexes.length
+      ) {
+        return false;
+      }
+
+      rowVirtualizer.scrollToIndex(lineNumber - 1, { align: "start" });
+      return true;
+    },
+    [grid.y_indexes.length, rowVirtualizer],
+  );
+
+  const scrollToHashLine = useCallback(
+    (rawHash: string): boolean => {
+      const lineNumber = parseLineNumberFromHash(
+        rawHash,
+        grid.y_indexes.length,
+      );
+      if (lineNumber === null) {
+        return false;
+      }
+
+      return scrollToLineNumber(lineNumber);
+    },
+    [grid.y_indexes.length, scrollToLineNumber],
+  );
+
+  const syncUrlHashWithLineNumber = useCallback((lineNumber: number) => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const nextHash = encodeURIComponent(String(lineNumber));
+    const nextUrl = `${window.location.pathname}${window.location.search}#${nextHash}`;
+
+    window.history.replaceState(null, "", nextUrl);
+  }, []);
+
   const persistCurrentScrollAnchor = useCallback(() => {
     const scrollElement = scrollElementRef.current;
     if (!scrollElement) return;
@@ -592,6 +668,10 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
     }
 
     didRestoreScrollRef.current = true;
+    if (scrollToHashLine(window.location.hash)) {
+      return;
+    }
+
     const anchor = loadSavedScrollAnchor(runDir);
     if (!anchor) {
       return;
@@ -607,7 +687,26 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
     }
 
     rowVirtualizer.scrollToOffset(targetOffset);
-  }, [grid.y_indexes, rowHeight, rowVirtualizer, runDir, scrollViewportWidth]);
+  }, [
+    grid.y_indexes,
+    rowHeight,
+    rowVirtualizer,
+    runDir,
+    scrollToHashLine,
+    scrollViewportWidth,
+  ]);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      scrollToHashLine(window.location.hash);
+    };
+
+    window.addEventListener("hashchange", handleHashChange);
+
+    return () => {
+      window.removeEventListener("hashchange", handleHashChange);
+    };
+  }, [scrollToHashLine]);
 
   useEffect(() => {
     const element = scrollElementRef.current;
@@ -876,8 +975,8 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                       onSubmit={(e) => {
                         e.preventDefault();
                         const lineNum = parseInt(jumpInputValue, 10);
-                        if (!isNaN(lineNum) && lineNum >= 1 && lineNum <= grid.y_indexes.length) {
-                          rowVirtualizer.scrollToIndex(lineNum - 1, { align: "start" });
+                        if (scrollToLineNumber(lineNum)) {
+                          syncUrlHashWithLineNumber(lineNum);
                           setIsJumpInputOpen(false);
                         } else {
                           toast.error(`行号必须在 1 到 ${grid.y_indexes.length} 之间`);
