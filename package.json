@@ -15,7 +15,7 @@
     "@hugeicons/react": "^1.1.6",
     "@lobehub/icons": "^5.4.0",
     "@supabase/ssr": "^0.8.0",
-    "@supabase/supabase-js": "^2.103.0",
+    "@supabase/supabase-js": "^2.103.3",
     "@tanstack/react-virtual": "^3.13.23",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -51,7 +51,7 @@
     "prettier": "3.8.1",
     "tailwindcss": "^4.2.2",
     "typescript": "^5.9.3",
-    "wrangler": "^4.82.2"
+    "wrangler": "^4.83.0"
   },
   "packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319"
 }
