@@ -346,16 +346,16 @@ function HorizontalScrollList({
 }
 
 type HomePageClientProps = {
-  runs: RunSummary[];
+  models: RunSummary[];
   hasError?: boolean;
 };
 
 export default function HomePageClient({
-  runs,
+  models,
   hasError = false,
 }: HomePageClientProps) {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const isEmpty = runs.length === 0;
+  const isEmpty = models.length === 0;
 
   return (
     <main className="relative h-full w-full flex flex-col items-center selection:bg-primary/20 selection:text-primary overflow-y-auto">
@@ -395,21 +395,21 @@ export default function HomePageClient({
           </p>
         </section>
 
-        {/* Runs Section */}
+        {/* Models Section */}
         <section className="w-full flex flex-col gap-10">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between border-b border-border/40 pb-5 gap-4">
             <div className="space-y-1">
               <h2 className="text-2xl md:text-3xl font-bold tracking-tight">
-                最新对比记录
+                模型目录
               </h2>
               <p className="text-sm text-muted-foreground">
-                浏览最近运行的模型评测与风格网格
+                浏览最近收录的模型评测与风格网格
               </p>
             </div>
             {!isEmpty && (
               <div className="flex items-center gap-3 shrink-0">
                 <span className="text-muted-foreground font-mono text-[10px] tracking-widest uppercase border border-border/40 px-2 py-1 bg-muted/20">
-                  {runs.length} Records Found
+                  {models.length} Models Found
                 </span>
               </div>
             )}
@@ -419,27 +419,30 @@ export default function HomePageClient({
             <Empty className="py-24 border border-dashed border-border/50 bg-background/30 backdrop-blur-sm">
               <EmptyHeader>
                 <EmptyTitle className="text-xl">
-                  {hasError ? "加载失败" : "暂无对比记录"}
+                  {hasError ? "加载失败" : "暂无模型"}
                 </EmptyTitle>
                 <EmptyDescription className="text-sm max-w-sm mx-auto">
                   {hasError
                     ? "请稍后刷新重试，或检查 API 服务状态。"
-                    : "暂无可用 runs 数据，等待后端数据同步。"}
+                    : "暂无可用模型数据，等待后端数据同步。"}
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
           ) : null}
 
-          {runs.length > 0 ? (
+          {models.length > 0 ? (
             <div className="columns-1 md:columns-2 lg:columns-3 gap-8">
-              {runs.map((run, index) => {
-                const modelName = run.model?.name || run.run_dir;
+              {models.map((modelSummary, index) => {
+                const modelName =
+                  modelSummary.model?.name || modelSummary.run_dir;
                 const modelDesc =
-                  run.model?.description?.zh || run.model?.description?.en;
+                  modelSummary.model?.description?.zh ||
+                  modelSummary.model?.description?.en;
 
-                const coverAsset = run.assets?.cover;
+                const coverAsset = modelSummary.assets?.cover;
                 const coverSource = resolvePreferredImageSource(coverAsset);
-                const homepageCards = run.assets?.homepage_cards || [];
+                const homepageCards =
+                  modelSummary.assets?.homepage_cards || [];
 
                 const coverRatio =
                   coverAsset?.width && coverAsset?.height
@@ -448,8 +451,8 @@ export default function HomePageClient({
 
                 return (
                   <Link
-                    key={run.run_dir}
-                    href={`/runs/${encodeURIComponent(run.run_dir)}`}
+                    key={modelSummary.run_dir}
+                    href={`/models/${encodeURIComponent(modelSummary.run_dir)}`}
                     className="group animate-fade-in-up block outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background break-inside-avoid mb-8"
                     style={{
                       animationFillMode: "forwards",

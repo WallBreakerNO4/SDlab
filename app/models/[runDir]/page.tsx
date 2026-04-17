@@ -3,9 +3,9 @@ import { notFound } from "next/navigation";
 import { isValidRunDir } from "@/lib/comfyui-types";
 import { createSupabaseAuthClient } from "@/lib/supabase-auth";
 
-import { RunDetailClientPage } from "./run-detail-client";
+import { ModelDetailClientPage } from "./model-detail-client";
 
-type RunDetailPageProps = {
+type ModelDetailPageProps = {
   params: Promise<{ runDir: string | string[] }>;
 };
 
@@ -17,9 +17,9 @@ function readRunDir(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] ?? "" : value;
 }
 
-export default async function RunDetailPage({
+export default async function ModelDetailPage({
   params,
-}: RunDetailPageProps) {
+}: ModelDetailPageProps) {
   const resolvedParams = await params;
   const runDir = readRunDir(resolvedParams?.runDir);
 
@@ -35,12 +35,12 @@ export default async function RunDetailPage({
     .maybeSingle();
 
   if (error) {
-    throw new Error("Failed to load run detail page");
+    throw new Error("Failed to load model detail page");
   }
 
   if (!data) {
     notFound();
   }
 
-  return <RunDetailClientPage runDir={runDir} />;
+  return <ModelDetailClientPage runDir={runDir} />;
 }

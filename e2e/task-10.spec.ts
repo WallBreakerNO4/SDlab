@@ -13,13 +13,13 @@ test("task 10: placeholder appears before image load", async ({ page }) => {
   // We need a runDir that has images. Let's use the API to find one or just mock it.
   // Wait, we can just intercept the image request and delay it.
   
-  // First, go to the home page to find a runDir
+  // First, go to the home page to find a model entry
   await page.goto("/")
   
-  // Find the first run link
-  const runLink = page.locator("a[href^='/runs/']").first()
-  const runUrl = await runLink.getAttribute("href")
-  if (!runUrl) throw new Error("No run URL found")
+  // Find the first model link
+  const modelLink = page.locator("a[href^='/models/']").first()
+  const modelUrl = await modelLink.getAttribute("href")
+  if (!modelUrl) throw new Error("No model URL found")
   
   // Intercept image requests and delay them
   await page.route("**/api/comfyui/image/**", async (route) => {
@@ -28,8 +28,8 @@ test("task 10: placeholder appears before image load", async ({ page }) => {
     await route.continue()
   })
   
-  // Navigate to the run page
-  await page.goto(runUrl)
+  // Navigate to the model page
+  await page.goto(modelUrl)
   
   // Wait for the grid to load
   await expect(page.getByTestId("run-grid")).toBeVisible()

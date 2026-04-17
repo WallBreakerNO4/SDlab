@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 
-type RunDetailSummary = {
+type ModelDetailSummary = {
   run_id: string;
   created_at: string;
   run_dir: string;
@@ -56,8 +56,8 @@ type RunDetailSummary = {
   } | null;
 };
 
-type RunDetailResponse = {
-  run: RunDetailSummary;
+type ModelDetailResponse = {
+  run: ModelDetailSummary;
   xLabels: string[];
   yLabels: string[];
   x_columns: RunGridXColumn[];
@@ -76,7 +76,7 @@ function isStringArray(value: unknown): value is string[] {
   );
 }
 
-function isRunDetailResponse(value: unknown): value is RunDetailResponse {
+function isModelDetailResponse(value: unknown): value is ModelDetailResponse {
   if (!isRecord(value)) {
     return false;
   }
@@ -170,12 +170,14 @@ function GridSkeleton() {
   );
 }
 
-export function RunDetailClientPage({ runDir }: { runDir: string }) {
+export function ModelDetailClientPage({ runDir }: { runDir: string }) {
   const { user } = useAuth();
   const { showNsfw } = useUserPreferences();
   const [detailLoadState, setDetailLoadState] = useState<LoadState>("loading");
   const [gridLoadState, setGridLoadState] = useState<LoadState>("loading");
-  const [detailData, setDetailData] = useState<RunDetailResponse | null>(null);
+  const [detailData, setDetailData] = useState<ModelDetailResponse | null>(
+    null,
+  );
   const [gridData, setGridData] = useState<RunGridIndexData | null>(null);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
 
@@ -197,7 +199,7 @@ export function RunDetailClientPage({ runDir }: { runDir: string }) {
         if (res.status === 404) throw new Error("not-found");
         if (!res.ok) throw new Error("error");
         const data = await res.json();
-        if (!isRunDetailResponse(data)) throw new Error("error");
+        if (!isModelDetailResponse(data)) throw new Error("error");
         return data;
       });
 
@@ -286,28 +288,28 @@ export function RunDetailClientPage({ runDir }: { runDir: string }) {
         </BreadcrumbList>
       </Breadcrumb>
       {isDetailLoading ? (
-        <div data-testid="run-detail-loading">
+        <div data-testid="model-detail-loading">
           <SummarySkeleton />
         </div>
       ) : null}
 
       {detailLoadState === "not-found" ? (
-        <Empty data-testid="run-not-found">
+        <Empty data-testid="model-not-found">
           <EmptyHeader>
-            <EmptyTitle>未找到 run</EmptyTitle>
+            <EmptyTitle>未找到模型</EmptyTitle>
             <EmptyDescription>
-              这个 run 可能已被删除，或当前会话无权访问。
+              这个模型页可能已被删除，或当前会话无权访问。
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
       ) : null}
 
       {detailLoadState === "error" ? (
-        <Empty data-testid="run-error">
+        <Empty data-testid="model-error">
           <EmptyHeader>
             <EmptyTitle>加载失败</EmptyTitle>
             <EmptyDescription>
-              请求 run 详情失败，请稍后刷新重试。
+              请求模型详情失败，请稍后刷新重试。
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -445,7 +447,7 @@ export function RunDetailClientPage({ runDir }: { runDir: string }) {
             <EmptyHeader>
               <EmptyTitle>暂无网格可展示</EmptyTitle>
               <EmptyDescription>
-                修复 runDir 或请求错误后，此区域将显示完整网格。
+                修复模型标识或请求错误后，此区域将显示完整网格。
               </EmptyDescription>
             </EmptyHeader>
           </Empty>

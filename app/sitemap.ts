@@ -11,22 +11,22 @@ function toLastModified(value: string): Date | undefined {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  let runs: Awaited<ReturnType<typeof listRunSummaries>> = [];
+  let models: Awaited<ReturnType<typeof listRunSummaries>> = [];
 
   try {
-    runs = await listRunSummaries();
+    models = await listRunSummaries();
   } catch {
-    runs = [];
+    models = [];
   }
 
-  const latestRunModified = runs[0]
-    ? toLastModified(runs[0].created_at)
+  const latestModelModified = models[0]
+    ? toLastModified(models[0].created_at)
     : undefined;
 
   const entries: MetadataRoute.Sitemap = [
     {
       url: SITE_ORIGIN,
-      lastModified: latestRunModified,
+      lastModified: latestModelModified,
       changeFrequency: "daily",
       priority: 1,
     },
@@ -37,16 +37,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
   ];
 
-  const seenRunDirs = new Set<string>();
-  for (const run of runs) {
-    if (!isValidRunDir(run.run_dir) || seenRunDirs.has(run.run_dir)) {
+  const seenModelRunDirs = new Set<string>();
+  for (const model of models) {
+    if (
+      !isValidRunDir(model.run_dir) ||
+      seenModelRunDirs.has(model.run_dir)
+    ) {
       continue;
     }
 
-    seenRunDirs.add(run.run_dir);
+    seenModelRunDirs.add(model.run_dir);
     entries.push({
-      url: `${SITE_ORIGIN}/runs/${encodeURIComponent(run.run_dir)}`,
-      lastModified: toLastModified(run.created_at),
+      url: `${SITE_ORIGIN}/models/${encodeURIComponent(model.run_dir)}`,
+      lastModified: toLastModified(model.created_at),
       changeFrequency: "weekly",
       priority: 0.8,
     });

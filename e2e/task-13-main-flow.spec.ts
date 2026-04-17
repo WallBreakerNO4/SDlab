@@ -4,7 +4,7 @@ const hasSupabaseConfig = Boolean(
   process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY,
 );
 
-test.describe("task 13: runs -> detail -> grid -> scroll row lazy load", () => {
+test.describe("task 13: models -> detail -> grid -> scroll row lazy load", () => {
   test.skip(!hasSupabaseConfig, "缺少 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY，跳过数据相关用例");
 
   test("grid renders and scrolling triggers more row requests", async ({ page }) => {
@@ -27,11 +27,11 @@ test.describe("task 13: runs -> detail -> grid -> scroll row lazy load", () => {
 
     await page.goto("/");
 
-    const runLink = page.locator("a[href^='/runs/']").first();
-    await expect(runLink).toBeVisible();
+    const modelLink = page.locator("a[href^='/models/']").first();
+    await expect(modelLink).toBeVisible();
 
-    await runLink.click();
-    await expect(page).toHaveURL(/\/runs\//);
+    await modelLink.click();
+    await expect(page).toHaveURL(/\/models\//);
     await expect(page.getByTestId("run-grid")).toBeVisible();
 
     await expect

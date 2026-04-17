@@ -36,7 +36,7 @@ function buildRowPayload(yIndex: number) {
   };
 }
 
-test.describe("task 13: run detail scroll restoration", () => {
+test.describe("task 13: model detail scroll restoration", () => {
   test("reload keeps the current row in view", async ({ page }) => {
     await page.route(
       new RegExp(`/api/comfyui/run/${MOCK_RUN_DIR}(\\?.*)?$`),
@@ -106,7 +106,7 @@ test.describe("task 13: run detail scroll restoration", () => {
       },
     );
 
-    await page.goto(`/runs/${MOCK_RUN_DIR}`);
+    await page.goto(`/models/${MOCK_RUN_DIR}`);
 
     const grid = page.getByTestId("run-grid");
     const scrollEl = page.getByTestId("run-grid-scroll");
@@ -132,7 +132,7 @@ test.describe("task 13: run detail scroll restoration", () => {
       rowHeight * targetRowIndex + rowHeight / 2,
     );
 
-    const storageKey = `sd-style-lab:run-grid-anchor:${MOCK_RUN_DIR}`;
+    const storageKey = `sd-style-lab:model-grid-anchor:${MOCK_RUN_DIR}`;
     await expect
       .poll(
         () =>

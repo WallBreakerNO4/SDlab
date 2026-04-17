@@ -16,9 +16,9 @@ test.describe("task 13: grid image src uses R2 public URL", () => {
   test("normal column images should not use /api/comfyui/image proxy", async ({ page }) => {
     await page.goto("/");
 
-    const runLink = page.locator("a[href^='/runs/']").first();
-    await expect(runLink).toBeVisible();
-    await runLink.click();
+    const modelLink = page.locator("a[href^='/models/']").first();
+    await expect(modelLink).toBeVisible();
+    await modelLink.click();
 
     await expect(page.getByTestId("run-grid")).toBeVisible();
 

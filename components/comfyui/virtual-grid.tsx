@@ -95,7 +95,7 @@ const CELL_MIN_WIDTH = 184;
 const LEFT_COLUMN_WIDTH = 220;
 const DEV_IMAGE_DOM_CAP_NOTE = 300;
 const SCROLL_ANCHOR_STORAGE_VERSION = 1;
-const SCROLL_ANCHOR_STORAGE_PREFIX = "sd-style-lab:run-grid-anchor:";
+const SCROLL_ANCHOR_STORAGE_PREFIX = "sd-style-lab:model-grid-anchor:";
 const MAX_ROW_OFFSET_RATIO = 0.999999;
 
 const CELL_PADDING_PX = 8;

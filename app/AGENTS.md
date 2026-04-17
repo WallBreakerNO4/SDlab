@@ -2,7 +2,7 @@
 
 ## 概览
 
-- 页面层负责 runs / run detail / auth callback 展示与全站 layout 装配；数据从 Supabase API 读取，图片从 R2 公开 URL 或私有签名 URL 读取。
+- 页面层负责首页模型目录 / 模型详情 / auth callback 展示与全站 layout 装配；数据从 Supabase API 读取，图片从 R2 公开 URL 或私有签名 URL 读取。
 - 术语约定：run 详情页网格里消费的 `display_*` / `thumb_*` 变体叫“展示页缩略图”；run 级 `image.*` 属于封面图，同级 `images/*` 属于主页缩略图集合。当前网页首页已经通过 `/api/comfyui/runs` 消费封面图与主页缩略图字段。
 
 ## 去哪儿看
@@ -10,7 +10,7 @@
 | 场景                | 位置                                             | 备注                                                          |
 | ------------------- | ------------------------------------------------ | ------------------------------------------------------------- |
 | 首页 runs 列表      | `app/page.tsx`                                   | 拉 `/api/comfyui/runs`；消费封面图与主页缩略图字段            |
-| run 详情页          | `app/runs/[runDir]/page.tsx`                     | 并行拉 detail + grid，前端做 type guard，并显示 workflow 下载 |
+| 模型详情页         | `app/models/[runDir]/page.tsx`                   | 并行拉 detail + grid，前端做 type guard，并显示 workflow 下载 |
 | Auth 回调页         | `app/auth/callback/route.ts`                     | OAuth 回跳处理                                                |
 | Auth 局部约定       | `app/auth/AGENTS.md`                             | PKCE session 交换特例                                         |
 | API 总约定          | `app/api/AGENTS.md`                              | `runtime` / 错误响应 / 鉴权边界                               |

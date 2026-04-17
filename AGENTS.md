@@ -56,7 +56,7 @@
 | 资产转换脚本          | `scripts/other/convert_*.py`                                                     | 文件名遗留 `json`，实际输出 YAML 资产                                          |
 | run 配置示例          | `data/runs/example.yaml`                                                         | `image-run-config/v1` 示例                                                     |
 | 网站首页              | `app/page.tsx`                                                                   | 读取 `/api/comfyui/runs`；消费 `assets.cover` / `assets.homepage_cards`        |
-| run 详情页            | `app/runs/[runDir]/page.tsx`                                                     | 并行拉 run + grid，显示 workflow 下载入口                                      |
+| 模型详情页           | `app/models/[runDir]/page.tsx`                                                   | 并行拉 run + grid，显示 workflow 下载入口                                      |
 | App API 总约定        | `app/api/AGENTS.md`                                                              | `app/api/**/route.ts` 共享约束                                                 |
 | ComfyUI API           | `app/api/comfyui/**/route.ts`                                                    | Node runtime + Supabase 查询 + workflow 下载                                   |
 | Auth 回调特例         | `app/auth/AGENTS.md`                                                             | PKCE callback 直接交换 session                                                 |

@@ -11,7 +11,7 @@
 | Playwright 全局配置 | `playwright.config.ts` | baseURL/webServer/outputDir |
 | 冒烟 | `smoke.spec.ts` | 首页可访问 |
 | Supabase 配置校验 | `task-10.spec.ts` | 跳过无 Supabase 环境 |
-| 主流程 | `task-13-main-flow.spec.ts` | runs → detail → grid 完整链路 |
+| 主流程 | `task-13-main-flow.spec.ts` | models → detail → grid 完整链路 |
 | R2 图片源验证 | `task-13-r2-src.spec.ts` | 图片 src 指向 R2 公开/私有 URL |
 
 ## 运行
