@@ -1,7 +1,6 @@
 "use client";
 
 import { useVirtualizer } from "@tanstack/react-virtual";
-
 import {
   useCallback,
   useEffect,
@@ -10,9 +9,15 @@ import {
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  Copy01Icon,
+  Download01Icon,
+  Tick01Icon,
+} from "@hugeicons/core-free-icons";
 
 import { AuthLoginDialog } from "@/components/auth-login-dialog";
-import { Input } from "@/components/ui/input";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,67 +27,41 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { GridImage } from "./grid-image";
+import { Input } from "@/components/ui/input";
+
 import { BlurhashCanvas } from "./blurhash-canvas";
-import { toast } from "sonner";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { Tick01Icon, Copy01Icon, Download01Icon } from "@hugeicons/core-free-icons";
+import { VirtualGridPreviewCell } from "./virtual-grid-preview-cell";
+import { VirtualGridRowLabel } from "./virtual-grid-row-label";
+import {
+  buildScrollAnchor,
+  formatValue,
+  getNonEmptyString,
+  getPreferredAspectRatioFromCache,
+  getXLabel,
+  loadSavedScrollAnchor,
+  normalizeRowPayload,
+  parseDialogImagePayload,
+  parseLineNumberFromHash,
+  resolveScrollOffsetFromAnchor,
+  saveScrollAnchor,
+} from "./virtual-grid-utils";
+import type {
+  BlurhashCell,
+  CachedRow,
+  RowCell,
+  RowMeta,
+  RunGridIndexData,
+  RunGridXColumn,
+  SelectedCellPreview,
+  VariantUrls,
+} from "./virtual-grid-types";
 
-export type VariantUrls = {
-  webp?: string;
-  avif?: string;
-};
-
-type RowMeta = {
-  seed: string | null;
-  prompt_hash: string | null;
-  positive_prompt: string | null;
-  y_value: string | null;
-};
-
-type RowItem = {
-  batch_index: number;
-  category: string | null;
-  width: number | null;
-  height: number | null;
-  blurhash: string | null;
-  meta: RowMeta;
-  thumb: VariantUrls | null;
-};
-
-type RowCell = {
-  x_index: number;
-  y_index: number;
-  items: RowItem[];
-};
-
-type RowPayload = {
-  run_dir: string;
-  y_index: number;
-  cells: RowCell[];
-};
-
-export type RunGridXColumn = {
-  type: string | null;
-  description: Record<string, unknown> | null;
-};
-
-export type BlurhashCell = {
-  x_index: number;
-  y_index: number;
-  batch_index: number;
-  category: string;
-  width: number | null;
-  height: number | null;
-  blurhash: string | null;
-};
-
-export type RunGridIndexData = {
-  x_columns: RunGridXColumn[];
-  y_indexes: number[];
-  y_labels?: string[];
-  blurhash_cells: BlurhashCell[];
-};
+export type {
+  BlurhashCell,
+  RunGridIndexData,
+  RunGridXColumn,
+  VariantUrls,
+} from "./virtual-grid-types";
 
 type VirtualGridProps = {
   runDir: string;
@@ -94,371 +73,7 @@ type VirtualGridProps = {
 const CELL_MIN_WIDTH = 184;
 const LEFT_COLUMN_WIDTH = 220;
 const DEV_IMAGE_DOM_CAP_NOTE = 300;
-const SCROLL_ANCHOR_STORAGE_VERSION = 1;
-const SCROLL_ANCHOR_STORAGE_PREFIX = "sd-style-lab:model-grid-anchor:";
-const MAX_ROW_OFFSET_RATIO = 0.999999;
-
 const CELL_PADDING_PX = 8;
-
-type SavedScrollAnchor = {
-  version: typeof SCROLL_ANCHOR_STORAGE_VERSION;
-  yIndex: number;
-  rowOffsetRatio: number;
-};
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function getNonEmptyString(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function getFiniteNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function clampNumber(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
-
-function parseLineNumberFromHash(
-  rawHash: string,
-  maxLineNumber: number,
-): number | null {
-  if (typeof rawHash !== "string" || maxLineNumber < 1) {
-    return null;
-  }
-
-  const rawValue = rawHash.startsWith("#") ? rawHash.slice(1) : rawHash;
-  if (rawValue.length === 0) {
-    return null;
-  }
-
-  try {
-    const decodedValue = decodeURIComponent(rawValue).trim();
-    if (!/^\d+$/.test(decodedValue)) {
-      return null;
-    }
-
-    const lineNumber = Number(decodedValue);
-    if (
-      !Number.isSafeInteger(lineNumber) ||
-      lineNumber < 1 ||
-      lineNumber > maxLineNumber
-    ) {
-      return null;
-    }
-
-    return lineNumber;
-  } catch {
-    return null;
-  }
-}
-
-function getScrollAnchorStorageKey(runDir: string): string {
-  return `${SCROLL_ANCHOR_STORAGE_PREFIX}${runDir}`;
-}
-
-function parseSavedScrollAnchor(raw: string | null): SavedScrollAnchor | null {
-  if (!raw) return null;
-
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!isRecord(parsed)) return null;
-    const version = getFiniteNumber(parsed.version);
-    const yIndex = getFiniteNumber(parsed.yIndex);
-    const rowOffsetRatio = getFiniteNumber(parsed.rowOffsetRatio);
-    if (
-      version !== SCROLL_ANCHOR_STORAGE_VERSION ||
-      yIndex === null ||
-      yIndex < 0 ||
-      rowOffsetRatio === null
-    ) {
-      return null;
-    }
-
-    return {
-      version: SCROLL_ANCHOR_STORAGE_VERSION,
-      yIndex,
-      rowOffsetRatio: clampNumber(rowOffsetRatio, 0, MAX_ROW_OFFSET_RATIO),
-    };
-  } catch {
-    return null;
-  }
-}
-
-function loadSavedScrollAnchor(runDir: string): SavedScrollAnchor | null {
-  if (typeof window === "undefined" || runDir.trim().length === 0) {
-    return null;
-  }
-
-  try {
-    return parseSavedScrollAnchor(
-      window.sessionStorage.getItem(getScrollAnchorStorageKey(runDir)),
-    );
-  } catch {
-    return null;
-  }
-}
-
-function saveScrollAnchor(runDir: string, anchor: SavedScrollAnchor): void {
-  if (typeof window === "undefined" || runDir.trim().length === 0) {
-    return;
-  }
-
-  try {
-    window.sessionStorage.setItem(
-      getScrollAnchorStorageKey(runDir),
-      JSON.stringify(anchor),
-    );
-  } catch {
-    // Ignore storage failures (private mode / quota / disabled storage).
-  }
-}
-
-function buildScrollAnchor(
-  scrollOffset: number,
-  yIndexes: number[],
-  rowHeight: number,
-): SavedScrollAnchor | null {
-  if (
-    !Number.isFinite(scrollOffset) ||
-    !Number.isFinite(rowHeight) ||
-    rowHeight <= 0 ||
-    yIndexes.length === 0
-  ) {
-    return null;
-  }
-
-  const listIndex = clampNumber(
-    Math.floor(scrollOffset / rowHeight),
-    0,
-    yIndexes.length - 1,
-  );
-  const yIndex = yIndexes[listIndex];
-  if (typeof yIndex !== "number" || !Number.isFinite(yIndex) || yIndex < 0) {
-    return null;
-  }
-
-  const rowOffsetRatio = clampNumber(
-    (scrollOffset - listIndex * rowHeight) / rowHeight,
-    0,
-    MAX_ROW_OFFSET_RATIO,
-  );
-
-  return {
-    version: SCROLL_ANCHOR_STORAGE_VERSION,
-    yIndex,
-    rowOffsetRatio,
-  };
-}
-
-function resolveScrollOffsetFromAnchor(
-  anchor: SavedScrollAnchor,
-  yIndexes: number[],
-  rowHeight: number,
-): number | null {
-  if (!Number.isFinite(rowHeight) || rowHeight <= 0 || yIndexes.length === 0) {
-    return null;
-  }
-
-  let listIndex = yIndexes.indexOf(anchor.yIndex);
-  if (listIndex < 0) {
-    const nextIndex = yIndexes.findIndex((value) => value > anchor.yIndex);
-    listIndex =
-      nextIndex === -1 ? yIndexes.length - 1 : Math.max(0, nextIndex - 1);
-  }
-
-  return listIndex * rowHeight + anchor.rowOffsetRatio * rowHeight;
-}
-
-function getSeedString(value: unknown): string | null {
-  if (
-    typeof value === "number" &&
-    Number.isFinite(value) &&
-    Number.isInteger(value)
-  ) {
-    return String(value);
-  }
-  return getNonEmptyString(value);
-}
-
-function getXLabel(column: RunGridXColumn | null | undefined): string {
-  const raw = column?.description;
-  const zh =
-    raw && typeof raw.zh === "string" ? getNonEmptyString(raw.zh) : null;
-  return zh ?? "";
-}
-
-function pickBestVariants(
-  primary: VariantUrls | null,
-  fallback: VariantUrls | null,
-): VariantUrls | null {
-  const candidate = primary ?? fallback;
-  if (!candidate) return null;
-  const hasWebp =
-    typeof candidate.webp === "string" && candidate.webp.length > 0;
-  const hasAvif =
-    typeof candidate.avif === "string" && candidate.avif.length > 0;
-  if (!hasWebp && !hasAvif) return null;
-  return {
-    webp: hasWebp ? candidate.webp : undefined,
-    avif: hasAvif ? candidate.avif : undefined,
-  };
-}
-
-function getPreferredAspectRatioFromCache(rows: Iterable<CachedRow>): number {
-  for (const row of rows) {
-    if (row.status !== "ready") continue;
-    for (const cell of row.cellsByX.values()) {
-      for (const item of cell.items) {
-        const width = item.width;
-        const height = item.height;
-        if (
-          typeof width === "number" &&
-          typeof height === "number" &&
-          Number.isFinite(width) &&
-          Number.isFinite(height) &&
-          width > 0 &&
-          height > 0
-        ) {
-          return height / width;
-        }
-      }
-    }
-  }
-  return 1;
-}
-
-type SelectedCellPreview = {
-  xIndex: number;
-  yIndex: number;
-  xLabel: string;
-  yLabel: string;
-  seed: string | null;
-  promptHash: string | null;
-  positivePrompt: string;
-  items: Array<{
-    batchIndex: number;
-    width: number | null;
-    height: number | null;
-    thumb: VariantUrls | null;
-    blurhash: string | null;
-  }>;
-};
-
-type CachedRow =
-  | {
-    status: "ready";
-    yIndex: number;
-    yValue: string | null;
-    representativeMeta: RowMeta | null;
-    cellsByX: Map<number, RowCell>;
-  }
-  | {
-    status: "error";
-    yIndex: number;
-    error: string;
-  };
-
-function parseVariantUrls(value: unknown): VariantUrls | null {
-  if (!isRecord(value)) return null;
-  const webp = getNonEmptyString(value.webp);
-  const avif = getNonEmptyString(value.avif);
-  if (!webp && !avif) return null;
-  return {
-    webp: webp ?? undefined,
-    avif: avif ?? undefined,
-  };
-}
-
-function parseRowMeta(value: unknown): RowMeta {
-  if (!isRecord(value)) {
-    return {
-      seed: null,
-      prompt_hash: null,
-      positive_prompt: null,
-      y_value: null,
-    };
-  }
-
-  return {
-    seed: getSeedString(value.seed),
-    prompt_hash: getNonEmptyString(value.prompt_hash),
-    positive_prompt: getNonEmptyString(value.positive_prompt),
-    y_value: getNonEmptyString(value.y_value),
-  };
-}
-
-function normalizeRowPayload(
-  raw: unknown,
-  requestedYIndex: number,
-): RowPayload | null {
-  if (!isRecord(raw)) return null;
-
-  const rawCells = raw.cells;
-  const cells: RowCell[] = Array.isArray(rawCells)
-    ? rawCells
-      .map((cell) => {
-        if (!isRecord(cell)) return null;
-        const xIndex = getFiniteNumber(cell.x_index);
-        const yIndex = getFiniteNumber(cell.y_index);
-        if (xIndex === null || yIndex === null) return null;
-        const itemsRaw = cell.items;
-        const items: RowItem[] = Array.isArray(itemsRaw)
-          ? itemsRaw
-            .map((item) => {
-              if (!isRecord(item)) return null;
-              const batchIndex = getFiniteNumber(item.batch_index);
-              if (batchIndex === null) return null;
-              const meta = parseRowMeta(item.meta);
-              return {
-                batch_index: batchIndex,
-                category: getNonEmptyString(item.category),
-                width: getFiniteNumber(item.width),
-                height: getFiniteNumber(item.height),
-                blurhash: getNonEmptyString(item.blurhash),
-                meta,
-                thumb: parseVariantUrls(item.thumb),
-              };
-            })
-            .filter((v): v is RowItem => v !== null)
-          : [];
-
-        items.sort((a, b) => a.batch_index - b.batch_index);
-        return { x_index: xIndex, y_index: yIndex, items };
-      })
-      .filter((v): v is RowCell => v !== null)
-    : [];
-
-  const yIndexValue = getFiniteNumber(raw.y_index) ?? requestedYIndex;
-  const runDir = getNonEmptyString(raw.run_dir) ?? "";
-
-  return {
-    run_dir: runDir,
-    y_index: yIndexValue,
-    cells,
-  };
-}
-
-function formatValue(value: string | number | null | undefined): string {
-  return value === null || value === undefined || value === ""
-    ? "-"
-    : String(value);
-}
-
-function parseDialogImagePayload(
-  raw: unknown,
-): VariantUrls | null {
-  if (!isRecord(raw) || !("image" in raw)) {
-    return null;
-  }
-
-  return parseVariantUrls(raw.image);
-}
 
 export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
   "use no memo";
@@ -525,12 +140,11 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
 
   const preferredAspectRatio = useMemo(() => {
     void rowCacheVersion;
-    // Try row cache first
     const fromCache = getPreferredAspectRatioFromCache(
       rowCacheRef.current.values(),
     );
     if (fromCache !== 1) return fromCache;
-    // Fall back to pre-loaded blurhash cells for instant aspect ratio
+
     for (const cell of blurhashMap.values()) {
       const w = cell.width;
       const h = cell.height;
@@ -601,10 +215,10 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
     currentDisplayVariants?.webp ?? currentDisplayVariants?.avif ?? null;
   const sizeText =
     currentItem &&
-      typeof currentItem.width === "number" &&
-      typeof currentItem.height === "number" &&
-      Number.isFinite(currentItem.width) &&
-      Number.isFinite(currentItem.height)
+    typeof currentItem.width === "number" &&
+    typeof currentItem.height === "number" &&
+    Number.isFinite(currentItem.width) &&
+    Number.isFinite(currentItem.height)
       ? `${currentItem.width}×${currentItem.height}`
       : "-";
 
@@ -715,10 +329,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
 
   const scrollToHashLine = useCallback(
     (rawHash: string): boolean => {
-      const lineNumber = parseLineNumberFromHash(
-        rawHash,
-        grid.y_indexes.length,
-      );
+      const lineNumber = parseLineNumberFromHash(rawHash, grid.y_indexes.length);
       if (lineNumber === null) {
         return false;
       }
@@ -865,7 +476,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
             yIndex,
             error: "not-found",
           });
-          setRowCacheVersion((v) => v + 1);
+          setRowCacheVersion((value) => value + 1);
           return;
         }
 
@@ -875,7 +486,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
             yIndex,
             error: `http-${response.status}`,
           });
-          setRowCacheVersion((v) => v + 1);
+          setRowCacheVersion((value) => value + 1);
           return;
         }
 
@@ -887,7 +498,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
             yIndex,
             error: "invalid-payload",
           });
-          setRowCacheVersion((v) => v + 1);
+          setRowCacheVersion((value) => value + 1);
           return;
         }
 
@@ -911,7 +522,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
           representativeMeta,
           cellsByX,
         });
-        setRowCacheVersion((v) => v + 1);
+        setRowCacheVersion((value) => value + 1);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
           return;
@@ -922,7 +533,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
           yIndex,
           error: "fetch-failed",
         });
-        setRowCacheVersion((v) => v + 1);
+        setRowCacheVersion((value) => value + 1);
       } finally {
         rowRequestsRef.current.delete(yIndex);
       }
@@ -958,14 +569,13 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
       yLabel: string,
       preloadedBlurhash: string | null,
     ) => {
-      const items = cell.items
-        .map((item) => ({
-          batchIndex: item.batch_index,
-          width: item.width,
-          height: item.height,
-          thumb: item.thumb,
-          blurhash: item.blurhash ?? preloadedBlurhash,
-        }));
+      const items = cell.items.map((item) => ({
+        batchIndex: item.batch_index,
+        width: item.width,
+        height: item.height,
+        thumb: item.thumb,
+        blurhash: item.blurhash ?? preloadedBlurhash,
+      }));
 
       const representative = cell.items[0]?.meta ?? null;
       const positivePrompt = representative?.positive_prompt;
@@ -1126,8 +736,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
             style={{ height: rowVirtualizer.getTotalSize() }}
           >
             {virtualRows.map((virtualRow) => {
-              const yIndex =
-                grid.y_indexes[virtualRow.index] ?? virtualRow.index;
+              const yIndex = grid.y_indexes[virtualRow.index] ?? virtualRow.index;
               const cachedRow = rowCacheRef.current.get(yIndex);
               const preloadedYLabel = grid.y_labels?.[virtualRow.index] ?? "";
               const yLabel =
@@ -1147,231 +756,34 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                   }}
                 >
                   <div className="grid h-full" style={{ gridTemplateColumns }}>
-                    <div
-                      className="bg-background/95 sticky left-0 z-20 flex h-full w-full border-r border-border/40 px-3 py-2 text-xs backdrop-blur supports-backdrop-filter:bg-background/80 overflow-hidden"
-                      data-testid="run-grid-y-label"
-                    >
-                      <div className="flex flex-col items-start justify-between w-full h-full gap-1 relative group/y-label">
-                        <div className="flex-1 w-full overflow-hidden">
-                          {(() => {
-                            const labelText =
-                              cachedRow && cachedRow.status === "ready"
-                                ? ((cachedRow.yValue ?? preloadedYLabel) || "-")
-                                : cachedRow && cachedRow.status === "error"
-                                  ? (preloadedYLabel || "加载失败")
-                                  : yLabel;
-
-                            if (!labelText || labelText === "-") {
-                              return (
-                                <span className="text-muted-foreground/50 text-[10px]">
-                                  -
-                                </span>
-                              );
-                            }
-
-                            if (labelText.includes(",")) {
-                              const parts = labelText
-                                .split(",")
-                                .map((p) => p.trim())
-                                .filter(Boolean);
-                              return (
-                                <div
-                                  className="flex flex-wrap gap-1 content-start max-h-full cursor-pointer hover:opacity-80 transition-opacity"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    void copyRowLabel(labelText);
-                                  }}
-                                  title="点击复制"
-                                >
-                                  {parts.map((part, i) => {
-                                    let weight = 1;
-                                    const match = part.match(/:([0-9.]+)[)\]}]*$/);
-                                    if (match) {
-                                      const w = parseFloat(match[1]);
-                                      if (!isNaN(w)) {
-                                        weight = w;
-                                      }
-                                    }
-
-                                    if (weight === 1) {
-                                      return (
-                                        <span
-                                          key={i}
-                                          className="inline-block border bg-muted/60 text-muted-foreground border-border/50 rounded px-1.5 py-0.5 text-[10px] font-mono leading-none truncate max-w-full transition-all"
-                                        >
-                                          {part}
-                                        </span>
-                                      );
-                                    }
-
-                                    if (weight < 1) {
-                                      const opacity = Math.max(0.3, weight);
-                                      return (
-                                        <span
-                                          key={i}
-                                          className="inline-block border bg-muted/30 text-muted-foreground border-border/20 rounded px-1.5 py-0.5 text-[10px] font-mono leading-none truncate max-w-full transition-all"
-                                          style={{ opacity }}
-                                        >
-                                          {part}
-                                        </span>
-                                      );
-                                    }
-
-                                    // weight > 1
-                                    const ratio = Math.min(Math.max((weight - 1) / 1, 0), 1);
-                                    // Hue from 220 (blue) down to 0 (red)
-                                    const hue = Math.round(220 - 220 * ratio);
-                                    // Smoothly increase font weight from 400 to 800+
-                                    const fontWeight = Math.min(Math.round(400 + (weight - 1) * 400), 900);
-
-                                    const style = {
-                                      "--weight-hue": hue,
-                                      fontWeight
-                                    } as React.CSSProperties;
-
-                                    return (
-                                      <span
-                                        key={i}
-                                        className="inline-block border rounded px-1.5 py-0.5 text-[10px] font-mono leading-none truncate max-w-full transition-all bg-[hsla(var(--weight-hue),80%,50%,0.15)] border-[hsla(var(--weight-hue),80%,50%,0.3)] text-[hsl(var(--weight-hue),80%,40%)] dark:text-[hsl(var(--weight-hue),80%,65%)]"
-                                        style={style}
-                                      >
-                                        {part}
-                                      </span>
-                                    );
-                                  })}
-                                </div>
-                              );
-                            }
-
-                            return (
-                              <p
-                                className="text-muted-foreground text-[10px] leading-relaxed wrap-break-word w-full cursor-pointer hover:opacity-80 transition-opacity"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  void copyRowLabel(labelText);
-                                }}
-                                title="点击复制"
-                              >
-                                {labelText}
-                              </p>
-                            );
-                          })()}
-                        </div>
-                        <div className="absolute bottom-4 left-0 right-0 h-8 bg-linear-to-t from-background/95 to-transparent pointer-events-none" />
-                        <div className="absolute -bottom-1 -right-1 text-[10px] font-mono text-muted-foreground/30 select-none pointer-events-none">
-                          #{virtualRow.index + 1}
-                        </div>
-                      </div>
-                    </div>
+                    <VirtualGridRowLabel
+                      cachedRow={cachedRow}
+                      preloadedYLabel={preloadedYLabel}
+                      yLabel={yLabel}
+                      virtualRowIndex={virtualRow.index}
+                      onCopyRowLabel={copyRowLabel}
+                    />
 
                     {xHeaders.map((header, xIndex) => {
                       const xLabel = header.label;
                       const xKey = header.key;
                       const rowEntry = rowCacheRef.current.get(yIndex);
-                      const rowCell =
-                        rowEntry && rowEntry.status === "ready"
-                          ? (rowEntry.cellsByX.get(xIndex) ?? null)
-                          : null;
-
-                      const representativeItem = rowCell?.items[0] ?? null;
-                      const thumbVariants = representativeItem
-                        ? pickBestVariants(representativeItem.thumb, null)
-                        : null;
-
-                      // Always use pre-loaded blurhash from the grid-level map as the
-                      // primary source — it's available before any row API call completes.
-                      // Fall back to the row-level data only if the map has no entry.
-                      const preloadedCell = blurhashMap.get(
-                        `${xIndex}:${yIndex}`,
-                      );
-                      const effectiveBlurhash =
-                        preloadedCell?.blurhash ??
-                        representativeItem?.blurhash ??
-                        null;
-                      const effectiveCategory =
-                        preloadedCell?.category ??
-                        representativeItem?.category ??
-                        null;
-
-                      const canOpenDialog =
-                        !!rowCell && rowCell.items.length > 0;
-                      const isLocked =
-                        !user &&
-                        effectiveCategory !== null &&
-                        effectiveCategory !== "normal";
-
-                      const hasBlurhash = !!effectiveBlurhash;
-                      // Show the image component whenever we have real thumbs OR a blurhash
-                      // (locked or not, row loaded or not).
-                      const showImage = !!thumbVariants || hasBlurhash;
-
-                      const placeholderLabel =
-                        rowEntry && rowEntry.status === "error"
-                          ? "加载失败"
-                          : rowEntry
-                            ? "缺失"
-                            : "加载中";
-
-                      const previewNode = showImage ? (
-                        <div
-                          className="w-full rounded border border-border/40 overflow-hidden relative"
-                          style={{ height: previewHeight }}
-                        >
-                          <div className="w-full h-full transition-transform duration-500 ease-out group-hover/cell:scale-[1.03]">
-                            <GridImage
-                              thumbVariants={thumbVariants}
-                              blurhash={effectiveBlurhash}
-                              alt={
-                                yLabel && xLabel
-                                  ? `${yLabel} × ${xLabel}`
-                                  : yLabel || xLabel || "图片预览"
-                              }
-                              locked={isLocked}
-                              onLockedClick={() => setLoginDialogOpen(true)}
-                            />
-                          </div>
-                          <div className="absolute inset-0 bg-foreground/0 transition-colors duration-300 pointer-events-none group-hover/cell:bg-foreground/5" />
-                        </div>
-                      ) : (
-                        <div
-                          className="bg-muted/40 text-muted-foreground flex items-center justify-center rounded border border-border/40 border-dashed text-[10px] font-medium"
-                          data-testid="run-grid-placeholder"
-                          style={{ height: previewHeight }}
-                        >
-                          {placeholderLabel}
-                        </div>
-                      );
 
                       return (
-                        <div
+                        <VirtualGridPreviewCell
                           key={`${xKey}-${yIndex}`}
-                          className="flex h-full flex-col border-r border-border/40 p-2 transition-colors hover:bg-muted/20 group/cell"
-                        >
-                          {canOpenDialog && !isLocked ? (
-                            <button
-                              type="button"
-                              aria-label="打开单元格预览"
-                              className="focus-visible:ring-ring rounded text-left focus-visible:outline-none focus-visible:ring-2"
-                              onClick={() => {
-                                if (!rowCell) return;
-                                openCellDialog(
-                                  rowCell,
-                                  xIndex,
-                                  yIndex,
-                                  xLabel,
-                                  yLabel,
-                                  effectiveBlurhash,
-                                );
-                              }}
-                            >
-                              {previewNode}
-                            </button>
-                          ) : (
-                            previewNode
-                          )}
-                        </div>
+                          xKey={xKey}
+                          xIndex={xIndex}
+                          xLabel={xLabel}
+                          yIndex={yIndex}
+                          yLabel={yLabel}
+                          rowEntry={rowEntry}
+                          blurhashMap={blurhashMap}
+                          previewHeight={previewHeight}
+                          isAuthenticated={!!user}
+                          onRequireLogin={() => setLoginDialogOpen(true)}
+                          onOpenCellDialog={openCellDialog}
+                        />
                       );
                     })}
                   </div>
@@ -1401,12 +813,18 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                   <BlurhashCanvas
                     blurhash={currentItem.blurhash}
                     width={(() => {
-                      const ratio = (currentItem.width ?? 1) / (currentItem.height ?? 1);
-                      return ratio > 1 ? 32 : Math.max(1, Math.round(32 * ratio));
+                      const ratio =
+                        (currentItem.width ?? 1) / (currentItem.height ?? 1);
+                      return ratio > 1
+                        ? 32
+                        : Math.max(1, Math.round(32 * ratio));
                     })()}
                     height={(() => {
-                      const ratio = (currentItem.width ?? 1) / (currentItem.height ?? 1);
-                      return ratio > 1 ? Math.max(1, Math.round(32 / ratio)) : 32;
+                      const ratio =
+                        (currentItem.width ?? 1) / (currentItem.height ?? 1);
+                      return ratio > 1
+                        ? Math.max(1, Math.round(32 / ratio))
+                        : 32;
                     })()}
                     className={`absolute inset-0 m-auto h-full w-full object-contain blur-md transition-opacity duration-500 ${isDialogImageLoaded ? "opacity-0" : "opacity-100"}`}
                   />
@@ -1427,11 +845,10 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                     ) : null}
                     <img
                       alt={
-                        selectedCell &&
-                          (selectedCell.yLabel || selectedCell.xLabel)
+                        selectedCell && (selectedCell.yLabel || selectedCell.xLabel)
                           ? [selectedCell.yLabel, selectedCell.xLabel]
-                            .filter(Boolean)
-                            .join(" × ")
+                              .filter(Boolean)
+                              .join(" × ")
                           : "cell preview"
                       }
                       className={`h-full w-full object-contain transition-opacity duration-500 pointer-events-auto ${isDialogImageLoaded ? "opacity-100" : "opacity-0"}`}
@@ -1553,13 +970,19 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                 {currentDownloadUrl ? (
                   <Button asChild className="w-full" size="sm">
                     <a href={currentDownloadUrl} download>
-                      <HugeiconsIcon icon={Download01Icon} className="mr-2 h-4 w-4" />
+                      <HugeiconsIcon
+                        icon={Download01Icon}
+                        className="mr-2 h-4 w-4"
+                      />
                       下载图片
                     </a>
                   </Button>
                 ) : (
                   <Button className="w-full" size="sm" disabled>
-                    <HugeiconsIcon icon={Download01Icon} className="mr-2 h-4 w-4" />
+                    <HugeiconsIcon
+                      icon={Download01Icon}
+                      className="mr-2 h-4 w-4"
+                    />
                     下载图片
                   </Button>
                 )}
