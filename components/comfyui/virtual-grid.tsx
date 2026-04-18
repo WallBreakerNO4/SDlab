@@ -459,6 +459,8 @@ function parseDialogImagePayload(
 }
 
 export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
+  "use no memo";
+
   const scrollElementRef = useRef<HTMLDivElement | null>(null);
   const didRestoreScrollRef = useRef(false);
   const dialogImageRequestRef = useRef<AbortController | null>(null);
@@ -568,7 +570,9 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
   }, [previewHeight]);
 
   // TanStack Virtual's hook returns functions that React Compiler can't memoize safely.
-  // We intentionally keep virtualization here for performance.
+  // React will already skip compiling this path; keep the warning suppressed locally
+  // so lint can still enforce the rest of the file.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const rowVirtualizer = useVirtualizer({
     count: grid.y_indexes.length,
     getScrollElement: () => scrollElementRef.current,
