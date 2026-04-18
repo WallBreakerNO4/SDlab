@@ -19,6 +19,23 @@ const eslintConfig = defineConfig([
     "types/routes.d.ts",
     "types/validator.ts",
   ]),
+  // Extracted hooks from virtual-grid.tsx inherit the same patterns that were
+  // originally covered by "use no memo" in that file. The React Compiler ESLint
+  // rules for refs-in-render and setState-in-effect flag these intentional
+  // patterns; suppress them for these modules since the patterns are documented
+  // and tested in the parent component.
+  {
+    files: ["components/comfyui/use-virtual-grid-layout.ts"],
+    rules: {
+      "react-hooks/refs": "off",
+    },
+  },
+  {
+    files: ["components/comfyui/virtual-grid-cell-dialog.tsx"],
+    rules: {
+      "react-hooks/set-state-in-effect": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;
