@@ -35,7 +35,6 @@ type RowItem = {
   blurhash: string | null;
   meta: RowMeta;
   thumb: VariantUrls | null;
-  display: VariantUrls | null;
 };
 
 type RowCell = {
@@ -142,7 +141,7 @@ export async function GET(
     const { data: imagesData, error: imagesError } = await supabase
       .from("run_grid_items")
       .select(
-        "run_dir,x_index,y_index,batch_index,category,width,height,blurhash,seed,prompt_hash,positive_prompt,y_value,thumb_webp_bucket,thumb_webp_r2_key,thumb_avif_bucket,thumb_avif_r2_key,display_webp_bucket,display_webp_r2_key,display_avif_bucket,display_avif_r2_key",
+        "run_dir,x_index,y_index,batch_index,category,width,height,blurhash,seed,prompt_hash,positive_prompt,y_value,thumb_webp_bucket,thumb_webp_r2_key,thumb_avif_bucket,thumb_avif_r2_key",
       )
       .eq("run_dir", runDir)
       .eq("y_index", yIndex)
@@ -185,7 +184,6 @@ export async function GET(
       const meta = buildMeta(image);
 
       const thumb: VariantUrls = {};
-      const display: VariantUrls = {};
 
       const thumbWebp = nullableUrl(
         image.thumb_webp_bucket,
@@ -195,19 +193,9 @@ export async function GET(
         image.thumb_avif_bucket,
         image.thumb_avif_r2_key,
       );
-      const displayWebp = nullableUrl(
-        image.display_webp_bucket,
-        image.display_webp_r2_key,
-      );
-      const displayAvif = nullableUrl(
-        image.display_avif_bucket,
-        image.display_avif_r2_key,
-      );
 
       if (thumbWebp) thumb.webp = thumbWebp;
       if (thumbAvif) thumb.avif = thumbAvif;
-      if (displayWebp) display.webp = displayWebp;
-      if (displayAvif) display.avif = displayAvif;
 
       const item: RowItem = {
         batch_index: image.batch_index,
@@ -217,7 +205,6 @@ export async function GET(
         blurhash: image.blurhash,
         meta,
         thumb: Object.keys(thumb).length > 0 ? thumb : null,
-        display: Object.keys(display).length > 0 ? display : null,
       };
 
       const remappedXIndex = visibleColumns.remapOriginalXIndex(image.x_index);

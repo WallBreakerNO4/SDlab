@@ -47,7 +47,6 @@ type RowItem = {
   blurhash: string | null;
   meta: RowMeta;
   thumb: VariantUrls | null;
-  display: VariantUrls | null;
 };
 
 type RowCell = {
@@ -346,7 +345,6 @@ type SelectedCellPreview = {
     width: number | null;
     height: number | null;
     thumb: VariantUrls | null;
-    display: VariantUrls | null;
   }>;
 };
 
@@ -423,7 +421,6 @@ function normalizeRowPayload(
                 blurhash: getNonEmptyString(item.blurhash),
                 meta,
                 thumb: parseVariantUrls(item.thumb),
-                display: parseVariantUrls(item.display),
               };
             })
             .filter((v): v is RowItem => v !== null)
@@ -451,9 +448,20 @@ function formatValue(value: string | number | null | undefined): string {
     : String(value);
 }
 
+function parseDialogImagePayload(
+  raw: unknown,
+): VariantUrls | null {
+  if (!isRecord(raw) || !("image" in raw)) {
+    return null;
+  }
+
+  return parseVariantUrls(raw.image);
+}
+
 export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
   const scrollElementRef = useRef<HTMLDivElement | null>(null);
   const didRestoreScrollRef = useRef(false);
+  const dialogImageRequestRef = useRef<AbortController | null>(null);
   const [scrollViewportWidth, setScrollViewportWidth] = useState<number | null>(
     null,
   );
@@ -465,6 +473,8 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
   const [copiedField, setCopiedField] = useState<"prompt" | "seed" | null>(
     null,
   );
+  const [dialogImageVariants, setDialogImageVariants] =
+    useState<VariantUrls | null>(null);
   const rowCacheRef = useRef<Map<number, CachedRow>>(new Map());
   const rowRequestsRef = useRef<Map<number, AbortController>>(new Map());
   const [rowCacheVersion, setRowCacheVersion] = useState(0);
@@ -575,10 +585,11 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
   const isDevEnv = process.env.NODE_ENV !== "production";
   const totalImages = selectedCell?.items.length ?? 0;
   const currentItem = selectedCell?.items[currentImageIndex] ?? null;
-  const currentDisplayVariants = useMemo(() => {
-    if (!currentItem) return null;
-    return pickBestVariants(currentItem.display, currentItem.thumb);
-  }, [currentItem]);
+  const selectedXIndex = selectedCell?.xIndex ?? null;
+  const selectedYIndex = selectedCell?.yIndex ?? null;
+  const currentBatchIndex = currentItem?.batchIndex ?? null;
+  const currentUserId = user?.id ?? null;
+  const currentDisplayVariants = dialogImageVariants;
   const currentDownloadUrl =
     currentDisplayVariants?.webp ?? currentDisplayVariants?.avif ?? null;
   const sizeText =
@@ -592,10 +603,85 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
 
   useEffect(() => {
     if (!dialogOpen) {
+      dialogImageRequestRef.current?.abort();
+      dialogImageRequestRef.current = null;
       setCopiedField(null);
       setCurrentImageIndex(0);
+      setDialogImageVariants(null);
     }
   }, [dialogOpen]);
+
+  useEffect(() => {
+    return () => {
+      dialogImageRequestRef.current?.abort();
+      dialogImageRequestRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (
+      !dialogOpen ||
+      selectedXIndex === null ||
+      selectedYIndex === null ||
+      currentBatchIndex === null
+    ) {
+      return;
+    }
+
+    let ignore = false;
+    dialogImageRequestRef.current?.abort();
+    setDialogImageVariants(null);
+
+    const controller = new AbortController();
+    dialogImageRequestRef.current = controller;
+
+    async function loadDialogImage() {
+      try {
+        const response = await fetch(
+          `/api/comfyui/run/${encodeURIComponent(runDir)}/display?x_index=${encodeURIComponent(String(selectedXIndex))}&y_index=${encodeURIComponent(String(selectedYIndex))}&batch_index=${encodeURIComponent(String(currentBatchIndex))}`,
+          {
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        );
+
+        if (!response.ok) {
+          return;
+        }
+
+        const raw: unknown = await response.json();
+        const image = parseDialogImagePayload(raw);
+        if (!ignore && image) {
+          setDialogImageVariants(image);
+        }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+      } finally {
+        if (dialogImageRequestRef.current === controller) {
+          dialogImageRequestRef.current = null;
+        }
+      }
+    }
+
+    void loadDialogImage();
+
+    return () => {
+      ignore = true;
+      controller.abort();
+      if (dialogImageRequestRef.current === controller) {
+        dialogImageRequestRef.current = null;
+      }
+    };
+  }, [
+    currentBatchIndex,
+    currentUserId,
+    dialogOpen,
+    runDir,
+    selectedXIndex,
+    selectedYIndex,
+  ]);
 
   useEffect(() => {
     void rowHeight;
@@ -868,9 +954,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
           width: item.width,
           height: item.height,
           thumb: item.thumb,
-          display: item.display,
-        }))
-        .filter((item) => item.thumb !== null || item.display !== null);
+        }));
 
       const representative = cell.items[0]?.meta ?? null;
       const positivePrompt = representative?.positive_prompt;
@@ -887,6 +971,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
         positivePrompt: positivePrompt ?? "（无 positive prompt）",
         items,
       });
+      setDialogImageVariants(null);
       setCurrentImageIndex(0);
       setDialogOpen(true);
     },
@@ -918,24 +1003,22 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
   }, []);
 
   const showPreviousImage = useCallback(() => {
-    setCurrentImageIndex((index) => {
-      if (index <= 0) {
-        return 0;
-      }
+    if (currentImageIndex <= 0) {
+      return;
+    }
 
-      return index - 1;
-    });
-  }, []);
+    setDialogImageVariants(null);
+    setCurrentImageIndex((index) => Math.max(0, index - 1));
+  }, [currentImageIndex]);
 
   const showNextImage = useCallback(() => {
-    setCurrentImageIndex((index) => {
-      if (!selectedCell || index >= selectedCell.items.length - 1) {
-        return index;
-      }
+    if (!selectedCell || currentImageIndex >= selectedCell.items.length - 1) {
+      return;
+    }
 
-      return index + 1;
-    });
-  }, [selectedCell]);
+    setDialogImageVariants(null);
+    setCurrentImageIndex((index) => index + 1);
+  }, [currentImageIndex, selectedCell]);
 
   return (
     <div
@@ -1183,10 +1266,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
 
                       const representativeItem = rowCell?.items[0] ?? null;
                       const thumbVariants = representativeItem
-                        ? pickBestVariants(
-                          representativeItem.thumb,
-                          representativeItem.display,
-                        )
+                        ? pickBestVariants(representativeItem.thumb, null)
                         : null;
 
                       // Always use pre-loaded blurhash from the grid-level map as the
@@ -1304,8 +1384,8 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
 
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
             <div className="space-y-2">
-              {currentDownloadUrl ? (
-                <div className="bg-muted/20 h-[62vh] w-full rounded-sm border">
+              <div className="h-[62vh] w-full rounded-sm border bg-black overflow-hidden">
+                {currentDownloadUrl ? (
                   <picture>
                     {currentDisplayVariants?.avif ? (
                       <source
@@ -1333,12 +1413,8 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                       src={currentDownloadUrl}
                     />
                   </picture>
-                </div>
-              ) : (
-                <div className="bg-muted/30 text-muted-foreground flex min-h-64 items-center justify-center rounded border border-dashed text-xs">
-                  当前单元格无可用图片
-                </div>
-              )}
+                ) : null}
+              </div>
 
               {totalImages > 1 ? (
                 <div className="flex items-center justify-between gap-2">

@@ -19,7 +19,7 @@
 - 性能：大网格必须虚拟化渲染（只渲染可视行/列）；避免一次性 render 全量 cell。
 - 图片源：R2 公开 URL 优先；私有图片使用 `privateObjectUrl()` 生成的短期签名 URL。URL 构建使用 `lib/r2-url.ts`。
 - Blurhash：图片未加载时展示 blurhash canvas 占位；加载完成后平滑切换到真实图片。
-- 多图：预览数据来自 `/row` 返回的 `items[].thumb` / `display`；展示时优先选可用 display/thumb 变体。这些变体在文档中统一称为“展示页缩略图”。
+- 多图：表格缩略图数据来自 `/row` 返回的 `items[].thumb`；弹窗大图通过 `/display` 按需获取 fresh URL，只认 display 变体，不做 thumb 回退，也不要在 row 预取阶段缓存 display 签名。
 - 状态：组件层核心是 row cache 的 `ready/error` 与图片加载中的占位态；缺失 cell 也要能渲染 blurhash 或空态。
 - UI primitives：按钮/对话框等交互来自 `components/ui/*`，不要在业务组件里手写 primitives。
 

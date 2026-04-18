@@ -12,7 +12,8 @@
 | runs 列表      | `runs/route.ts`                  | 读取 `run_list_items` projection 并收敛 summary           |
 | run 详情       | `run/[runDir]/route.ts`          | 返回 run 基础信息 + x/y labels + `x_columns`/`y_indexes`  |
 | grid 索引      | `run/[runDir]/grid/route.ts`     | 返回 `blurhash_cells`，按页规避 PostgREST `max_rows`      |
-| row 级图片查询 | `run/[runDir]/row/route.ts`      | 返回每个 cell 的展示页缩略图 URL（display/thumb）         |
+| row 级图片查询 | `run/[runDir]/row/route.ts`      | 返回每个 cell 的缩略图 URL（thumb）与元数据              |
+| 大图按需签名   | `run/[runDir]/display/route.ts`  | 点击弹窗时按 item 返回 fresh 的 display URL              |
 | workflow 下载  | `run/[runDir]/workflow/route.ts` | 校验 workflow artifact key 后从 R2_PUBLIC_BUCKET 流式返回 |
 
 ## 约定（本目录特有）
@@ -23,7 +24,8 @@
 - `runDir` 入口先用 `isValidRunDir()` 判形态；非法值直接 404，不继续查库。
 - 对外 payload 只保留前端渲染需要的字段；不要透传原始 `run_json` / `metadata` 大对象。
 - `grid/route.ts` 读取 `run_grid_cells` projection；若结果较多仍需分页拉取，避免撞 PostgREST 默认 `max_rows`。
-- `row/route.ts` 读取 `run_grid_items` projection，并把其中预整形的展示页缩略图 key 映射成 URL；公开/私有 URL 都通过 `lib/r2-url.ts`。
+- `row/route.ts` 读取 `run_grid_items` projection，并把其中 thumb 变体 key 映射成 URL；公开/私有 URL 都通过 `lib/r2-url.ts`。
+- `display/route.ts` 用于弹窗大图的按需签名；只返回 display 变体，不做 thumb 回退，也不要在滚动预取阶段生成 display 的私有签名 URL。
 - `runs/route.ts` 当前除基础字段外，还会返回首页列表所需的 `model`、`assets.cover` 与 `assets.homepage_cards`；这些字段用于首页封面图和主页缩略图展示。
 - `workflow/route.ts` 先从 `runs.workflow_download_r2_key` 取 key，再验证它必须落在 `runs/{runDir}/artifacts/workflow/*.json`，随后通过 `getCloudflareContext().env.R2_PUBLIC_BUCKET` 回源并保留对象 metadata。
 - `catch` 分支只返回固定短文案，避免暴露数据库、路径、环境细节。
