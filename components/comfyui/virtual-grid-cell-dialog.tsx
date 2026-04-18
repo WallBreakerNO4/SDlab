@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
 import { BlurhashCanvas } from "./blurhash-canvas";
@@ -70,10 +71,10 @@ export function VirtualGridCellDialog({
       : "cell preview";
   const sizeText =
     currentItem &&
-    typeof currentItem.width === "number" &&
-    typeof currentItem.height === "number" &&
-    Number.isFinite(currentItem.width) &&
-    Number.isFinite(currentItem.height)
+      typeof currentItem.width === "number" &&
+      typeof currentItem.height === "number" &&
+      Number.isFinite(currentItem.width) &&
+      Number.isFinite(currentItem.height)
       ? `${currentItem.width}×${currentItem.height}`
       : "-";
 
@@ -291,6 +292,12 @@ export function VirtualGridCellDialog({
                     onLoad={() => setIsDialogImageLoaded(true)}
                   />
                 </picture>
+              ) : null}
+              {!isDialogImageLoaded ? (
+                <div className="absolute right-3 bottom-3 z-10 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 text-xs text-white backdrop-blur-md pointer-events-none transition-opacity duration-300">
+                  <Spinner className="h-3 w-3" />
+                  <span>加载中...</span>
+                </div>
               ) : null}
             </div>
 

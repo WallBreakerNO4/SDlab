@@ -95,7 +95,9 @@ test.describe("task 13: dialog display image loads on demand", () => {
       /opacity-0/,
     );
 
-    releaseDisplayRequest?.();
+    if (releaseDisplayRequest) {
+      (releaseDisplayRequest as () => void)();
+    }
 
     await expect(dialog.getByTestId("cell-dialog-display-image")).toHaveClass(
       /opacity-100/,
