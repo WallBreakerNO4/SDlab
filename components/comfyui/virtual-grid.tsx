@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { GridImage } from "./grid-image";
+import { BlurhashCanvas } from "./blurhash-canvas";
 import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Tick01Icon, Copy01Icon, Download01Icon } from "@hugeicons/core-free-icons";
@@ -345,6 +346,7 @@ type SelectedCellPreview = {
     width: number | null;
     height: number | null;
     thumb: VariantUrls | null;
+    blurhash: string | null;
   }>;
 };
 
@@ -485,6 +487,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
   const [isJumpInputOpen, setIsJumpInputOpen] = useState(false);
   const [jumpInputValue, setJumpInputValue] = useState("");
   const jumpInputRef = useRef<HTMLInputElement>(null);
+  const [isDialogImageLoaded, setIsDialogImageLoaded] = useState(false);
 
   useEffect(() => {
     const element = scrollElementRef.current;
@@ -612,6 +615,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
       setCopiedField(null);
       setCurrentImageIndex(0);
       setDialogImageVariants(null);
+      setIsDialogImageLoaded(false);
     }
   }, [dialogOpen]);
 
@@ -635,6 +639,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
     let ignore = false;
     dialogImageRequestRef.current?.abort();
     setDialogImageVariants(null);
+    setIsDialogImageLoaded(false);
 
     const controller = new AbortController();
     dialogImageRequestRef.current = controller;
@@ -951,6 +956,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
       yIndex: number,
       xLabel: string,
       yLabel: string,
+      preloadedBlurhash: string | null,
     ) => {
       const items = cell.items
         .map((item) => ({
@@ -958,6 +964,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
           width: item.width,
           height: item.height,
           thumb: item.thumb,
+          blurhash: item.blurhash ?? preloadedBlurhash,
         }));
 
       const representative = cell.items[0]?.meta ?? null;
@@ -1355,6 +1362,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                                   yIndex,
                                   xLabel,
                                   yLabel,
+                                  effectiveBlurhash,
                                 );
                               }}
                             >
@@ -1388,9 +1396,23 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
 
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
             <div className="space-y-2">
-              <div className="h-[62vh] w-full rounded-sm border bg-black overflow-hidden">
+              <div className="relative h-[62vh] w-full rounded-sm border bg-black overflow-hidden flex items-center justify-center">
+                {currentItem?.blurhash ? (
+                  <BlurhashCanvas
+                    blurhash={currentItem.blurhash}
+                    width={(() => {
+                      const ratio = (currentItem.width ?? 1) / (currentItem.height ?? 1);
+                      return ratio > 1 ? 32 : Math.max(1, Math.round(32 * ratio));
+                    })()}
+                    height={(() => {
+                      const ratio = (currentItem.width ?? 1) / (currentItem.height ?? 1);
+                      return ratio > 1 ? Math.max(1, Math.round(32 / ratio)) : 32;
+                    })()}
+                    className={`absolute inset-0 m-auto h-full w-full object-contain blur-md transition-opacity duration-500 ${isDialogImageLoaded ? "opacity-0" : "opacity-100"}`}
+                  />
+                ) : null}
                 {currentDownloadUrl ? (
-                  <picture>
+                  <picture className="absolute inset-0 h-full w-full pointer-events-none">
                     {currentDisplayVariants?.avif ? (
                       <source
                         srcSet={currentDisplayVariants.avif}
@@ -1412,9 +1434,10 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                             .join(" × ")
                           : "cell preview"
                       }
-                      className="h-full w-full object-contain"
+                      className={`h-full w-full object-contain transition-opacity duration-500 pointer-events-auto ${isDialogImageLoaded ? "opacity-100" : "opacity-0"}`}
                       decoding="async"
                       src={currentDownloadUrl}
+                      onLoad={() => setIsDialogImageLoaded(true)}
                     />
                   </picture>
                 ) : null}
