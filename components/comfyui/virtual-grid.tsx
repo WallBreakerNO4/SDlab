@@ -51,7 +51,6 @@ import type {
   RowCell,
   RowMeta,
   RunGridIndexData,
-  RunGridXColumn,
   SelectedCellPreview,
   VariantUrls,
 } from "./virtual-grid-types";
