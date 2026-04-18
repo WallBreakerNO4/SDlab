@@ -1379,7 +1379,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
           className="max-h-[90vh] overflow-auto p-4 sm:max-w-4xl sm:p-6"
           data-testid="cell-dialog"
         >
-          <DialogHeader>
+          <DialogHeader className="sr-only">
             <DialogTitle>单元格预览</DialogTitle>
             <DialogDescription className="sr-only">
               单元格图片预览
