@@ -14,11 +14,13 @@ import { VirtualGridCellDialog } from "./virtual-grid-cell-dialog";
 import { useVirtualGridLayout } from "./use-virtual-grid-layout";
 import { useVirtualGridRows } from "./use-virtual-grid-rows";
 import { useVirtualGridScroll } from "./use-virtual-grid-scroll";
+import { getVariantCacheKey } from "./virtual-grid-utils";
 import type {
   BlurhashCell,
   RowCell,
   RunGridIndexData,
   SelectedCellPreview,
+  VariantUrls,
 } from "./virtual-grid-types";
 
 export type {
@@ -40,6 +42,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
   "use no memo";
 
   const scrollElementRef = useRef<HTMLDivElement | null>(null);
+  const loadedThumbKeysRef = useRef(new Set<string>());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedCell, setSelectedCell] = useState<SelectedCellPreview | null>(
     null,
@@ -81,6 +84,15 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
       scrollViewportWidth,
     });
 
+  const markThumbAsLoaded = useCallback((variants: VariantUrls) => {
+    const key = getVariantCacheKey(variants);
+    if (!key) {
+      return;
+    }
+
+    loadedThumbKeysRef.current.add(key);
+  }, []);
+
   const virtualRows = rowVirtualizer.getVirtualItems();
   const isDevEnv = process.env.NODE_ENV !== "production";
 
@@ -107,13 +119,20 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
       yLabel: string,
       preloadedBlurhash: string | null,
     ) => {
-      const items = cell.items.map((item) => ({
-        batchIndex: item.batch_index,
-        width: item.width,
-        height: item.height,
-        thumb: item.thumb,
-        blurhash: item.blurhash ?? preloadedBlurhash,
-      }));
+      const items = cell.items.map((item) => {
+        const thumbKey = getVariantCacheKey(item.thumb);
+
+        return {
+          batchIndex: item.batch_index,
+          width: item.width,
+          height: item.height,
+          thumb: item.thumb,
+          thumbLoaded: thumbKey
+            ? loadedThumbKeysRef.current.has(thumbKey)
+            : false,
+          blurhash: item.blurhash ?? preloadedBlurhash,
+        };
+      });
 
       const representative = cell.items[0]?.meta ?? null;
       const positivePrompt = representative?.positive_prompt;
@@ -286,6 +305,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                           isAuthenticated={!!user}
                           onRequireLogin={() => setLoginDialogOpen(true)}
                           onOpenCellDialog={openCellDialog}
+                          onThumbLoad={markThumbAsLoaded}
                         />
                       );
                     })}

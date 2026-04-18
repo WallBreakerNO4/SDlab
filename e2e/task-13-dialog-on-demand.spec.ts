@@ -57,4 +57,53 @@ test.describe("task 13: dialog display image loads on demand", () => {
       .poll(() => displayRequestCount, { timeout: 10_000 })
       .toBeGreaterThan(0);
   });
+
+  test("dialog should use the loaded preview image until the display image finishes loading", async ({
+    page,
+  }) => {
+    let releaseDisplayRequest: (() => void) | null = null;
+
+    await page.route("**/api/comfyui/run/*/display?*", async (route) => {
+      await new Promise<void>((resolve) => {
+        releaseDisplayRequest = resolve;
+      });
+      await route.continue();
+    });
+
+    await page.goto("/");
+
+    const modelLink = page.locator("a[href^='/models/']").first();
+    await expect(modelLink).toBeVisible();
+    await modelLink.click();
+
+    await expect(page).toHaveURL(/\/models\//);
+    await expect(page.getByTestId("run-grid")).toBeVisible();
+
+    const previewButton = page.getByLabel("打开单元格预览").first();
+    const previewImage = previewButton.getByTestId("run-grid-image");
+    await expect(previewImage).toHaveClass(/opacity-100/, { timeout: 10_000 });
+
+    await previewButton.click();
+
+    const dialog = page.getByTestId("cell-dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByTestId("cell-dialog-preview-image")).toHaveClass(
+      /opacity-100/,
+      { timeout: 10_000 },
+    );
+    await expect(dialog.getByTestId("cell-dialog-display-image")).toHaveClass(
+      /opacity-0/,
+    );
+
+    releaseDisplayRequest?.();
+
+    await expect(dialog.getByTestId("cell-dialog-display-image")).toHaveClass(
+      /opacity-100/,
+      { timeout: 10_000 },
+    );
+    await expect(dialog.getByTestId("cell-dialog-preview-image")).toHaveClass(
+      /opacity-0/,
+      { timeout: 10_000 },
+    );
+  });
 });

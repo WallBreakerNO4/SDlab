@@ -73,6 +73,7 @@ export type SelectedCellPreview = {
     width: number | null;
     height: number | null;
     thumb: VariantUrls | null;
+    thumbLoaded: boolean;
     blurhash: string | null;
   }>;
 };

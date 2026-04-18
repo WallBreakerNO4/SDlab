@@ -4,6 +4,7 @@ import type {
   BlurhashCell,
   CachedRow,
   RowCell,
+  VariantUrls,
 } from "./virtual-grid-types";
 
 type VirtualGridPreviewCellProps = {
@@ -25,6 +26,7 @@ type VirtualGridPreviewCellProps = {
     yLabel: string,
     preloadedBlurhash: string | null,
   ) => void;
+  onThumbLoad: (variants: VariantUrls) => void;
 };
 
 export function VirtualGridPreviewCell({
@@ -39,6 +41,7 @@ export function VirtualGridPreviewCell({
   isAuthenticated,
   onRequireLogin,
   onOpenCellDialog,
+  onThumbLoad,
 }: VirtualGridPreviewCellProps) {
   const rowCell =
     rowEntry && rowEntry.status === "ready"
@@ -86,6 +89,7 @@ export function VirtualGridPreviewCell({
           }
           locked={isLocked}
           onLockedClick={onRequireLogin}
+          onImageLoaded={onThumbLoad}
         />
       </div>
       <div className="absolute inset-0 bg-foreground/0 transition-colors duration-300 pointer-events-none group-hover/cell:bg-foreground/5" />

@@ -222,6 +222,27 @@ export function pickBestVariants(
   };
 }
 
+export function getVariantCacheKey(
+  variants: VariantUrls | null | undefined,
+): string | null {
+  if (!variants) return null;
+
+  const webp =
+    typeof variants.webp === "string" && variants.webp.length > 0
+      ? variants.webp
+      : null;
+  const avif =
+    typeof variants.avif === "string" && variants.avif.length > 0
+      ? variants.avif
+      : null;
+
+  if (!webp && !avif) {
+    return null;
+  }
+
+  return `${avif ?? ""}::${webp ?? ""}`;
+}
+
 export function getPreferredAspectRatioFromCache(
   rows: Iterable<CachedRow>,
 ): number {

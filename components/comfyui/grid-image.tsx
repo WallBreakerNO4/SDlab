@@ -14,6 +14,7 @@ type GridImageProps = {
   locked?: boolean;
   /** Callback when the locked overlay is clicked. */
   onLockedClick?: () => void;
+  onImageLoaded?: (variants: VariantUrls) => void;
 };
 
 export function GridImage({
@@ -22,8 +23,11 @@ export function GridImage({
   alt,
   locked,
   onLockedClick,
+  onImageLoaded,
 }: GridImageProps) {
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
+  const src = thumbVariants?.webp ?? thumbVariants?.avif;
+  const isLoaded = src !== null && loadedSrc === src;
 
   if (locked) {
     return (
@@ -63,8 +67,6 @@ export function GridImage({
     );
   }
 
-  const src = thumbVariants?.webp ?? thumbVariants?.avif;
-
   return (
     <div className="relative h-full w-full overflow-hidden">
       {blurhash && (
@@ -93,7 +95,12 @@ export function GridImage({
             data-testid="run-grid-image"
             decoding="async"
             src={src}
-            onLoad={() => setIsLoaded(true)}
+            onLoad={() => {
+              setLoadedSrc(src);
+              if (thumbVariants) {
+                onImageLoaded?.(thumbVariants);
+              }
+            }}
           />
         </picture>
       ) : null}

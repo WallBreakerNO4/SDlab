@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 import { BlurhashCanvas } from "./blurhash-canvas";
 import { formatValue, parseDialogImagePayload } from "./virtual-grid-utils";
@@ -56,8 +57,17 @@ export function VirtualGridCellDialog({
   const selectedYIndex = cell?.yIndex ?? null;
   const currentBatchIndex = currentItem?.batchIndex ?? null;
   const currentDisplayVariants = dialogImageVariants;
+  const currentPreviewVariants = currentItem?.thumb ?? null;
+  const previewWasLoaded = Boolean(currentItem?.thumbLoaded);
+  const currentPreviewUrl =
+    currentPreviewVariants?.webp ?? currentPreviewVariants?.avif ?? null;
   const currentDownloadUrl =
     currentDisplayVariants?.webp ?? currentDisplayVariants?.avif ?? null;
+  const showPreviewPlaceholder = previewWasLoaded && !!currentPreviewUrl;
+  const dialogAlt =
+    cell && (cell.yLabel || cell.xLabel)
+      ? [cell.yLabel, cell.xLabel].filter(Boolean).join(" × ")
+      : "cell preview";
   const sizeText =
     currentItem &&
     typeof currentItem.width === "number" &&
@@ -159,6 +169,7 @@ export function VirtualGridCellDialog({
     }
 
     setDialogImageVariants(null);
+    setIsDialogImageLoaded(false);
     setCurrentImageIndex((index) => Math.max(0, index - 1));
   }, [currentImageIndex]);
 
@@ -168,6 +179,7 @@ export function VirtualGridCellDialog({
     }
 
     setDialogImageVariants(null);
+    setIsDialogImageLoaded(false);
     setCurrentImageIndex((index) => index + 1);
   }, [currentImageIndex, cell]);
 
@@ -219,8 +231,39 @@ export function VirtualGridCellDialog({
                       ? Math.max(1, Math.round(32 / ratio))
                       : 32;
                   })()}
-                  className={`absolute inset-0 m-auto h-full w-full object-contain blur-md transition-opacity duration-500 ${isDialogImageLoaded ? "opacity-0" : "opacity-100"}`}
+                  className={cn(
+                    "absolute inset-0 m-auto h-full w-full object-contain blur-md transition-opacity duration-500",
+                    isDialogImageLoaded || showPreviewPlaceholder
+                      ? "opacity-0"
+                      : "opacity-100",
+                  )}
                 />
+              ) : null}
+              {showPreviewPlaceholder ? (
+                <picture className="absolute inset-0 h-full w-full pointer-events-none">
+                  {currentPreviewVariants?.avif ? (
+                    <source
+                      srcSet={currentPreviewVariants.avif}
+                      type="image/avif"
+                    />
+                  ) : null}
+                  {currentPreviewVariants?.webp ? (
+                    <source
+                      srcSet={currentPreviewVariants.webp}
+                      type="image/webp"
+                    />
+                  ) : null}
+                  <img
+                    alt={dialogAlt}
+                    className={cn(
+                      "h-full w-full object-contain transition-opacity duration-500",
+                      isDialogImageLoaded ? "opacity-0" : "opacity-100",
+                    )}
+                    data-testid="cell-dialog-preview-image"
+                    decoding="async"
+                    src={currentPreviewUrl}
+                  />
+                </picture>
               ) : null}
               {currentDownloadUrl ? (
                 <picture className="absolute inset-0 h-full w-full pointer-events-none">
@@ -237,14 +280,12 @@ export function VirtualGridCellDialog({
                     />
                   ) : null}
                   <img
-                    alt={
-                      cell && (cell.yLabel || cell.xLabel)
-                        ? [cell.yLabel, cell.xLabel]
-                            .filter(Boolean)
-                            .join(" × ")
-                        : "cell preview"
-                    }
-                    className={`h-full w-full object-contain transition-opacity duration-500 pointer-events-auto ${isDialogImageLoaded ? "opacity-100" : "opacity-0"}`}
+                    alt={dialogAlt}
+                    className={cn(
+                      "h-full w-full object-contain transition-opacity duration-500 pointer-events-auto",
+                      isDialogImageLoaded ? "opacity-100" : "opacity-0",
+                    )}
+                    data-testid="cell-dialog-display-image"
                     decoding="async"
                     src={currentDownloadUrl}
                     onLoad={() => setIsDialogImageLoaded(true)}
