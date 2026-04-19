@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT))
 
 from scripts.r2_upload.upload_images_to_r2 import main
 from scripts.r2_upload.upload_planner import (
+    _build_run_plan,
     _build_run_asset_category_resolver,
     _build_run_asset_payload,
     _build_run_db_fields,
@@ -60,6 +61,7 @@ def _extended_run_json(
         "run_id": run_name,
         "run_key": run_name,
         "run_dir": run_name,
+        "created_at": "2026-04-20T00:00:00Z",
         "dry_run": False,
         "config_schema_version": "image-run-config/v1",
         "config_path": "data/models/example/config.yaml",
@@ -355,6 +357,72 @@ def test_cli_dry_run_includes_png_cover_asset_variants_with_original_extension(
     ]
     assert any("display_webp.webp" in key for key in planned_asset_keys)
     assert any("thumb_webp.webp" in key for key in planned_asset_keys)
+
+
+def test_build_run_plan_embeds_image_variants_in_public_row_manifest(
+    tmp_path: Path,
+) -> None:
+    run_dir = _write_run_fixture(tmp_path, run_name="view-row-manifest-run")
+    run_json_path = run_dir / "run.json"
+    run_payload = cast(
+        dict[str, object],
+        json.loads(run_json_path.read_text(encoding="utf-8")),
+    )
+    run_payload["created_at"] = "2026-04-20T00:00:00Z"
+
+    config_snapshot = cast(dict[str, object], run_payload["config_snapshot"])
+    selection = cast(dict[str, object], config_snapshot["selection"])
+    selection["x_columns"] = [
+        {
+            "type": "normal",
+            "description": {"zh": "示例列"},
+        }
+    ]
+    selection["y_indexes"] = [0]
+    selection["x_count"] = 1
+    selection["y_count"] = 1
+    selection["total_cells"] = 1
+    run_json_path.write_text(
+        json.dumps(run_payload, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    plan = _build_run_plan(
+        run_dir,
+        intermediate_root=tmp_path / "_r2_upload_intermediate",
+        category_override=None,
+        remaining_limit=None,
+        image_workers=1,
+    )
+
+    row_upload = next(
+        upload
+        for upload in plan.manifest_uploads
+        if upload.variant == "view_row_public"
+        and upload.key.endswith("/rows/public/0.json")
+    )
+    assert row_upload.body_bytes is not None
+
+    row_manifest = cast(
+        dict[str, object],
+        json.loads(row_upload.body_bytes.decode("utf-8")),
+    )
+    cells = cast(list[dict[str, object]], row_manifest["cells"])
+    items = cast(list[dict[str, object]], cells[0]["items"])
+    item = items[0]
+
+    thumb = cast(dict[str, object], item["thumb"])
+    display = cast(dict[str, object], item["display"])
+
+    thumb_webp = cast(dict[str, object], thumb["webp"])
+    display_webp = cast(dict[str, object], display["webp"])
+
+    assert thumb_webp["bucket"] == "public"
+    assert display_webp["bucket"] == "public"
+    assert str(thumb_webp["key"]).endswith("thumb_webp.webp")
+    assert str(display_webp["key"]).endswith("display_webp.webp")
+    assert len(str(thumb_webp["cache_key"])) == 64
+    assert len(str(display_webp["cache_key"])) == 64
 
 
 def test_build_run_db_fields_extracts_model_structured_fields(tmp_path: Path) -> None:

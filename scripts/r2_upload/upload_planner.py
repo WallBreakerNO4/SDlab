@@ -275,6 +275,36 @@ def _build_image_db_fields(metadata_record: dict[str, object]) -> dict[str, obje
     return fields
 
 
+def _variant_cache_key(*, bucket: str, r2_key: str) -> str:
+    payload = f"v1:{bucket}:{r2_key}".encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _build_image_variant_db_fields(
+    variant_rows: list[dict[str, object]],
+) -> dict[str, object]:
+    fields: dict[str, object] = {}
+
+    for row in variant_rows:
+        variant_name = _non_empty_str(row.get("variant"))
+        if variant_name is None or variant_name not in _IMAGE_VARIANTS:
+            continue
+
+        bucket = _non_empty_str(row.get("bucket"))
+        r2_key = _non_empty_str(row.get("r2_key"))
+        if bucket is None or r2_key is None:
+            continue
+
+        fields[f"{variant_name}_bucket"] = bucket
+        fields[f"{variant_name}_r2_key"] = r2_key
+        fields[f"{variant_name}_cache_key"] = _variant_cache_key(
+            bucket=bucket,
+            r2_key=r2_key,
+        )
+
+    return fields
+
+
 def _assets_from_run_json(run_json: dict[str, object]) -> dict[str, object] | None:
     return _json_object(run_json.get("assets"))
 
@@ -1316,6 +1346,7 @@ def _assemble_image_payload(
         "variants": variant_rows,
     }
     image_payload.update(_build_image_db_fields(metadata_record))
+    image_payload.update(_build_image_variant_db_fields(variant_rows))
     if width is not None:
         image_payload["width"] = width
     if height is not None:
