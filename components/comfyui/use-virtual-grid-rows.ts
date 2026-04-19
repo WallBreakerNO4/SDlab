@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { RunViewAccess } from "@/app/models/[runDir]/model-detail-types";
 import {
   privateObjectProxyUrl,
-  publicObjectProxyUrl,
+  publicObjectUrl,
 } from "@/lib/r2-url";
 
 import type { CachedRow, RowCell, RowMeta } from "./virtual-grid-types";
@@ -27,7 +27,7 @@ function buildRowManifestUrl(options: {
 }): string {
   const { runDir, yIndex, releaseId, showNsfw, viewAccess } = options;
   if (!viewAccess) {
-    return publicObjectProxyUrl(
+    return publicObjectUrl(
       `runs/${runDir}/view/v2/${releaseId}/rows/public/${yIndex}.json`,
     );
   }

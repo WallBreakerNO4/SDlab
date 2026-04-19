@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import {
-  publicObjectProxyUrl,
+  publicObjectUrl,
   privateObjectProxyUrl,
 } from "@/lib/r2-url";
 
@@ -47,7 +47,7 @@ export function useModelDetailData({
       setViewAccess(null);
 
       const currentResponse = await fetch(
-        publicObjectProxyUrl(`runs/${runDir}/view/current.json`),
+        publicObjectUrl(`runs/${runDir}/view/current.json`),
         {
           signal: abortController.signal,
           cache: "no-store",
@@ -96,7 +96,7 @@ export function useModelDetailData({
             `runs/${runDir}/view/v2/${currentRaw.release_id}/bootstrap.nsfw.json`,
             access!.grant,
           )
-        : publicObjectProxyUrl(currentRaw.bootstrap_sfw_key);
+        : publicObjectUrl(currentRaw.bootstrap_sfw_key);
 
       const bootstrapResponse = await fetch(bootstrapUrl, {
         signal: abortController.signal,

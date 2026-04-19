@@ -28,13 +28,6 @@ export function publicObjectUrl(r2Key: string): string {
   return `${readPublicBaseUrl()}/${encodePathSegments(r2Key)}`;
 }
 
-export function publicObjectProxyUrl(r2Key: string): string {
-  validateR2Key(r2Key);
-  const url = new URL("/api/public-object", "http://localhost");
-  url.searchParams.set("key", r2Key);
-  return `${url.pathname}${url.search}`;
-}
-
 export function privateObjectProxyUrl(r2Key: string, grant: string): string {
   validateR2Key(r2Key);
   const url = new URL("/api/private-object", "http://localhost");
