@@ -3,6 +3,7 @@ from __future__ import annotations
 # pyright: reportPrivateUsage=false,reportUnusedImport=false
 import hashlib
 import json
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from collections.abc import Callable, Mapping
 from typing import Protocol, cast
 
@@ -120,6 +121,7 @@ class SupabaseRemoteError(SupabaseWriterError):
 class SupabaseWriter:
     _upsert_batch_size: int
     _upsert_max_bytes: int
+    _upsert_concurrency: int
 
     def __init__(
         self,
@@ -128,11 +130,13 @@ class SupabaseWriter:
         dry_run: bool,
         upsert_batch_size: int = 100,
         upsert_max_bytes: int = 4_000_000,
+        upsert_concurrency: int = 4,
     ) -> None:
         self._client: SupabaseClientLike | None = client
         self.dry_run: bool = dry_run
         self._upsert_batch_size = upsert_batch_size
         self._upsert_max_bytes = upsert_max_bytes
+        self._upsert_concurrency = upsert_concurrency
 
         if not self.dry_run and self._client is None:
             raise SupabaseConfigError(
@@ -177,11 +181,20 @@ class SupabaseWriter:
                 "invalid supabase batch configuration",
                 code="invalid_batch_max_bytes",
             )
+        upsert_concurrency = _optional_env_int_value(
+            "SUPABASE_UPSERT_CONCURRENCY", default=4
+        )
+        if upsert_concurrency < 1:
+            raise SupabaseConfigError(
+                "invalid supabase batch configuration",
+                code="invalid_upsert_concurrency",
+            )
         return cls(
             client=client,
             dry_run=False,
             upsert_batch_size=upsert_batch_size,
             upsert_max_bytes=upsert_max_bytes,
+            upsert_concurrency=upsert_concurrency,
         )
 
     def upsert_upload_index(
@@ -232,9 +245,6 @@ class SupabaseWriter:
             )
         except PayloadValidationError as exc:
             raise _to_argument_error(exc) from exc
-        self._upsert_run_snapshot(run_snapshot_row)
-        _tick_progress()
-
         try:
             run_list_item_row = self._build_run_list_item_row(
                 payload,
@@ -245,16 +255,11 @@ class SupabaseWriter:
             )
         except PayloadValidationError as exc:
             raise _to_argument_error(exc) from exc
-        self._upsert_run_list_item(run_list_item_row)
-        _tick_progress()
-
         prompt_rows = self._build_run_prompt_rows(
             prompts=prompts,
             run_id=run_id,
             run_dir=run_dir,
         )
-        self._upsert_run_prompts_batch(prompt_rows)
-        _tick_progress_many(len(prompt_rows))
 
         grid_item_rows: list[dict[str, object]] = []
         grid_item_snapshot_rows: list[dict[str, object]] = []
@@ -270,27 +275,59 @@ class SupabaseWriter:
             grid_item_rows.append(row)
             grid_item_snapshot_rows.append(snapshot_row)
 
-        self._upsert_run_grid_items_batch(grid_item_rows)
-        _tick_progress_many(len(grid_item_rows))
-
-        self._upsert_run_grid_item_snapshots_batch(grid_item_snapshot_rows)
-        _tick_progress_many(len(grid_item_snapshot_rows))
-
         grid_cell_rows = self._build_run_grid_cells_rows(
             run_id=run_id,
             run_dir=run_dir,
             grid_item_rows=grid_item_rows,
         )
-        self._upsert_run_grid_cells_batch(grid_cell_rows)
-        _tick_progress_many(len(grid_cell_rows))
 
         run_view_index_row = self._build_run_view_index_row(
             run_id=run_id,
             run_dir=run_dir,
             view_release=view_release,
         )
-        self._upsert_run_view_index(run_view_index_row)
-        _tick_progress()
+
+        write_operations: list[tuple[Callable[[], None], int]] = [
+            (lambda row=run_snapshot_row: self._upsert_run_snapshot(row), 1),
+            (lambda row=run_list_item_row: self._upsert_run_list_item(row), 1),
+            (lambda row=run_view_index_row: self._upsert_run_view_index(row), 1),
+        ]
+        write_operations.extend(
+            self._build_chunked_upsert_operations(
+                table_name="run_prompts",
+                rows=prompt_rows,
+                on_conflict="run_id,prompt_id",
+                context_key="row_count",
+            )
+        )
+        write_operations.extend(
+            self._build_chunked_upsert_operations(
+                table_name="run_grid_items",
+                rows=grid_item_rows,
+                on_conflict="run_id,x_index,y_index,batch_index",
+                context_key="chunk_size",
+            )
+        )
+        write_operations.extend(
+            self._build_chunked_upsert_operations(
+                table_name="run_grid_item_snapshots",
+                rows=grid_item_snapshot_rows,
+                on_conflict="run_id,x_index,y_index,batch_index",
+                context_key="chunk_size",
+            )
+        )
+        write_operations.extend(
+            self._build_chunked_upsert_operations(
+                table_name="run_grid_cells",
+                rows=grid_cell_rows,
+                on_conflict="run_id,x_index,y_index",
+                context_key="chunk_size",
+            )
+        )
+        self._execute_write_operations(
+            write_operations,
+            progress_callback=progress_callback,
+        )
 
     def _build_run_row(
         self,
@@ -692,62 +729,115 @@ class SupabaseWriter:
         )
 
     def _upsert_run_prompts_batch(self, rows: list[dict[str, object]]) -> None:
-        if not rows:
-            return
-        for chunk in self._iter_row_chunks(rows):
-            normalized_chunk = _normalize_rows_for_postgrest(chunk)
-            _ = self._execute_upsert(
+        self._execute_write_operations(
+            self._build_chunked_upsert_operations(
                 table_name="run_prompts",
-                row_or_rows=normalized_chunk,
+                rows=rows,
                 on_conflict="run_id,prompt_id",
-                select_columns=None,
-                returning_mode="minimal",
-                context={"row_count": len(chunk)},
-            )
+                context_key="row_count",
+            ),
+            progress_callback=None,
+        )
 
     def _upsert_run_grid_items_batch(self, rows: list[dict[str, object]]) -> None:
-        if not rows:
-            return
-        for chunk in self._iter_row_chunks(rows):
-            normalized_chunk = _normalize_rows_for_postgrest(chunk)
-            _ = self._execute_upsert(
+        self._execute_write_operations(
+            self._build_chunked_upsert_operations(
                 table_name="run_grid_items",
-                row_or_rows=normalized_chunk,
+                rows=rows,
                 on_conflict="run_id,x_index,y_index,batch_index",
-                select_columns=None,
-                returning_mode="minimal",
-                context={"chunk_size": len(normalized_chunk)},
-            )
+                context_key="chunk_size",
+            ),
+            progress_callback=None,
+        )
 
     def _upsert_run_grid_item_snapshots_batch(
         self, rows: list[dict[str, object]]
     ) -> None:
-        if not rows:
-            return
-        for chunk in self._iter_row_chunks(rows):
-            normalized_chunk = _normalize_rows_for_postgrest(chunk)
-            _ = self._execute_upsert(
+        self._execute_write_operations(
+            self._build_chunked_upsert_operations(
                 table_name="run_grid_item_snapshots",
-                row_or_rows=normalized_chunk,
+                rows=rows,
                 on_conflict="run_id,x_index,y_index,batch_index",
-                select_columns=None,
-                returning_mode="minimal",
-                context={"chunk_size": len(normalized_chunk)},
-            )
+                context_key="chunk_size",
+            ),
+            progress_callback=None,
+        )
 
     def _upsert_run_grid_cells_batch(self, rows: list[dict[str, object]]) -> None:
+        self._execute_write_operations(
+            self._build_chunked_upsert_operations(
+                table_name="run_grid_cells",
+                rows=rows,
+                on_conflict="run_id,x_index,y_index",
+                context_key="chunk_size",
+            ),
+            progress_callback=None,
+        )
+
+    def _build_chunked_upsert_operations(
+        self,
+        *,
+        table_name: str,
+        rows: list[dict[str, object]],
+        on_conflict: str,
+        context_key: str,
+    ) -> list[tuple[Callable[[], None], int]]:
+        operations: list[tuple[Callable[[], None], int]] = []
         if not rows:
-            return
+            return operations
         for chunk in self._iter_row_chunks(rows):
             normalized_chunk = _normalize_rows_for_postgrest(chunk)
-            _ = self._execute_upsert(
-                table_name="run_grid_cells",
-                row_or_rows=normalized_chunk,
-                on_conflict="run_id,x_index,y_index",
-                select_columns=None,
-                returning_mode="minimal",
-                context={"chunk_size": len(normalized_chunk)},
-            )
+            context = {context_key: len(normalized_chunk)}
+
+            def _operation(
+                *,
+                normalized_chunk: list[dict[str, object]] = normalized_chunk,
+                context: dict[str, object] = context,
+                table_name: str = table_name,
+                on_conflict: str = on_conflict,
+            ) -> None:
+                _ = self._execute_upsert(
+                    table_name=table_name,
+                    row_or_rows=normalized_chunk,
+                    on_conflict=on_conflict,
+                    select_columns=None,
+                    returning_mode="minimal",
+                    context=context,
+                )
+
+            operations.append((_operation, len(chunk)))
+        return operations
+
+    def _execute_write_operations(
+        self,
+        operations: list[tuple[Callable[[], None], int]],
+        *,
+        progress_callback: Callable[[], None] | None,
+    ) -> None:
+        if not operations:
+            return
+
+        def _tick_many(count: int) -> None:
+            if progress_callback is None:
+                return
+            for _ in range(count):
+                progress_callback()
+
+        if self._upsert_concurrency <= 1 or len(operations) == 1:
+            for operation, progress_count in operations:
+                operation()
+                _tick_many(progress_count)
+            return
+
+        max_workers = min(self._upsert_concurrency, len(operations))
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures: dict[Future[None], int] = {
+                pool.submit(operation): progress_count
+                for operation, progress_count in operations
+            }
+            for future in as_completed(futures):
+                future.result()
+                _tick_many(futures[future])
 
     def _variant_lookup(
         self, variants: list[Mapping[str, object]]
