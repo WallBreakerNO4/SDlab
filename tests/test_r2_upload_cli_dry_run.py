@@ -19,7 +19,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from scripts.r2_upload.upload_images_to_r2 import main
-from scripts.r2_upload.upload_planner import _build_run_db_fields
+from scripts.r2_upload.upload_planner import (
+    _build_run_asset_category_resolver,
+    _build_run_asset_payload,
+    _build_run_db_fields,
+)
+from scripts.r2_upload.upload_contracts import PlannedImageTask
 from scripts.r2_upload.upload_runtime import _resolve_image_workers
 
 
@@ -370,6 +375,60 @@ def test_build_run_db_fields_extracts_model_structured_fields(tmp_path: Path) ->
         f"runs/model-run/artifacts/workflow/{expected_sha256}.json"
     )
     assert fields["workflow_download_sha256"] == expected_sha256
+
+
+def test_build_run_asset_payload_uses_private_bucket_for_nsfw_category(
+    tmp_path: Path,
+) -> None:
+    image_path = tmp_path / "repo-assets/images/nsfw-card.png"
+    _write_png(image_path)
+    run_intermediate_dir = tmp_path / "_r2_upload_intermediate"
+    run_intermediate_dir.mkdir(parents=True, exist_ok=True)
+    asset = {
+        "path": str(image_path),
+        "repo_relative_path": "data/models/example/images/nsfw-card.png",
+        "sha256": _sha256_file(image_path),
+    }
+
+    payload, uploads = _build_run_asset_payload(
+        run_dir_name="nsfw-run",
+        run_intermediate_dir=run_intermediate_dir,
+        asset=asset,
+        asset_role="homepage_card",
+        asset_index=0,
+        batch_index=1,
+        category="nsfw",
+    )
+
+    assert uploads
+    assert all(upload.bucket_scope == "private" for upload in uploads)
+    variants = cast(list[dict[str, object]], payload["variants"])
+    assert variants
+    assert all(variant.get("bucket") == "private" for variant in variants)
+
+
+def test_build_run_asset_category_resolver_infers_category_by_sha(
+    tmp_path: Path,
+) -> None:
+    source_path = tmp_path / "images/source.png"
+    copied_path = tmp_path / "repo-assets/images/copied.png"
+    _write_png(source_path)
+    copied_path.parent.mkdir(parents=True, exist_ok=True)
+    copied_path.write_bytes(source_path.read_bytes())
+
+    resolver = _build_run_asset_category_resolver(
+        [
+            PlannedImageTask(
+                index=0,
+                image_path=source_path,
+                metadata_record={},
+                category="advance",
+                batch_index=0,
+            )
+        ]
+    )
+
+    assert resolver(copied_path) == "advance"
 
 
 def test_build_run_db_fields_skips_workflow_download_when_only_sha_present() -> None:

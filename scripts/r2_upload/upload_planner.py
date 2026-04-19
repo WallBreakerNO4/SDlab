@@ -49,7 +49,7 @@ from .upload_io import (
 from .variants import inspect_image_metadata, plan_image_variants
 
 LOG = logging.getLogger(__name__)
-_RUN_ASSET_PUBLIC_BUCKET: BucketScope = "public"
+_RUN_ASSET_DEFAULT_CATEGORY: Category = "normal"
 
 
 @dataclass(frozen=True)
@@ -637,6 +637,7 @@ def _collect_public_variant_payloads(
     run_dir_name: str,
     run_intermediate_dir: Path,
     image_path: Path,
+    category: Category,
     batch_index: int,
     original_sha256: str,
     uploads: list[PlannedUpload],
@@ -673,7 +674,7 @@ def _collect_public_variant_payloads(
             variant_rows=variant_rows,
             cached_variant_paths=cached_bundle.cached_variant_paths,
             cached_variant_lookup=cached_bundle.variant_lookup,
-            bucket_scope_for_variant=lambda _: _RUN_ASSET_PUBLIC_BUCKET,
+            bucket_scope_for_variant=lambda variant: bucket_for(category, variant),
         )
         return width, height, blurhash_value, blurhash_width, blurhash_height
 
@@ -696,7 +697,7 @@ def _collect_public_variant_payloads(
             key = object_key(run_dir_name, original_sha256, variant_raw)
             upload = _build_variant_upload(
                 variant=variant_raw,
-                bucket_scope=_RUN_ASSET_PUBLIC_BUCKET,
+                bucket_scope=bucket_for(category, variant_raw),
                 key=key,
                 byte_size=intermediate_path.stat().st_size,
                 local_path=intermediate_path,
@@ -711,7 +712,7 @@ def _collect_public_variant_payloads(
 
             cached_variant_payload: dict[str, object] = {
                 "variant": variant_raw,
-                "bucket": _RUN_ASSET_PUBLIC_BUCKET,
+                "bucket": bucket_for(category, variant_raw),
                 "r2_key": key,
                 "content_type": upload.content_type,
                 "cache_control": upload.cache_control,
@@ -777,7 +778,7 @@ def _collect_public_variant_payloads(
         key = object_key(run_dir_name, original_sha256, variant_raw)
         upload = _build_variant_upload(
             variant=variant_raw,
-            bucket_scope=_RUN_ASSET_PUBLIC_BUCKET,
+            bucket_scope=bucket_for(category, variant_raw),
             key=key,
             byte_size=intermediate_path.stat().st_size,
             local_path=intermediate_path,
@@ -785,7 +786,7 @@ def _collect_public_variant_payloads(
         uploads.append(upload)
         derived_variant_payload: dict[str, object] = {
             "variant": variant_raw,
-            "bucket": _RUN_ASSET_PUBLIC_BUCKET,
+            "bucket": bucket_for(category, variant_raw),
             "r2_key": key,
             "content_type": upload.content_type,
             "cache_control": upload.cache_control,
@@ -824,6 +825,7 @@ def _build_run_asset_payload(
     asset_role: str,
     asset_index: int,
     batch_index: int,
+    category: Category,
     plan_image_variants_fn: Callable[
         [Path], list[dict[str, object]]
     ] = plan_image_variants,
@@ -845,7 +847,7 @@ def _build_run_asset_payload(
         run_dir_name=run_dir_name,
         run_intermediate_dir=run_intermediate_dir,
         image_path=source_path,
-        category="normal",
+        category=category,
         batch_index=batch_index,
     )
     source_sha256 = original_sha256
@@ -861,6 +863,7 @@ def _build_run_asset_payload(
         run_dir_name=run_dir_name,
         run_intermediate_dir=run_intermediate_dir,
         image_path=source_path,
+        category=category,
         batch_index=batch_index,
         original_sha256=original_sha256,
         uploads=uploads,
@@ -901,6 +904,7 @@ def _build_run_asset_payloads(
     run_json: dict[str, object],
     run_dir_name: str,
     run_intermediate_dir: Path,
+    resolve_asset_category: Callable[[Path], Category],
     plan_image_variants_fn: Callable[
         [Path], list[dict[str, object]]
     ] = plan_image_variants,
@@ -918,6 +922,7 @@ def _build_run_asset_payloads(
 
     cover_image = _json_object(assets.get("cover_image"))
     if cover_image is not None:
+        cover_source_path = _resolve_run_asset_source_path(cover_image)
         cover_payload, cover_uploads = _build_run_asset_payload(
             run_dir_name=run_dir_name,
             run_intermediate_dir=run_intermediate_dir,
@@ -925,6 +930,7 @@ def _build_run_asset_payloads(
             asset_role="cover",
             asset_index=0,
             batch_index=batch_index,
+            category=resolve_asset_category(cover_source_path),
             plan_image_variants_fn=plan_image_variants_fn,
             inspect_image_metadata_fn=inspect_image_metadata_fn,
         )
@@ -935,6 +941,7 @@ def _build_run_asset_payloads(
     for asset_index, homepage_asset in enumerate(
         _json_object_list(assets.get("homepage_images"))
     ):
+        homepage_source_path = _resolve_run_asset_source_path(homepage_asset)
         homepage_payload, homepage_uploads = _build_run_asset_payload(
             run_dir_name=run_dir_name,
             run_intermediate_dir=run_intermediate_dir,
@@ -942,6 +949,7 @@ def _build_run_asset_payloads(
             asset_role="homepage_card",
             asset_index=asset_index,
             batch_index=batch_index,
+            category=resolve_asset_category(homepage_source_path),
             plan_image_variants_fn=plan_image_variants_fn,
             inspect_image_metadata_fn=inspect_image_metadata_fn,
         )
@@ -950,6 +958,49 @@ def _build_run_asset_payloads(
         batch_index += 1
 
     return asset_rows, uploads
+
+
+def _merge_asset_category(current: Category, incoming: Category) -> Category:
+    if current == "nsfw" or incoming == "nsfw":
+        return "nsfw"
+    if current == "advance" or incoming == "advance":
+        return "advance"
+    return "normal"
+
+
+def _build_run_asset_category_resolver(
+    image_tasks: list[PlannedImageTask],
+) -> Callable[[Path], Category]:
+    path_category: dict[Path, Category] = {}
+    sha_category: dict[str, Category] = {}
+    for task in image_tasks:
+        resolved = task.image_path.resolve()
+        existing_path_category = path_category.get(resolved)
+        if existing_path_category is None:
+            path_category[resolved] = task.category
+        else:
+            path_category[resolved] = _merge_asset_category(
+                existing_path_category, task.category
+            )
+
+        sha256 = _sha256_file(resolved)
+        existing_sha_category = sha_category.get(sha256)
+        if existing_sha_category is None:
+            sha_category[sha256] = task.category
+        else:
+            sha_category[sha256] = _merge_asset_category(
+                existing_sha_category, task.category
+            )
+
+    def _resolve(path: Path) -> Category:
+        resolved = path.resolve()
+        by_path = path_category.get(resolved)
+        if by_path is not None:
+            return by_path
+        source_sha256 = _sha256_file(resolved)
+        return sha_category.get(source_sha256, _RUN_ASSET_DEFAULT_CATEGORY)
+
+    return _resolve
 
 
 def _normalize_category(raw_value: object, override: Category | None) -> Category:
@@ -1421,10 +1472,12 @@ def _build_run_plan(
             images_rows.append(image_payload)
             image_uploads.extend(uploads)
 
+    resolve_asset_category = _build_run_asset_category_resolver(image_tasks)
     run_assets_rows, run_asset_uploads = _build_run_asset_payloads(
         run_json=run_json,
         run_dir_name=run_dir_name,
         run_intermediate_dir=run_intermediate_dir,
+        resolve_asset_category=resolve_asset_category,
         plan_image_variants_fn=plan_image_variants_fn,
         inspect_image_metadata_fn=inspect_image_metadata_fn,
     )
