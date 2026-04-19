@@ -11,6 +11,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { UserPreferencesProvider } from "@/components/user-preferences-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { createSupabaseAuthClient } from "@/lib/supabase-auth";
 import {
   THEME_COOKIE_NAME,
   THEME_STORAGE_KEY,
@@ -61,6 +62,18 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const cookieStore = await cookies();
+  let initialUser = null;
+
+  try {
+    const supabase = await createSupabaseAuthClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    initialUser = user ?? null;
+  } catch {
+    initialUser = null;
+  }
+
   const initialTheme = parseThemePreference(
     cookieStore.get(THEME_COOKIE_NAME)?.value,
   );
@@ -102,7 +115,7 @@ export default async function RootLayout({
           storageKey={THEME_STORAGE_KEY}
           scriptProps={{ "data-cfasync": "false" }}
         >
-          <AuthProvider>
+          <AuthProvider initialUser={initialUser}>
             <UserPreferencesProvider initialShowNsfw={initialShowNsfw}>
               <div className="flex h-dvh flex-col overflow-hidden">
                 <SiteHeader />
