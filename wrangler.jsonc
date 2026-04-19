@@ -34,4 +34,9 @@
     "R2_PRIVATE_BUCKET": "sdslab-private",
     "R2_SIGNED_URL_TTL_SECONDS": "60",
   },
+  // 配置日志和指标的采样率，启用后可以在 Cloudflare 仪表盘的 Workers Observability 中查看相关数据
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1 // optional. default = 1.
+  }
 }
