@@ -77,32 +77,34 @@ def _upload_image_variants_for_plan(
 def _upload_artifacts_for_plan(
     *,
     plan: RunPlan,
+    upload_concurrency: int,
     r2_client: R2Client,
     bucket_names: dict[BucketScope, str],
     artifact_pbar: tqdm,
+    thread_pool_cls: type[ThreadPoolExecutor],
 ) -> tuple[int, int]:
     artifact_uploaded = 0
     skipped_existing = 0
-    for artifact_upload in plan.artifact_uploads:
-        if _upload_if_missing(
-            r2_client=r2_client,
-            bucket_names=bucket_names,
-            planned=artifact_upload,
-        ):
-            artifact_uploaded += 1
-        else:
-            skipped_existing += 1
-        artifact_pbar.update(1)
-    for manifest_upload in plan.manifest_uploads:
-        if _upload_if_missing(
-            r2_client=r2_client,
-            bucket_names=bucket_names,
-            planned=manifest_upload,
-        ):
-            artifact_uploaded += 1
-        else:
-            skipped_existing += 1
-        artifact_pbar.update(1)
+    uploads = [*plan.artifact_uploads, *plan.manifest_uploads]
+    if not uploads:
+        return artifact_uploaded, skipped_existing
+
+    with thread_pool_cls(max_workers=upload_concurrency) as pool:
+        futures: list[Future[bool]] = [
+            pool.submit(
+                _upload_if_missing,
+                r2_client=r2_client,
+                bucket_names=bucket_names,
+                planned=upload,
+            )
+            for upload in uploads
+        ]
+        for future in as_completed(futures):
+            if future.result():
+                artifact_uploaded += 1
+            else:
+                skipped_existing += 1
+            artifact_pbar.update(1)
     return artifact_uploaded, skipped_existing
 
 
@@ -183,9 +185,11 @@ def _execute(
                             plan_artifact_skipped,
                         ) = _upload_artifacts_for_plan(
                             plan=plan,
+                            upload_concurrency=upload_concurrency,
                             r2_client=r2_client,
                             bucket_names=bucket_names,
                             artifact_pbar=artifact_pbar,
+                            thread_pool_cls=thread_pool_cls,
                         )
                         artifact_uploaded += plan_artifact_uploaded
                         skipped_existing += plan_artifact_skipped
