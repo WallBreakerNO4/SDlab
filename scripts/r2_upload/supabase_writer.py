@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 # pyright: reportPrivateUsage=false,reportUnusedImport=false
+import hashlib
 import json
 from collections.abc import Callable, Mapping
 from typing import Protocol, cast
@@ -523,12 +524,24 @@ class SupabaseWriter:
             or _optional_required_string(metadata.get("y_value")),
             "thumb_webp_bucket": self._variant_bucket(variant_lookup, "thumb_webp"),
             "thumb_webp_r2_key": self._variant_r2_key(variant_lookup, "thumb_webp"),
+            "thumb_webp_cache_key": self._variant_cache_key(
+                variant_lookup, "thumb_webp"
+            ),
             "thumb_avif_bucket": self._variant_bucket(variant_lookup, "thumb_avif"),
             "thumb_avif_r2_key": self._variant_r2_key(variant_lookup, "thumb_avif"),
+            "thumb_avif_cache_key": self._variant_cache_key(
+                variant_lookup, "thumb_avif"
+            ),
             "display_webp_bucket": self._variant_bucket(variant_lookup, "display_webp"),
             "display_webp_r2_key": self._variant_r2_key(variant_lookup, "display_webp"),
+            "display_webp_cache_key": self._variant_cache_key(
+                variant_lookup, "display_webp"
+            ),
             "display_avif_bucket": self._variant_bucket(variant_lookup, "display_avif"),
             "display_avif_r2_key": self._variant_r2_key(variant_lookup, "display_avif"),
+            "display_avif_cache_key": self._variant_cache_key(
+                variant_lookup, "display_avif"
+            ),
         }
         snapshot_row: dict[str, object] = {
             "run_id": run_id,
@@ -668,6 +681,19 @@ class SupabaseWriter:
         if variant is None:
             return None
         return optional_str(variant.get("r2_key"), field=f"{variant_name}.r2_key")
+
+    def _variant_cache_key(
+        self, lookup: Mapping[str, Mapping[str, object]], variant_name: str
+    ) -> str | None:
+        variant = lookup.get(variant_name)
+        if variant is None:
+            return None
+        bucket = optional_str(variant.get("bucket"), field=f"{variant_name}.bucket")
+        r2_key = optional_str(variant.get("r2_key"), field=f"{variant_name}.r2_key")
+        if bucket is None or r2_key is None:
+            return None
+        payload = f"v1:{bucket}:{r2_key}".encode("utf-8")
+        return hashlib.sha256(payload).hexdigest()
 
     def _read_seed_string(
         self,

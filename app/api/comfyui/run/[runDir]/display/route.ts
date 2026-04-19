@@ -1,5 +1,10 @@
 import { isValidRunDir } from "@/lib/comfyui-types";
-import { privateObjectUrl, publicObjectUrl } from "@/lib/r2-url";
+import {
+  privateObjectUrlWithMetadata,
+  privateSignedUrlResponseMaxAgeSeconds,
+  privateSignedUrlTtlSeconds,
+  publicObjectUrl,
+} from "@/lib/r2-url";
 import { createSupabaseAuthClient } from "@/lib/supabase-auth";
 import type {
   ImageCategory,
@@ -14,8 +19,14 @@ type RouteContext = {
 };
 
 type VariantUrls = {
-  webp?: string;
-  avif?: string;
+  bucket: R2Bucket;
+  cache_key: string;
+  url: string;
+};
+
+type VariantSources = {
+  webp?: VariantUrls;
+  avif?: VariantUrls;
 };
 
 function parseNonNegativeInt(raw: string | null): number | null {
@@ -35,26 +46,48 @@ function isMissingAuthSessionError(error: Error | null): boolean {
   return error.message.toLowerCase().includes("auth session missing");
 }
 
-function urlFromVariant(bucket: R2Bucket, r2Key: string): string {
-  return bucket === "public" ? publicObjectUrl(r2Key) : privateObjectUrl(r2Key);
-}
-
-function nullableUrl(
+function nullableResolvedVariant(
   bucket: R2Bucket | null | undefined,
   r2Key: string | null | undefined,
-): string | null {
-  if (!bucket || !r2Key) return null;
-  return urlFromVariant(bucket, r2Key);
+  cacheKey: string | null | undefined,
+  signedAt: Date,
+): VariantUrls | null {
+  if (!bucket && !r2Key && !cacheKey) return null;
+  if (!bucket || !r2Key || !cacheKey) {
+    throw new Error("Invalid display variant payload");
+  }
+
+  if (bucket === "public") {
+    return {
+      bucket,
+      cache_key: cacheKey,
+      url: publicObjectUrl(r2Key),
+    };
+  }
+
+  const signed = privateObjectUrlWithMetadata(r2Key, signedAt);
+  return {
+    bucket,
+    cache_key: cacheKey,
+    url: signed.url,
+  };
 }
 
-function buildDisplayImage(image: SupabaseRunGridItemRow): VariantUrls | null {
-  const displayWebp = nullableUrl(
+function buildDisplayImage(
+  image: SupabaseRunGridItemRow,
+  signedAt: Date,
+): VariantSources | null {
+  const displayWebp = nullableResolvedVariant(
     image.display_webp_bucket,
     image.display_webp_r2_key,
+    image.display_webp_cache_key,
+    signedAt,
   );
-  const displayAvif = nullableUrl(
+  const displayAvif = nullableResolvedVariant(
     image.display_avif_bucket,
     image.display_avif_r2_key,
+    image.display_avif_cache_key,
+    signedAt,
   );
 
   if (displayWebp || displayAvif) {
@@ -90,10 +123,13 @@ export async function GET(
     }
 
     const supabase = await createSupabaseAuthClient();
+    const signingAt = new Date();
+    const signedUrlTtlSeconds = privateSignedUrlTtlSeconds();
+    const responseMaxAge = privateSignedUrlResponseMaxAgeSeconds();
     const { data, error } = await supabase
       .from("run_grid_items")
       .select(
-        "run_dir,x_index,y_index,batch_index,category,width,height,blurhash,display_webp_bucket,display_webp_r2_key,display_avif_bucket,display_avif_r2_key",
+        "run_dir,x_index,y_index,batch_index,category,width,height,blurhash,display_webp_bucket,display_webp_r2_key,display_webp_cache_key,display_avif_bucket,display_avif_r2_key,display_avif_cache_key",
       )
       .eq("run_dir", runDir)
       .eq("x_index", xIndex)
@@ -138,7 +174,7 @@ export async function GET(
       }
     }
 
-    const displayImage = buildDisplayImage(image);
+    const displayImage = buildDisplayImage(image, signingAt);
     if (!displayImage) {
       return Response.json({ error: "Image not found" }, { status: 404 });
     }
@@ -149,11 +185,14 @@ export async function GET(
         x_index: xIndex,
         y_index: yIndex,
         batch_index: batchIndex,
+        signed_url_expires_at: new Date(
+          signingAt.getTime() + signedUrlTtlSeconds * 1000,
+        ).toISOString(),
         image: displayImage,
       },
       {
         headers: {
-          "Cache-Control": "private, no-store, max-age=0",
+          "Cache-Control": `private, max-age=${responseMaxAge}`,
           Vary: "Cookie",
         },
       },

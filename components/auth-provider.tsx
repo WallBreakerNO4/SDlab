@@ -10,6 +10,7 @@ import {
 } from "react";
 import type { User } from "@supabase/supabase-js";
 import { toast } from "sonner";
+import { clearAllPrivateImageCaches } from "@/lib/private-image-cache";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 type AuthContextValue = {
@@ -191,6 +192,7 @@ export function AuthProvider({
       return;
     }
 
+    await clearAllPrivateImageCaches();
     setUser(null);
   }, [supabase]);
 

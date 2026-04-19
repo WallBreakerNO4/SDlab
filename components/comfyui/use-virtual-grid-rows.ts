@@ -7,9 +7,13 @@ import { normalizeRowPayload } from "./virtual-grid-utils";
 
 type UseVirtualGridRowsOptions = {
   runDir: string;
+  showNsfw: boolean;
 };
 
-export function useVirtualGridRows({ runDir }: UseVirtualGridRowsOptions) {
+export function useVirtualGridRows({
+  runDir,
+  showNsfw,
+}: UseVirtualGridRowsOptions) {
   const rowCacheRef = useRef<Map<number, CachedRow>>(new Map());
   const rowRequestsRef = useRef<Map<number, AbortController>>(new Map());
   const [rowCacheVersion, setRowCacheVersion] = useState(0);
@@ -24,10 +28,10 @@ export function useVirtualGridRows({ runDir }: UseVirtualGridRowsOptions) {
       rowRequestsRef.current.set(yIndex, controller);
 
       try {
+        const preferenceRequestKey = showNsfw ? "nsfw-on" : "nsfw-off";
         const response = await fetch(
-          `/api/comfyui/run/${encodeURIComponent(runDir)}/row?y_index=${encodeURIComponent(String(yIndex))}`,
+          `/api/comfyui/run/${encodeURIComponent(runDir)}/row?y_index=${encodeURIComponent(String(yIndex))}&viewer_nsfw=${encodeURIComponent(preferenceRequestKey)}`,
           {
-            cache: "no-store",
             signal: controller.signal,
           },
         );
@@ -100,7 +104,7 @@ export function useVirtualGridRows({ runDir }: UseVirtualGridRowsOptions) {
         rowRequestsRef.current.delete(yIndex);
       }
     },
-    [runDir],
+    [runDir, showNsfw],
   );
 
   useEffect(() => {

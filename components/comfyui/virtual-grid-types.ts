@@ -1,6 +1,12 @@
-export type VariantUrls = {
-  webp?: string;
-  avif?: string;
+export type ImageVariantSource = {
+  bucket: "public" | "private";
+  cache_key: string;
+  url?: string;
+};
+
+export type VariantSources = {
+  webp?: ImageVariantSource;
+  avif?: ImageVariantSource;
 };
 
 export type RowMeta = {
@@ -17,7 +23,8 @@ export type RowItem = {
   height: number | null;
   blurhash: string | null;
   meta: RowMeta;
-  thumb: VariantUrls | null;
+  thumb: VariantSources | null;
+  display: VariantSources | null;
 };
 
 export type RowCell = {
@@ -72,7 +79,8 @@ export type SelectedCellPreview = {
     batchIndex: number;
     width: number | null;
     height: number | null;
-    thumb: VariantUrls | null;
+    thumb: VariantSources | null;
+    display: VariantSources | null;
     thumbLoaded: boolean;
     blurhash: string | null;
   }>;

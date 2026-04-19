@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import sys
 from pathlib import Path
 from typing import cast
@@ -113,6 +114,10 @@ def _sample_payload() -> dict[str, object]:
             }
         ],
     }
+
+
+def _variant_cache_key(bucket: str, r2_key: str) -> str:
+    return hashlib.sha256(f"v1:{bucket}:{r2_key}".encode("utf-8")).hexdigest()
 
 
 def _sample_payload_with_png_run_asset() -> dict[str, object]:
@@ -467,6 +472,10 @@ def test_upsert_upload_index_extracts_structured_columns() -> None:
     assert image_row["prompt_hash"] == "hash-1"
     assert image_row["positive_prompt"] == "hello"
     assert image_row["y_value"] == "Y1"
+    assert image_row["thumb_webp_cache_key"] is None
+    assert image_row["thumb_avif_cache_key"] is None
+    assert image_row["display_webp_cache_key"] is None
+    assert image_row["display_avif_cache_key"] is None
 
 
 def test_upsert_upload_index_persists_run_assets() -> None:
@@ -495,6 +504,25 @@ def test_upsert_upload_index_preserves_png_run_asset_paths() -> None:
     cover = cast(dict[str, object], run_list_item["cover"])
     assert cover["display_webp_r2_key"] == "runs/r/cover-display.webp"
     assert cover["thumb_webp_r2_key"] == "runs/r/cover-thumb.webp"
+
+
+def test_upsert_upload_index_persists_variant_cache_keys() -> None:
+    client = _InMemorySupabaseClient(return_upsert_rows=True)
+    writer = SupabaseWriter(client=client, dry_run=False)
+
+    writer.upsert_upload_index(_sample_payload())
+
+    image_row = next(iter(client._tables["run_grid_items"].values()))
+    assert image_row["display_webp_cache_key"] == _variant_cache_key(
+        "public",
+        "runs/r/display.webp",
+    )
+    assert image_row["thumb_webp_cache_key"] == _variant_cache_key(
+        "public",
+        "runs/r/thumb.webp",
+    )
+    assert image_row["display_avif_cache_key"] is None
+    assert image_row["thumb_avif_cache_key"] is None
 
 
 def test_upsert_upload_index_fallbacks_to_select_for_ids() -> None:

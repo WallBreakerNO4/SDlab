@@ -5,6 +5,7 @@ import { createSupabaseAuthClient } from "@/lib/supabase-auth";
 import type { SupabaseRunRow } from "@/lib/supabase-types";
 
 export const runtime = "nodejs";
+const DETAIL_RESPONSE_CACHE_CONTROL = "private, max-age=240";
 
 type RouteContext = {
   params: Promise<{ runDir: string }>;
@@ -126,22 +127,30 @@ export async function GET(
 
     const yLabels = readYLabels(y_indexes, row.y_labels);
 
-    return Response.json({
-      run: {
-        run_id: runId,
-        created_at: row.created_at,
-        run_dir: row.run_dir,
-        selection: {
-          total_cells,
+    return Response.json(
+      {
+        run: {
+          run_id: runId,
+          created_at: row.created_at,
+          run_dir: row.run_dir,
+          selection: {
+            total_cells,
+          },
+          model: readModelMetadata(row),
+          workflow: readWorkflowMetadata(row),
         },
-        model: readModelMetadata(row),
-        workflow: readWorkflowMetadata(row),
+        xLabels,
+        yLabels,
+        x_columns: visibleColumns.columns,
+        y_indexes,
       },
-      xLabels,
-      yLabels,
-      x_columns: visibleColumns.columns,
-      y_indexes,
-    });
+      {
+        headers: {
+          "Cache-Control": DETAIL_RESPONSE_CACHE_CONTROL,
+          Vary: "Cookie",
+        },
+      },
+    );
   } catch {
     return Response.json(
       {

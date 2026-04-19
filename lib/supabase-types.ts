@@ -72,10 +72,14 @@ export interface SupabaseRunGridItemRow {
   y_value?: string | null;
   thumb_webp_bucket?: R2Bucket | null;
   thumb_webp_r2_key?: string | null;
+  thumb_webp_cache_key?: string | null;
   thumb_avif_bucket?: R2Bucket | null;
   thumb_avif_r2_key?: string | null;
+  thumb_avif_cache_key?: string | null;
   display_webp_bucket?: R2Bucket | null;
   display_webp_r2_key?: string | null;
+  display_webp_cache_key?: string | null;
   display_avif_bucket?: R2Bucket | null;
   display_avif_r2_key?: string | null;
+  display_avif_cache_key?: string | null;
 }

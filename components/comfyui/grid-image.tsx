@@ -3,30 +3,43 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { BlurhashCanvas } from "./blurhash-canvas";
+import { useRenderableVariantSource } from "./use-renderable-variant-source";
+import { getPreferredVariantSource } from "./virtual-grid-utils";
 
-import type { VariantUrls } from "./virtual-grid";
+import type { VariantSources } from "./virtual-grid";
 
 type GridImageProps = {
-  thumbVariants: VariantUrls | null;
+  thumbVariants: VariantSources | null;
   blurhash: string | null;
   alt: string;
+  currentUserId: string | null;
   /** When true, show only the blurhash with a lock overlay instead of the real image. */
   locked?: boolean;
   /** Callback when the locked overlay is clicked. */
   onLockedClick?: () => void;
-  onImageLoaded?: (variants: VariantUrls) => void;
+  onImageLoaded?: (cacheKey: string) => void;
 };
 
 export function GridImage({
   thumbVariants,
   blurhash,
   alt,
+  currentUserId,
   locked,
   onLockedClick,
   onImageLoaded,
 }: GridImageProps) {
   const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
-  const src = thumbVariants?.webp ?? thumbVariants?.avif;
+  const preferredVariant = getPreferredVariantSource(thumbVariants);
+  const isPrivateVariant = preferredVariant?.bucket === "private";
+  const { src: privateSrc, cacheKey: privateCacheKey } =
+    useRenderableVariantSource({
+      variants: isPrivateVariant ? thumbVariants : null,
+      currentUserId,
+    });
+  const src = isPrivateVariant
+    ? privateSrc
+    : thumbVariants?.webp?.url ?? thumbVariants?.avif?.url ?? null;
   const isLoaded = src !== null && loadedSrc === src;
 
   if (locked) {
@@ -80,11 +93,11 @@ export function GridImage({
       )}
       {src ? (
         <picture>
-          {thumbVariants?.avif ? (
-            <source srcSet={thumbVariants.avif} type="image/avif" />
+          {!isPrivateVariant && thumbVariants?.avif?.url ? (
+            <source srcSet={thumbVariants.avif.url} type="image/avif" />
           ) : null}
-          {thumbVariants?.webp ? (
-            <source srcSet={thumbVariants.webp} type="image/webp" />
+          {!isPrivateVariant && thumbVariants?.webp?.url ? (
+            <source srcSet={thumbVariants.webp.url} type="image/webp" />
           ) : null}
           <img
             alt={alt}
@@ -97,8 +110,12 @@ export function GridImage({
             src={src}
             onLoad={() => {
               setLoadedSrc(src);
-              if (thumbVariants) {
-                onImageLoaded?.(thumbVariants);
+              const cacheKey =
+                privateCacheKey ??
+                preferredVariant?.cache_key ??
+                null;
+              if (cacheKey) {
+                onImageLoaded?.(cacheKey);
               }
             }}
           />

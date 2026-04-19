@@ -1,12 +1,13 @@
 import type {
   CachedRow,
+  ImageVariantSource,
   RowCell,
   RowItem,
   RowMeta,
   RowPayload,
   RunGridXColumn,
   SavedScrollAnchor,
-  VariantUrls,
+  VariantSources,
 } from "./virtual-grid-types";
 
 const SCROLL_ANCHOR_STORAGE_VERSION = 1 as const;
@@ -206,15 +207,13 @@ export function getXLabel(column: RunGridXColumn | null | undefined): string {
 }
 
 export function pickBestVariants(
-  primary: VariantUrls | null,
-  fallback: VariantUrls | null,
-): VariantUrls | null {
+  primary: VariantSources | null,
+  fallback: VariantSources | null,
+): VariantSources | null {
   const candidate = primary ?? fallback;
   if (!candidate) return null;
-  const hasWebp =
-    typeof candidate.webp === "string" && candidate.webp.length > 0;
-  const hasAvif =
-    typeof candidate.avif === "string" && candidate.avif.length > 0;
+  const hasWebp = isImageVariantSource(candidate.webp);
+  const hasAvif = isImageVariantSource(candidate.avif);
   if (!hasWebp && !hasAvif) return null;
   return {
     webp: hasWebp ? candidate.webp : undefined,
@@ -222,25 +221,28 @@ export function pickBestVariants(
   };
 }
 
-export function getVariantCacheKey(
-  variants: VariantUrls | null | undefined,
+export function getPreferredVariantCacheKey(
+  variants: VariantSources | null | undefined,
 ): string | null {
-  if (!variants) return null;
-
-  const webp =
-    typeof variants.webp === "string" && variants.webp.length > 0
-      ? variants.webp
-      : null;
-  const avif =
-    typeof variants.avif === "string" && variants.avif.length > 0
-      ? variants.avif
-      : null;
-
-  if (!webp && !avif) {
-    return null;
+  if (isImageVariantSource(variants?.webp)) {
+    return variants.webp.cache_key;
   }
+  if (isImageVariantSource(variants?.avif)) {
+    return variants.avif.cache_key;
+  }
+  return null;
+}
 
-  return `${avif ?? ""}::${webp ?? ""}`;
+export function getPreferredVariantSource(
+  variants: VariantSources | null | undefined,
+): ImageVariantSource | null {
+  if (isImageVariantSource(variants?.webp)) {
+    return variants.webp;
+  }
+  if (isImageVariantSource(variants?.avif)) {
+    return variants.avif;
+  }
+  return null;
 }
 
 export function getPreferredAspectRatioFromCache(
@@ -268,10 +270,37 @@ export function getPreferredAspectRatioFromCache(
   return 1;
 }
 
-function parseVariantUrls(value: unknown): VariantUrls | null {
+function isImageVariantSource(value: unknown): value is ImageVariantSource {
+  return (
+    isRecord(value) &&
+    (value.bucket === "public" || value.bucket === "private") &&
+    getNonEmptyString(value.cache_key) !== null
+  );
+}
+
+function parseImageVariantSource(value: unknown): ImageVariantSource | null {
   if (!isRecord(value)) return null;
-  const webp = getNonEmptyString(value.webp);
-  const avif = getNonEmptyString(value.avif);
+  const bucket = value.bucket;
+  const cacheKey = getNonEmptyString(value.cache_key);
+  if (
+    (bucket !== "public" && bucket !== "private") ||
+    cacheKey === null
+  ) {
+    return null;
+  }
+
+  const url = getNonEmptyString(value.url);
+  return {
+    bucket,
+    cache_key: cacheKey,
+    ...(url ? { url } : {}),
+  };
+}
+
+function parseVariantSources(value: unknown): VariantSources | null {
+  if (!isRecord(value)) return null;
+  const webp = parseImageVariantSource(value.webp);
+  const avif = parseImageVariantSource(value.avif);
   if (!webp && !avif) return null;
   return {
     webp: webp ?? undefined,
@@ -326,7 +355,8 @@ export function normalizeRowPayload(
                     height: getFiniteNumber(item.height),
                     blurhash: getNonEmptyString(item.blurhash),
                     meta,
-                    thumb: parseVariantUrls(item.thumb),
+                    thumb: parseVariantSources(item.thumb),
+                    display: parseVariantSources(item.display),
                   };
                 })
                 .filter((value): value is RowItem => value !== null)
@@ -356,10 +386,10 @@ export function formatValue(
     : String(value);
 }
 
-export function parseDialogImagePayload(raw: unknown): VariantUrls | null {
+export function parseDialogImagePayload(raw: unknown): VariantSources | null {
   if (!isRecord(raw) || !("image" in raw)) {
     return null;
   }
 
-  return parseVariantUrls(raw.image);
+  return parseVariantSources(raw.image);
 }

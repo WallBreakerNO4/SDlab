@@ -9,6 +9,7 @@ import type {
 } from "@/lib/supabase-types";
 
 export const runtime = "nodejs";
+const GRID_RESPONSE_CACHE_CONTROL = "private, max-age=240";
 
 type RunGridMetaRow = {
   x_columns: JsonValue[] | null;
@@ -190,15 +191,23 @@ export async function GET(
     const y_count =
       typeof runMeta.y_count === "number" ? runMeta.y_count : y_indexes.length;
 
-    return Response.json({
-      x_columns: visibleColumns.columns,
-      y_indexes,
-      y_labels,
-      x_count,
-      y_count,
-      cells: {},
-      blurhash_cells,
-    });
+    return Response.json(
+      {
+        x_columns: visibleColumns.columns,
+        y_indexes,
+        y_labels,
+        x_count,
+        y_count,
+        cells: {},
+        blurhash_cells,
+      },
+      {
+        headers: {
+          "Cache-Control": GRID_RESPONSE_CACHE_CONTROL,
+          Vary: "Cookie",
+        },
+      },
+    );
   } catch {
     return Response.json({ error: "Failed to load run grid" }, { status: 500 });
   }

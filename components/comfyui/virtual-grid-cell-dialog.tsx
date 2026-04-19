@@ -19,9 +19,10 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
+import { useRenderableVariantSource } from "./use-renderable-variant-source";
 import { BlurhashCanvas } from "./blurhash-canvas";
 import { formatValue, parseDialogImagePayload } from "./virtual-grid-utils";
-import type { SelectedCellPreview, VariantUrls } from "./virtual-grid-types";
+import type { SelectedCellPreview, VariantSources } from "./virtual-grid-types";
 
 type VirtualGridCellDialogProps = {
   open: boolean;
@@ -46,7 +47,7 @@ export function VirtualGridCellDialog({
     null,
   );
   const [dialogImageVariants, setDialogImageVariants] =
-    useState<VariantUrls | null>(null);
+    useState<VariantSources | null>(null);
   const [isDialogImageLoaded, setIsDialogImageLoaded] = useState(false);
 
   const prevCellKeyRef = useRef<string | null>(null);
@@ -59,12 +60,25 @@ export function VirtualGridCellDialog({
   const currentBatchIndex = currentItem?.batchIndex ?? null;
   const currentDisplayVariants = dialogImageVariants;
   const currentPreviewVariants = currentItem?.thumb ?? null;
+  const currentDisplayCacheVariants = currentItem?.display ?? null;
   const previewWasLoaded = Boolean(currentItem?.thumbLoaded);
-  const currentPreviewUrl =
-    currentPreviewVariants?.webp ?? currentPreviewVariants?.avif ?? null;
-  const currentDownloadUrl =
-    currentDisplayVariants?.webp ?? currentDisplayVariants?.avif ?? null;
-  const showPreviewPlaceholder = previewWasLoaded && !!currentPreviewUrl;
+  const { src: currentPreviewUrl } = useRenderableVariantSource({
+    variants: currentPreviewVariants,
+    currentUserId,
+  });
+  const { src: cachedDisplayUrl, loading: isCachedDisplayLoading } =
+    useRenderableVariantSource({
+      variants: currentDisplayCacheVariants,
+      currentUserId,
+      cacheOnly: true,
+    });
+  const { src: fetchedDisplayUrl } = useRenderableVariantSource({
+    variants: currentDisplayVariants,
+    currentUserId,
+  });
+  const currentDownloadUrl = fetchedDisplayUrl ?? cachedDisplayUrl ?? null;
+  const showPreviewPlaceholder =
+    previewWasLoaded && !!currentPreviewUrl && !currentDownloadUrl;
   const dialogAlt =
     cell && (cell.yLabel || cell.xLabel)
       ? [cell.yLabel, cell.xLabel].filter(Boolean).join(" × ")
@@ -110,7 +124,9 @@ export function VirtualGridCellDialog({
       !open ||
       selectedXIndex === null ||
       selectedYIndex === null ||
-      currentBatchIndex === null
+      currentBatchIndex === null ||
+      currentDownloadUrl !== null ||
+      isCachedDisplayLoading
     ) {
       return;
     }
@@ -128,7 +144,6 @@ export function VirtualGridCellDialog({
         const response = await fetch(
           `/api/comfyui/run/${encodeURIComponent(runDir)}/display?x_index=${encodeURIComponent(String(selectedXIndex))}&y_index=${encodeURIComponent(String(selectedYIndex))}&batch_index=${encodeURIComponent(String(currentBatchIndex))}`,
           {
-            cache: "no-store",
             signal: controller.signal,
           },
         );
@@ -162,7 +177,16 @@ export function VirtualGridCellDialog({
         dialogImageRequestRef.current = null;
       }
     };
-  }, [currentBatchIndex, currentUserId, open, runDir, selectedXIndex, selectedYIndex]);
+  }, [
+    currentBatchIndex,
+    currentDownloadUrl,
+    currentUserId,
+    isCachedDisplayLoading,
+    open,
+    runDir,
+    selectedXIndex,
+    selectedYIndex,
+  ]);
 
   const showPreviousImage = useCallback(() => {
     if (currentImageIndex <= 0) {
@@ -242,15 +266,17 @@ export function VirtualGridCellDialog({
               ) : null}
               {showPreviewPlaceholder ? (
                 <picture className="absolute inset-0 h-full w-full pointer-events-none">
-                  {currentPreviewVariants?.avif ? (
+                  {currentPreviewVariants?.avif?.bucket === "public" &&
+                  currentPreviewVariants.avif.url ? (
                     <source
-                      srcSet={currentPreviewVariants.avif}
+                      srcSet={currentPreviewVariants.avif.url}
                       type="image/avif"
                     />
                   ) : null}
-                  {currentPreviewVariants?.webp ? (
+                  {currentPreviewVariants?.webp?.bucket === "public" &&
+                  currentPreviewVariants.webp.url ? (
                     <source
-                      srcSet={currentPreviewVariants.webp}
+                      srcSet={currentPreviewVariants.webp.url}
                       type="image/webp"
                     />
                   ) : null}
@@ -268,15 +294,17 @@ export function VirtualGridCellDialog({
               ) : null}
               {currentDownloadUrl ? (
                 <picture className="absolute inset-0 h-full w-full pointer-events-none">
-                  {currentDisplayVariants?.avif ? (
+                  {currentDisplayVariants?.avif?.bucket === "public" &&
+                  currentDisplayVariants.avif.url ? (
                     <source
-                      srcSet={currentDisplayVariants.avif}
+                      srcSet={currentDisplayVariants.avif.url}
                       type="image/avif"
                     />
                   ) : null}
-                  {currentDisplayVariants?.webp ? (
+                  {currentDisplayVariants?.webp?.bucket === "public" &&
+                  currentDisplayVariants.webp.url ? (
                     <source
-                      srcSet={currentDisplayVariants.webp}
+                      srcSet={currentDisplayVariants.webp.url}
                       type="image/webp"
                     />
                   ) : null}

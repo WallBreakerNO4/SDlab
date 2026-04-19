@@ -14,31 +14,36 @@ import { VirtualGridCellDialog } from "./virtual-grid-cell-dialog";
 import { useVirtualGridLayout } from "./use-virtual-grid-layout";
 import { useVirtualGridRows } from "./use-virtual-grid-rows";
 import { useVirtualGridScroll } from "./use-virtual-grid-scroll";
-import { getVariantCacheKey } from "./virtual-grid-utils";
+import { getPreferredVariantCacheKey } from "./virtual-grid-utils";
 import type {
   BlurhashCell,
   RowCell,
   RunGridIndexData,
   SelectedCellPreview,
-  VariantUrls,
 } from "./virtual-grid-types";
 
 export type {
   BlurhashCell,
   RunGridIndexData,
   RunGridXColumn,
-  VariantUrls,
+  VariantSources,
 } from "./virtual-grid-types";
 
 type VirtualGridProps = {
   runDir: string;
   grid: RunGridIndexData;
   blurhashMap: Map<string, BlurhashCell>;
+  showNsfw: boolean;
 };
 
 const DEV_IMAGE_DOM_CAP_NOTE = 300;
 
-export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
+export function VirtualGrid({
+  runDir,
+  grid,
+  blurhashMap,
+  showNsfw,
+}: VirtualGridProps) {
   "use no memo";
 
   const scrollElementRef = useRef<HTMLDivElement | null>(null);
@@ -55,6 +60,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
 
   const { rowCacheRef, rowCacheVersion, requestRow } = useVirtualGridRows({
     runDir,
+    showNsfw,
   });
   const layout = useVirtualGridLayout({
     scrollElementRef,
@@ -84,8 +90,8 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
       scrollViewportWidth,
     });
 
-  const markThumbAsLoaded = useCallback((variants: VariantUrls) => {
-    const key = getVariantCacheKey(variants);
+  const markThumbAsLoaded = useCallback((cacheKey: string) => {
+    const key = cacheKey.trim();
     if (!key) {
       return;
     }
@@ -120,13 +126,14 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
       preloadedBlurhash: string | null,
     ) => {
       const items = cell.items.map((item) => {
-        const thumbKey = getVariantCacheKey(item.thumb);
+        const thumbKey = getPreferredVariantCacheKey(item.thumb);
 
         return {
           batchIndex: item.batch_index,
           width: item.width,
           height: item.height,
           thumb: item.thumb,
+          display: item.display,
           thumbLoaded: thumbKey
             ? loadedThumbKeysRef.current.has(thumbKey)
             : false,
@@ -303,6 +310,7 @@ export function VirtualGrid({ runDir, grid, blurhashMap }: VirtualGridProps) {
                           blurhashMap={blurhashMap}
                           previewHeight={layout.previewHeight}
                           isAuthenticated={!!user}
+                          currentUserId={user?.id ?? null}
                           onRequireLogin={() => setLoginDialogOpen(true)}
                           onOpenCellDialog={openCellDialog}
                           onThumbLoad={markThumbAsLoaded}

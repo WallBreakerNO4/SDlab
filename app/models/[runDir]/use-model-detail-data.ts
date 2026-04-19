@@ -28,7 +28,6 @@ export function useModelDetailData(runDir: string, showNsfw: boolean) {
       const detailPromise = fetch(
         `/api/comfyui/run/${encodeURIComponent(runDir)}?viewer_nsfw=${preferenceRequestKey}`,
         {
-          cache: "no-store",
           signal: abortController.signal,
         },
       ).then(async (res) => {
@@ -42,7 +41,6 @@ export function useModelDetailData(runDir: string, showNsfw: boolean) {
       const gridPromise = fetch(
         `/api/comfyui/run/${encodeURIComponent(runDir)}/grid?viewer_nsfw=${preferenceRequestKey}`,
         {
-          cache: "no-store",
           signal: abortController.signal,
         },
       ).then(async (res) => {

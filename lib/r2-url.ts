@@ -17,6 +17,12 @@ type PrivateSigningConfig = {
   ttlSeconds: number;
 };
 
+export type PrivateSignedObjectUrl = {
+  url: string;
+  expiresAt: string;
+  ttlSeconds: number;
+};
+
 /**
  * 分段进行 URL 编码，保留斜杠
  */
@@ -232,9 +238,31 @@ export function publicObjectUrl(r2Key: string): string {
 }
 
 export function privateObjectUrl(r2Key: string): string {
+  return privateObjectUrlWithMetadata(r2Key).url;
+}
+
+export function privateObjectUrlWithMetadata(
+  r2Key: string,
+  now: Date = new Date(),
+): PrivateSignedObjectUrl {
   validateR2Key(r2Key);
   validateVariantFileName(r2Key);
 
   const signingConfig = getPrivateSigningConfig();
-  return buildSignedPrivateObjectUrl(signingConfig, r2Key);
+  return {
+    url: buildSignedPrivateObjectUrl(signingConfig, r2Key, now),
+    expiresAt: new Date(
+      now.getTime() + signingConfig.ttlSeconds * 1000,
+    ).toISOString(),
+    ttlSeconds: signingConfig.ttlSeconds,
+  };
+}
+
+export function privateSignedUrlResponseMaxAgeSeconds(): number {
+  const signingConfig = getPrivateSigningConfig();
+  return Math.max(1, signingConfig.ttlSeconds - 15);
+}
+
+export function privateSignedUrlTtlSeconds(): number {
+  return getPrivateSigningConfig().ttlSeconds;
 }

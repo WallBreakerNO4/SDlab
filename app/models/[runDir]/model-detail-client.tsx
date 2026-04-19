@@ -18,7 +18,6 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { FileIcon, LinkSquare02Icon } from "@hugeicons/core-free-icons";
 import {
   Empty,
   EmptyDescription,
@@ -118,6 +117,7 @@ export function ModelDetailClientPage({ runDir }: { runDir: string }) {
               runDir={runDir}
               grid={gridData}
               blurhashMap={blurhashMap}
+              showNsfw={showNsfw}
             />
           </div>
         ) : null}

@@ -1,0 +1,18 @@
+{
+  "rules": [
+    {
+      "id": "private-image-downloads",
+      "allowed": {
+        "origins": [
+          "http://localhost:3000",
+          "https://sdlab.wall-breaker-no4.xyz"
+        ],
+        "methods": [
+          "GET",
+          "HEAD"
+        ]
+      },
+      "maxAgeSeconds": 3600
+    }
+  ]
+}
