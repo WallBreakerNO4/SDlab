@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from argparse import Namespace
-from contextlib import contextmanager
 from collections.abc import Iterator
+from contextlib import contextmanager
+import copy
 import json
 import hashlib
 import os
@@ -19,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from scripts.r2_upload.upload_images_to_r2 import main
+from scripts.r2_upload.manifest import build_view_release
 from scripts.r2_upload.upload_planner import (
     _build_run_plan,
     _build_run_asset_category_resolver,
@@ -252,7 +254,7 @@ def test_cli_dry_run_outputs_required_keys_and_manifest_uploads(
     assert payload["planned_grid_image_variant_uploads"] == 4
     assert payload["planned_run_asset_variant_uploads"] == 0
     assert payload["planned_artifact_uploads"] == 1
-    assert payload["planned_manifest_uploads"] == 2
+    assert payload["planned_manifest_uploads"] == 3
 
     planned_uploads = payload.get("planned_uploads")
     assert isinstance(planned_uploads, list)
@@ -273,14 +275,15 @@ def test_cli_dry_run_outputs_required_keys_and_manifest_uploads(
         str(cast(dict[str, object], item).get("variant")) for item in planned_uploads
     }
     assert "workflow_download" in variant_names
-    assert "manifest_public" in variant_names
-    assert "manifest_private" in variant_names
+    assert "view_current" in variant_names
+    assert "view_bootstrap_sfw" in variant_names
+    assert "view_bootstrap_nsfw" in variant_names
 
     manifest_keys = payload.get("manifest_keys")
     assert isinstance(manifest_keys, dict)
     assert isinstance(manifest_keys.get("public"), list)
     assert isinstance(manifest_keys.get("private"), list)
-    assert len(cast(list[object], manifest_keys["public"])) == 1
+    assert len(cast(list[object], manifest_keys["public"])) == 2
     assert len(cast(list[object], manifest_keys["private"])) == 1
 
 
@@ -301,7 +304,7 @@ def test_cli_dry_run_includes_cover_and_homepage_asset_variants(
     assert payload.get("planned_grid_image_variant_uploads") == 4
     assert payload.get("planned_run_asset_variant_uploads") == 8
     assert payload.get("planned_artifact_uploads") == 1
-    assert payload.get("planned_manifest_uploads") == 2
+    assert payload.get("planned_manifest_uploads") == 3
 
     planned_uploads = payload.get("planned_uploads")
     assert isinstance(planned_uploads, list)
@@ -423,6 +426,115 @@ def test_build_run_plan_embeds_image_variants_in_public_row_manifest(
     assert str(display_webp["key"]).endswith("display_webp.webp")
     assert len(str(thumb_webp["cache_key"])) == 64
     assert len(str(display_webp["cache_key"])) == 64
+
+
+def _sample_view_release_payload() -> dict[str, object]:
+    return {
+        "run_dir": "demo-run",
+        "run_id": "demo-run",
+        "run_json": {
+            "created_at": "2026-04-20T00:00:00Z",
+        },
+        "x_columns": [
+            {
+                "type": "normal",
+                "description": {"zh": "示例列"},
+            }
+        ],
+        "y_indexes": [0],
+        "total_cells": 1,
+        "images": [
+            {
+                "x_index": 0,
+                "y_index": 0,
+                "batch_index": 0,
+                "category": "advance",
+                "blurhash": "advance-blurhash",
+                "positive_prompt": "advance prompt",
+                "prompt_hash": "advance-hash",
+                "seed": "100",
+                "y_value": "style-a",
+                "thumb_webp_bucket": "private",
+                "thumb_webp_r2_key": (
+                    "runs/demo-run/sha256/aa/"
+                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/"
+                    "thumb_webp.webp"
+                ),
+                "thumb_webp_cache_key": "a" * 64,
+                "display_webp_bucket": "private",
+                "display_webp_r2_key": (
+                    "runs/demo-run/sha256/aa/"
+                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/"
+                    "display_webp.webp"
+                ),
+                "display_webp_cache_key": "b" * 64,
+            },
+            {
+                "x_index": 0,
+                "y_index": 0,
+                "batch_index": 1,
+                "category": "normal",
+                "blurhash": "normal-blurhash",
+                "positive_prompt": "normal prompt",
+                "prompt_hash": "normal-hash",
+                "seed": "101",
+                "y_value": "style-a",
+                "thumb_webp_bucket": "public",
+                "thumb_webp_r2_key": (
+                    "runs/demo-run/sha256/bb/"
+                    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/"
+                    "thumb_webp.webp"
+                ),
+                "thumb_webp_cache_key": "c" * 64,
+                "display_webp_bucket": "public",
+                "display_webp_r2_key": (
+                    "runs/demo-run/sha256/bb/"
+                    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/"
+                    "display_webp.webp"
+                ),
+                "display_webp_cache_key": "d" * 64,
+            },
+        ],
+    }
+
+
+def test_build_view_release_filters_public_rows_to_accessible_items() -> None:
+    release = build_view_release(_sample_view_release_payload())
+
+    public_row = cast(dict[str, object], release["row_manifests"])["public"]
+    public_row_manifest = cast(dict[int, dict[str, object]], public_row)[0]
+    cells = cast(list[dict[str, object]], public_row_manifest["cells"])
+    items = cast(list[dict[str, object]], cells[0]["items"])
+
+    assert len(items) == 1
+    assert items[0]["category"] == "normal"
+
+    meta = cast(dict[str, object], items[0]["meta"])
+    assert meta["positive_prompt"] == "normal prompt"
+
+    bootstrap_sfw = cast(dict[str, object], release["bootstrap_sfw"])
+    blurhash_cells = cast(list[dict[str, object]], bootstrap_sfw["blurhash_cells"])
+    prompts = cast(list[dict[str, object]], bootstrap_sfw["prompts"])
+    assert blurhash_cells[0]["category"] == "normal"
+    assert prompts == [
+        {
+            "id": 2,
+            "prompt_hash": "normal-hash",
+            "positive_prompt": "normal prompt",
+        }
+    ]
+
+
+def test_build_view_release_release_id_changes_when_row_manifest_changes() -> None:
+    base_payload = _sample_view_release_payload()
+    changed_payload = copy.deepcopy(base_payload)
+    changed_images = cast(list[dict[str, object]], changed_payload["images"])
+    changed_images[1]["display_webp_cache_key"] = "e" * 64
+
+    first_release = build_view_release(base_payload)
+    second_release = build_view_release(changed_payload)
+
+    assert first_release["release_id"] != second_release["release_id"]
 
 
 def test_build_run_db_fields_extracts_model_structured_fields(tmp_path: Path) -> None:
@@ -742,6 +854,7 @@ def test_cli_dry_run_loads_metadata_once_per_run(
 def test_cli_dry_run_cache_sidecars_do_not_collide_for_repeated_batch_index(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     run_dir = tmp_path / "duplicate-batch-run"
     images_dir = run_dir / "images"
@@ -768,6 +881,10 @@ def test_cli_dry_run_cache_sidecars_do_not_collide_for_repeated_batch_index(
             },
         ],
     )
+    monkeypatch.setenv(
+        "R2_UPLOAD_INTERMEDIATE_DIR",
+        str(tmp_path / "duplicate-batch-intermediate"),
+    )
 
     first_exit = main(["--dry-run", "--run-dir", str(run_dir)])
     assert first_exit == 0
@@ -791,6 +908,10 @@ def test_cli_dry_run_rebuilds_cache_when_source_file_changes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     run_dir = _write_run_fixture(tmp_path, run_name="invalidate-cache-run")
+    monkeypatch.setenv(
+        "R2_UPLOAD_INTERMEDIATE_DIR",
+        str(tmp_path / "invalidate-cache-intermediate"),
+    )
 
     first_exit = main(["--dry-run", "--run-dir", str(run_dir)])
     assert first_exit == 0
@@ -854,7 +975,12 @@ def test_resolve_image_workers_defaults_to_available_cpu_count(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("R2_IMAGE_WORKERS", raising=False)
-    monkeypatch.setattr(os, "sched_getaffinity", lambda _: {0, 1, 2, 3})
+    monkeypatch.setattr(
+        os,
+        "sched_getaffinity",
+        lambda _: {0, 1, 2, 3},
+        raising=False,
+    )
 
     assert _resolve_image_workers(Namespace(concurrency=None)) == 4
 

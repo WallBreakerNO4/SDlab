@@ -53,7 +53,6 @@ def build_view_release(payload: Mapping[str, object]) -> dict[str, object]:
     images = _required_mapping_list(payload.get("images"), field="images")
     x_columns = _required_sequence(payload.get("x_columns"), field="x_columns")
     y_indexes = _required_int_list(payload.get("y_indexes"), field="y_indexes")
-    workflow_key = _optional_non_empty_str(payload.get("workflow_download_r2_key"))
 
     prompt_rows = _build_prompt_rows(run_dir=run_dir, images=images)
     prompts_by_key = {
@@ -73,6 +72,7 @@ def build_view_release(payload: Mapping[str, object]) -> dict[str, object]:
         images=images,
         prompts_by_key=prompts_by_key,
         visible_columns=visible_columns_sfw,
+        accessible_categories={"normal"},
     )
     bootstrap_nsfw = _build_bootstrap_manifest(
         run_detail=run_detail,
@@ -81,14 +81,8 @@ def build_view_release(payload: Mapping[str, object]) -> dict[str, object]:
         images=images,
         prompts_by_key=prompts_by_key,
         visible_columns=visible_columns_nsfw,
+        accessible_categories={"normal", "advance", "nsfw"},
     )
-
-    release_seed = {
-        "bootstrap_sfw": bootstrap_sfw,
-        "bootstrap_nsfw": bootstrap_nsfw,
-        "prompt_rows": prompt_rows,
-    }
-    release_id = _manifest_sha256(release_seed)[:20]
 
     row_manifests: dict[str, dict[int, dict[str, object]]] = {
         "public": {},
@@ -121,6 +115,14 @@ def build_view_release(payload: Mapping[str, object]) -> dict[str, object]:
             visible_columns=visible_columns_nsfw,
             accessible_categories={"normal", "advance", "nsfw"},
         )
+
+    release_seed = {
+        "bootstrap_sfw": bootstrap_sfw,
+        "bootstrap_nsfw": bootstrap_nsfw,
+        "row_manifests": row_manifests,
+        "prompt_rows": prompt_rows,
+    }
+    release_id = _manifest_sha256(release_seed)[:20]
 
     current_manifest = {
         "schema_version": VIEW_SCHEMA_VERSION,
@@ -357,6 +359,7 @@ def _build_bootstrap_manifest(
     images: Sequence[Mapping[str, object]],
     prompts_by_key: Mapping[tuple[str | None, str], Mapping[str, object]],
     visible_columns: Mapping[str, object],
+    accessible_categories: set[str],
 ) -> dict[str, object]:
     remap = cast(dict[int, int], visible_columns["remap"])
     prompt_ids: set[int] = set()
@@ -371,6 +374,13 @@ def _build_bootstrap_manifest(
             continue
         if x_index not in remap:
             continue
+        if not _is_accessible_category(
+            _optional_non_empty_str(image.get("category")),
+            accessible_categories=accessible_categories,
+        ):
+            continue
+        prompt_row = _prompt_row_for_image(image, prompts_by_key)
+        prompt_ids.add(int(prompt_row["prompt_id"]))
         if not isinstance(batch_index, int):
             continue
         key = (x_index, y_index)
@@ -461,6 +471,11 @@ def _build_row_manifest(
         if not isinstance(original_x_index, int) or original_x_index not in remap:
             continue
         category = _optional_non_empty_str(image.get("category"))
+        if not _is_accessible_category(
+            category,
+            accessible_categories=accessible_categories,
+        ):
+            continue
         prompt_row = _prompt_row_for_image(image, prompts_by_key)
         cells_by_x[remap[original_x_index]].append(
             {
@@ -473,6 +488,7 @@ def _build_row_manifest(
                     "seed": _optional_non_empty_str(image.get("seed")),
                     "prompt_id": int(prompt_row["prompt_id"]),
                     "prompt_hash": prompt_row["prompt_hash"],
+                    "positive_prompt": prompt_row["positive_prompt"],
                     "y_value": _optional_non_empty_str(image.get("y_value")),
                 },
                 "thumb": _build_variant_sources(
@@ -526,3 +542,11 @@ def _build_variant_sources(
             "key": r2_key,
         }
     return result or None
+
+
+def _is_accessible_category(
+    category: str | None,
+    *,
+    accessible_categories: set[str],
+) -> bool:
+    return category is not None and category in accessible_categories

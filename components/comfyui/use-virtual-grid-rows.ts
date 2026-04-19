@@ -39,6 +39,14 @@ function buildRowManifestUrl(options: {
   );
 }
 
+function pickRepresentativeMeta(cell: RowCell): RowMeta | null {
+  return (
+    cell.items.find((item) => item.display || item.thumb)?.meta ??
+    cell.items[0]?.meta ??
+    null
+  );
+}
+
 export function useVirtualGridRows({
   runDir,
   showNsfw,
@@ -108,9 +116,12 @@ export function useVirtualGridRows({
         const cellsByX = new Map<number, RowCell>();
         let representativeMeta: RowMeta | null = null;
         for (const cell of payload.cells) {
+          if (cell.items.length === 0) {
+            continue;
+          }
           cellsByX.set(cell.x_index, cell);
           if (!representativeMeta) {
-            representativeMeta = cell.items[0]?.meta ?? null;
+            representativeMeta = pickRepresentativeMeta(cell);
           }
         }
 

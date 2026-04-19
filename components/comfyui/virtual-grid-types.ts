@@ -13,6 +13,7 @@ export type RowMeta = {
   seed: string | null;
   prompt_id: number | null;
   prompt_hash: string | null;
+  positive_prompt: string | null;
   y_value: string | null;
 };
 

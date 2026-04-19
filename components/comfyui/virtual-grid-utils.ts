@@ -315,6 +315,7 @@ function parseRowMeta(value: unknown): RowMeta {
       seed: null,
       prompt_id: null,
       prompt_hash: null,
+      positive_prompt: null,
       y_value: null,
     };
   }
@@ -323,6 +324,7 @@ function parseRowMeta(value: unknown): RowMeta {
     seed: getSeedString(value.seed),
     prompt_id: getFiniteNumber(value.prompt_id),
     prompt_hash: getNonEmptyString(value.prompt_hash),
+    positive_prompt: getNonEmptyString(value.positive_prompt),
     y_value: getNonEmptyString(value.y_value),
   };
 }
@@ -349,6 +351,9 @@ export function normalizeRowPayload(
                   const batchIndex = getFiniteNumber(item.batch_index);
                   if (batchIndex === null) return null;
                   const meta = parseRowMeta(item.meta);
+                  const thumb = parseVariantSources(item.thumb);
+                  const display = parseVariantSources(item.display);
+                  if (!thumb && !display) return null;
                   return {
                     batch_index: batchIndex,
                     category: getNonEmptyString(item.category),
@@ -356,8 +361,8 @@ export function normalizeRowPayload(
                     height: getFiniteNumber(item.height),
                     blurhash: getNonEmptyString(item.blurhash),
                     meta,
-                    thumb: parseVariantSources(item.thumb),
-                    display: parseVariantSources(item.display),
+                    thumb,
+                    display,
                   };
                 })
                 .filter((value): value is RowItem => value !== null)

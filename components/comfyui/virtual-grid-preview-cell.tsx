@@ -50,8 +50,10 @@ export function VirtualGridPreviewCell({
     rowEntry && rowEntry.status === "ready"
       ? (rowEntry.cellsByX.get(xIndex) ?? null)
       : null;
-
-  const representativeItem = rowCell?.items[0] ?? null;
+  const representativeItem =
+    rowCell?.items.find((item) => pickBestVariants(item.thumb, null)) ??
+    rowCell?.items[0] ??
+    null;
   const thumbVariants = representativeItem
     ? pickBestVariants(representativeItem.thumb, null)
     : null;

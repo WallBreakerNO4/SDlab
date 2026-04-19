@@ -36,14 +36,10 @@ function isAllowedPrivateObjectKey(
   }
 
   const fileName = key.split("/").pop() ?? "";
-  if (fileName === "display_webp.webp" || fileName === "display_avif.avif") {
-    return false;
-  }
-
-  return (
-    fileName.startsWith("display_") ||
-    fileName.startsWith("thumb_")
-  );
+  const isAllowedVariantFile =
+    (fileName.startsWith("display_") || fileName.startsWith("thumb_")) &&
+    (fileName.endsWith(".webp") || fileName.endsWith(".avif"));
+  return isAllowedVariantFile;
 }
 
 export async function GET(request: Request): Promise<Response> {
@@ -72,11 +68,7 @@ export async function GET(request: Request): Promise<Response> {
     headers.set("Content-Length", String(object.size));
     headers.set("ETag", object.httpEtag);
     return new Response(object.body, { status: 200, headers });
-  } catch (error) {
-    console.error("[api/private-object]", error);
-    return jsonError(
-      500,
-      error instanceof Error ? error.message : "Failed to load private object",
-    );
+  } catch {
+    return jsonError(500, "Failed to load private object");
   }
 }

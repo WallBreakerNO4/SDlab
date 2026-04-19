@@ -148,7 +148,10 @@ export function VirtualGrid({
         };
       });
 
-      const representative = cell.items[0]?.meta ?? null;
+      const representative =
+        cell.items.find((item) => item.display || item.thumb)?.meta ??
+        cell.items[0]?.meta ??
+        null;
       const positivePrompt = grid.prompts.find(
         (prompt) => prompt.id === representative?.prompt_id,
       )?.positive_prompt;
@@ -162,7 +165,10 @@ export function VirtualGrid({
         yLabel,
         seed,
         promptHash,
-        positivePrompt: positivePrompt ?? "（无 positive prompt）",
+        positivePrompt:
+          positivePrompt ??
+          representative?.positive_prompt ??
+          "（无 positive prompt）",
         items,
       });
       setDialogOpen(true);
