@@ -10,13 +10,17 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from .encoding_params import avif_params, webp_params
-from .manifest import build_public_manifest, build_run_manifest, manifest_object_key
+from .manifest import (
+    build_view_release,
+    current_view_object_key,
+    view_manifest_object_key,
+)
 from .path_safety import normalize_run_dir, resolve_metadata_image_paths
 from .r2_keys import (
     bucket_for,
@@ -1497,42 +1501,113 @@ def _build_run_plan(
         run_json, run_dir_name=run_dir_name
     )
 
-    private_manifest = build_run_manifest(db_payload)
-    public_manifest = build_public_manifest(private_manifest)
-    private_manifest_bytes = _to_json_line(private_manifest).encode("utf-8")
-    public_manifest_bytes = _to_json_line(public_manifest).encode("utf-8")
-
-    private_manifest_key = manifest_object_key(
-        run_dir_name,
-        private_manifest,
-        visibility="private",
-    )
-    public_manifest_key = manifest_object_key(
-        run_dir_name,
-        public_manifest,
-        visibility="public",
-    )
-
-    manifest_uploads = [
-        PlannedUpload(
-            variant="manifest_private",
-            bucket_scope="private",
-            key=private_manifest_key,
-            content_type="application/json",
-            cache_control=cache_control_for("private"),
-            byte_size=len(private_manifest_bytes),
-            body_bytes=private_manifest_bytes,
+    view_release = build_view_release(db_payload)
+    db_payload["view_release"] = {
+        "schema_version": view_release["schema_version"],
+        "release_id": view_release["release_id"],
+        "current_r2_key": current_view_object_key(run_dir_name),
+        "bootstrap_sfw_r2_key": view_manifest_object_key(
+            run_dir_name,
+            cast(str, view_release["release_id"]),
+            kind="bootstrap",
+            viewer_variant="public",
         ),
+        "bootstrap_nsfw_r2_key": view_manifest_object_key(
+            run_dir_name,
+            cast(str, view_release["release_id"]),
+            kind="bootstrap",
+            viewer_variant="auth_nsfw",
+        ),
+        "media_access_version": 1,
+    }
+    db_payload["prompts"] = view_release["prompt_rows"]
+
+    manifest_uploads: list[PlannedUpload] = []
+
+    current_manifest_bytes = _to_json_line(
+        cast(dict[str, object], view_release["current_manifest"])
+    ).encode("utf-8")
+    manifest_uploads.append(
         PlannedUpload(
-            variant="manifest_public",
+            variant="view_current",
             bucket_scope="public",
-            key=public_manifest_key,
+            key=current_view_object_key(run_dir_name),
+            content_type="application/json",
+            cache_control="public, max-age=60, stale-while-revalidate=300",
+            byte_size=len(current_manifest_bytes),
+            body_bytes=current_manifest_bytes,
+        )
+    )
+
+    bootstrap_sfw_bytes = _to_json_line(
+        cast(dict[str, object], view_release["bootstrap_sfw"])
+    ).encode("utf-8")
+    manifest_uploads.append(
+        PlannedUpload(
+            variant="view_bootstrap_sfw",
+            bucket_scope="public",
+            key=view_manifest_object_key(
+                run_dir_name,
+                cast(str, view_release["release_id"]),
+                kind="bootstrap",
+                viewer_variant="public",
+            ),
             content_type="application/json",
             cache_control=cache_control_for("public"),
-            byte_size=len(public_manifest_bytes),
-            body_bytes=public_manifest_bytes,
-        ),
-    ]
+            byte_size=len(bootstrap_sfw_bytes),
+            body_bytes=bootstrap_sfw_bytes,
+        )
+    )
+
+    bootstrap_nsfw_bytes = _to_json_line(
+        cast(dict[str, object], view_release["bootstrap_nsfw"])
+    ).encode("utf-8")
+    manifest_uploads.append(
+        PlannedUpload(
+            variant="view_bootstrap_nsfw",
+            bucket_scope="private",
+            key=view_manifest_object_key(
+                run_dir_name,
+                cast(str, view_release["release_id"]),
+                kind="bootstrap",
+                viewer_variant="auth_nsfw",
+            ),
+            content_type="application/json",
+            cache_control=cache_control_for("private"),
+            byte_size=len(bootstrap_nsfw_bytes),
+            body_bytes=bootstrap_nsfw_bytes,
+        )
+    )
+
+    row_manifests = cast(
+        dict[str, dict[int, dict[str, object]]],
+        view_release["row_manifests"],
+    )
+    for viewer_variant, rows in row_manifests.items():
+        bucket_scope: BucketScope = "public" if viewer_variant == "public" else "private"
+        cache_control = cache_control_for(bucket_scope)
+        for y_index, row_manifest in rows.items():
+            row_bytes = _to_json_line(row_manifest).encode("utf-8")
+            manifest_uploads.append(
+                PlannedUpload(
+                    variant=f"view_row_{viewer_variant}",
+                    bucket_scope=bucket_scope,
+                    key=view_manifest_object_key(
+                        run_dir_name,
+                        cast(str, view_release["release_id"]),
+                        kind="row",
+                        viewer_variant=cast(
+                            Literal["public", "auth_sfw", "auth_nsfw"],
+                            viewer_variant,
+                        ),
+                        y_index=y_index,
+                    ),
+                    content_type="application/json",
+                    cache_control=cache_control,
+                    byte_size=len(row_bytes),
+                    body_bytes=row_bytes,
+                )
+            )
 
     return RunPlan(
         run_dir=normalized_run_dir,

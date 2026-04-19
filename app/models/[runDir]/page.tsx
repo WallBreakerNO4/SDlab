@@ -1,7 +1,5 @@
-import { notFound } from "next/navigation";
-
 import { isValidRunDir } from "@/lib/comfyui-types";
-import { createSupabaseAuthClient } from "@/lib/supabase-auth";
+import { notFound } from "next/navigation";
 
 import { ModelDetailClientPage } from "./model-detail-client";
 
@@ -24,21 +22,6 @@ export default async function ModelDetailPage({
   const runDir = readRunDir(resolvedParams?.runDir);
 
   if (!isValidRunDir(runDir)) {
-    notFound();
-  }
-
-  const supabase = await createSupabaseAuthClient();
-  const { data, error } = await supabase
-    .from("runs")
-    .select("run_dir")
-    .eq("run_dir", runDir)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error("Failed to load model detail page");
-  }
-
-  if (!data) {
     notFound();
   }
 

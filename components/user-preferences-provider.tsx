@@ -63,33 +63,9 @@ export function UserPreferencesProvider({
   );
 
   useEffect(() => {
-    const abortController = new AbortController();
-
-    if (user) {
-      void fetch("/api/viewer/preferences/nsfw", {
-        cache: "no-store",
-        signal: abortController.signal,
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (abortController.signal.aborted) {
-            return;
-          }
-          if (typeof data.show_nsfw === "boolean") {
-            setShowNsfwState(data.show_nsfw);
-          }
-        })
-        .catch((error: unknown) => {
-          if (error instanceof DOMException && error.name === "AbortError") {
-            return;
-          }
-          setShowNsfwState(false);
-        });
+    if (!user) {
+      setShowNsfwState(false);
     }
-
-    return () => {
-      abortController.abort();
-    };
   }, [user]);
 
   const value = useMemo(

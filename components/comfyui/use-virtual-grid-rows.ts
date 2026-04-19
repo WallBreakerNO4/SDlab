@@ -2,17 +2,43 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import type { RunViewAccess } from "@/app/models/[runDir]/model-detail-types";
+import { privateObjectProxyUrl, publicObjectUrl } from "@/lib/r2-url";
+
 import type { CachedRow, RowCell, RowMeta } from "./virtual-grid-types";
 import { normalizeRowPayload } from "./virtual-grid-utils";
 
 type UseVirtualGridRowsOptions = {
   runDir: string;
   showNsfw: boolean;
+  releaseId: string | null;
+  viewAccess: RunViewAccess | null;
 };
+
+function buildRowManifestUrl(options: {
+  runDir: string;
+  yIndex: number;
+  releaseId: string;
+  showNsfw: boolean;
+  viewAccess: RunViewAccess | null;
+}): string {
+  const { runDir, yIndex, releaseId, showNsfw, viewAccess } = options;
+  if (!viewAccess) {
+    return publicObjectUrl(`runs/${runDir}/view/v2/${releaseId}/rows/public/${yIndex}.json`);
+  }
+
+  const viewerVariant = showNsfw ? "auth_nsfw" : "auth_sfw";
+  return privateObjectProxyUrl(
+    `runs/${runDir}/view/v2/${releaseId}/rows/${viewerVariant}/${yIndex}.json`,
+    viewAccess.grant,
+  );
+}
 
 export function useVirtualGridRows({
   runDir,
   showNsfw,
+  releaseId,
+  viewAccess,
 }: UseVirtualGridRowsOptions) {
   const rowCacheRef = useRef<Map<number, CachedRow>>(new Map());
   const rowRequestsRef = useRef<Map<number, AbortController>>(new Map());
@@ -20,7 +46,7 @@ export function useVirtualGridRows({
 
   const requestRow = useCallback(
     async (yIndex: number) => {
-      if (!Number.isFinite(yIndex) || yIndex < 0) return;
+      if (!Number.isFinite(yIndex) || yIndex < 0 || !releaseId) return;
       if (rowCacheRef.current.has(yIndex)) return;
       if (rowRequestsRef.current.has(yIndex)) return;
 
@@ -28,11 +54,17 @@ export function useVirtualGridRows({
       rowRequestsRef.current.set(yIndex, controller);
 
       try {
-        const preferenceRequestKey = showNsfw ? "nsfw-on" : "nsfw-off";
         const response = await fetch(
-          `/api/comfyui/run/${encodeURIComponent(runDir)}/row?y_index=${encodeURIComponent(String(yIndex))}&viewer_nsfw=${encodeURIComponent(preferenceRequestKey)}`,
+          buildRowManifestUrl({
+            runDir,
+            yIndex,
+            releaseId,
+            showNsfw,
+            viewAccess,
+          }),
           {
             signal: controller.signal,
+            cache: "force-cache",
           },
         );
 
@@ -73,18 +105,14 @@ export function useVirtualGridRows({
         for (const cell of payload.cells) {
           cellsByX.set(cell.x_index, cell);
           if (!representativeMeta) {
-            const firstItem = cell.items[0];
-            if (firstItem) {
-              representativeMeta = firstItem.meta;
-            }
+            representativeMeta = cell.items[0]?.meta ?? null;
           }
         }
 
-        const yValue = representativeMeta?.y_value ?? null;
         rowCacheRef.current.set(yIndex, {
           status: "ready",
           yIndex,
-          yValue,
+          yValue: representativeMeta?.y_value ?? null,
           representativeMeta,
           cellsByX,
         });
@@ -104,8 +132,15 @@ export function useVirtualGridRows({
         rowRequestsRef.current.delete(yIndex);
       }
     },
-    [runDir, showNsfw],
+    [releaseId, runDir, showNsfw, viewAccess],
   );
+
+  useEffect(() => {
+    rowCacheRef.current.clear();
+    rowRequestsRef.current.forEach((controller) => controller.abort());
+    rowRequestsRef.current.clear();
+    setRowCacheVersion((value) => value + 1);
+  }, [releaseId, runDir, showNsfw, viewAccess?.grant]);
 
   useEffect(() => {
     const requests = rowRequestsRef.current;

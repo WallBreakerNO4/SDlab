@@ -32,8 +32,18 @@ export function ModelDetailClientPage({ runDir }: { runDir: string }) {
   const { user } = useAuth();
   const { showNsfw } = useUserPreferences();
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
-  const { detailLoadState, gridLoadState, detailData, gridData } =
-    useModelDetailData(runDir, showNsfw);
+  const {
+    detailLoadState,
+    gridLoadState,
+    detailData,
+    gridData,
+    currentView,
+    viewAccess,
+  } = useModelDetailData({
+    runDir,
+    showNsfw,
+    currentUserId: user?.id ?? null,
+  });
 
   const isDetailLoading = detailLoadState === "loading";
   const isGridLoading = gridLoadState === "loading";
@@ -113,11 +123,13 @@ export function ModelDetailClientPage({ runDir }: { runDir: string }) {
         {isGridReady ? (
           <div className="min-h-0 flex-1">
             <VirtualGrid
-              key={`${runDir}:${showNsfw ? "nsfw" : "sfw"}`}
+              key={`${runDir}:${showNsfw ? "nsfw" : "sfw"}:${viewAccess?.viewer_variant ?? "public"}`}
               runDir={runDir}
               grid={gridData}
               blurhashMap={blurhashMap}
               showNsfw={showNsfw}
+              currentView={currentView}
+              viewAccess={viewAccess}
             />
           </div>
         ) : null}

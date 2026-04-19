@@ -25,14 +25,16 @@
       "binding": "R2_PUBLIC_BUCKET",
       "bucket_name": "sdslab-public",
     },
+    {
+      "binding": "R2_PRIVATE_BUCKET",
+      "bucket_name": "sdslab-private",
+    },
   ],
-  // 非敏感环境变量；私有图签名所需 R2_ENDPOINT / access key / secret 请通过 wrangler secret 配置
+  // 非敏感环境变量；敏感授权密钥请通过 wrangler secret 配置
   "vars": {
     "NEXT_PUBLIC_SUPABASE_URL": "https://pevlrhqutitakzpsvqyc.supabase.co",
     "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_CBYV0tBjm0qaZy2LeJz6_w_EMbT3L5m",
-    "R2_PUBLIC_BASE_URL": "https://images.sdlab.wall-breaker-no4.xyz",
-    "R2_PRIVATE_BUCKET": "sdslab-private",
-    "R2_SIGNED_URL_TTL_SECONDS": "60",
+    "NEXT_PUBLIC_R2_PUBLIC_BASE_URL": "https://images.sdlab.wall-breaker-no4.xyz",
   },
   // 配置日志和指标的采样率，启用后可以在 Cloudflare 仪表盘的 Workers Observability 中查看相关数据
   "observability": {

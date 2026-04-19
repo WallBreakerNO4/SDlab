@@ -17,6 +17,7 @@ type VirtualGridPreviewCellProps = {
   previewHeight: number;
   isAuthenticated: boolean;
   currentUserId: string | null;
+  grant: string | null;
   onRequireLogin: () => void;
   onOpenCellDialog: (
     cell: RowCell,
@@ -40,6 +41,7 @@ export function VirtualGridPreviewCell({
   previewHeight,
   isAuthenticated,
   currentUserId,
+  grant,
   onRequireLogin,
   onOpenCellDialog,
   onThumbLoad,
@@ -89,6 +91,7 @@ export function VirtualGridPreviewCell({
             yLabel && xLabel ? `${yLabel} × ${xLabel}` : yLabel || xLabel || "图片预览"
           }
           currentUserId={currentUserId}
+          grant={grant}
           locked={isLocked}
           onLockedClick={onRequireLogin}
           onImageLoaded={onThumbLoad}

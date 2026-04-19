@@ -13,6 +13,7 @@ type GridImageProps = {
   blurhash: string | null;
   alt: string;
   currentUserId: string | null;
+  grant: string | null;
   /** When true, show only the blurhash with a lock overlay instead of the real image. */
   locked?: boolean;
   /** Callback when the locked overlay is clicked. */
@@ -25,21 +26,19 @@ export function GridImage({
   blurhash,
   alt,
   currentUserId,
+  grant,
   locked,
   onLockedClick,
   onImageLoaded,
 }: GridImageProps) {
   const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
   const preferredVariant = getPreferredVariantSource(thumbVariants);
-  const isPrivateVariant = preferredVariant?.bucket === "private";
-  const { src: privateSrc, cacheKey: privateCacheKey } =
+  const { src, cacheKey: privateCacheKey } =
     useRenderableVariantSource({
-      variants: isPrivateVariant ? thumbVariants : null,
+      variants: thumbVariants,
       currentUserId,
+      grant,
     });
-  const src = isPrivateVariant
-    ? privateSrc
-    : thumbVariants?.webp?.url ?? thumbVariants?.avif?.url ?? null;
   const isLoaded = src !== null && loadedSrc === src;
 
   if (locked) {
@@ -93,12 +92,6 @@ export function GridImage({
       )}
       {src ? (
         <picture>
-          {!isPrivateVariant && thumbVariants?.avif?.url ? (
-            <source srcSet={thumbVariants.avif.url} type="image/avif" />
-          ) : null}
-          {!isPrivateVariant && thumbVariants?.webp?.url ? (
-            <source srcSet={thumbVariants.webp.url} type="image/webp" />
-          ) : null}
           <img
             alt={alt}
             className={cn(

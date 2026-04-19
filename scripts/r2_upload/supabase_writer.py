@@ -194,9 +194,11 @@ class SupabaseWriter:
             run_dir = required_str(payload, "run_dir")
             run_json = required_json_object(payload, "run_json")
             images = optional_object_list(payload.get("images"), field="images")
+            prompts = optional_object_list(payload.get("prompts"), field="prompts")
             run_assets = optional_object_list(
                 payload.get("run_assets"), field="run_assets"
             )
+            view_release = required_json_object(payload, "view_release")
         except PayloadValidationError as exc:
             raise _to_argument_error(exc) from exc
 
@@ -246,6 +248,14 @@ class SupabaseWriter:
         self._upsert_run_list_item(run_list_item_row)
         _tick_progress()
 
+        prompt_rows = self._build_run_prompt_rows(
+            prompts=prompts,
+            run_id=run_id,
+            run_dir=run_dir,
+        )
+        self._upsert_run_prompts_batch(prompt_rows)
+        _tick_progress_many(len(prompt_rows))
+
         grid_item_rows: list[dict[str, object]] = []
         grid_item_snapshot_rows: list[dict[str, object]] = []
         for image in images:
@@ -273,6 +283,14 @@ class SupabaseWriter:
         )
         self._upsert_run_grid_cells_batch(grid_cell_rows)
         _tick_progress_many(len(grid_cell_rows))
+
+        run_view_index_row = self._build_run_view_index_row(
+            run_id=run_id,
+            run_dir=run_dir,
+            view_release=view_release,
+        )
+        self._upsert_run_view_index(run_view_index_row)
+        _tick_progress()
 
     def _build_run_row(
         self,
@@ -464,6 +482,29 @@ class SupabaseWriter:
         }
         return row
 
+    def _build_run_prompt_rows(
+        self,
+        *,
+        prompts: list[Mapping[str, object]],
+        run_id: str,
+        run_dir: str,
+    ) -> list[dict[str, object]]:
+        rows: list[dict[str, object]] = []
+        for prompt in prompts:
+            rows.append(
+                {
+                    "run_id": run_id,
+                    "run_dir": run_dir,
+                    "prompt_id": required_int(prompt, "prompt_id"),
+                    "prompt_hash": optional_str(
+                        prompt.get("prompt_hash"),
+                        field="prompt_hash",
+                    ),
+                    "positive_prompt": required_str(prompt, "positive_prompt"),
+                }
+            )
+        return rows
+
     def _build_run_asset_summary(
         self,
         run_asset: Mapping[str, object],
@@ -612,6 +653,57 @@ class SupabaseWriter:
             returning_mode="minimal",
             context={"run_dir": row.get("run_dir")},
         )
+
+    def _build_run_view_index_row(
+        self,
+        *,
+        run_id: str,
+        run_dir: str,
+        view_release: Mapping[str, object],
+    ) -> dict[str, object]:
+        return {
+            "run_id": run_id,
+            "run_dir": run_dir,
+            "schema_version": required_int(view_release, "schema_version"),
+            "release_id": required_str(view_release, "release_id"),
+            "current_r2_key": required_str(view_release, "current_r2_key"),
+            "bootstrap_sfw_r2_key": required_str(
+                view_release,
+                "bootstrap_sfw_r2_key",
+            ),
+            "bootstrap_nsfw_r2_key": required_str(
+                view_release,
+                "bootstrap_nsfw_r2_key",
+            ),
+            "media_access_version": required_int(
+                view_release,
+                "media_access_version",
+            ),
+        }
+
+    def _upsert_run_view_index(self, row: Mapping[str, object]) -> None:
+        _ = self._execute_upsert(
+            table_name="run_view_index",
+            row_or_rows=dict(row),
+            on_conflict="run_id",
+            select_columns=None,
+            returning_mode="minimal",
+            context={"run_dir": row.get("run_dir")},
+        )
+
+    def _upsert_run_prompts_batch(self, rows: list[dict[str, object]]) -> None:
+        if not rows:
+            return
+        for chunk in self._iter_row_chunks(rows):
+            normalized_chunk = _normalize_rows_for_postgrest(chunk)
+            _ = self._execute_upsert(
+                table_name="run_prompts",
+                row_or_rows=normalized_chunk,
+                on_conflict="run_id,prompt_id",
+                select_columns=None,
+                returning_mode="minimal",
+                context={"row_count": len(chunk)},
+            )
 
     def _upsert_run_grid_items_batch(self, rows: list[dict[str, object]]) -> None:
         if not rows:
@@ -862,12 +954,13 @@ def upsert_upload_index(
 
 def estimate_upload_index_records(payload: Mapping[str, object]) -> int:
     images = optional_object_list(payload.get("images"), field="images")
+    prompts = optional_object_list(payload.get("prompts"), field="prompts")
     unique_grid_cells: set[tuple[int, int]] = set()
     for image in images:
         x_index = int_with_default(image, "x_index", default=0)
         y_index = int_with_default(image, "y_index", default=0)
         unique_grid_cells.add((x_index, y_index))
-    return 3 + len(images) + len(images) + len(unique_grid_cells)
+    return 4 + len(prompts) + len(images) + len(images) + len(unique_grid_cells)
 
 
 def _default_client_factory(

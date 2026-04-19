@@ -2,91 +2,147 @@
 
 import { useEffect, useState } from "react";
 
+import { publicObjectUrl, privateObjectProxyUrl } from "@/lib/r2-url";
+
 import type { RunGridIndexData } from "@/components/comfyui/virtual-grid";
 
 import {
+  isCurrentRunView,
   isModelDetailResponse,
   isRunGridIndexData,
+  isRunViewAccess,
+  type CurrentRunView,
   type LoadState,
   type ModelDetailResponse,
+  type RunViewAccess,
 } from "./model-detail-types";
 
-export function useModelDetailData(runDir: string, showNsfw: boolean) {
+type UseModelDetailDataOptions = {
+  runDir: string;
+  showNsfw: boolean;
+  currentUserId: string | null;
+};
+
+export function useModelDetailData({
+  runDir,
+  showNsfw,
+  currentUserId,
+}: UseModelDetailDataOptions) {
   const [detailLoadState, setDetailLoadState] = useState<LoadState>("loading");
   const [gridLoadState, setGridLoadState] = useState<LoadState>("loading");
   const [detailData, setDetailData] = useState<ModelDetailResponse | null>(null);
   const [gridData, setGridData] = useState<RunGridIndexData | null>(null);
+  const [currentView, setCurrentView] = useState<CurrentRunView | null>(null);
+  const [viewAccess, setViewAccess] = useState<RunViewAccess | null>(null);
 
   useEffect(() => {
     const abortController = new AbortController();
-    const preferenceRequestKey = showNsfw ? "nsfw-on" : "nsfw-off";
 
     async function fetchAll() {
       setDetailLoadState("loading");
       setGridLoadState("loading");
+      setViewAccess(null);
 
-      const detailPromise = fetch(
-        `/api/comfyui/run/${encodeURIComponent(runDir)}?viewer_nsfw=${preferenceRequestKey}`,
+      const currentResponse = await fetch(
+        publicObjectUrl(`runs/${runDir}/view/current.json`),
         {
           signal: abortController.signal,
+          cache: "no-store",
         },
-      ).then(async (res) => {
-        if (res.status === 404) throw new Error("not-found");
-        if (!res.ok) throw new Error("error");
-        const data = await res.json();
-        if (!isModelDetailResponse(data)) throw new Error("error");
-        return data;
+      );
+
+      if (currentResponse.status === 404) {
+        throw new Error("not-found");
+      }
+      if (!currentResponse.ok) {
+        throw new Error("error");
+      }
+
+      const currentRaw: unknown = await currentResponse.json();
+      if (!isCurrentRunView(currentRaw)) {
+        throw new Error("error");
+      }
+      if (abortController.signal.aborted) return;
+      setCurrentView(currentRaw);
+
+      let access: RunViewAccess | null = null;
+      if (currentUserId) {
+        const accessResponse = await fetch(
+          `/api/comfyui/run/${encodeURIComponent(runDir)}/access`,
+          {
+            signal: abortController.signal,
+            cache: "no-store",
+          },
+        );
+        if (!accessResponse.ok) {
+          throw new Error("error");
+        }
+        const accessRaw: unknown = await accessResponse.json();
+        if (!isRunViewAccess(accessRaw)) {
+          throw new Error("error");
+        }
+        access = accessRaw;
+        if (!abortController.signal.aborted) {
+          setViewAccess(accessRaw);
+        }
+      }
+
+      const wantsPrivateNsfw = showNsfw && access?.viewer_variant === "auth_nsfw";
+      const bootstrapUrl = wantsPrivateNsfw
+        ? privateObjectProxyUrl(
+            `runs/${runDir}/view/v2/${currentRaw.release_id}/bootstrap.nsfw.json`,
+            access!.grant,
+          )
+        : publicObjectUrl(currentRaw.bootstrap_sfw_key);
+
+      const bootstrapResponse = await fetch(bootstrapUrl, {
+        signal: abortController.signal,
+        cache: "no-store",
       });
 
-      const gridPromise = fetch(
-        `/api/comfyui/run/${encodeURIComponent(runDir)}/grid?viewer_nsfw=${preferenceRequestKey}`,
-        {
-          signal: abortController.signal,
-        },
-      ).then(async (res) => {
-        if (res.status === 404) throw new Error("not-found");
-        if (!res.ok) throw new Error("error");
-        const data = await res.json();
-        if (!isRunGridIndexData(data)) throw new Error("error");
-        return data;
-      });
+      if (bootstrapResponse.status === 404) {
+        throw new Error("not-found");
+      }
+      if (!bootstrapResponse.ok) {
+        throw new Error("error");
+      }
 
-      detailPromise
-        .then((data) => {
-          if (abortController.signal.aborted) return;
-          setDetailData(data);
-          setDetailLoadState("ready");
-        })
-        .catch((err) => {
-          if (abortController.signal.aborted) return;
-          if (err.name === "AbortError") return;
-          setDetailLoadState(err.message === "not-found" ? "not-found" : "error");
-        });
+      const bootstrapRaw: unknown = await bootstrapResponse.json();
+      if (
+        !isModelDetailResponse(bootstrapRaw) ||
+        !isRunGridIndexData(bootstrapRaw)
+      ) {
+        throw new Error("error");
+      }
 
-      gridPromise
-        .then((data) => {
-          if (abortController.signal.aborted) return;
-          setGridData(data);
-          setGridLoadState("ready");
-        })
-        .catch((err) => {
-          if (abortController.signal.aborted) return;
-          if (err.name === "AbortError") return;
-          setGridLoadState(err.message === "not-found" ? "not-found" : "error");
-        });
+      if (abortController.signal.aborted) return;
+      setDetailData(bootstrapRaw);
+      setGridData(bootstrapRaw);
+      setDetailLoadState("ready");
+      setGridLoadState("ready");
     }
 
-    void fetchAll();
+    void fetchAll().catch((err: unknown) => {
+      if (abortController.signal.aborted) return;
+      const state =
+        err instanceof Error && err.message === "not-found"
+          ? "not-found"
+          : "error";
+      setDetailLoadState(state);
+      setGridLoadState(state);
+    });
 
     return () => {
       abortController.abort();
     };
-  }, [runDir, showNsfw]);
+  }, [currentUserId, runDir, showNsfw]);
 
   return {
     detailLoadState,
     gridLoadState,
     detailData,
     gridData,
+    currentView,
+    viewAccess,
   };
 }

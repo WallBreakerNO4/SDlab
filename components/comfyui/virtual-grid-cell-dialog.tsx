@@ -21,33 +21,30 @@ import { cn } from "@/lib/utils";
 
 import { useRenderableVariantSource } from "./use-renderable-variant-source";
 import { BlurhashCanvas } from "./blurhash-canvas";
-import { formatValue, parseDialogImagePayload } from "./virtual-grid-utils";
-import type { SelectedCellPreview, VariantSources } from "./virtual-grid-types";
+import { formatValue } from "./virtual-grid-utils";
+import type { SelectedCellPreview } from "./virtual-grid-types";
 
 type VirtualGridCellDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   cell: SelectedCellPreview | null;
-  runDir: string;
   currentUserId: string | null;
+  grant: string | null;
 };
 
 export function VirtualGridCellDialog({
   open,
   onOpenChange,
   cell,
-  runDir,
   currentUserId,
+  grant,
 }: VirtualGridCellDialogProps) {
   "use no memo";
 
-  const dialogImageRequestRef = useRef<AbortController | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [copiedField, setCopiedField] = useState<"prompt" | "seed" | null>(
     null,
   );
-  const [dialogImageVariants, setDialogImageVariants] =
-    useState<VariantSources | null>(null);
   const [isDialogImageLoaded, setIsDialogImageLoaded] = useState(false);
 
   const prevCellKeyRef = useRef<string | null>(null);
@@ -55,26 +52,26 @@ export function VirtualGridCellDialog({
 
   const totalImages = cell?.items.length ?? 0;
   const currentItem = cell?.items[currentImageIndex] ?? null;
-  const selectedXIndex = cell?.xIndex ?? null;
-  const selectedYIndex = cell?.yIndex ?? null;
-  const currentBatchIndex = currentItem?.batchIndex ?? null;
-  const currentDisplayVariants = dialogImageVariants;
+  const currentDisplayVariants = currentItem?.display ?? null;
   const currentPreviewVariants = currentItem?.thumb ?? null;
   const currentDisplayCacheVariants = currentItem?.display ?? null;
   const previewWasLoaded = Boolean(currentItem?.thumbLoaded);
   const { src: currentPreviewUrl } = useRenderableVariantSource({
     variants: currentPreviewVariants,
     currentUserId,
+    grant,
   });
   const { src: cachedDisplayUrl, loading: isCachedDisplayLoading } =
     useRenderableVariantSource({
       variants: currentDisplayCacheVariants,
       currentUserId,
+      grant,
       cacheOnly: true,
     });
   const { src: fetchedDisplayUrl } = useRenderableVariantSource({
     variants: currentDisplayVariants,
     currentUserId,
+    grant,
   });
   const currentDownloadUrl = fetchedDisplayUrl ?? cachedDisplayUrl ?? null;
   const showPreviewPlaceholder =
@@ -96,104 +93,23 @@ export function VirtualGridCellDialog({
     if (cellKey !== prevCellKeyRef.current) {
       prevCellKeyRef.current = cellKey;
       setCurrentImageIndex(0);
-      setDialogImageVariants(null);
       setIsDialogImageLoaded(false);
     }
   }, [cellKey]);
 
   useEffect(() => {
     if (!open) {
-      dialogImageRequestRef.current?.abort();
-      dialogImageRequestRef.current = null;
       setCopiedField(null);
       setCurrentImageIndex(0);
-      setDialogImageVariants(null);
       setIsDialogImageLoaded(false);
     }
   }, [open]);
-
-  useEffect(() => {
-    return () => {
-      dialogImageRequestRef.current?.abort();
-      dialogImageRequestRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (
-      !open ||
-      selectedXIndex === null ||
-      selectedYIndex === null ||
-      currentBatchIndex === null ||
-      currentDownloadUrl !== null ||
-      isCachedDisplayLoading
-    ) {
-      return;
-    }
-
-    let ignore = false;
-    dialogImageRequestRef.current?.abort();
-    setDialogImageVariants(null);
-    setIsDialogImageLoaded(false);
-
-    const controller = new AbortController();
-    dialogImageRequestRef.current = controller;
-
-    async function loadDialogImage() {
-      try {
-        const response = await fetch(
-          `/api/comfyui/run/${encodeURIComponent(runDir)}/display?x_index=${encodeURIComponent(String(selectedXIndex))}&y_index=${encodeURIComponent(String(selectedYIndex))}&batch_index=${encodeURIComponent(String(currentBatchIndex))}`,
-          {
-            signal: controller.signal,
-          },
-        );
-
-        if (!response.ok) {
-          return;
-        }
-
-        const raw: unknown = await response.json();
-        const image = parseDialogImagePayload(raw);
-        if (!ignore && image) {
-          setDialogImageVariants(image);
-        }
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          return;
-        }
-      } finally {
-        if (dialogImageRequestRef.current === controller) {
-          dialogImageRequestRef.current = null;
-        }
-      }
-    }
-
-    void loadDialogImage();
-
-    return () => {
-      ignore = true;
-      controller.abort();
-      if (dialogImageRequestRef.current === controller) {
-        dialogImageRequestRef.current = null;
-      }
-    };
-  }, [
-    currentBatchIndex,
-    currentDownloadUrl,
-    currentUserId,
-    isCachedDisplayLoading,
-    open,
-    runDir,
-    selectedXIndex,
-    selectedYIndex,
-  ]);
 
   const showPreviousImage = useCallback(() => {
     if (currentImageIndex <= 0) {
       return;
     }
 
-    setDialogImageVariants(null);
     setIsDialogImageLoaded(false);
     setCurrentImageIndex((index) => Math.max(0, index - 1));
   }, [currentImageIndex]);
@@ -203,7 +119,6 @@ export function VirtualGridCellDialog({
       return;
     }
 
-    setDialogImageVariants(null);
     setIsDialogImageLoaded(false);
     setCurrentImageIndex((index) => index + 1);
   }, [currentImageIndex, cell]);
@@ -266,20 +181,6 @@ export function VirtualGridCellDialog({
               ) : null}
               {showPreviewPlaceholder ? (
                 <picture className="absolute inset-0 h-full w-full pointer-events-none">
-                  {currentPreviewVariants?.avif?.bucket === "public" &&
-                  currentPreviewVariants.avif.url ? (
-                    <source
-                      srcSet={currentPreviewVariants.avif.url}
-                      type="image/avif"
-                    />
-                  ) : null}
-                  {currentPreviewVariants?.webp?.bucket === "public" &&
-                  currentPreviewVariants.webp.url ? (
-                    <source
-                      srcSet={currentPreviewVariants.webp.url}
-                      type="image/webp"
-                    />
-                  ) : null}
                   <img
                     alt={dialogAlt}
                     className={cn(
@@ -294,20 +195,6 @@ export function VirtualGridCellDialog({
               ) : null}
               {currentDownloadUrl ? (
                 <picture className="absolute inset-0 h-full w-full pointer-events-none">
-                  {currentDisplayVariants?.avif?.bucket === "public" &&
-                  currentDisplayVariants.avif.url ? (
-                    <source
-                      srcSet={currentDisplayVariants.avif.url}
-                      type="image/avif"
-                    />
-                  ) : null}
-                  {currentDisplayVariants?.webp?.bucket === "public" &&
-                  currentDisplayVariants.webp.url ? (
-                    <source
-                      srcSet={currentDisplayVariants.webp.url}
-                      type="image/webp"
-                    />
-                  ) : null}
                   <img
                     alt={dialogAlt}
                     className={cn(

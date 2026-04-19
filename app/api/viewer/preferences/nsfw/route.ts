@@ -1,9 +1,15 @@
 import {
-  getViewerShowNsfwPreference,
   requireViewerForPreferenceWrite,
   setViewerShowNsfwPreference,
 } from "@/lib/server-user-preferences";
 import { createSupabaseAuthClient } from "@/lib/supabase-auth";
+import {
+  DEFAULT_SHOW_NSFW,
+  parseViewerShowNsfwCookieValue,
+  setViewerShowNsfwCookie,
+  VIEWER_SHOW_NSFW_COOKIE,
+} from "@/lib/viewer-nsfw-cookie";
+import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
@@ -20,18 +26,18 @@ function parseBody(value: unknown): { show_nsfw: boolean } | null {
   return { show_nsfw: candidate };
 }
 
-export async function GET(): Promise<Response> {
-  try {
-    const supabase = await createSupabaseAuthClient();
-    const showNsfw = await getViewerShowNsfwPreference(supabase);
-
-    return Response.json({ show_nsfw: showNsfw });
-  } catch {
-    return Response.json(
-      { error: "Failed to load viewer preference" },
-      { status: 500 },
-    );
-  }
+export async function GET(request: Request): Promise<Response> {
+  const rawCookie = request.headers.get("cookie");
+  const cookieEntry = rawCookie
+    ?.split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${VIEWER_SHOW_NSFW_COOKIE}=`));
+  const value = cookieEntry?.slice(VIEWER_SHOW_NSFW_COOKIE.length + 1);
+  return Response.json({
+    show_nsfw: value === undefined
+      ? DEFAULT_SHOW_NSFW
+      : parseViewerShowNsfwCookieValue(value),
+  });
 }
 
 export async function PATCH(request: Request): Promise<Response> {
@@ -52,7 +58,9 @@ export async function PATCH(request: Request): Promise<Response> {
       showNsfw: body.show_nsfw,
     });
 
-    return Response.json({ show_nsfw: body.show_nsfw });
+    const response = NextResponse.json({ show_nsfw: body.show_nsfw });
+    setViewerShowNsfwCookie(response, body.show_nsfw);
+    return response;
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHENTICATED") {
       return Response.json(

@@ -3,8 +3,6 @@ import "server-only";
 import type { User } from "@supabase/supabase-js";
 import type { createSupabaseAuthClient } from "@/lib/supabase-auth";
 
-export const DEFAULT_SHOW_NSFW = false;
-
 type PreferenceSupabaseClient = Awaited<
   ReturnType<typeof createSupabaseAuthClient>
 >;
@@ -15,41 +13,6 @@ function isMissingSessionError(error: Error | null): boolean {
   }
 
   return error.message.toLowerCase().includes("auth session missing");
-}
-
-export async function getViewerShowNsfwPreference(
-  supabase: PreferenceSupabaseClient,
-): Promise<boolean> {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError) {
-    if (isMissingSessionError(userError)) {
-      return DEFAULT_SHOW_NSFW;
-    }
-    throw userError;
-  }
-
-  if (!user) {
-    return DEFAULT_SHOW_NSFW;
-  }
-
-  const { data, error } = await supabase
-    .from("user_preferences")
-    .select("show_nsfw")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (error) {
-    if (isMissingSessionError(error)) {
-      return DEFAULT_SHOW_NSFW;
-    }
-    throw error;
-  }
-
-  return data?.show_nsfw ?? DEFAULT_SHOW_NSFW;
 }
 
 export async function requireViewerForPreferenceWrite(

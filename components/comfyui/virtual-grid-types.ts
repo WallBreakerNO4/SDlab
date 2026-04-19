@@ -1,7 +1,7 @@
 export type ImageVariantSource = {
   bucket: "public" | "private";
   cache_key: string;
-  url?: string;
+  key: string;
 };
 
 export type VariantSources = {
@@ -11,8 +11,8 @@ export type VariantSources = {
 
 export type RowMeta = {
   seed: string | null;
+  prompt_id: number | null;
   prompt_hash: string | null;
-  positive_prompt: string | null;
   y_value: string | null;
 };
 
@@ -44,6 +44,12 @@ export type RunGridXColumn = {
   description: Record<string, unknown> | null;
 };
 
+export type RunPrompt = {
+  id: number;
+  prompt_hash: string | null;
+  positive_prompt: string;
+};
+
 export type BlurhashCell = {
   x_index: number;
   y_index: number;
@@ -58,6 +64,7 @@ export type RunGridIndexData = {
   x_columns: RunGridXColumn[];
   y_indexes: number[];
   y_labels?: string[];
+  prompts: RunPrompt[];
   blurhash_cells: BlurhashCell[];
 };
 

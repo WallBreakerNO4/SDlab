@@ -15,6 +15,7 @@ import { useVirtualGridLayout } from "./use-virtual-grid-layout";
 import { useVirtualGridRows } from "./use-virtual-grid-rows";
 import { useVirtualGridScroll } from "./use-virtual-grid-scroll";
 import { getPreferredVariantCacheKey } from "./virtual-grid-utils";
+import type { RunViewAccess } from "@/app/models/[runDir]/model-detail-types";
 import type {
   BlurhashCell,
   RowCell,
@@ -34,6 +35,8 @@ type VirtualGridProps = {
   grid: RunGridIndexData;
   blurhashMap: Map<string, BlurhashCell>;
   showNsfw: boolean;
+  currentView: { release_id: string } | null;
+  viewAccess: RunViewAccess | null;
 };
 
 const DEV_IMAGE_DOM_CAP_NOTE = 300;
@@ -43,6 +46,8 @@ export function VirtualGrid({
   grid,
   blurhashMap,
   showNsfw,
+  currentView,
+  viewAccess,
 }: VirtualGridProps) {
   "use no memo";
 
@@ -61,6 +66,8 @@ export function VirtualGrid({
   const { rowCacheRef, rowCacheVersion, requestRow } = useVirtualGridRows({
     runDir,
     showNsfw,
+    releaseId: currentView?.release_id ?? null,
+    viewAccess,
   });
   const layout = useVirtualGridLayout({
     scrollElementRef,
@@ -142,7 +149,9 @@ export function VirtualGrid({
       });
 
       const representative = cell.items[0]?.meta ?? null;
-      const positivePrompt = representative?.positive_prompt;
+      const positivePrompt = grid.prompts.find(
+        (prompt) => prompt.id === representative?.prompt_id,
+      )?.positive_prompt;
       const seed = representative?.seed ?? null;
       const promptHash = representative?.prompt_hash ?? null;
 
@@ -158,7 +167,7 @@ export function VirtualGrid({
       });
       setDialogOpen(true);
     },
-    [],
+    [grid.prompts],
   );
 
   const copyRowLabel = useCallback(async (value: string) => {
@@ -311,6 +320,7 @@ export function VirtualGrid({
                           previewHeight={layout.previewHeight}
                           isAuthenticated={!!user}
                           currentUserId={user?.id ?? null}
+                          grant={viewAccess?.grant ?? null}
                           onRequireLogin={() => setLoginDialogOpen(true)}
                           onOpenCellDialog={openCellDialog}
                           onThumbLoad={markThumbAsLoaded}
@@ -329,8 +339,8 @@ export function VirtualGrid({
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         cell={selectedCell}
-        runDir={runDir}
         currentUserId={user?.id ?? null}
+        grant={viewAccess?.grant ?? null}
       />
 
       <AuthLoginDialog

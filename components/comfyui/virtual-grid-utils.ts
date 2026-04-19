@@ -274,7 +274,8 @@ function isImageVariantSource(value: unknown): value is ImageVariantSource {
   return (
     isRecord(value) &&
     (value.bucket === "public" || value.bucket === "private") &&
-    getNonEmptyString(value.cache_key) !== null
+    getNonEmptyString(value.cache_key) !== null &&
+    getNonEmptyString(value.key) !== null
   );
 }
 
@@ -282,18 +283,18 @@ function parseImageVariantSource(value: unknown): ImageVariantSource | null {
   if (!isRecord(value)) return null;
   const bucket = value.bucket;
   const cacheKey = getNonEmptyString(value.cache_key);
+  const key = getNonEmptyString(value.key);
   if (
     (bucket !== "public" && bucket !== "private") ||
-    cacheKey === null
+    cacheKey === null ||
+    key === null
   ) {
     return null;
   }
-
-  const url = getNonEmptyString(value.url);
   return {
     bucket,
     cache_key: cacheKey,
-    ...(url ? { url } : {}),
+    key,
   };
 }
 
@@ -312,16 +313,16 @@ function parseRowMeta(value: unknown): RowMeta {
   if (!isRecord(value)) {
     return {
       seed: null,
+      prompt_id: null,
       prompt_hash: null,
-      positive_prompt: null,
       y_value: null,
     };
   }
 
   return {
     seed: getSeedString(value.seed),
+    prompt_id: getFiniteNumber(value.prompt_id),
     prompt_hash: getNonEmptyString(value.prompt_hash),
-    positive_prompt: getNonEmptyString(value.positive_prompt),
     y_value: getNonEmptyString(value.y_value),
   };
 }

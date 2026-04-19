@@ -36,7 +36,24 @@ export type ModelDetailResponse = {
   y_indexes: number[];
 };
 
+export type RunViewAccess = {
+  run_dir: string;
+  release_id: string;
+  viewer_variant: "auth_sfw" | "auth_nsfw";
+  grant: string;
+};
+
 export type LoadState = "loading" | "ready" | "not-found" | "error";
+
+export type CurrentRunView = {
+  schema_version: number;
+  run_dir: string;
+  release_id: string;
+  bootstrap_sfw_key: string;
+  public_row_prefix: string;
+};
+
+export type RunBootstrapResponse = ModelDetailResponse & RunGridIndexData;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -81,7 +98,12 @@ export function isRunGridIndexData(value: unknown): value is RunGridIndexData {
     return false;
   }
 
-  if (!Array.isArray(value.x_columns) || !Array.isArray(value.y_indexes)) {
+  if (
+    !Array.isArray(value.x_columns) ||
+    !Array.isArray(value.y_indexes) ||
+    !Array.isArray(value.prompts) ||
+    !Array.isArray(value.blurhash_cells)
+  ) {
     return false;
   }
 
@@ -101,13 +123,35 @@ export function isRunGridIndexData(value: unknown): value is RunGridIndexData {
   );
   const yLabelsOk =
     value.y_labels === undefined || isStringArray(value.y_labels);
+  const promptsOk = (value.prompts as unknown[]).every((prompt) => {
+    return (
+      isRecord(prompt) &&
+      typeof prompt.id === "number" &&
+      typeof prompt.positive_prompt === "string" &&
+      (typeof prompt.prompt_hash === "string" || prompt.prompt_hash === null)
+    );
+  });
 
-  const hasBlurhashCells = Array.isArray(value.blurhash_cells);
+  return xColumnsOk && yIndexesOk && yLabelsOk && promptsOk;
+}
 
+export function isCurrentRunView(value: unknown): value is CurrentRunView {
   return (
-    xColumnsOk &&
-    yIndexesOk &&
-    yLabelsOk &&
-    (hasBlurhashCells || !value.blurhash_cells)
+    isRecord(value) &&
+    typeof value.schema_version === "number" &&
+    typeof value.run_dir === "string" &&
+    typeof value.release_id === "string" &&
+    typeof value.bootstrap_sfw_key === "string" &&
+    typeof value.public_row_prefix === "string"
+  );
+}
+
+export function isRunViewAccess(value: unknown): value is RunViewAccess {
+  return (
+    isRecord(value) &&
+    typeof value.run_dir === "string" &&
+    typeof value.release_id === "string" &&
+    typeof value.grant === "string" &&
+    (value.viewer_variant === "auth_sfw" || value.viewer_variant === "auth_nsfw")
   );
 }

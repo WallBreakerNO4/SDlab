@@ -19,9 +19,11 @@ import {
   getThemeInlineStyle,
   parseThemePreference,
 } from "@/lib/theme";
-import { createSupabaseAuthClient } from "@/lib/supabase-auth";
-import { getViewerShowNsfwPreference } from "@/lib/server-user-preferences";
-import type { User } from "@supabase/supabase-js";
+import {
+  DEFAULT_SHOW_NSFW,
+  parseViewerShowNsfwCookieValue,
+  VIEWER_SHOW_NSFW_COOKIE,
+} from "@/lib/viewer-nsfw-cookie";
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
@@ -65,25 +67,11 @@ export default async function RootLayout({
   const initialThemeStyle = initialTheme
     ? getThemeInlineStyle(initialTheme)
     : undefined;
-  let initialUser: User | null | undefined;
-  let initialShowNsfw = false;
-  try {
-    const supabase = await createSupabaseAuthClient();
-    const { data } = await supabase.auth.getUser();
-    initialUser = data.user ?? null;
-    if (initialUser) {
-      initialShowNsfw = await getViewerShowNsfwPreference(supabase);
-    }
-  } catch {
-    initialUser = undefined;
-  }
-
-  const authSnapshotKey =
-    initialUser === undefined
-      ? "unknown"
-      : initialUser === null
-        ? "anon"
-        : `${initialUser.id}:${initialUser.updated_at ?? "snapshot"}`;
+  const initialShowNsfwCookie = cookieStore.get(VIEWER_SHOW_NSFW_COOKIE)?.value;
+  const initialShowNsfw =
+    initialShowNsfwCookie === undefined
+      ? DEFAULT_SHOW_NSFW
+      : parseViewerShowNsfwCookieValue(initialShowNsfwCookie);
 
   return (
     <html
@@ -114,7 +102,7 @@ export default async function RootLayout({
           storageKey={THEME_STORAGE_KEY}
           scriptProps={{ "data-cfasync": "false" }}
         >
-          <AuthProvider key={authSnapshotKey} initialUser={initialUser}>
+          <AuthProvider>
             <UserPreferencesProvider initialShowNsfw={initialShowNsfw}>
               <div className="flex h-dvh flex-col overflow-hidden">
                 <SiteHeader />
