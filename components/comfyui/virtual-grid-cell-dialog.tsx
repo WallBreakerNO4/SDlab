@@ -61,13 +61,12 @@ export function VirtualGridCellDialog({
     currentUserId,
     grant,
   });
-  const { src: cachedDisplayUrl, loading: isCachedDisplayLoading } =
-    useRenderableVariantSource({
-      variants: currentDisplayCacheVariants,
-      currentUserId,
-      grant,
-      cacheOnly: true,
-    });
+  const { src: cachedDisplayUrl } = useRenderableVariantSource({
+    variants: currentDisplayCacheVariants,
+    currentUserId,
+    grant,
+    cacheOnly: true,
+  });
   const { src: fetchedDisplayUrl } = useRenderableVariantSource({
     variants: currentDisplayVariants,
     currentUserId,

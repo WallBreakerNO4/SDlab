@@ -4,10 +4,10 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
 } from "react";
+import type { User } from "@supabase/supabase-js";
 
 import { useAuth } from "@/components/auth-provider";
 
@@ -37,6 +37,27 @@ export function UserPreferencesProvider({
   initialShowNsfw: boolean;
 }) {
   const { user } = useAuth();
+
+  return (
+    <UserPreferencesProviderState
+      key={user?.id ?? "anonymous"}
+      user={user}
+      initialShowNsfw={user ? initialShowNsfw : false}
+    >
+      {children}
+    </UserPreferencesProviderState>
+  );
+}
+
+function UserPreferencesProviderState({
+  children,
+  initialShowNsfw,
+  user,
+}: {
+  children: React.ReactNode;
+  initialShowNsfw: boolean;
+  user: User | null;
+}) {
   const [showNsfw, setShowNsfwState] = useState(initialShowNsfw);
   const effectiveShowNsfw = user ? showNsfw : false;
 
@@ -61,12 +82,6 @@ export function UserPreferencesProvider({
     },
     [user],
   );
-
-  useEffect(() => {
-    if (!user) {
-      setShowNsfwState(false);
-    }
-  }, [user]);
 
   const value = useMemo(
     () => ({ showNsfw: effectiveShowNsfw, setShowNsfw }),

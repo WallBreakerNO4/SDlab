@@ -123,7 +123,7 @@ export function ModelDetailClientPage({ runDir }: { runDir: string }) {
         {isGridReady ? (
           <div className="min-h-0 flex-1">
             <VirtualGrid
-              key={`${runDir}:${showNsfw ? "nsfw" : "sfw"}:${viewAccess?.viewer_variant ?? "public"}`}
+              key={`${runDir}:${currentView?.release_id ?? "no-release"}:${showNsfw ? "nsfw" : "sfw"}:${viewAccess?.viewer_variant ?? "public"}:${viewAccess?.grant ?? "public"}`}
               runDir={runDir}
               grid={gridData}
               blurhashMap={blurhashMap}

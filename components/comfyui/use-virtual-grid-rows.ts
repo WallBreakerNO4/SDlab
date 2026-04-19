@@ -141,11 +141,9 @@ export function useVirtualGridRows({
   );
 
   useEffect(() => {
-    rowCacheRef.current.clear();
     rowRequestsRef.current.forEach((controller) => controller.abort());
     rowRequestsRef.current.clear();
-    setRowCacheVersion((value) => value + 1);
-  }, [releaseId, runDir, showNsfw, viewAccess?.grant]);
+  }, []);
 
   useEffect(() => {
     const requests = rowRequestsRef.current;
