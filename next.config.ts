@@ -16,6 +16,9 @@ const markdownLoaderPath = path.join(
 const contentPageMarkdownPattern = /(^|[\\/])data[\\/].*-page\.md$/i;
 
 const nextConfig: NextConfig = {
+  env: {
+    NEXT_PUBLIC_R2_PUBLIC_BASE_URL: process.env.R2_PUBLIC_BASE_URL,
+  },
   images: {
     remotePatterns: [
       {

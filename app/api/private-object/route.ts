@@ -72,7 +72,11 @@ export async function GET(request: Request): Promise<Response> {
     headers.set("Content-Length", String(object.size));
     headers.set("ETag", object.httpEtag);
     return new Response(object.body, { status: 200, headers });
-  } catch {
-    return jsonError(500, "Failed to load private object");
+  } catch (error) {
+    console.error("[api/private-object]", error);
+    return jsonError(
+      500,
+      error instanceof Error ? error.message : "Failed to load private object",
+    );
   }
 }

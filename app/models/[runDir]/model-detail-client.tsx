@@ -103,7 +103,7 @@ export function ModelDetailClientPage({ runDir }: { runDir: string }) {
           <EmptyHeader>
             <EmptyTitle>加载失败</EmptyTitle>
             <EmptyDescription>
-              请求模型详情失败，请稍后刷新重试。
+              请查看终端日志、浏览器 Console 或 Network 面板定位模型页错误。
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -140,7 +140,7 @@ export function ModelDetailClientPage({ runDir }: { runDir: string }) {
             <EmptyHeader>
               <EmptyTitle>暂无网格可展示</EmptyTitle>
               <EmptyDescription>
-                修复模型标识或请求错误后，此区域将显示完整网格。
+                请查看终端日志、浏览器 Console 或 Network 面板定位网格加载错误。
               </EmptyDescription>
             </EmptyHeader>
           </Empty>

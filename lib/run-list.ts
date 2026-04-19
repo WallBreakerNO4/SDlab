@@ -1,8 +1,10 @@
 import "server-only";
 
+import { createClient } from "@supabase/supabase-js";
+
 import type { RunAssetSummary, RunSummary } from "@/lib/comfyui-types";
+import { getPublicEnv } from "@/lib/env/public";
 import { publicObjectUrl } from "@/lib/r2-url";
-import { createSupabaseAuthClient } from "@/lib/supabase-auth";
 import type {
   JsonObject,
   JsonValue,
@@ -110,7 +112,14 @@ function readHomepageCards(
 }
 
 export async function listRunSummaries(): Promise<RunSummary[]> {
-  const supabase = await createSupabaseAuthClient();
+  const { supabaseUrl, supabasePublishableKey } = getPublicEnv();
+
+  const supabase = createClient(supabaseUrl, supabasePublishableKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
   const { data, error } = await supabase
     .from("run_list_items")
     .select(
@@ -119,7 +128,7 @@ export async function listRunSummaries(): Promise<RunSummary[]> {
     .order("created_at", { ascending: false });
 
   if (error) {
-    throw new Error("Failed to load runs");
+    throw new Error(`Failed to load runs: ${error.message}`);
   }
 
   const rows = (data as SupabaseRunListItemRow[] | null) ?? [];
@@ -132,7 +141,9 @@ export async function listRunSummaries(): Promise<RunSummary[]> {
     const totalCells = getNonNegativeInteger(row.total_cells);
 
     if (!runId || xCount === null || yCount === null || totalCells === null) {
-      throw new Error("Failed to load runs");
+      throw new Error(
+        `Invalid run_list_items row for run_dir=${row.run_dir}`,
+      );
     }
 
     const cover = readAssetProjection(

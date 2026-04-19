@@ -93,7 +93,11 @@ export async function GET(
       viewer_variant: viewerVariant,
       grant,
     });
-  } catch {
-    return jsonError(500, "Failed to load run access");
+  } catch (error) {
+    console.error("[api/comfyui/run/access]", error);
+    return jsonError(
+      500,
+      error instanceof Error ? error.message : "Failed to load run access",
+    );
   }
 }

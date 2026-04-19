@@ -92,7 +92,7 @@ export default function HomePageClient({
                 </EmptyTitle>
                 <EmptyDescription className="text-sm max-w-sm mx-auto">
                   {hasError
-                    ? "请稍后刷新重试，或检查 API 服务状态。"
+                    ? "请查看终端日志或 Network 面板定位首页数据链路错误。"
                     : "暂无可用模型数据，等待后端数据同步。"}
                 </EmptyDescription>
               </EmptyHeader>

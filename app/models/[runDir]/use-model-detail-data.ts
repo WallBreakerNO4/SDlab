@@ -124,6 +124,7 @@ export function useModelDetailData({
 
     void fetchAll().catch((err: unknown) => {
       if (abortController.signal.aborted) return;
+      console.error("[model-detail] Failed to load run view", err);
       const state =
         err instanceof Error && err.message === "not-found"
           ? "not-found"

@@ -2,6 +2,7 @@ import 'server-only'
 
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { getServerEnv } from '@/lib/env/server'
 
 /**
  * Server-side Supabase client with cookie-based session handling.
@@ -13,18 +14,11 @@ import { cookies } from 'next/headers'
  * Used by both API routes (data queries) and the R2 private proxy (auth check).
  */
 export async function createSupabaseAuthClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-
-  if (!url || !anonKey) {
-    throw new Error(
-      'Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY environment variables',
-    )
-  }
+  const { supabaseUrl, supabasePublishableKey } = getServerEnv()
 
   const cookieStore = await cookies()
 
-  return createServerClient(url, anonKey, {
+  return createServerClient(supabaseUrl, supabasePublishableKey, {
     cookies: {
       getAll() {
         return cookieStore.getAll()

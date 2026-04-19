@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { getPublicEnv } from "@/lib/env/public";
 
 /**
  * Middleware that refreshes the Supabase auth session on every request.
@@ -11,14 +12,17 @@ import { createServerClient } from "@supabase/ssr";
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-
-  // If Supabase env vars are not configured, skip auth session refresh
-  if (!url || !anonKey) {
+  let url: string;
+  let anonKey: string;
+  try {
+    const publicEnv = getPublicEnv();
+    url = publicEnv.supabaseUrl;
+    anonKey = publicEnv.supabasePublishableKey;
+  } catch {
     return supabaseResponse;
   }
 
+  // If Supabase env vars are not configured, skip auth session refresh
   const supabase = createServerClient(url, anonKey, {
     cookies: {
       getAll() {

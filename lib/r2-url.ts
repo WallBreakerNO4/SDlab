@@ -1,3 +1,5 @@
+import { getPublicEnv } from "@/lib/env/public";
+
 const ALLOWED_PREFIX = "runs/";
 
 function encodePathSegments(path: string): string {
@@ -14,9 +16,9 @@ function validateR2Key(r2Key: string): void {
 }
 
 function readPublicBaseUrl(): string {
-  const baseUrl = process.env.NEXT_PUBLIC_R2_PUBLIC_BASE_URL;
+  const baseUrl = getPublicEnv().r2PublicBaseUrl;
   if (!baseUrl) {
-    throw new Error("NEXT_PUBLIC_R2_PUBLIC_BASE_URL is not defined");
+    throw new Error("R2_PUBLIC_BASE_URL is not defined");
   }
   return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
 }

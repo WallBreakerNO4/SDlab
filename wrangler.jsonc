@@ -34,7 +34,7 @@
   "vars": {
     "NEXT_PUBLIC_SUPABASE_URL": "https://pevlrhqutitakzpsvqyc.supabase.co",
     "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_CBYV0tBjm0qaZy2LeJz6_w_EMbT3L5m",
-    "NEXT_PUBLIC_R2_PUBLIC_BASE_URL": "https://images.sdlab.wall-breaker-no4.xyz",
+    "R2_PUBLIC_BASE_URL": "https://images.sdlab.wall-breaker-no4.xyz",
   },
   // 配置日志和指标的采样率，启用后可以在 Cloudflare 仪表盘的 Workers Observability 中查看相关数据
   "observability": {

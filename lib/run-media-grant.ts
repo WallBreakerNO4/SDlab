@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { getServerEnv } from "@/lib/env/server";
 
 export type ViewerVariant = "auth_sfw" | "auth_nsfw";
 
@@ -12,11 +13,7 @@ export type RunMediaGrantClaims = {
 };
 
 function requireGrantSecret(): string {
-  const secret = process.env.RUN_MEDIA_GRANT_SECRET?.trim();
-  if (!secret) {
-    throw new Error("RUN_MEDIA_GRANT_SECRET is not configured");
-  }
-  return secret;
+  return getServerEnv().runMediaGrantSecret;
 }
 
 function toBase64Url(value: Buffer | string): string {

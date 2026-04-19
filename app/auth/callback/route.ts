@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { getPublicEnv } from '@/lib/env/public'
 
 export const runtime = 'nodejs'
 
@@ -64,10 +65,13 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-
-  if (!url || !anonKey) {
+  let url: string
+  let anonKey: string
+  try {
+    const publicEnv = getPublicEnv()
+    url = publicEnv.supabaseUrl
+    anonKey = publicEnv.supabasePublishableKey
+  } catch {
     console.error('[auth/callback] Missing Supabase env vars')
     return NextResponse.redirect(buildRedirectUrl(request, 'auth_not_configured'))
   }

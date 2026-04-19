@@ -13,7 +13,7 @@ declare global {
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: string;
 
     // --- R2 公开链接 base URL（wrangler.jsonc vars） ---
-    NEXT_PUBLIC_R2_PUBLIC_BASE_URL: string;
+    R2_PUBLIC_BASE_URL: string;
 
     RUN_MEDIA_GRANT_SECRET?: string;
   }
