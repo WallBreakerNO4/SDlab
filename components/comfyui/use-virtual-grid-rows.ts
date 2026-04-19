@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { RunViewAccess } from "@/app/models/[runDir]/model-detail-types";
-import { privateObjectProxyUrl, publicObjectUrl } from "@/lib/r2-url";
+import {
+  privateObjectProxyUrl,
+  publicObjectProxyUrl,
+} from "@/lib/r2-url";
 
 import type { CachedRow, RowCell, RowMeta } from "./virtual-grid-types";
 import { normalizeRowPayload } from "./virtual-grid-utils";
@@ -24,7 +27,9 @@ function buildRowManifestUrl(options: {
 }): string {
   const { runDir, yIndex, releaseId, showNsfw, viewAccess } = options;
   if (!viewAccess) {
-    return publicObjectUrl(`runs/${runDir}/view/v2/${releaseId}/rows/public/${yIndex}.json`);
+    return publicObjectProxyUrl(
+      `runs/${runDir}/view/v2/${releaseId}/rows/public/${yIndex}.json`,
+    );
   }
 
   const viewerVariant = showNsfw ? "auth_nsfw" : "auth_sfw";

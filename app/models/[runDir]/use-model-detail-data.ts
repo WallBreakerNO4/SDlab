@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 
-import { publicObjectUrl, privateObjectProxyUrl } from "@/lib/r2-url";
+import {
+  publicObjectProxyUrl,
+  privateObjectProxyUrl,
+} from "@/lib/r2-url";
 
 import type { RunGridIndexData } from "@/components/comfyui/virtual-grid";
 
@@ -44,7 +47,7 @@ export function useModelDetailData({
       setViewAccess(null);
 
       const currentResponse = await fetch(
-        publicObjectUrl(`runs/${runDir}/view/current.json`),
+        publicObjectProxyUrl(`runs/${runDir}/view/current.json`),
         {
           signal: abortController.signal,
           cache: "no-store",
@@ -93,7 +96,7 @@ export function useModelDetailData({
             `runs/${runDir}/view/v2/${currentRaw.release_id}/bootstrap.nsfw.json`,
             access!.grant,
           )
-        : publicObjectUrl(currentRaw.bootstrap_sfw_key);
+        : publicObjectProxyUrl(currentRaw.bootstrap_sfw_key);
 
       const bootstrapResponse = await fetch(bootstrapUrl, {
         signal: abortController.signal,
