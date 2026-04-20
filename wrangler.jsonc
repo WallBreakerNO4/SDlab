@@ -24,10 +24,12 @@
     {
       "binding": "R2_PUBLIC_BUCKET",
       "bucket_name": "sdslab-public",
+      "remote": true,
     },
     {
       "binding": "R2_PRIVATE_BUCKET",
       "bucket_name": "sdslab-private",
+      "remote": true,
     },
   ],
   // 非敏感环境变量；敏感授权密钥请通过 wrangler secret 配置
