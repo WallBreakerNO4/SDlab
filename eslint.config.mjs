@@ -16,6 +16,7 @@ const eslintConfig = defineConfig([
     ".open-next/**",
     "dist/**",
     ".sisyphus/**",
+    ".wrangler/**",
     "types/routes.d.ts",
     "types/validator.ts",
   ]),
