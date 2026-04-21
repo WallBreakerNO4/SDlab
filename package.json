@@ -1,6 +1,6 @@
 {
   "name": "next-app",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -10,13 +10,13 @@
     "test:e2e": "sh -c 'if [ \"$1\" = \"--\" ]; then shift; fi; playwright test \"$@\"' --"
   },
   "dependencies": {
-    "@base-ui/react": "^1.4.0",
+    "@base-ui/react": "^1.4.1",
     "@hugeicons/core-free-icons": "^3.3.0",
     "@hugeicons/react": "^1.1.6",
-    "@lobehub/icons": "^5.4.0",
+    "@lobehub/icons": "^5.5.4",
     "@supabase/ssr": "^0.8.0",
-    "@supabase/supabase-js": "^2.103.3",
-    "@tanstack/react-virtual": "^3.13.23",
+    "@supabase/supabase-js": "^2.104.0",
+    "@tanstack/react-virtual": "^3.13.24",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -40,18 +40,18 @@
     "vaul": "^1.1.2"
   },
   "devDependencies": {
-    "@opennextjs/cloudflare": "^1.19.1",
+    "@opennextjs/cloudflare": "^1.19.2",
     "@playwright/test": "^1.59.1",
-    "@tailwindcss/postcss": "^4.2.2",
+    "@tailwindcss/postcss": "^4.2.3",
     "@types/node": "^20.19.39",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "eslint": "^9.39.4",
     "eslint-config-next": "16.1.6",
     "prettier": "3.8.1",
-    "tailwindcss": "^4.2.2",
+    "tailwindcss": "^4.2.3",
     "typescript": "^5.9.3",
-    "wrangler": "^4.83.0"
+    "wrangler": "^4.84.0"
   },
   "packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319"
 }
