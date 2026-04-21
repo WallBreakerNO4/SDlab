@@ -118,6 +118,18 @@ export function useModelDetailData({
         throw new Error("error");
       }
 
+      // Production bootstrap JSON uses camelCase `yLabels` (ModelDetailResponse).
+      // Grid components expect snake_case `y_labels` (RunGridIndexData).
+      // Normalize here so downstream consumers don't need dual-field handling.
+      if (
+        !bootstrapRaw.y_labels &&
+        Array.isArray((bootstrapRaw as Record<string, unknown>).yLabels)
+      ) {
+        (bootstrapRaw as { y_labels?: string[] }).y_labels = (
+          bootstrapRaw as Record<string, unknown>
+        ).yLabels as string[];
+      }
+
       if (abortController.signal.aborted) return;
       setDetailData(bootstrapRaw);
       setGridData(bootstrapRaw);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { AuthLoginDialog } from "@/components/auth-login-dialog";
@@ -62,6 +62,10 @@ export function VirtualGrid({
   const [isJumpInputOpen, setIsJumpInputOpen] = useState(false);
   const [jumpInputValue, setJumpInputValue] = useState("");
   const jumpInputRef = useRef<HTMLInputElement>(null);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeMatchIndex, setActiveMatchIndex] = useState(-1);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const { rowCacheRef, rowCacheVersion, requestRow } = useVirtualGridRows({
     runDir,
@@ -97,6 +101,51 @@ export function VirtualGrid({
       scrollViewportWidth,
     });
 
+  const searchMatches = useMemo(() => {
+    const query = searchQuery.trim();
+    if (!query) return [];
+    const term = query.toLowerCase();
+    const matches: { rowIndex: number; yIndex: number; label: string }[] = [];
+    const yLabels = grid.y_labels ?? [];
+    for (let i = 0; i < yLabels.length; i++) {
+      const label = yLabels[i];
+      if (typeof label === "string" && label.toLowerCase().includes(term)) {
+        matches.push({ rowIndex: i, yIndex: grid.y_indexes[i] ?? i, label });
+      }
+    }
+    return matches;
+  }, [searchQuery, grid.y_labels, grid.y_indexes]);
+
+  const goToMatch = useCallback(
+    (delta: number) => {
+      if (searchMatches.length === 0) return;
+      setActiveMatchIndex((prev) => {
+        if (prev < 0) {
+          return delta > 0 ? 0 : searchMatches.length - 1;
+        }
+        return (prev + delta + searchMatches.length) % searchMatches.length;
+      });
+    },
+    [searchMatches.length],
+  );
+
+  useEffect(() => {
+    if (activeMatchIndex < 0 || searchMatches.length === 0) return;
+    const match = searchMatches[activeMatchIndex];
+    const lineNum = match.rowIndex + 1;
+    scrollToLineNumber(lineNum);
+    syncUrlHashWithLineNumber(lineNum);
+  }, [
+    activeMatchIndex,
+    searchMatches,
+    scrollToLineNumber,
+    syncUrlHashWithLineNumber,
+  ]);
+
+  useEffect(() => {
+    setActiveMatchIndex(-1);
+  }, [searchQuery]);
+
   const markThumbAsLoaded = useCallback((cacheKey: string) => {
     const key = cacheKey.trim();
     if (!key) {
@@ -122,6 +171,37 @@ export function VirtualGrid({
       void requestRow(yIndex);
     }
   }, [grid.y_indexes, requestRow, virtualRows]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (document.activeElement === searchInputRef.current) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setIsSearchOpen(false);
+          searchInputRef.current?.blur();
+          return;
+        }
+        if (e.key === "Enter") {
+          e.preventDefault();
+          goToMatch(e.shiftKey ? -1 : 1);
+          return;
+        }
+        return;
+      }
+
+      if (e.key === "/" || (e.ctrlKey && e.key.toLowerCase() === "f")) {
+        const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+        if (tag === "input" || tag === "textarea" || tag === "select") return;
+        e.preventDefault();
+        setIsSearchOpen(true);
+        setIsJumpInputOpen(false);
+        setTimeout(() => searchInputRef.current?.focus(), 0);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [goToMatch]);
 
   const openCellDialog = useCallback(
     (
@@ -210,56 +290,119 @@ export function VirtualGrid({
           <div className="bg-background/95 sticky top-0 z-30 border-b backdrop-blur supports-backdrop-filter:bg-background/80">
             <div className="grid" style={{ gridTemplateColumns }}>
               <div
-                className="bg-background/95 sticky left-0 z-40 flex items-end justify-between border-r border-border/40 px-3 py-2 backdrop-blur supports-backdrop-filter:bg-background/80"
+                className="bg-background/95 sticky left-0 z-40 flex flex-col gap-1.5 border-r border-border/40 px-3 py-2 backdrop-blur supports-backdrop-filter:bg-background/80"
                 data-testid="run-grid-corner"
               >
-                <span className="text-muted-foreground/50 text-[10px] font-medium leading-none pb-0.5">
-                  点击画师串可直接复制
-                </span>
-                <div className="flex items-center -mb-1 -mr-1">
-                  {isJumpInputOpen ? (
-                    <form
-                      className="flex items-center w-16 relative"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const lineNum = parseInt(jumpInputValue, 10);
-                        if (scrollToLineNumber(lineNum)) {
-                          syncUrlHashWithLineNumber(lineNum);
+                <div className="flex items-end justify-between w-full">
+                  <span className="text-muted-foreground/50 text-[10px] font-medium leading-none pb-0.5">
+                    点击画师串可直接复制
+                  </span>
+                  <div className="flex items-center -mb-1 -mr-1 gap-1">
+                    {isSearchOpen ? (
+                      <form
+                        className="flex items-center gap-1 w-36 relative"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          goToMatch(1);
+                        }}
+                      >
+                        <Input
+                          ref={searchInputRef}
+                          type="text"
+                          className="h-5 pl-1.5 pr-14 py-0 text-[10px] w-full bg-background/50 rounded-[3px] shadow-none focus-visible:ring-1 focus-visible:ring-ring/30 border-border/50 placeholder:text-muted-foreground/30"
+                          placeholder="搜索画师..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          onBlur={() => setIsSearchOpen(false)}
+                        />
+                        {searchQuery.trim() && (
+                          <span className="absolute right-10 top-1/2 -translate-y-1/2 text-muted-foreground/50 text-[9px] pointer-events-none">
+                            {searchMatches.length > 0
+                              ? `${activeMatchIndex >= 0 ? activeMatchIndex + 1 : 0}/${searchMatches.length}`
+                              : "无结果"}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          className="text-muted-foreground/40 hover:text-foreground/80 hover:bg-muted/50 rounded px-1 py-0.5 text-[10px] font-medium transition-all"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => goToMatch(-1)}
+                          title="上一个匹配"
+                          disabled={searchMatches.length === 0}
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          className="text-muted-foreground/40 hover:text-foreground/80 hover:bg-muted/50 rounded px-1 py-0.5 text-[10px] font-medium transition-all"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => goToMatch(1)}
+                          title="下一个匹配"
+                          disabled={searchMatches.length === 0}
+                        >
+                          ↓
+                        </button>
+                      </form>
+                    ) : (
+                      <button
+                        type="button"
+                        className="text-muted-foreground/40 hover:text-foreground/80 hover:bg-muted/50 rounded px-1.5 py-0.5 text-[10px] font-medium transition-all"
+                        onClick={() => {
+                          setIsSearchOpen(true);
                           setIsJumpInputOpen(false);
-                        } else {
-                          toast.error(`行号必须在 1 到 ${grid.y_indexes.length} 之间`);
-                        }
-                      }}
-                    >
-                      <Input
-                        ref={jumpInputRef}
-                        type="number"
-                        min={1}
-                        max={grid.y_indexes.length}
-                        className="h-5 pl-1.5 pr-4 py-0 text-[10px] w-full bg-background/50 rounded-[3px] shadow-none focus-visible:ring-1 focus-visible:ring-ring/30 border-border/50 placeholder:text-muted-foreground/30 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
-                        placeholder="行号"
-                        value={jumpInputValue}
-                        onChange={(e) => setJumpInputValue(e.target.value)}
-                        onBlur={() => setIsJumpInputOpen(false)}
-                      />
-                      <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground/30 text-[9px] pointer-events-none">
-                        ↵
-                      </span>
-                    </form>
-                  ) : (
-                    <button
-                      type="button"
-                      className="text-muted-foreground/40 hover:text-foreground/80 hover:bg-muted/50 rounded px-1.5 py-0.5 text-[10px] font-medium transition-all"
-                      onClick={() => {
-                        setIsJumpInputOpen(true);
-                        setJumpInputValue("");
-                        setTimeout(() => jumpInputRef.current?.focus(), 0);
-                      }}
-                      title="跳转到指定行"
-                    >
-                      点此跳转
-                    </button>
-                  )}
+                          setSearchQuery("");
+                          setTimeout(() => searchInputRef.current?.focus(), 0);
+                        }}
+                        title="搜索画师 (/)"
+                      >
+                        搜索
+                      </button>
+                    )}
+                    {isJumpInputOpen ? (
+                      <form
+                        className="flex items-center w-16 relative"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const lineNum = parseInt(jumpInputValue, 10);
+                          if (scrollToLineNumber(lineNum)) {
+                            syncUrlHashWithLineNumber(lineNum);
+                            setIsJumpInputOpen(false);
+                          } else {
+                            toast.error(`行号必须在 1 到 ${grid.y_indexes.length} 之间`);
+                          }
+                        }}
+                      >
+                        <Input
+                          ref={jumpInputRef}
+                          type="number"
+                          min={1}
+                          max={grid.y_indexes.length}
+                          className="h-5 pl-1.5 pr-4 py-0 text-[10px] w-full bg-background/50 rounded-[3px] shadow-none focus-visible:ring-1 focus-visible:ring-ring/30 border-border/50 placeholder:text-muted-foreground/30 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                          placeholder="行号"
+                          value={jumpInputValue}
+                          onChange={(e) => setJumpInputValue(e.target.value)}
+                          onBlur={() => setIsJumpInputOpen(false)}
+                        />
+                        <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground/30 text-[9px] pointer-events-none">
+                          ↵
+                        </span>
+                      </form>
+                    ) : (
+                      <button
+                        type="button"
+                        className="text-muted-foreground/40 hover:text-foreground/80 hover:bg-muted/50 rounded px-1.5 py-0.5 text-[10px] font-medium transition-all"
+                        onClick={() => {
+                          setIsJumpInputOpen(true);
+                          setIsSearchOpen(false);
+                          setJumpInputValue("");
+                          setTimeout(() => jumpInputRef.current?.focus(), 0);
+                        }}
+                        title="跳转到指定行"
+                      >
+                        跳转
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
               {xHeaders.map((header) => (
@@ -306,6 +449,7 @@ export function VirtualGrid({
                       yLabel={yLabel}
                       virtualRowIndex={virtualRow.index}
                       onCopyRowLabel={copyRowLabel}
+                      highlightTerm={searchQuery.trim() || undefined}
                     />
 
                     {xHeaders.map((header, xIndex) => {

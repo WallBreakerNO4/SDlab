@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 import type { CachedRow } from "./virtual-grid-types";
 
@@ -8,7 +8,39 @@ type VirtualGridRowLabelProps = {
   yLabel: string;
   virtualRowIndex: number;
   onCopyRowLabel: (value: string) => void | Promise<void>;
+  highlightTerm?: string;
 };
+
+function renderHighlightedText(text: string, term: string | undefined): ReactNode {
+  if (!term || !term.trim()) return text;
+  const lowerText = text.toLowerCase();
+  const lowerTerm = term.trim().toLowerCase();
+  if (!lowerText.includes(lowerTerm)) return text;
+
+  const result: ReactNode[] = [];
+  let lastIndex = 0;
+  let index = lowerText.indexOf(lowerTerm);
+  let key = 0;
+  while (index !== -1) {
+    if (index > lastIndex) {
+      result.push(text.slice(lastIndex, index));
+    }
+    result.push(
+      <mark
+        key={`h-${key++}`}
+        className="bg-yellow-300/80 text-black dark:bg-yellow-400/70 dark:text-yellow-950 rounded-sm px-0.5"
+      >
+        {text.slice(index, index + lowerTerm.length)}
+      </mark>,
+    );
+    lastIndex = index + lowerTerm.length;
+    index = lowerText.indexOf(lowerTerm, lastIndex);
+  }
+  if (lastIndex < text.length) {
+    result.push(text.slice(lastIndex));
+  }
+  return result;
+}
 
 export function VirtualGridRowLabel({
   cachedRow,
@@ -16,6 +48,7 @@ export function VirtualGridRowLabel({
   yLabel,
   virtualRowIndex,
   onCopyRowLabel,
+  highlightTerm,
 }: VirtualGridRowLabelProps) {
   return (
     <div
@@ -69,7 +102,7 @@ export function VirtualGridRowLabel({
                           key={index}
                           className="inline-block border bg-muted/60 text-muted-foreground border-border/50 rounded px-1.5 py-0.5 text-[10px] font-mono leading-none truncate max-w-full transition-all"
                         >
-                          {part}
+                          {renderHighlightedText(part, highlightTerm)}
                         </span>
                       );
                     }
@@ -82,7 +115,7 @@ export function VirtualGridRowLabel({
                           className="inline-block border bg-muted/30 text-muted-foreground border-border/20 rounded px-1.5 py-0.5 text-[10px] font-mono leading-none truncate max-w-full transition-all"
                           style={{ opacity }}
                         >
-                          {part}
+                          {renderHighlightedText(part, highlightTerm)}
                         </span>
                       );
                     }
@@ -105,7 +138,7 @@ export function VirtualGridRowLabel({
                         className="inline-block border rounded px-1.5 py-0.5 text-[10px] font-mono leading-none truncate max-w-full transition-all bg-[hsla(var(--weight-hue),80%,50%,0.15)] border-[hsla(var(--weight-hue),80%,50%,0.3)] text-[hsl(var(--weight-hue),80%,40%)] dark:text-[hsl(var(--weight-hue),80%,65%)]"
                         style={style}
                       >
-                        {part}
+                        {renderHighlightedText(part, highlightTerm)}
                       </span>
                     );
                   })}
@@ -123,7 +156,7 @@ export function VirtualGridRowLabel({
                 }}
                 title="点击复制"
               >
-                {labelText}
+                {renderHighlightedText(labelText, highlightTerm)}
               </p>
             );
           })()}
