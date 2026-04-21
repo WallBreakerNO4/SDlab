@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type BrowserContext } from "@playwright/test";
 
 const MOCK_RUN_DIR = "mock-run-scroll-restore";
 const MOCK_BLURHASH = "LEHV6nWB2yk8pyo0adR*.7kCMdnj";
@@ -36,75 +36,81 @@ function buildRowPayload(yIndex: number) {
   };
 }
 
-test.describe("task 13: model detail scroll restoration", () => {
-  test("reload keeps the current row in view", async ({ page }) => {
-    await page.route(
-      new RegExp(`/api/comfyui/run/${MOCK_RUN_DIR}(\\?.*)?$`),
-      async (route) => {
-        await route.fulfill({
-          json: {
-            run: {
-              run_id: "mock-run-id",
-              created_at: "2026-04-11T00:00:00.000Z",
-              run_dir: MOCK_RUN_DIR,
-              selection: {
-                total_cells: MOCK_X_COLUMNS.length * MOCK_Y_INDEXES.length,
-              },
-              model: {
-                name: "Mock Scroll Restore Run",
-                description: {
-                  zh: "用于验证详情页刷新后是否保留滚动位置。",
-                },
-              },
-              workflow: null,
+async function installMockRoutes(context: BrowserContext) {
+  await context.route(
+    new RegExp(`/api/comfyui/run/${MOCK_RUN_DIR}(\\?.*)?$`),
+    async (route) => {
+      await route.fulfill({
+        json: {
+          run: {
+            run_id: "mock-run-id",
+            created_at: "2026-04-11T00:00:00.000Z",
+            run_dir: MOCK_RUN_DIR,
+            selection: {
+              total_cells: MOCK_X_COLUMNS.length * MOCK_Y_INDEXES.length,
             },
-            xLabels: MOCK_X_COLUMNS.map((column) => column.description.zh),
-            yLabels: MOCK_Y_INDEXES.map((yIndex) => `第 ${yIndex} 行`),
-            x_columns: MOCK_X_COLUMNS,
-            y_indexes: MOCK_Y_INDEXES,
+            model: {
+              name: "Mock Scroll Restore Run",
+              description: {
+                zh: "用于验证详情页重新进入后是否保留滚动位置。",
+              },
+            },
+            workflow: null,
           },
-        });
-      },
-    );
+          xLabels: MOCK_X_COLUMNS.map((column) => column.description.zh),
+          yLabels: MOCK_Y_INDEXES.map((yIndex) => `第 ${yIndex} 行`),
+          x_columns: MOCK_X_COLUMNS,
+          y_indexes: MOCK_Y_INDEXES,
+        },
+      });
+    },
+  );
 
-    await page.route(
-      new RegExp(`/api/comfyui/run/${MOCK_RUN_DIR}/grid(\\?.*)?$`),
-      async (route) => {
-        await route.fulfill({
-          json: {
-            x_columns: MOCK_X_COLUMNS,
-            y_indexes: MOCK_Y_INDEXES,
-            y_labels: MOCK_Y_INDEXES.map((yIndex) => `第 ${yIndex} 行`),
-            x_count: MOCK_X_COLUMNS.length,
-            y_count: MOCK_Y_INDEXES.length,
-            cells: {},
-            blurhash_cells: MOCK_Y_INDEXES.slice(0, 40).flatMap((yIndex) =>
-              MOCK_X_COLUMNS.map((_, xIndex) => ({
-                x_index: xIndex,
-                y_index: yIndex,
-                batch_index: 0,
-                category: "normal",
-                width: 512,
-                height: 768,
-                blurhash: MOCK_BLURHASH,
-              })),
-            ),
-          },
-        });
-      },
-    );
+  await context.route(
+    new RegExp(`/api/comfyui/run/${MOCK_RUN_DIR}/grid(\\?.*)?$`),
+    async (route) => {
+      await route.fulfill({
+        json: {
+          x_columns: MOCK_X_COLUMNS,
+          y_indexes: MOCK_Y_INDEXES,
+          y_labels: MOCK_Y_INDEXES.map((yIndex) => `第 ${yIndex} 行`),
+          x_count: MOCK_X_COLUMNS.length,
+          y_count: MOCK_Y_INDEXES.length,
+          cells: {},
+          blurhash_cells: MOCK_Y_INDEXES.slice(0, 40).flatMap((yIndex) =>
+            MOCK_X_COLUMNS.map((_, xIndex) => ({
+              x_index: xIndex,
+              y_index: yIndex,
+              batch_index: 0,
+              category: "normal",
+              width: 512,
+              height: 768,
+              blurhash: MOCK_BLURHASH,
+            })),
+          ),
+        },
+      });
+    },
+  );
 
-    await page.route(
-      new RegExp(`/api/comfyui/run/${MOCK_RUN_DIR}/row\\?.*$`),
-      async (route) => {
-        const requestUrl = new URL(route.request().url());
-        const yIndex = Number(requestUrl.searchParams.get("y_index") ?? "0");
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        await route.fulfill({
-          json: buildRowPayload(Number.isFinite(yIndex) ? yIndex : 0),
-        });
-      },
-    );
+  await context.route(
+    new RegExp(`/api/comfyui/run/${MOCK_RUN_DIR}/row\\?.*$`),
+    async (route) => {
+      const requestUrl = new URL(route.request().url());
+      const yIndex = Number(requestUrl.searchParams.get("y_index") ?? "0");
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await route.fulfill({
+        json: buildRowPayload(Number.isFinite(yIndex) ? yIndex : 0),
+      });
+    },
+  );
+}
+
+test.describe("task 13: model detail scroll restoration", () => {
+  test("reopening the page keeps the current row in view", async ({ browser }) => {
+    const firstContext = await browser.newContext();
+    await installMockRoutes(firstContext);
+    const page = await firstContext.newPage();
 
     await page.goto(`/models/${MOCK_RUN_DIR}`);
 
@@ -136,7 +142,7 @@ test.describe("task 13: model detail scroll restoration", () => {
     await expect
       .poll(
         () =>
-          page.evaluate((key) => window.sessionStorage.getItem(key), storageKey),
+          page.evaluate((key) => window.localStorage.getItem(key), storageKey),
         { timeout: 10_000 },
       )
       .not.toBeNull();
@@ -145,7 +151,7 @@ test.describe("task 13: model detail scroll restoration", () => {
       .poll(
         () =>
           page.evaluate((key) => {
-            const raw = window.sessionStorage.getItem(key);
+            const raw = window.localStorage.getItem(key);
             if (!raw) return null;
 
             try {
@@ -159,18 +165,36 @@ test.describe("task 13: model detail scroll restoration", () => {
       )
       .toBe(targetRowIndex);
 
-    const beforeReload = Math.round(await scrollEl.evaluate((el) => el.scrollTop));
+    const beforeClose = Math.round(await scrollEl.evaluate((el) => el.scrollTop));
+    const storageState = await firstContext.storageState();
 
-    await page.reload();
+    await firstContext.close();
 
-    await expect(grid).toBeVisible();
+    const reopenedContext = await browser.newContext({ storageState });
+    await installMockRoutes(reopenedContext);
+    const reopenedPage = await reopenedContext.newPage();
+
+    await reopenedPage.goto("/");
+    await reopenedPage.goto(`/models/${MOCK_RUN_DIR}`);
+
+    const reopenedGrid = reopenedPage.getByTestId("run-grid");
+    const reopenedScrollEl = reopenedPage.getByTestId("run-grid-scroll");
+
+    await expect(reopenedGrid).toBeVisible();
     await expect
-      .poll(async () => Math.round(await scrollEl.evaluate((el) => el.scrollTop)))
+      .poll(
+        async () =>
+          Math.round(await reopenedScrollEl.evaluate((el) => el.scrollTop)),
+      )
       .toBeGreaterThan(rowHeight * 95);
 
-    const afterReload = Math.round(await scrollEl.evaluate((el) => el.scrollTop));
+    const afterReopen = Math.round(
+      await reopenedScrollEl.evaluate((el) => el.scrollTop),
+    );
     const tolerance = Math.max(rowHeight, 48);
 
-    expect(Math.abs(afterReload - beforeReload)).toBeLessThanOrEqual(tolerance);
+    expect(Math.abs(afterReopen - beforeClose)).toBeLessThanOrEqual(tolerance);
+
+    await reopenedContext.close();
   });
 });

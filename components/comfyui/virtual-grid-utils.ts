@@ -107,7 +107,7 @@ export function loadSavedScrollAnchor(
 
   try {
     return parseSavedScrollAnchor(
-      window.sessionStorage.getItem(getScrollAnchorStorageKey(runDir)),
+      window.localStorage.getItem(getScrollAnchorStorageKey(runDir)),
     );
   } catch {
     return null;
@@ -123,7 +123,7 @@ export function saveScrollAnchor(
   }
 
   try {
-    window.sessionStorage.setItem(
+    window.localStorage.setItem(
       getScrollAnchorStorageKey(runDir),
       JSON.stringify(anchor),
     );
