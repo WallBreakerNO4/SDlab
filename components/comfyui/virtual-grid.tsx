@@ -6,7 +6,15 @@ import { toast } from "sonner";
 
 import { AuthLoginDialog } from "@/components/auth-login-dialog";
 import { useAuth } from "@/components/auth-provider";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  Search01Icon,
+  ArrowUp01Icon,
+  ArrowDown01Icon,
+  ArrowMoveUpRightIcon,
+} from "@hugeicons/core-free-icons";
 
 import { VirtualGridPreviewCell } from "./virtual-grid-preview-cell";
 import { VirtualGridRowLabel } from "./virtual-grid-row-label";
@@ -293,116 +301,132 @@ export function VirtualGrid({
                 className="bg-background/95 sticky left-0 z-40 flex flex-col gap-1.5 border-r border-border/40 px-3 py-2 backdrop-blur supports-backdrop-filter:bg-background/80"
                 data-testid="run-grid-corner"
               >
-                <div className="flex items-end justify-between w-full">
-                  <span className="text-muted-foreground/50 text-[10px] font-medium leading-none pb-0.5">
-                    点击画师串可直接复制
-                  </span>
-                  <div className="flex items-center -mb-1 -mr-1 gap-1">
-                    {isSearchOpen ? (
-                      <form
-                        className="flex items-center gap-1 w-36 relative"
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          goToMatch(1);
-                        }}
-                      >
+                <div className="flex items-center justify-end w-full gap-1.5">
+                  {isSearchOpen ? (
+                    <form
+                      className="flex items-center justify-end w-full max-w-full"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        goToMatch(1);
+                      }}
+                    >
+                      <div className="relative w-full max-w-48">
+                        <HugeiconsIcon
+                          icon={Search01Icon}
+                          strokeWidth={2}
+                          className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50 pointer-events-none"
+                        />
                         <Input
                           ref={searchInputRef}
                           type="text"
-                          className="h-5 pl-1.5 pr-14 py-0 text-[10px] w-full bg-background/50 rounded-[3px] shadow-none focus-visible:ring-1 focus-visible:ring-ring/30 border-border/50 placeholder:text-muted-foreground/30"
+                          className="h-6 pl-7 pr-16 py-0 text-xs w-full rounded-none shadow-none focus-visible:ring-1 focus-visible:ring-ring/30 border-border/50 placeholder:text-muted-foreground/50"
                           placeholder="搜索画师..."
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
                           onBlur={() => setIsSearchOpen(false)}
                         />
-                        {searchQuery.trim() && (
-                          <span className="absolute right-10 top-1/2 -translate-y-1/2 text-muted-foreground/50 text-[9px] pointer-events-none">
-                            {searchMatches.length > 0
-                              ? `${activeMatchIndex >= 0 ? activeMatchIndex + 1 : 0}/${searchMatches.length}`
-                              : "无结果"}
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          className="text-muted-foreground/40 hover:text-foreground/80 hover:bg-muted/50 rounded px-1 py-0.5 text-[10px] font-medium transition-all"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => goToMatch(-1)}
-                          title="上一个匹配"
-                          disabled={searchMatches.length === 0}
-                        >
-                          ↑
-                        </button>
-                        <button
-                          type="button"
-                          className="text-muted-foreground/40 hover:text-foreground/80 hover:bg-muted/50 rounded px-1 py-0.5 text-[10px] font-medium transition-all"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => goToMatch(1)}
-                          title="下一个匹配"
-                          disabled={searchMatches.length === 0}
-                        >
-                          ↓
-                        </button>
-                      </form>
-                    ) : (
-                      <button
-                        type="button"
-                        className="text-muted-foreground/40 hover:text-foreground/80 hover:bg-muted/50 rounded px-1.5 py-0.5 text-[10px] font-medium transition-all"
-                        onClick={() => {
-                          setIsSearchOpen(true);
+                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                          {searchQuery.trim() && (
+                            <span className="text-[10px] tabular-nums text-muted-foreground/60 mr-0.5">
+                              {searchMatches.length > 0
+                                ? `${activeMatchIndex >= 0 ? activeMatchIndex + 1 : 0}/${searchMatches.length}`
+                                : "无结果"}
+                            </span>
+                          )}
+                          <Button
+                            type="button"
+                            size="icon-xs"
+                            variant="ghost"
+                            className="size-5"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => goToMatch(-1)}
+                            title="上一个匹配"
+                            disabled={searchMatches.length === 0}
+                          >
+                            <HugeiconsIcon icon={ArrowUp01Icon} strokeWidth={2} className="size-3" />
+                          </Button>
+                          <Button
+                            type="button"
+                            size="icon-xs"
+                            variant="ghost"
+                            className="size-5"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => goToMatch(1)}
+                            title="下一个匹配"
+                            disabled={searchMatches.length === 0}
+                          >
+                            <HugeiconsIcon icon={ArrowDown01Icon} strokeWidth={2} className="size-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </form>
+                  ) : !isJumpInputOpen ? (
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="ghost"
+                      className="text-muted-foreground/70 hover:text-foreground"
+                      onClick={() => {
+                        setIsSearchOpen(true);
+                        setIsJumpInputOpen(false);
+                        setSearchQuery("");
+                        setTimeout(() => searchInputRef.current?.focus(), 0);
+                      }}
+                      title="搜索画师 (/)"
+                    >
+                      <HugeiconsIcon icon={Search01Icon} strokeWidth={2} data-icon="inline-start" />
+                      搜索
+                    </Button>
+                  ) : null}
+                  {isJumpInputOpen ? (
+                    <form
+                      className="flex items-center gap-1.5"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const lineNum = parseInt(jumpInputValue, 10);
+                        if (scrollToLineNumber(lineNum)) {
+                          syncUrlHashWithLineNumber(lineNum);
                           setIsJumpInputOpen(false);
-                          setSearchQuery("");
-                          setTimeout(() => searchInputRef.current?.focus(), 0);
-                        }}
-                        title="搜索画师 (/)"
-                      >
-                        搜索
-                      </button>
-                    )}
-                    {isJumpInputOpen ? (
-                      <form
-                        className="flex items-center w-16 relative"
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          const lineNum = parseInt(jumpInputValue, 10);
-                          if (scrollToLineNumber(lineNum)) {
-                            syncUrlHashWithLineNumber(lineNum);
-                            setIsJumpInputOpen(false);
-                          } else {
-                            toast.error(`行号必须在 1 到 ${grid.y_indexes.length} 之间`);
-                          }
-                        }}
-                      >
+                        } else {
+                          toast.error(`行号必须在 1 到 ${grid.y_indexes.length} 之间`);
+                        }
+                      }}
+                    >
+                      <div className="relative w-20">
                         <Input
                           ref={jumpInputRef}
                           type="number"
                           min={1}
                           max={grid.y_indexes.length}
-                          className="h-5 pl-1.5 pr-4 py-0 text-[10px] w-full bg-background/50 rounded-[3px] shadow-none focus-visible:ring-1 focus-visible:ring-ring/30 border-border/50 placeholder:text-muted-foreground/30 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                          className="h-6 pl-1.5 pr-6 py-0 text-xs w-full rounded-none shadow-none focus-visible:ring-1 focus-visible:ring-ring/30 border-border/50 placeholder:text-muted-foreground/50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
                           placeholder="行号"
                           value={jumpInputValue}
                           onChange={(e) => setJumpInputValue(e.target.value)}
                           onBlur={() => setIsJumpInputOpen(false)}
                         />
-                        <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground/30 text-[9px] pointer-events-none">
+                        <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground/40 text-[9px] pointer-events-none">
                           ↵
                         </span>
-                      </form>
-                    ) : (
-                      <button
-                        type="button"
-                        className="text-muted-foreground/40 hover:text-foreground/80 hover:bg-muted/50 rounded px-1.5 py-0.5 text-[10px] font-medium transition-all"
-                        onClick={() => {
-                          setIsJumpInputOpen(true);
-                          setIsSearchOpen(false);
-                          setJumpInputValue("");
-                          setTimeout(() => jumpInputRef.current?.focus(), 0);
-                        }}
-                        title="跳转到指定行"
-                      >
-                        跳转
-                      </button>
-                    )}
-                  </div>
+                      </div>
+                    </form>
+                  ) : !isSearchOpen ? (
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="ghost"
+                      className="text-muted-foreground/70 hover:text-foreground"
+                      onClick={() => {
+                        setIsJumpInputOpen(true);
+                        setIsSearchOpen(false);
+                        setJumpInputValue("");
+                        setTimeout(() => jumpInputRef.current?.focus(), 0);
+                      }}
+                      title="跳转到指定行"
+                    >
+                      <HugeiconsIcon icon={ArrowMoveUpRightIcon} strokeWidth={2} data-icon="inline-start" />
+                      跳转
+                    </Button>
+                  ) : null}
                 </div>
               </div>
               {xHeaders.map((header) => (
