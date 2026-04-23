@@ -1,5 +1,11 @@
 import type { CSSProperties, ReactNode } from "react";
 
+import { HugeiconsIcon } from "@hugeicons/react";
+import { StarIcon } from "@hugeicons/core-free-icons";
+
+import { Button } from "@/components/ui/button";
+import type { StylePromptFavorite } from "@/lib/style-prompt-favorites";
+
 import type { CachedRow } from "./virtual-grid-types";
 
 type VirtualGridRowLabelProps = {
@@ -9,6 +15,9 @@ type VirtualGridRowLabelProps = {
   virtualRowIndex: number;
   onCopyRowLabel: (value: string) => void | Promise<void>;
   highlightTerm?: string;
+  favorite: StylePromptFavorite | null;
+  isFavoritePending: boolean;
+  onToggleFavorite: (value: string) => void | Promise<void>;
 };
 
 function renderHighlightedText(text: string, term: string | undefined): ReactNode {
@@ -49,6 +58,9 @@ export function VirtualGridRowLabel({
   virtualRowIndex,
   onCopyRowLabel,
   highlightTerm,
+  favorite,
+  isFavoritePending,
+  onToggleFavorite,
 }: VirtualGridRowLabelProps) {
   return (
     <div
@@ -56,7 +68,7 @@ export function VirtualGridRowLabel({
       data-testid="run-grid-y-label"
     >
       <div className="flex flex-col items-start justify-between w-full h-full gap-1 relative group/y-label">
-        <div className="flex-1 w-full overflow-hidden">
+        <div className="flex-1 w-full overflow-hidden pr-6">
           {(() => {
             const labelText =
               cachedRow && cachedRow.status === "ready"
@@ -70,6 +82,8 @@ export function VirtualGridRowLabel({
                 <span className="text-muted-foreground/50 text-[10px]">-</span>
               );
             }
+
+            const canFavorite = labelText !== "加载失败";
 
             if (labelText.includes(",")) {
               const parts = labelText
@@ -86,6 +100,28 @@ export function VirtualGridRowLabel({
                   }}
                   title="点击复制"
                 >
+                  {canFavorite ? (
+                    <Button
+                      type="button"
+                      size="icon-xs"
+                      variant="ghost"
+                      className={
+                        favorite
+                          ? "absolute -right-1 -top-1 size-5 bg-background/80 text-amber-500 hover:text-amber-600"
+                          : "absolute -right-1 -top-1 size-5 bg-background/80 text-muted-foreground/40 opacity-0 hover:text-amber-500 group-hover/y-label:opacity-100 focus-visible:opacity-100"
+                      }
+                      disabled={isFavoritePending}
+                      aria-label={favorite ? "取消收藏画师串" : "收藏画师串"}
+                      title={favorite ? "取消收藏" : "收藏画师串"}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void onToggleFavorite(labelText);
+                      }}
+                    >
+                      <HugeiconsIcon icon={StarIcon} strokeWidth={2} className="size-3" />
+                    </Button>
+                  ) : null}
                   {parts.map((part, index) => {
                     let weight = 1;
                     const match = part.match(/:([0-9.]+)[)\]}]*$/);
@@ -147,17 +183,41 @@ export function VirtualGridRowLabel({
             }
 
             return (
-              <p
-                className="text-muted-foreground text-[10px] leading-relaxed wrap-break-word w-full cursor-pointer hover:opacity-80 transition-opacity"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  void onCopyRowLabel(labelText);
-                }}
-                title="点击复制"
-              >
-                {renderHighlightedText(labelText, highlightTerm)}
-              </p>
+              <>
+                {canFavorite ? (
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    variant="ghost"
+                    className={
+                      favorite
+                        ? "absolute -right-1 -top-1 size-5 bg-background/80 text-amber-500 hover:text-amber-600"
+                        : "absolute -right-1 -top-1 size-5 bg-background/80 text-muted-foreground/40 opacity-0 hover:text-amber-500 group-hover/y-label:opacity-100 focus-visible:opacity-100"
+                    }
+                    disabled={isFavoritePending}
+                    aria-label={favorite ? "取消收藏画师串" : "收藏画师串"}
+                    title={favorite ? "取消收藏" : "收藏画师串"}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      void onToggleFavorite(labelText);
+                    }}
+                  >
+                    <HugeiconsIcon icon={StarIcon} strokeWidth={2} className="size-3" />
+                  </Button>
+                ) : null}
+                <p
+                  className="text-muted-foreground text-[10px] leading-relaxed wrap-break-word w-full cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void onCopyRowLabel(labelText);
+                  }}
+                  title="点击复制"
+                >
+                  {renderHighlightedText(labelText, highlightTerm)}
+                </p>
+              </>
             );
           })()}
         </div>

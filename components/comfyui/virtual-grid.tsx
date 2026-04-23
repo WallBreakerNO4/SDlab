@@ -7,13 +7,31 @@ import { toast } from "sonner";
 import { AuthLoginDialog } from "@/components/auth-login-dialog";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  normalizeStylePromptText,
+  type StylePromptFavorite,
+} from "@/lib/style-prompt-favorites";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Search01Icon,
   ArrowUp01Icon,
   ArrowDown01Icon,
   ArrowMoveUpRightIcon,
+  StarIcon,
 } from "@hugeicons/core-free-icons";
 
 import { VirtualGridPreviewCell } from "./virtual-grid-preview-cell";
@@ -45,6 +63,18 @@ type VirtualGridProps = {
   showNsfw: boolean;
   currentView: { release_id: string } | null;
   viewAccess: RunViewAccess | null;
+  stylePromptFavorites: StylePromptFavorite[];
+  favoriteByPrompt: Map<string, StylePromptFavorite>;
+  isStylePromptFavoritesLoading: boolean;
+  pendingStylePromptKeys: Set<string>;
+  onCreateStylePromptFavorite: (options: {
+    promptText: string;
+    sourceYIndex: number | null;
+  }) => Promise<StylePromptFavorite>;
+  onDeleteStylePromptFavorite: (
+    favorite: StylePromptFavorite,
+  ) => Promise<void>;
+  onUseStylePromptFavorite: (favorite: StylePromptFavorite) => Promise<void>;
 };
 
 const DEV_IMAGE_DOM_CAP_NOTE = 300;
@@ -56,6 +86,13 @@ export function VirtualGrid({
   showNsfw,
   currentView,
   viewAccess,
+  stylePromptFavorites,
+  favoriteByPrompt,
+  isStylePromptFavoritesLoading,
+  pendingStylePromptKeys,
+  onCreateStylePromptFavorite,
+  onDeleteStylePromptFavorite,
+  onUseStylePromptFavorite,
 }: VirtualGridProps) {
   "use no memo";
 
@@ -74,6 +111,7 @@ export function VirtualGrid({
   const [searchQuery, setSearchQuery] = useState("");
   const [activeMatchIndex, setActiveMatchIndex] = useState(-1);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const [favoritesPopoverOpen, setFavoritesPopoverOpen] = useState(false);
 
   const { rowCacheRef, rowCacheVersion, requestRow } = useVirtualGridRows({
     runDir,
@@ -123,6 +161,26 @@ export function VirtualGrid({
     }
     return matches;
   }, [searchQuery, grid.y_labels, grid.y_indexes]);
+
+  const stylePromptMatchesByPrompt = useMemo(() => {
+    const map = new Map<
+      string,
+      { rowIndex: number; yIndex: number; label: string }
+    >();
+    const yLabels = grid.y_labels ?? [];
+    for (let i = 0; i < yLabels.length; i++) {
+      const label = yLabels[i];
+      if (typeof label !== "string") continue;
+      const key = normalizeStylePromptText(label);
+      if (!key || map.has(key)) continue;
+      map.set(key, {
+        rowIndex: i,
+        yIndex: grid.y_indexes[i] ?? i,
+        label,
+      });
+    }
+    return map;
+  }, [grid.y_labels, grid.y_indexes]);
 
   const goToMatch = useCallback(
     (delta: number) => {
@@ -273,6 +331,72 @@ export function VirtualGrid({
     }
   }, []);
 
+  const toggleStylePromptFavorite = useCallback(
+    async (
+      promptText: string,
+      yIndex: number | null,
+      favorite: StylePromptFavorite | null,
+    ) => {
+      if (!user) {
+        setLoginDialogOpen(true);
+        return;
+      }
+
+      try {
+        if (favorite) {
+          await onDeleteStylePromptFavorite(favorite);
+          toast.success("已取消收藏画师串");
+          return;
+        }
+
+        await onCreateStylePromptFavorite({ promptText, sourceYIndex: yIndex });
+        toast.success("已收藏画师串");
+      } catch {
+        toast.error("收藏更新失败");
+      }
+    },
+    [onCreateStylePromptFavorite, onDeleteStylePromptFavorite, user],
+  );
+
+  const jumpToStylePromptFavorite = useCallback(
+    async (favorite: StylePromptFavorite) => {
+      const match = stylePromptMatchesByPrompt.get(
+        normalizeStylePromptText(favorite.prompt_text),
+      );
+      if (!match) {
+        toast.error("当前模型未包含这个画师串");
+        return;
+      }
+
+      const lineNum = match.rowIndex + 1;
+      scrollToLineNumber(lineNum);
+      syncUrlHashWithLineNumber(lineNum);
+      setFavoritesPopoverOpen(false);
+
+      void onUseStylePromptFavorite(favorite).catch((error: unknown) => {
+        console.error("[style-prompt-favorites] Failed to mark used", error);
+      });
+    },
+    [
+      onUseStylePromptFavorite,
+      scrollToLineNumber,
+      stylePromptMatchesByPrompt,
+      syncUrlHashWithLineNumber,
+    ],
+  );
+
+  const removeStylePromptFavoriteFromList = useCallback(
+    async (favorite: StylePromptFavorite) => {
+      try {
+        await onDeleteStylePromptFavorite(favorite);
+        toast.success("已取消收藏画师串");
+      } catch {
+        toast.error("收藏更新失败");
+      }
+    },
+    [onDeleteStylePromptFavorite],
+  );
+
   return (
     <div
       className="flex h-full min-h-0 flex-col overflow-hidden border border-border/40 rounded-sm"
@@ -302,6 +426,115 @@ export function VirtualGrid({
                 data-testid="run-grid-corner"
               >
                 <div className="flex items-center justify-end w-full gap-1.5">
+                  {!isSearchOpen && !isJumpInputOpen && !user ? (
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="ghost"
+                      className="text-muted-foreground/70 hover:text-foreground"
+                      onClick={() => setLoginDialogOpen(true)}
+                      title="登录后同步收藏"
+                    >
+                      <HugeiconsIcon icon={StarIcon} strokeWidth={2} data-icon="inline-start" />
+                      收藏
+                    </Button>
+                  ) : !isSearchOpen && !isJumpInputOpen ? (
+                    <Popover
+                      open={favoritesPopoverOpen}
+                      onOpenChange={setFavoritesPopoverOpen}
+                    >
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          size="xs"
+                          variant="ghost"
+                          className="text-muted-foreground/70 hover:text-foreground"
+                          title="收藏的画师串"
+                        >
+                          <HugeiconsIcon icon={StarIcon} strokeWidth={2} data-icon="inline-start" />
+                          收藏
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        align="start"
+                        className="w-80 gap-1 p-1.5"
+                      >
+                        <Command>
+                          <CommandInput placeholder="搜索收藏..." />
+                          <CommandList>
+                            <CommandEmpty>
+                              {isStylePromptFavoritesLoading
+                                ? "加载中"
+                                : "暂无收藏"}
+                            </CommandEmpty>
+                            <CommandGroup>
+                              {stylePromptFavorites.map((favorite) => {
+                                const match = stylePromptMatchesByPrompt.get(
+                                  normalizeStylePromptText(favorite.prompt_text),
+                                );
+
+                                return (
+                                  <CommandItem
+                                    key={favorite.id}
+                                    value={`${favorite.prompt_text} ${favorite.source_run_dir ?? ""}`}
+                                    onSelect={() => {
+                                      if (!match) {
+                                        toast.error("当前模型未包含这个画师串");
+                                        return;
+                                      }
+                                      void jumpToStylePromptFavorite(favorite);
+                                    }}
+                                    className={`items-start gap-2 py-2 ${match ? "" : "opacity-60"}`}
+                                  >
+                                    <Button
+                                      type="button"
+                                      size="icon-xs"
+                                      variant="ghost"
+                                      className="mt-0.5 size-5 text-amber-500 hover:text-amber-600"
+                                      title="取消收藏"
+                                      aria-label="取消收藏画师串"
+                                      disabled={pendingStylePromptKeys.has(
+                                        normalizeStylePromptText(
+                                          favorite.prompt_text,
+                                        ),
+                                      )}
+                                      onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                      }}
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        void removeStylePromptFavoriteFromList(
+                                          favorite,
+                                        );
+                                      }}
+                                    >
+                                      <HugeiconsIcon
+                                        icon={StarIcon}
+                                        strokeWidth={2}
+                                        className="size-3.5"
+                                      />
+                                    </Button>
+                                    <span className="min-w-0 flex-1">
+                                      <span className="line-clamp-2 font-mono text-[10px] leading-relaxed">
+                                        {favorite.prompt_text}
+                                      </span>
+                                      <span className="mt-0.5 block text-[10px] text-muted-foreground/60">
+                                        {match
+                                          ? `第 ${match.rowIndex + 1} 行`
+                                          : "当前模型无匹配"}
+                                      </span>
+                                    </span>
+                                  </CommandItem>
+                                );
+                              })}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  ) : null}
                   {isSearchOpen ? (
                     <form
                       className="flex items-center justify-end w-full max-w-full"
@@ -454,6 +687,18 @@ export function VirtualGrid({
                 cachedRow && cachedRow.status === "ready"
                   ? (cachedRow.yValue ?? preloadedYLabel)
                   : preloadedYLabel;
+              const labelText =
+                cachedRow && cachedRow.status === "ready"
+                  ? ((cachedRow.yValue ?? preloadedYLabel) || "-")
+                  : cachedRow && cachedRow.status === "error"
+                    ? (preloadedYLabel || "加载失败")
+                    : yLabel;
+              const normalizedLabelText = normalizeStylePromptText(
+                labelText === "-" || labelText === "加载失败" ? "" : labelText,
+              );
+              const stylePromptFavorite = normalizedLabelText
+                ? (favoriteByPrompt.get(normalizedLabelText) ?? null)
+                : null;
 
               return (
                 <div
@@ -474,6 +719,19 @@ export function VirtualGrid({
                       virtualRowIndex={virtualRow.index}
                       onCopyRowLabel={copyRowLabel}
                       highlightTerm={searchQuery.trim() || undefined}
+                      favorite={stylePromptFavorite}
+                      isFavoritePending={
+                        normalizedLabelText
+                          ? pendingStylePromptKeys.has(normalizedLabelText)
+                          : false
+                      }
+                      onToggleFavorite={(value) =>
+                        toggleStylePromptFavorite(
+                          value,
+                          yIndex,
+                          stylePromptFavorite,
+                        )
+                      }
                     />
 
                     {xHeaders.map((header, xIndex) => {
