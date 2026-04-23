@@ -1,5 +1,7 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
+import { writeR2HttpMetadata } from "@/lib/r2-response";
+
 export const runtime = "nodejs";
 
 function jsonError(status: number, message: string): Response {
@@ -37,7 +39,7 @@ export async function GET(request: Request): Promise<Response> {
     }
 
     const headers = new Headers();
-    object.writeHttpMetadata(headers);
+    writeR2HttpMetadata(headers, object);
     headers.set("Cache-Control", "public, max-age=300");
     headers.set("Content-Length", String(object.size));
     headers.set("ETag", object.httpEtag);

@@ -1,6 +1,7 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 import { isValidRunDir } from "@/lib/comfyui-types";
+import { writeR2HttpMetadata } from "@/lib/r2-response";
 import { createSupabaseAuthClient } from "@/lib/supabase-auth";
 
 export const runtime = "nodejs";
@@ -81,7 +82,7 @@ export async function GET(
     }
 
     const headers = new Headers();
-    object.writeHttpMetadata(headers);
+    writeR2HttpMetadata(headers, object);
     headers.set("Content-Type", "application/json; charset=utf-8");
     headers.set(
       "Content-Disposition",
