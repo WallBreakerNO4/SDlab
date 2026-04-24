@@ -1,3 +1,6 @@
+<!-- Parent: ../AGENTS.md -->
+<!-- Generated: 2026-04-06 | Updated: 2026-04-25 -->
+
 # e2e/ — Playwright 端到端测试
 
 ## 概览
@@ -13,6 +16,9 @@
 | Supabase 配置校验 | `task-10.spec.ts` | 跳过无 Supabase 环境 |
 | 主流程 | `task-13-main-flow.spec.ts` | models → detail → grid 完整链路 |
 | R2 图片源验证 | `task-13-r2-src.spec.ts` | 图片 src 指向 R2 公开/私有 URL |
+| 弹窗按需加载 | `task-13-dialog-on-demand.spec.ts` | 弹窗 display 图片按需加载 |
+| hash 跳转 | `task-13-hash-jump.spec.ts` | URL hash 定位到特定 cell |
+| 滚动恢复 | `task-13-scroll-restore.spec.ts` | 弹窗关闭后恢复滚动位置 |
 
 ## 运行
 

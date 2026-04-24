@@ -1,3 +1,6 @@
+<!-- Parent: ../AGENTS.md -->
+<!-- Generated: 2026-04-06 | Updated: 2026-04-25 -->
+
 # app/auth/ — Supabase Auth 回调特例
 
 ## 概览

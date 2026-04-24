@@ -1,3 +1,6 @@
+<!-- Parent: ../AGENTS.md -->
+<!-- Generated: 2026-04-06 | Updated: 2026-04-25 -->
+
 # hooks/ — 前端复用 hooks
 
 ## 概览

@@ -1,3 +1,6 @@
+<!-- Parent: ../AGENTS.md -->
+<!-- Generated: 2026-04-06 | Updated: 2026-04-25 -->
+
 # scripts/cli/ — 交互菜单与入口注册
 
 ## 概览

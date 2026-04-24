@@ -1,3 +1,6 @@
+<!-- Parent: ../AGENTS.md -->
+<!-- Generated: 2026-04-06 | Updated: 2026-04-25 -->
+
 # lib/ — Node 侧共享边界（Supabase + R2 + 路径安全 + 类型）
 
 ## 概览

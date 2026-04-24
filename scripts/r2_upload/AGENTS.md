@@ -1,3 +1,6 @@
+<!-- Parent: ../AGENTS.md -->
+<!-- Generated: 2026-04-06 | Updated: 2026-04-25 -->
+
 # scripts/r2_upload/ — R2 上传 + Supabase 写入
 
 ## 概览

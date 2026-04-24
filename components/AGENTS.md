@@ -1,3 +1,6 @@
+<!-- Parent: ../AGENTS.md -->
+<!-- Generated: 2026-04-06 | Updated: 2026-04-25 -->
+
 # components/ — 前端组件（业务 + 基础 UI）
 
 ## 概览
@@ -12,6 +15,9 @@
 | Blurhash 占位渲染     | `components/comfyui/blurhash-canvas.tsx` | canvas 渲染 blurhash 编码                          |
 | 网格图片组件          | `components/comfyui/grid-image.tsx`      | R2 图片 + blurhash 占位 + 加载状态                 |
 | ComfyUI 领域组件约定  | `components/comfyui/AGENTS.md`           | 性能/交互/图片路径约定                             |
+| 首页模型卡片          | `components/home/model-card.tsx`         | 封面图 + 描述展开 + 主页缩略图水平卷轴             |
+| 首页预览弹窗          | `components/home/preview-dialog.tsx`     | 全屏大图预览弹窗                                   |
+| 首页组件约定          | `components/home/AGENTS.md`              | 封面图/主页缩略图消费约定                          |
 | 站点头部              | `components/site-header.tsx`             | 品牌、ThemeToggle、登录弹窗入口、用户菜单          |
 | 浏览器端认证 Provider | `components/auth-provider.tsx`           | `createSupabaseBrowserClient()` + session 监听     |
 | 登录弹窗              | `components/auth-login-dialog.tsx`       | GitHub / Google / Microsoft OAuth 入口             |

@@ -1,3 +1,6 @@
+<!-- Parent: ../AGENTS.md -->
+<!-- Generated: 2026-04-06 | Updated: 2026-04-25 -->
+
 # app/ — Next.js 展示网站（App Router）
 
 ## 概览
@@ -10,15 +13,17 @@
 | 场景                | 位置                                             | 备注                                                          |
 | ------------------- | ------------------------------------------------ | ------------------------------------------------------------- |
 | 首页 runs 列表      | `app/page.tsx`                                   | 拉 `/api/comfyui/runs`；消费封面图与主页缩略图字段            |
-| 模型详情页         | `app/models/[runDir]/page.tsx`                   | 并行拉 detail + grid，前端做 type guard，并显示 workflow 下载 |
+| 模型详情页         | `app/models/[runDir]/page.tsx`                   | 拉取 view bootstrap JSON + 虚拟网格 + workflow 下载           |
 | Auth 回调页         | `app/auth/callback/route.ts`                     | OAuth 回跳处理                                                |
 | Auth 局部约定       | `app/auth/AGENTS.md`                             | PKCE session 交换特例                                         |
 | API 总约定          | `app/api/AGENTS.md`                              | `runtime` / 错误响应 / 鉴权边界                               |
 | API：runs 列表      | `app/api/comfyui/runs/route.ts`                  | Supabase 查询                                                 |
-| API：run 详情       | `app/api/comfyui/run/[runDir]/route.ts`          | 返回 `run`、`xLabels`、`yLabels`、`x_columns`、`y_indexes`    |
-| API：grid 索引      | `app/api/comfyui/run/[runDir]/grid/route.ts`     | blurhash_cells + 网格索引                                     |
-| API：row 级图片查询 | `app/api/comfyui/run/[runDir]/row/route.ts`      | 变体 URL + metadata                                           |
+| API：媒体授权       | `app/api/comfyui/run/[runDir]/access/route.ts`   | SFW/NSFW 视图 grant 分发                                      |
 | API：workflow 下载  | `app/api/comfyui/run/[runDir]/workflow/route.ts` | 认证后读取 R2 workflow artifact 并返回下载响应                |
+| 公开对象代理        | `app/api/public-object/route.ts`                 | R2 公开对象直接回源                                           |
+| 私有对象代理        | `app/api/private-object/route.ts`                | R2 私有对象代理（需 grant）                                   |
+| 关于页              | `app/info/page.tsx`                              | `force-static` + react-markdown 渲染                          |
+| 隐私政策页          | `app/privacy-policy/page.tsx`                    | `force-static` + react-markdown 渲染                          |
 | 布局与样式入口      | `app/layout.tsx`、`app/globals.css`              | token / fonts / ThemeProvider / AuthProvider                  |
 | 站点头部与登录入口  | `components/site-header.tsx`                     | ThemeToggle + 登录弹窗 + 用户菜单                             |
 | API 局部约定        | `app/api/comfyui/AGENTS.md`                      | 当前已落地的 route 细则                                       |
@@ -29,7 +34,8 @@
 - ComfyUI API 统一经 `createSupabaseAuthClient()`；`auth/callback` 为 PKCE 特例，直接用 `createServerClient()` 交换 session。
 - `app/api/` 负责 route 级共性约束；当前已落地的细分子域是 `app/api/comfyui/`。
 - Next 16 / React 19：本目录的动态页面与 route handler 普遍使用 `params: Promise<...>` 形态；客户端页面可 `use(params)`，route 中则 `await context.params`。
-- run 详情页当前除了 summary + grid，还消费 `run.workflow.download_url` 暴露 workflow 下载入口；页面层只消费 URL，不直接接触 R2 bucket 细节。
+- `app/info/` / `app/privacy-policy/`：静态 Markdown 渲染页（`force-static` + `react-markdown`），不引入运行时数据源。
+- run 详情页当前使用 view bootstrap JSON（`view/current.json` → `view/v2/{release_id}/bootstrap.*.json`）获取 detail + grid 数据，而非独立调用多个 API route。
 - 脚本侧已经适配 run 级封面图与主页缩略图资产；网页首页当前通过 `/api/comfyui/runs` 返回的 `assets.cover` / `assets.homepage_cards` 消费这些字段。
 - 首页当前使用独立的封面图/主页缩略图字段；不要把 run 详情页的展示页缩略图语义直接挪作首页卡片素材。
 - `app/layout.tsx` 负责挂载 `ThemeProvider`、`AuthProvider`、`SiteHeader`、`SiteFooter`；全站认证/主题入口从这里接入。
