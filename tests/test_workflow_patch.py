@@ -18,7 +18,7 @@ from scripts.generation.workflow_patch import (
 )
 
 
-RF_WORKFLOW = ROOT / "data" / "runs" / "example" / "api.json"
+RF_WORKFLOW = ROOT / "data" / "models" / "example" / "api.json"
 
 
 def _inputs(node: dict[str, object]) -> dict[str, object]:

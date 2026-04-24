@@ -36,6 +36,7 @@ def _write_run_fixture(
         "run_id": run_name,
         "run_key": run_name,
         "run_dir": run_name,
+        "created_at": "2026-01-01T00:00:00Z",
     }
     if include_workflow_download:
         workflow_download_path = run_dir / "workflow.json"

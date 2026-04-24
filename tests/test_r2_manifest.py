@@ -13,207 +13,448 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from scripts.r2_upload.manifest import (
-    SCHEMA_VERSION,
-    build_public_manifest,
-    build_run_manifest,
-    manifest_object_key,
+    VIEW_SCHEMA_VERSION,
+    build_view_release,
+    current_view_object_key,
+    view_manifest_object_key,
 )
 
 
 def _sample_payload() -> dict[str, object]:
     return {
         "run_dir": "chenkinnoob-xl-rf",
+        "run_id": "chenkinnoob-xl-rf",
         "run_json": {
             "run_id": "chenkinnoob-xl-rf",
-            "workflow_download_path": "/tmp/private/workflow.json",
-            "comfyui_base_url": "http://127.0.0.1:8188",
-            "assets": {
-                "cover_image": {
-                    "path": "/tmp/private/image.jpg",
-                    "repo_relative_path": "data/models/example/image.jpg",
-                    "sha256": "a" * 64,
-                }
-            },
+            "created_at": "2025-01-01T00:00:00Z",
         },
-        "run_assets": [
-            {
-                "asset_role": "cover",
-                "asset_index": 0,
-                "source_path": "data/models/example/image.jpg",
-                "variants": [
-                    {
-                        "variant": "display_webp",
-                        "bucket": "public",
-                        "r2_key": "runs/public/cover-display.webp",
-                        "content_type": "image/webp",
-                        "byte_size": 321,
-                    }
-                ],
-            }
-        ],
         "images": [
             {
                 "x_index": 0,
                 "y_index": 0,
                 "batch_index": 0,
                 "category": "normal",
-                "variants": [
-                    {
-                        "variant": "display_webp",
-                        "bucket": "public",
-                        "r2_key": "runs/public/normal-display.webp",
-                        "content_type": "image/webp",
-                        "byte_size": 123,
-                    },
-                ],
+                "positive_prompt": "a beautiful landscape",
+                "prompt_hash": "p1",
+                "width": 1024,
+                "height": 1024,
+                "blurhash": "L6PZfSi_.AyE_3t7t7R**0o#DgR4",
+                "seed": "111",
+                "y_value": "cfg_7.0",
+                "thumb_webp_bucket": "public",
+                "thumb_webp_r2_key": "runs/public/normal-thumb.webp",
+                "thumb_webp_cache_key": "ck1",
+                "display_webp_bucket": "public",
+                "display_webp_r2_key": "runs/public/normal-display.webp",
+                "display_webp_cache_key": "ck2",
             },
             {
                 "x_index": 1,
                 "y_index": 0,
                 "batch_index": 0,
                 "category": "nsfw",
-                "variants": [
-                    {
-                        "variant": "display_webp",
-                        "bucket": "private",
-                        "r2_key": "runs/private/nsfw-display.webp",
-                        "content_type": "image/webp",
-                        "byte_size": 222,
-                    }
-                ],
+                "positive_prompt": "a beautiful landscape",
+                "prompt_hash": "p1",
+                "width": 1024,
+                "height": 1024,
+                "blurhash": "L6PZfSi_.AyE_3t7t7R**0o#DgR4",
+                "seed": "222",
+                "y_value": "cfg_7.0",
+                "thumb_webp_bucket": "private",
+                "thumb_webp_r2_key": "runs/private/nsfw-thumb.webp",
+                "thumb_webp_cache_key": "ck3",
+                "display_webp_bucket": "private",
+                "display_webp_r2_key": "runs/private/nsfw-display.webp",
+                "display_webp_cache_key": "ck4",
             },
         ],
+        "x_columns": [
+            {"type": "normal", "description": {"zh": "\u666e\u901a"}},
+            {"type": "nsfw", "description": {"zh": "\u654f\u611f"}},
+        ],
+        "y_indexes": [0],
+        "total_cells": 2,
     }
 
 
-def test_build_run_manifest_includes_schema_version_and_isolation() -> None:
+# ---- build_view_release ----
+
+def test_build_view_release_includes_schema_version() -> None:
+    release = build_view_release(_sample_payload())
+
+    assert release["schema_version"] == VIEW_SCHEMA_VERSION
+
+
+def test_build_view_release_produces_expected_keys() -> None:
+    release = build_view_release(_sample_payload())
+
+    assert "release_id" in release
+    assert "current_manifest" in release
+    assert "bootstrap_sfw" in release
+    assert "bootstrap_nsfw" in release
+    assert "row_manifests" in release
+    assert "prompt_rows" in release
+
+
+def test_build_view_release_isolation() -> None:
     payload = _sample_payload()
+    release = build_view_release(payload)
 
-    manifest = build_run_manifest(payload)
-
-    assert manifest["schema_version"] == SCHEMA_VERSION
-    assert "schema_version" not in payload
-
-    images = cast(list[dict[str, object]], manifest["images"])
-    payload_images = cast(list[dict[str, object]], payload["images"])
+    images = cast(list[dict[str, object]], release["bootstrap_sfw"]["blurhash_cells"])
+    assert len(images) > 0
     images[0]["category"] = "advance"
+
+    payload_images = cast(list[dict[str, object]], payload["images"])
     assert payload_images[0]["category"] == "normal"
 
 
-def test_build_public_manifest_redacts_private_content_and_keys() -> None:
-    private_manifest = build_run_manifest(_sample_payload())
+def test_release_id_is_stable() -> None:
+    release1 = build_view_release(_sample_payload())
+    release2 = build_view_release(_sample_payload())
 
-    public_manifest = build_public_manifest(private_manifest)
-
-    images = cast(list[dict[str, object]], public_manifest["images"])
-    assert len(images) == 1
-    assert images[0]["category"] == "normal"
-
-    run_assets = cast(list[dict[str, object]], public_manifest["run_assets"])
-    assert len(run_assets) == 1
-    run_asset_variants = cast(list[dict[str, object]], run_assets[0]["variants"])
-    assert len(run_asset_variants) == 1
-    assert run_asset_variants[0]["bucket"] == "public"
-    assert run_assets[0]["source_path"] == "data/models/example/image.jpg"
-
-    run_json = cast(dict[str, object], public_manifest["run_json"])
-    assert "workflow_download_path" not in run_json
-    assert "comfyui_base_url" not in run_json
-    public_assets = cast(dict[str, object], run_json["assets"])
-    public_cover = cast(dict[str, object], public_assets["cover_image"])
-    assert "path" not in public_cover
-    assert public_cover["repo_relative_path"] == "data/models/example/image.jpg"
-
-    variants = cast(list[dict[str, object]], images[0]["variants"])
-    assert len(variants) == 1
-    assert variants[0]["bucket"] == "public"
-    assert variants[0]["r2_key"] == "runs/public/normal-display.webp"
-
-    leaked_private_keys = [
-        cast(str, variant["r2_key"])
-        for image in images
-        for variant in cast(list[dict[str, object]], image["variants"])
-        if cast(str, variant["bucket"]) != "public"
-        or "/private/" in cast(str, variant["r2_key"])
-    ]
-    assert leaked_private_keys == []
-
-    private_images = cast(list[dict[str, object]], private_manifest["images"])
-    assert len(private_images) == 2
+    assert release1["release_id"] == release2["release_id"]
 
 
-def test_build_public_manifest_preserves_non_jpg_run_asset_extensions() -> None:
+def test_release_id_changes_with_content() -> None:
     payload = _sample_payload()
-    run_json = cast(dict[str, object], payload["run_json"])
-    assets = cast(dict[str, object], run_json["assets"])
-    cover_image = cast(dict[str, object], assets["cover_image"])
-    cover_image["path"] = "/tmp/private/image.png"
-    cover_image["repo_relative_path"] = "data/models/example/image.png"
+    release1 = build_view_release(payload)
 
-    run_assets = cast(list[dict[str, object]], payload["run_assets"])
-    run_assets[0]["source_path"] = "data/models/example/image.png"
+    payload2 = copy.deepcopy(payload)
+    images = cast(list[dict[str, object]], payload2["images"])
+    images[0]["x_index"] = 999
 
-    public_manifest = build_public_manifest(build_run_manifest(payload))
-
-    public_run_assets = cast(list[dict[str, object]], public_manifest["run_assets"])
-    assert public_run_assets[0]["source_path"] == "data/models/example/image.png"
-    public_run_json = cast(dict[str, object], public_manifest["run_json"])
-    public_assets = cast(dict[str, object], public_run_json["assets"])
-    public_cover = cast(dict[str, object], public_assets["cover_image"])
-    assert public_cover["repo_relative_path"] == "data/models/example/image.png"
+    release2 = build_view_release(payload2)
+    assert release1["release_id"] != release2["release_id"]
 
 
-def test_manifest_object_key_is_stable_and_contains_required_segments() -> None:
-    manifest = build_run_manifest(_sample_payload())
+# ---- bootstrap sfw / nsfw ----
 
-    key1 = manifest_object_key("chenkinnoob-xl-rf", manifest, visibility="private")
-    key2 = manifest_object_key("chenkinnoob-xl-rf", manifest, visibility="private")
+def test_sfw_bootstrap_only_has_normal_cells() -> None:
+    release = build_view_release(_sample_payload())
+
+    cells = cast(list[dict[str, object]], release["bootstrap_sfw"]["blurhash_cells"])
+    assert len(cells) == 1
+    assert cells[0]["category"] == "normal"
+
+
+def test_nsfw_bootstrap_has_all_cells() -> None:
+    release = build_view_release(_sample_payload())
+
+    cells = cast(list[dict[str, object]], release["bootstrap_nsfw"]["blurhash_cells"])
+    assert len(cells) == 2
+    categories = {cast(str, cell["category"]) for cell in cells}
+    assert categories == {"normal", "nsfw"}
+
+
+def test_both_bootstraps_include_prompts() -> None:
+    release = build_view_release(_sample_payload())
+
+    for key in ("bootstrap_sfw", "bootstrap_nsfw"):
+        prompts = cast(list[dict[str, object]], release[key]["prompts"])
+        assert len(prompts) >= 1
+        assert "positive_prompt" in prompts[0]
+        assert "prompt_hash" in prompts[0]
+        assert "id" in prompts[0]
+
+
+def test_both_bootstraps_include_run_detail() -> None:
+    release = build_view_release(_sample_payload())
+
+    for key in ("bootstrap_sfw", "bootstrap_nsfw"):
+        run = cast(dict[str, object], release[key]["run"])
+        assert run["run_id"] == "chenkinnoob-xl-rf"
+        assert run["run_dir"] == "chenkinnoob-xl-rf"
+
+
+# ---- row_manifests (viewer variants) ----
+
+def test_public_row_only_has_normal_category() -> None:
+    release = build_view_release(_sample_payload())
+
+    public_rows = cast(dict[str, object], release["row_manifests"]["public"])
+    row = cast(dict[str, object], public_rows[0])
+    cells = cast(list[dict[str, object]], row["cells"])
+
+    for cell in cells:
+        items = cast(list[dict[str, object]], cell["items"])
+        for item in items:
+            assert item["category"] == "normal"
+
+
+def test_auth_sfw_row_has_normal_and_advance() -> None:
+    release = build_view_release(_sample_payload())
+
+    sfw_rows = cast(dict[str, object], release["row_manifests"]["auth_sfw"])
+    row = cast(dict[str, object], sfw_rows[0])
+    cells = cast(list[dict[str, object]], row["cells"])
+
+    categories: set[str] = set()
+    for cell in cells:
+        for item in cast(list[dict[str, object]], cell["items"]):
+            categories.add(cast(str, item["category"]))
+    # Our sample has normal+nsfw, so sfw should only see normal
+    assert categories == {"normal"}
+
+
+def test_auth_nsfw_row_has_all_categories() -> None:
+    release = build_view_release(_sample_payload())
+
+    nsfw_rows = cast(dict[str, object], release["row_manifests"]["auth_nsfw"])
+    row = cast(dict[str, object], nsfw_rows[0])
+    cells = cast(list[dict[str, object]], row["cells"])
+
+    categories: set[str] = set()
+    for cell in cells:
+        for item in cast(list[dict[str, object]], cell["items"]):
+            categories.add(cast(str, item["category"]))
+    assert categories == {"normal", "nsfw"}
+
+
+def test_public_row_variant_sources_not_leaked() -> None:
+    release = build_view_release(_sample_payload())
+
+    public_rows = cast(dict[str, object], release["row_manifests"]["public"])
+    row = cast(dict[str, object], public_rows[0])
+    cells = cast(list[dict[str, object]], row["cells"])
+
+    for cell in cells:
+        for item in cast(list[dict[str, object]], cell["items"]):
+            thumb = item.get("thumb")
+            display = item.get("display")
+            if thumb is not None:
+                thumb_dict = cast(dict[str, object], thumb)
+                for fmt_name in ("webp", "avif"):
+                    variant = thumb_dict.get(fmt_name)
+                    if variant is not None:
+                        variant_dict = cast(dict[str, object], variant)
+                        assert variant_dict["bucket"] == "public"
+                        assert "private" not in cast(str, variant_dict["key"])
+            if display is not None:
+                display_dict = cast(dict[str, object], display)
+                for fmt_name in ("webp", "avif"):
+                    variant = display_dict.get(fmt_name)
+                    if variant is not None:
+                        variant_dict = cast(dict[str, object], variant)
+                        assert variant_dict["bucket"] == "public"
+                        assert "private" not in cast(str, variant_dict["key"])
+
+
+# ---- view_manifest_object_key ----
+
+def test_view_manifest_object_key_stable_and_format() -> None:
+    key1 = view_manifest_object_key(
+        "chenkinnoob-xl-rf",
+        "abc123def456",
+        kind="bootstrap",
+        viewer_variant="public",
+    )
+    key2 = view_manifest_object_key(
+        "chenkinnoob-xl-rf",
+        "abc123def456",
+        kind="bootstrap",
+        viewer_variant="public",
+    )
 
     assert key1 == key2
-    assert key1.startswith("manifests/private/runs/chenkinnoob-xl-rf/schema/1/")
-    assert key1.endswith(".json")
-
-    digest = key1.removesuffix(".json").split("/")[-1]
-    assert len(digest) == 64
-    assert all(char in "0123456789abcdef" for char in digest)
+    assert key1.startswith("runs/chenkinnoob-xl-rf/view/v2/abc123def456/")
+    assert "bootstrap.sfw.json" in key1
 
 
-def test_manifest_object_key_changes_with_schema_or_content() -> None:
-    manifest = build_run_manifest(_sample_payload())
-
-    base_key = manifest_object_key("chenkinnoob-xl-rf", manifest, visibility="public")
-
-    schema_changed = copy.deepcopy(manifest)
-    schema_changed["schema_version"] = 2
-    schema_key = manifest_object_key(
+def test_view_manifest_object_key_nsfw_variant() -> None:
+    key = view_manifest_object_key(
         "chenkinnoob-xl-rf",
-        schema_changed,
-        visibility="public",
+        "abc123def456",
+        kind="bootstrap",
+        viewer_variant="auth_nsfw",
     )
 
-    content_changed = copy.deepcopy(manifest)
-    images = cast(list[dict[str, object]], content_changed["images"])
-    images[0]["x_index"] = 999
-    content_key = manifest_object_key(
+    assert "bootstrap.nsfw.json" in key
+
+
+def test_view_manifest_object_key_row_format() -> None:
+    key = view_manifest_object_key(
         "chenkinnoob-xl-rf",
-        content_changed,
-        visibility="public",
+        "abc123def456",
+        kind="row",
+        viewer_variant="public",
+        y_index=3,
     )
 
-    assert base_key != schema_key
-    assert "/schema/2/" in schema_key
-    assert base_key != content_key
+    assert key.startswith("runs/chenkinnoob-xl-rf/view/v2/abc123def456/rows/public/")
+    assert key.endswith("3.json")
 
 
-def test_manifest_object_key_rejects_invalid_inputs() -> None:
-    manifest = build_run_manifest(_sample_payload())
-
+def test_view_manifest_object_key_rejects_invalid_run_dir() -> None:
     with pytest.raises(ValueError, match="run_dir_name"):
-        manifest_object_key("NAI_4_FULL", manifest, visibility="public")
-
-    with pytest.raises(ValueError, match="visibility"):
-        manifest_object_key(
-            "chenkinnoob-xl-rf",
-            manifest,
-            visibility=cast(Literal["public", "private"], "internal"),
+        view_manifest_object_key(
+            "RUN_NAME",
+            "abc",
+            kind="bootstrap",
+            viewer_variant="public",
         )
+
+
+def test_view_manifest_object_key_rejects_invalid_release_id() -> None:
+    with pytest.raises(ValueError, match="release_id"):
+        view_manifest_object_key(
+            "chenkinnoob-xl-rf",
+            "INVALID_ID!!",
+            kind="bootstrap",
+            viewer_variant="public",
+        )
+
+
+def test_view_manifest_object_key_rejects_negative_y_index() -> None:
+    with pytest.raises(ValueError, match="y_index"):
+        view_manifest_object_key(
+            "chenkinnoob-xl-rf",
+            "abc",
+            kind="row",
+            viewer_variant="public",
+            y_index=-1,
+        )
+
+
+def test_view_manifest_object_key_rejects_missing_y_index_for_row() -> None:
+    with pytest.raises(ValueError, match="y_index"):
+        view_manifest_object_key(
+            "chenkinnoob-xl-rf",
+            "abc",
+            kind="row",
+            viewer_variant="public",
+        )
+
+
+# ---- current_view_object_key ----
+
+def test_current_view_object_key_format() -> None:
+    key = current_view_object_key("chenkinnoob-xl-rf")
+
+    assert key == "runs/chenkinnoob-xl-rf/view/current.json"
+
+
+def test_current_view_object_key_rejects_invalid_run_dir() -> None:
+    with pytest.raises(ValueError, match="run_dir_name"):
+        current_view_object_key("INVALID NAME")
+
+
+# ---- payload validation ----
+
+def test_build_view_release_rejects_missing_run_dir() -> None:
+    payload = _sample_payload()
+    del payload["run_dir"]
+
+    with pytest.raises(ValueError, match="run_dir"):
+        build_view_release(payload)
+
+
+def test_build_view_release_rejects_missing_run_json() -> None:
+    payload = _sample_payload()
+    del payload["run_json"]
+
+    with pytest.raises(ValueError, match="run_json"):
+        build_view_release(payload)
+
+
+def test_build_view_release_rejects_missing_images() -> None:
+    payload = _sample_payload()
+    del payload["images"]
+
+    with pytest.raises(ValueError, match="images"):
+        build_view_release(payload)
+
+
+def test_build_view_release_rejects_missing_x_columns() -> None:
+    payload = _sample_payload()
+    del payload["x_columns"]
+
+    with pytest.raises(ValueError, match="x_columns"):
+        build_view_release(payload)
+
+
+def test_build_view_release_rejects_missing_y_indexes() -> None:
+    payload = _sample_payload()
+    del payload["y_indexes"]
+
+    with pytest.raises(ValueError, match="y_indexes"):
+        build_view_release(payload)
+
+
+def test_build_view_release_rejects_missing_run_id_in_payload() -> None:
+    payload = _sample_payload()
+    del payload["run_id"]
+
+    with pytest.raises(ValueError, match="run_id"):
+        build_view_release(payload)
+
+
+# ---- y_labels ----
+
+def test_bootstrap_includes_y_labels() -> None:
+    release = build_view_release(_sample_payload())
+
+    for key in ("bootstrap_sfw", "bootstrap_nsfw"):
+        y_labels = cast(list[str], release[key]["yLabels"])
+        assert len(y_labels) == 1
+        assert y_labels[0] == "cfg_7.0"
+
+
+# ---- x_columns remap ----
+
+def test_nsfw_column_remapped_in_sfw() -> None:
+    release = build_view_release(_sample_payload())
+    bootstrap = cast(dict[str, object], release["bootstrap_sfw"])
+
+    x_columns = cast(list[dict[str, object]], bootstrap["x_columns"])
+    assert len(x_columns) == 1
+    assert x_columns[0]["type"] == "normal"
+
+
+def test_all_columns_present_in_nsfw() -> None:
+    release = build_view_release(_sample_payload())
+    bootstrap = cast(dict[str, object], release["bootstrap_nsfw"])
+
+    x_columns = cast(list[dict[str, object]], bootstrap["x_columns"])
+    assert len(x_columns) == 2
+    types = {cast(str, col["type"]) for col in x_columns}
+    assert types == {"normal", "nsfw"}
+
+
+# ---- current_manifest ----
+
+def test_current_manifest_contains_urls() -> None:
+    release = build_view_release(_sample_payload())
+
+    current = cast(dict[str, object], release["current_manifest"])
+    assert current["schema_version"] == VIEW_SCHEMA_VERSION
+    assert current["run_dir"] == "chenkinnoob-xl-rf"
+    assert "release_id" in current
+    assert "bootstrap_sfw_key" in current
+    assert "public_row_prefix" in current
+
+
+# ---- prompt_rows ----
+
+def test_prompt_rows_deduplication() -> None:
+    payload = _sample_payload()
+    # Both images share the same positive_prompt and prompt_hash,
+    # so there should be only one prompt_row
+    release = build_view_release(payload)
+
+    prompt_rows = cast(list[dict[str, object]], release["prompt_rows"])
+    assert len(prompt_rows) == 1
+    assert prompt_rows[0]["positive_prompt"] == "a beautiful landscape"
+    assert prompt_rows[0]["prompt_hash"] == "p1"
+    assert prompt_rows[0]["run_dir"] == "chenkinnoob-xl-rf"
+
+
+def test_prompt_rows_distinct_prompts() -> None:
+    payload = _sample_payload()
+    images = cast(list[dict[str, object]], payload["images"])
+    images[1]["positive_prompt"] = "a different scene"
+    images[1]["prompt_hash"] = "p2"
+
+    release = build_view_release(payload)
+
+    prompt_rows = cast(list[dict[str, object]], release["prompt_rows"])
+    assert len(prompt_rows) == 2

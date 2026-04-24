@@ -48,6 +48,7 @@ def test_dry_run_prints_structured_summary_placeholder(
             '"run_id":"contract-run",'
             '"run_key":"contract-run",'
             '"run_dir":"contract-run",'
+            '"created_at":"2026-01-01T00:00:00Z",'
             '"config_schema_version":"image-run-config/v1",'
             '"config_path":"data/models/example/config.yaml",'
             '"config_sha256":"' + ("deadbeef" * 8) + '",'

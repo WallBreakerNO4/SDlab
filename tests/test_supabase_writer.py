@@ -24,7 +24,7 @@ from scripts.r2_upload.supabase_writer import (
 def _sample_payload() -> dict[str, object]:
     return {
         "run_dir": "test-run",
-        "run_json": {"base_seed": 123, "count": 1},
+        "run_json": {"base_seed": 123, "count": 1, "created_at": "2026-01-01T00:00:00Z"},
         "run_id": "test-run",
         "x_columns": [],
         "y_indexes": [],
@@ -75,6 +75,14 @@ def _sample_payload() -> dict[str, object]:
                 ],
             }
         ],
+        "view_release": {
+            "schema_version": 2,
+            "release_id": "abc123def456",
+            "current_r2_key": "runs/test-run/view/current.json",
+            "bootstrap_sfw_r2_key": "runs/test-run/view/v2/abc123def456/bootstrap.sfw.json",
+            "bootstrap_nsfw_r2_key": "runs/test-run/view/v2/abc123def456/bootstrap.nsfw.json",
+            "media_access_version": 1,
+        },
         "images": [
             {
                 "x_index": 0,
@@ -146,6 +154,7 @@ class _InMemorySupabaseClient:
             "run_grid_items": {},
             "run_grid_item_snapshots": {},
             "run_grid_cells": {},
+            "run_view_index": {},
         }
         self._next_id = {
             "runs": 1,
@@ -401,6 +410,7 @@ def test_upsert_upload_index_is_idempotent() -> None:
     assert client.row_count("run_grid_items") == 1
     assert client.row_count("run_grid_item_snapshots") == 1
     assert client.row_count("run_grid_cells") == 1
+    assert client.row_count("run_view_index") == 1
 
     on_conflicts = {str(call["on_conflict"]) for call in client.upsert_calls}
     assert "run_dir" in on_conflicts
@@ -430,6 +440,14 @@ def test_upsert_upload_index_extracts_structured_columns() -> None:
         "model_homepage": None,
         "model_huggingface": "https://huggingface.co/example",
         "model_civitai": None,
+        "view_release": {
+            "schema_version": 2,
+            "release_id": "def456abc123",
+            "current_r2_key": "runs/structured-run/view/current.json",
+            "bootstrap_sfw_r2_key": "runs/structured-run/view/v2/def456abc123/bootstrap.sfw.json",
+            "bootstrap_nsfw_r2_key": "runs/structured-run/view/v2/def456abc123/bootstrap.nsfw.json",
+            "media_access_version": 1,
+        },
         "images": [
             {
                 "x_index": 0,
@@ -537,6 +555,7 @@ def test_upsert_upload_index_fallbacks_to_select_for_ids() -> None:
     assert client.row_count("run_grid_items") == 1
     assert client.row_count("run_grid_item_snapshots") == 1
     assert client.row_count("run_grid_cells") == 1
+    assert client.row_count("run_view_index") == 1
     assert client.select_execute_calls >= 2
 
 
@@ -558,6 +577,14 @@ def test_upsert_upload_index_preserves_large_seed_as_string() -> None:
         "model_homepage": None,
         "model_huggingface": None,
         "model_civitai": None,
+        "view_release": {
+            "schema_version": 2,
+            "release_id": "ghi789jkl012",
+            "current_r2_key": "runs/large-seed-run/view/current.json",
+            "bootstrap_sfw_r2_key": "runs/large-seed-run/view/v2/ghi789jkl012/bootstrap.sfw.json",
+            "bootstrap_nsfw_r2_key": "runs/large-seed-run/view/v2/ghi789jkl012/bootstrap.nsfw.json",
+            "media_access_version": 1,
+        },
         "images": [
             {
                 "x_index": 0,
@@ -596,6 +623,14 @@ def test_upsert_upload_index_requires_structured_run_fields() -> None:
         "x_count": 0,
         "y_count": 0,
         "total_cells": 0,
+        "view_release": {
+            "schema_version": 2,
+            "release_id": "mno345pqr678",
+            "current_r2_key": "runs/missing-structured-run/view/current.json",
+            "bootstrap_sfw_r2_key": "runs/missing-structured-run/view/v2/mno345pqr678/bootstrap.sfw.json",
+            "bootstrap_nsfw_r2_key": "runs/missing-structured-run/view/v2/mno345pqr678/bootstrap.nsfw.json",
+            "media_access_version": 1,
+        },
         "images": [],
     }
 

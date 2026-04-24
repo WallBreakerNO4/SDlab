@@ -25,7 +25,7 @@ from scripts.r2_upload.supabase_writer import (
 def _structured_run_payload() -> dict[str, object]:
     return {
         "run_dir": "run-1",
-        "run_json": {"base_seed": 1},
+        "run_json": {"base_seed": 1, "created_at": "2026-01-01T00:00:00Z"},
         "run_id": "run-1",
         "x_columns": [],
         "y_indexes": [],
@@ -38,6 +38,14 @@ def _structured_run_payload() -> dict[str, object]:
         "model_homepage": None,
         "model_huggingface": None,
         "model_civitai": None,
+        "view_release": {
+            "schema_version": 2,
+            "release_id": "abc123def456",
+            "current_r2_key": "runs/run-1/view/current.json",
+            "bootstrap_sfw_r2_key": "runs/run-1/view/v2/abc123def456/bootstrap.sfw.json",
+            "bootstrap_nsfw_r2_key": "runs/run-1/view/v2/abc123def456/bootstrap.nsfw.json",
+            "media_access_version": 1,
+        },
         "images": [],
     }
 
