@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import os
 import random
-import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -46,37 +45,16 @@ _ENV_API_KEY = "NOVELAI_API_KEY"
 _ENV_MIN_INTERVAL = "NOVELAI_MIN_INTERVAL_S"
 _ENV_MAX_RETRIES = "NOVELAI_MAX_RETRIES"
 _ENV_REQUEST_TIMEOUT = "NOVELAI_REQUEST_TIMEOUT_S"
+_ENV_INTERVAL_JITTER = "NOVELAI_INTERVAL_JITTER_S"
+_ENV_RATE_LIMIT_COOLDOWN = "NOVELAI_RATE_LIMIT_COOLDOWN_S"
+_ENV_RATE_LIMIT_JITTER = "NOVELAI_RATE_LIMIT_JITTER_S"
 
 _DEFAULT_MIN_INTERVAL = 5.0
 _DEFAULT_MAX_RETRIES = 3
 _DEFAULT_REQUEST_TIMEOUT = 120.0
-
-
-class _TokenBucket:
-    def __init__(self, max_tokens: int, min_interval_s: float) -> None:
-        self._max_tokens = max_tokens
-        self._refill_rate = 1.0 / max(min_interval_s, 0.1)
-        self._tokens = float(max_tokens)
-        self._last_refill = time.monotonic()
-        self._lock = threading.Lock()
-
-    def acquire(self) -> None:
-        with self._lock:
-            now = time.monotonic()
-            elapsed = now - self._last_refill
-            self._tokens = min(self._max_tokens, self._tokens + elapsed * self._refill_rate)
-            self._last_refill = now
-
-            if self._tokens >= 1.0:
-                self._tokens -= 1.0
-                return
-
-            deficit = 1.0 - self._tokens
-            wait_s = deficit / self._refill_rate
-
-        LOG.info("NovelAI 速率限制：等待 %.1f 秒", wait_s)
-        time.sleep(wait_s)
-        self.acquire()
+_DEFAULT_INTERVAL_JITTER = 0.0
+_DEFAULT_RATE_LIMIT_COOLDOWN = 30.0
+_DEFAULT_RATE_LIMIT_JITTER = 0.0
 
 
 def _env_float(name: str, default: float) -> float:
@@ -107,6 +85,9 @@ class NovelAIAPIClient:
         min_interval_s: float | None = None,
         max_retries: int | None = None,
         request_timeout_s: float | None = None,
+        interval_jitter_s: float | None = None,
+        rate_limit_cooldown_s: float | None = None,
+        rate_limit_jitter_s: float | None = None,
     ) -> None:
         self._api_key = api_key or _resolve_api_key()
         self._min_interval = (
@@ -124,11 +105,25 @@ class NovelAIAPIClient:
             if request_timeout_s is not None
             else _env_float(_ENV_REQUEST_TIMEOUT, _DEFAULT_REQUEST_TIMEOUT)
         )
+        self._jitter = (
+            interval_jitter_s
+            if interval_jitter_s is not None
+            else _env_float(_ENV_INTERVAL_JITTER, _DEFAULT_INTERVAL_JITTER)
+        )
+        self._rate_limit_cooldown = (
+            rate_limit_cooldown_s
+            if rate_limit_cooldown_s is not None
+            else _env_float(_ENV_RATE_LIMIT_COOLDOWN, _DEFAULT_RATE_LIMIT_COOLDOWN)
+        )
+        self._rate_limit_jitter = (
+            rate_limit_jitter_s
+            if rate_limit_jitter_s is not None
+            else _env_float(_ENV_RATE_LIMIT_JITTER, _DEFAULT_RATE_LIMIT_JITTER)
+        )
         self._sdk = NovelAI(
             api_key=self._api_key or "dry-run",
             timeout=self._request_timeout,
         )
-        self._bucket = _TokenBucket(max_tokens=1, min_interval_s=self._min_interval)
 
     def generate(
         self,
@@ -161,19 +156,20 @@ class NovelAIAPIClient:
             uc_preset="light",
         )
 
-        base_delay = 10.0
         max_delay = 120.0
 
         for attempt in range(self._max_retries + 1):
-            self._bucket.acquire()
-
             try:
                 images = self._sdk.image.generate(params)
+                wait_s = max(0.0, self._min_interval + random.uniform(-self._jitter, self._jitter))
+                if wait_s > 0:
+                    LOG.info("NovelAI 速率限制：等待 %.1f 秒", wait_s)
+                    time.sleep(wait_s)
                 return images
             except RateLimitError:
                 if attempt >= self._max_retries:
                     raise
-                delay = min(base_delay * (2**attempt) + random.uniform(0, 5), max_delay)
+                delay = max(0.0, self._rate_limit_cooldown + random.uniform(-self._rate_limit_jitter, self._rate_limit_jitter))
                 LOG.warning(
                     "NovelAI 速率限制 (429)，第 %s 次重试，等待 %.1f 秒",
                     attempt + 1,
@@ -184,7 +180,7 @@ class NovelAIAPIClient:
             except NetworkError:
                 if attempt >= self._max_retries:
                     raise
-                delay = min(base_delay * (2**attempt) + random.uniform(0, 3), max_delay)
+                delay = min(max_delay, 10.0 * (2**attempt) + random.uniform(0, 3))
                 LOG.warning(
                     "NovelAI 网络错误，第 %s 次重试，等待 %.1f 秒",
                     attempt + 1,
@@ -195,7 +191,7 @@ class NovelAIAPIClient:
             except (ServerError, NovelAIError):
                 if attempt >= self._max_retries:
                     raise
-                delay = min(base_delay * (2**attempt) + random.uniform(0, 3), max_delay)
+                delay = min(max_delay, 10.0 * (2**attempt) + random.uniform(0, 3))
                 LOG.warning(
                     "NovelAI 服务端错误，第 %s 次重试，等待 %.1f 秒",
                     attempt + 1,
