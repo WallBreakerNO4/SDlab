@@ -109,7 +109,6 @@ class NovelAIAPIClient:
         request_timeout_s: float | None = None,
     ) -> None:
         self._api_key = api_key or _resolve_api_key()
-        self._sdk = NovelAI(api_key=self._api_key or "dry-run")
         self._min_interval = (
             min_interval_s
             if min_interval_s is not None
@@ -124,6 +123,10 @@ class NovelAIAPIClient:
             request_timeout_s
             if request_timeout_s is not None
             else _env_float(_ENV_REQUEST_TIMEOUT, _DEFAULT_REQUEST_TIMEOUT)
+        )
+        self._sdk = NovelAI(
+            api_key=self._api_key or "dry-run",
+            timeout=self._request_timeout,
         )
         self._bucket = _TokenBucket(max_tokens=1, min_interval_s=self._min_interval)
 
@@ -234,8 +237,8 @@ def _normalize_model(raw_model: str | None) -> str:
     normalized = raw_model.strip().lower()
     if normalized in _NOVELAI_MODEL_NAMES:
         return normalized
-    LOG.info("未知模型 %s，回退到 nai-diffusion-4-5-full", raw_model)
-    return "nai-diffusion-4-5-full"
+    models = ", ".join(sorted(_NOVELAI_MODEL_NAMES))
+    raise ValueError(f"未知 NovelAI 模型: {raw_model}; 可选: {models}")
 
 
 def _build_error_payload(exc: Exception) -> dict[str, object]:

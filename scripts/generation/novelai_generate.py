@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import sys
@@ -36,6 +37,7 @@ from scripts.generation.prompt_grid import (
 )
 from scripts.generation.runner_selection import (
     SelectedRow,
+    _extract_x_info_type,
     _select_rows,
 )
 from scripts.generation.runner_prompt_template import (
@@ -154,6 +156,8 @@ def run(args: argparse.Namespace) -> int:
         )
 
     _apply_config_to_args(args, config)
+    model_name = _normalize_model(config.model.key)
+    novelai_fingerprint = _novelai_generation_fingerprint(args, model=model_name)
 
     x_rows = read_x_rows(args.x_json)
     y_rows = read_y_rows(args.y_json)
@@ -184,6 +188,10 @@ def run(args: argparse.Namespace) -> int:
         x_selected=x_selected,
         y_selected=y_selected,
         workflow_context=None,
+    )
+    _apply_novelai_fingerprint_to_run_payload(
+        run_payload,
+        fingerprint=novelai_fingerprint,
     )
 
     run_id_obj = run_payload.get("run_id")
@@ -223,7 +231,6 @@ def run(args: argparse.Namespace) -> int:
             print("错误: 未设置 NOVELAI_API_KEY 环境变量", file=sys.stderr)
             return 2
 
-    model_name = _normalize_model(config.model.key)
     worker_fn = novelai_worker(client=client, model=model_name)
 
     with logging_redirect_tqdm():
@@ -243,7 +250,7 @@ def run(args: argparse.Namespace) -> int:
                     run_dir=run_artifacts.run_dir,
                     run_id=run_id,
                     workflow_context=None,
-                    workflow_hash="novelai",
+                    workflow_hash=novelai_fingerprint,
                     stats=stats,
                     pbar=pbar,
                     writer=writer,
@@ -410,15 +417,68 @@ def _novelai_effective_params(
     }
 
 
+def _novelai_generation_fingerprint(
+    args: argparse.Namespace,
+    *,
+    model: str,
+) -> str:
+    payload = {
+        "schema": "novelai-generation-fingerprint/v1",
+        "backend": BACKEND_NOVELAI,
+        "model": model,
+        "quality": True,
+        "uc_preset": "light",
+        "generation": {
+            "negative_prompt": args.negative_prompt,
+            "append_negative_prompt": getattr(args, "append_negative_prompt", None),
+            "width": args.width,
+            "height": args.height,
+            "batch_size": args.batch_size,
+            "steps": args.steps,
+            "cfg": args.cfg,
+            "denoise": args.denoise,
+            "sampler_name": args.sampler_name,
+            "scheduler": args.scheduler,
+        },
+    }
+    raw = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _apply_novelai_fingerprint_to_run_payload(
+    run_payload: dict[str, object],
+    *,
+    fingerprint: str,
+) -> None:
+    run_payload["workflow_api_sha256"] = fingerprint
+
+    config_snapshot_obj = run_payload.get("config_snapshot")
+    if not isinstance(config_snapshot_obj, dict):
+        return
+    workflow_obj = config_snapshot_obj.get("workflow")
+    if not isinstance(workflow_obj, dict):
+        return
+    workflow_obj["api_sha256"] = fingerprint
+
+
 def _novelai_final_negative(
     args: argparse.Namespace,
     workflow_context: Any,
     x_row: dict[str, str],
 ) -> str | None:
     base = args.negative_prompt
-    append_val = getattr(args, "append_negative_prompt", None)
+    append_val = (
+        getattr(args, "append_negative_prompt", None)
+        if _extract_x_info_type(x_row) == "normal"
+        else None
+    )
 
-    _ = (workflow_context, x_row)
+    _ = workflow_context
 
     if base is None:
         base = ""
