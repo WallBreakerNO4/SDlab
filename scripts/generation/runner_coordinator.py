@@ -97,6 +97,7 @@ class GenerationCoordinator:
         save_image_prefix_builder: (
             Callable[[str, int, int, int, str], str] | None
         ) = None,
+        worker_fn: Callable[..., Any] | None = None,
     ):
         self.args = args
         self.x_descriptions = x_descriptions
@@ -127,6 +128,7 @@ class GenerationCoordinator:
         self.wait_prompt_done_with_fallback = wait_prompt_done_with_fallback
         self.get_history_item = get_history_item
         self.download_image_to_path = download_image_to_path
+        self.worker_fn = worker_fn if worker_fn is not None else _worker_submit_and_wait
 
         if cell_pairs is None:
             self.cell_iter = product(x_selected, y_selected)
@@ -139,9 +141,6 @@ class GenerationCoordinator:
         self.has_failed = False
 
     def run(self) -> bool:
-        if not self.args.dry_run and self.workflow_context is None:
-            raise ValueError("非 dry-run 模式必须提供可用 workflow")
-
         with ThreadPoolExecutor(max_workers=self.args.concurrency) as gen_pool:
             with ThreadPoolExecutor(max_workers=self.args.concurrency) as dl_pool:
                 while True:
@@ -307,8 +306,9 @@ class GenerationCoordinator:
             )
 
             future = gen_pool.submit(
-                _worker_submit_and_wait,
+                self.worker_fn,
                 self.args,
+                self.run_dir,
                 self.workflow_context,
                 plan,
                 self.patch_workflow,
@@ -393,6 +393,7 @@ def run_generation(
     download_image_to_path: Callable[..., Path],
     cell_pairs: Iterable[tuple[Any, Any]] | None = None,
     save_image_prefix_builder: (Callable[[str, int, int, int, str], str] | None) = None,
+    worker_fn: Callable[..., Any] | None = None,
 ) -> bool:
     return GenerationCoordinator(
         args=args,
@@ -426,11 +427,13 @@ def run_generation(
         download_image_to_path=download_image_to_path,
         cell_pairs=cell_pairs,
         save_image_prefix_builder=save_image_prefix_builder,
+        worker_fn=worker_fn,
     ).run()
 
 
 def _worker_submit_and_wait(
     args: argparse.Namespace,
+    run_dir: Path,
     workflow_context: Any,
     plan: _CellPlan,
     patch_workflow: Callable[..., Any],

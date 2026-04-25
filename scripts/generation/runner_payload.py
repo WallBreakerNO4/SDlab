@@ -46,6 +46,7 @@ def _build_run_payload(
         "created_at": _now_iso(),
         "dry_run": args.dry_run,
         "run_dir": run_key,
+        "backend": getattr(args, "config_backend", "comfyui"),
         "config_schema_version": getattr(args, "config_schema_version", None),
         "config_path": getattr(args, "config_path", None),
         "config_sha256": getattr(args, "config_sha256", None),

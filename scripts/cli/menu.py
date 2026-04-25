@@ -25,6 +25,7 @@ CONVERT_X_DEFAULT_ENV = "CONVERT_X_DEFAULT_CSV"
 CONVERT_Y_DEFAULT_ENV = "CONVERT_Y_DEFAULT_CSV"
 
 GENERATE_BASE_COMMAND = "uv run python scripts/generation/comfyui_part1_generate.py"
+GENERATE_NOVELAI_BASE_COMMAND = "uv run python scripts/generation/novelai_generate.py"
 UPLOAD_BASE_COMMAND = "uv run python scripts/r2_upload/upload_images_to_r2.py"
 CONVERT_X_BASE_COMMAND = "uv run python scripts/other/convert_x_csv_to_json.py"
 CONVERT_Y_BASE_COMMAND = "uv run python scripts/other/convert_y_csv_to_json.py"
@@ -123,7 +124,8 @@ def run_menu(io: MenuIO) -> int:
             selected = backend.select(
                 "主菜单",
                 [
-                    MenuChoice("generate", "生图"),
+                    MenuChoice("generate", "生图 (ComfyUI)"),
+                    MenuChoice("generate_novelai", "生图 (NovelAI)"),
                     MenuChoice("upload", "上传"),
                     MenuChoice("other", "其他"),
                 ],
@@ -133,6 +135,9 @@ def run_menu(io: MenuIO) -> int:
                 return 0
             if selected == "generate":
                 _handle_generate(backend)
+                continue
+            if selected == "generate_novelai":
+                _handle_generate_novelai(backend)
                 continue
             if selected == "upload":
                 _handle_upload(backend)
@@ -178,6 +183,51 @@ def _handle_generate(backend: QuestionaryMenuBackend) -> None:
             base_command=GENERATE_BASE_COMMAND,
             success_prefix="生图完成，退出码: ",
             cancel_message="已取消生图。",
+        ),
+    )
+
+
+def _handle_generate_novelai(backend: QuestionaryMenuBackend) -> None:
+    config_files = _list_config_files()
+    if not config_files:
+        backend.write("未找到 data/models/ 下的运行配置。")
+        return
+
+    novelai_configs = [
+        path
+        for path in config_files
+        if _is_novelai_config(path)
+    ]
+    if not novelai_configs:
+        backend.write(
+            "未找到 NovelAI 运行配置。"
+            " 请在 data/models/ 下创建 schema_version=image-run-config/v2 + backend=novelai 的配置。"
+        )
+        return
+
+    selected = backend.select(
+        "选择运行配置",
+        [
+            MenuChoice(path.as_posix(), path.relative_to(DATA_MODELS_DIR).as_posix())
+            for path in novelai_configs
+        ],
+        allow_back=True,
+    )
+    if selected == "__back__":
+        return
+
+    argv = ["--config", selected]
+    if backend.confirm("是否开启高级参数？", default=False):
+        argv.extend(_prompt_generate_novelai_advanced_args(backend))
+
+    _confirm_and_execute(
+        backend,
+        ExecutionPlan(
+            entry_key="generate_novelai",
+            argv=argv,
+            base_command=GENERATE_NOVELAI_BASE_COMMAND,
+            success_prefix="NovelAI 生图完成，退出码: ",
+            cancel_message="已取消 NovelAI 生图。",
         ),
     )
 
@@ -405,6 +455,27 @@ def _prompt_generate_advanced_args(backend: QuestionaryMenuBackend) -> list[str]
     return argv
 
 
+def _prompt_generate_novelai_advanced_args(
+    backend: QuestionaryMenuBackend,
+) -> list[str]:
+    argv: list[str] = []
+    if backend.confirm("开启 dry-run？", default=False):
+        argv.append("--dry-run")
+
+    run_dir = backend.text("自定义 --run-dir（留空使用默认行为）")
+    if run_dir:
+        argv.extend(["--run-dir", run_dir])
+
+    concurrency = backend.text("覆盖 --concurrency（留空使用默认值 2）")
+    if concurrency:
+        argv.extend(["--concurrency", concurrency])
+
+    client_id = backend.text("覆盖 --client-id（留空自动生成）")
+    if client_id:
+        argv.extend(["--client-id", client_id])
+    return argv
+
+
 def _prompt_upload_advanced_args(backend: QuestionaryMenuBackend) -> list[str]:
     defaults = _parser_defaults(build_upload_parser())
     argv: list[str] = []
@@ -442,6 +513,22 @@ def _prompt_upload_advanced_args(backend: QuestionaryMenuBackend) -> list[str]:
 
 def _list_config_files() -> list[Path]:
     return iter_run_config_files(DATA_MODELS_DIR)
+
+
+def _is_novelai_config(path: Path) -> bool:
+    try:
+        import yaml
+
+        text = path.read_text(encoding="utf-8")
+        data = yaml.safe_load(text)
+        if not isinstance(data, dict):
+            return False
+        return (
+            data.get("schema_version") == "image-run-config/v2"
+            and data.get("backend") == "novelai"
+        )
+    except Exception:
+        return False
 
 
 def _list_run_dirs(run_root: Path) -> list[Path]:

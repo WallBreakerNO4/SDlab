@@ -129,6 +129,7 @@ def _fake_runner_config(
     workflow_download_path.write_text('{"version": 1}\n', encoding="utf-8")
     return SimpleNamespace(
         schema_version="image-run-config/v1",
+        backend="comfyui",
         config_path="data/models/example/config.yaml",
         config_sha256=_sha256_file(config_path),
         model=SimpleNamespace(

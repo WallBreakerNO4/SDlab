@@ -98,7 +98,7 @@ def test_worker_submit_and_wait_uses_fallback_wait_and_returns_download(
         fail_if_ws_called,
     )
 
-    outcome = runner._worker_submit_and_wait(args, workflow_context, plan)
+    outcome = runner._worker_submit_and_wait(args, None, workflow_context, plan)
 
     assert outcome.record is None
     assert outcome.download is not None
@@ -150,7 +150,7 @@ def test_worker_submit_and_wait_serializes_execution_error_as_failed_record(
         fail_if_ws_called,
     )
 
-    outcome = runner._worker_submit_and_wait(args, workflow_context, plan)
+    outcome = runner._worker_submit_and_wait(args, None, workflow_context, plan)
 
     assert outcome.download is None
     assert outcome.record is not None

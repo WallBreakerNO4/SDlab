@@ -1,0 +1,42 @@
+schema_version: image-run-config/v2
+backend: novelai
+
+model:
+  key: nai-diffusion-4-5-full
+  name: "NovelAI Diffusion V4 Full"
+  family: novelai
+  links:
+    homepage: https://novelai.net/
+    huggingface: null
+    civitai: null
+  description:
+    zh: NovelAI 官方 Diffusion V4 Full 模型，闭源
+    en: NovelAI official Diffusion V4 Full model, closed-source
+
+prompts:
+  x_path: data/prompts/X/common_prompts.yaml
+  y_path: data/prompts/Y/300_NAI_Styles_Table-test.yaml
+
+workflow:
+  ksampler_node_id: null
+
+generation:
+  template: "{quality}{rating}{y}{gender}{characters}{series}{general}"
+  quality_prompt: "masterpiece,high score,great score,absurdres,year 2025,"
+  base_seed: 123
+  negative_prompt: null
+  append_negative_prompt: "nsfw,nipples,pussy,nude,"
+  width: 832
+  height: 1216
+  batch_size: 1
+  steps: 28
+  cfg: 5.0
+  denoise: null
+  sampler_name: k_euler_ancestral
+  scheduler: null
+
+selection:
+  x_limit: null
+  y_limit: null
+  x_indexes: null
+  y_indexes: null

@@ -8,6 +8,7 @@ dependencies = [
     "blurhash>=1.1.5",
     "boto3>=1.42.53",
     "botocore>=1.42.53",
+    "novelai-sdk>=0.8.0",
     "pillow>=12.1.1",
     "pillow-avif-plugin>=1.5.5",
     "python-dotenv>=1.2.1",

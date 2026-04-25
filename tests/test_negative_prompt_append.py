@@ -74,6 +74,7 @@ class _RunnerModule(Protocol):
     def _worker_submit_and_wait(
         self,
         args: argparse.Namespace,
+        run_dir: object,
         workflow_context: object,
         plan: object,
     ) -> _Outcome: ...
@@ -243,11 +244,13 @@ def test_negative_prompt_append_uses_config_value_and_ignores_env_for_normal(
 
     normal_outcome = runner._worker_submit_and_wait(
         args,
+        None,
         workflow_context,
         _build_worker_plan(runner, "normal"),
     )
     non_normal_outcome = runner._worker_submit_and_wait(
         args,
+        None,
         workflow_context,
         _build_worker_plan(runner, "lora"),
     )
@@ -295,6 +298,7 @@ def test_negative_prompt_append_uses_config_value_with_override_base(
 
     outcome = runner._worker_submit_and_wait(
         args,
+        None,
         workflow_context,
         _build_worker_plan(runner, "normal"),
     )

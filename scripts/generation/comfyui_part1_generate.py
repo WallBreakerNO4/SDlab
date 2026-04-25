@@ -255,6 +255,7 @@ def _apply_fresh_run_config(args: argparse.Namespace) -> None:
     config = load_runner_config(args.config, repo_root=Path.cwd())
 
     args.config_schema_version = config.schema_version
+    args.config_backend = config.backend
     args.config_path = config.config_path
     args.config_sha256 = config.config_sha256
     args.config_model = config.model
@@ -839,11 +840,14 @@ _infer_image_extension = _coordinator_infer_image_extension
 
 def _worker_submit_and_wait(
     args: argparse.Namespace,
+    run_dir: Path | None,
     workflow_context: WorkflowContext,
     plan: _CellPlan,
 ) -> _GenOutcome:
+    _ = run_dir
     return _coordinator_worker_submit_and_wait(
         args,
+        Path(),
         workflow_context,
         plan,
         patch_workflow,

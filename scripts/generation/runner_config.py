@@ -13,8 +13,12 @@ from scripts.run_naming import validate_run_key
 
 
 SCHEMA_VERSION = "image-run-config/v1"
+SCHEMA_VERSION_V2 = "image-run-config/v2"
 
-_ROOT_KEYS = {
+_VALID_SCHEMA_VERSIONS = {SCHEMA_VERSION, SCHEMA_VERSION_V2}
+_VALID_BACKENDS = {"comfyui", "novelai"}
+
+_V1_ROOT_KEYS = {
     "schema_version",
     "model",
     "prompts",
@@ -22,6 +26,11 @@ _ROOT_KEYS = {
     "generation",
     "selection",
 }
+
+_V2_ROOT_KEYS = _V1_ROOT_KEYS | {"backend"}
+
+BACKEND_COMFYUI = "comfyui"
+BACKEND_NOVELAI = "novelai"
 _MODEL_KEYS = {"key", "name", "family", "links", "description"}
 _MODEL_LINK_KEYS = {"homepage", "huggingface", "civitai"}
 _MODEL_DESCRIPTION_KEYS = {"zh", "en"}
@@ -116,6 +125,7 @@ class AssetsConfig:
 @dataclass(frozen=True)
 class RunnerConfig:
     schema_version: str
+    backend: str
     config_path: str
     config_sha256: str
     model: ModelConfig
@@ -382,6 +392,7 @@ def _load_workflow(
     *,
     repo_root: Path,
     config_dir: Path,
+    backend: str,
 ) -> WorkflowConfig:
     mapping = _require_mapping(payload, "workflow")
     _validate_keys(
@@ -396,8 +407,18 @@ def _load_workflow(
         repo_root=repo_root,
         filename=_WORKFLOW_API_FILENAME,
         field_name="workflow.api_json",
-        required=True,
+        required=(backend != BACKEND_NOVELAI),
     )
+
+    if backend == BACKEND_NOVELAI:
+        return WorkflowConfig(
+            path="",
+            repo_relative_path="",
+            sha256="",
+            download=None,
+            ksampler_node_id=None,
+        )
+
     if api_asset is None:
         raise ValueError("字段 workflow.api_json 对应文件不存在")
 
@@ -478,21 +499,37 @@ def load_runner_config(config_path: str, *, repo_root: Path) -> RunnerConfig:
 
     payload_obj = cast(object, yaml.safe_load(config_file.read_text(encoding="utf-8")))
     mapping = _require_mapping(payload_obj, "<root>")
-    _validate_keys(
-        mapping,
-        field_name="<root>",
-        allowed=_ROOT_KEYS,
-        required=_ROOT_KEYS,
-    )
 
     schema_version = _require_str(mapping["schema_version"], "schema_version")
-    if schema_version != SCHEMA_VERSION:
+    if schema_version not in _VALID_SCHEMA_VERSIONS:
         raise ValueError(
-            f"字段 schema_version 必须为 {SCHEMA_VERSION}: {schema_version}"
+            f"字段 schema_version 必须是 {SCHEMA_VERSION} 或 {SCHEMA_VERSION_V2}: "
+            f"{schema_version}"
+        )
+
+    if schema_version == SCHEMA_VERSION:
+        backend = BACKEND_COMFYUI
+        _validate_keys(
+            mapping,
+            field_name="<root>",
+            allowed=_V1_ROOT_KEYS,
+            required=_V1_ROOT_KEYS,
+        )
+    else:
+        backend = _require_str(mapping["backend"], "backend")
+        if backend not in _VALID_BACKENDS:
+            backends = ", ".join(sorted(_VALID_BACKENDS))
+            raise ValueError(f"字段 backend 必须是 {backends} 之一: {backend}")
+        _validate_keys(
+            mapping,
+            field_name="<root>",
+            allowed=_V2_ROOT_KEYS,
+            required=_V2_ROOT_KEYS,
         )
 
     return RunnerConfig(
         schema_version=schema_version,
+        backend=backend,
         config_path=config_file.relative_to(repo_root).as_posix(),
         config_sha256=_sha256_file(config_file),
         model=_load_model(mapping["model"]),
@@ -501,6 +538,7 @@ def load_runner_config(config_path: str, *, repo_root: Path) -> RunnerConfig:
             mapping["workflow"],
             repo_root=repo_root,
             config_dir=config_file.parent,
+            backend=backend,
         ),
         generation=_load_generation(mapping["generation"]),
         selection=_load_selection(mapping["selection"]),
@@ -508,4 +546,4 @@ def load_runner_config(config_path: str, *, repo_root: Path) -> RunnerConfig:
     )
 
 
-__all__ = ["RunnerConfig", "load_runner_config"]
+__all__ = ["RunnerConfig", "load_runner_config", "BACKEND_COMFYUI", "BACKEND_NOVELAI"]

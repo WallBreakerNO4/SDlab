@@ -20,8 +20,13 @@ class MenuEntry:
 _DEFAULT_ENTRIES: tuple[MenuEntry, ...] = (
     MenuEntry(
         key="generate_grid",
-        label="生图",
+        label="生图 (ComfyUI)",
         entrypoint="scripts.generation.comfyui_part1_generate:main",
+    ),
+    MenuEntry(
+        key="generate_novelai",
+        label="生图 (NovelAI)",
+        entrypoint="scripts.generation.novelai_generate:main",
     ),
     MenuEntry(
         key="convert_x_csv",
