@@ -62,9 +62,8 @@ function CardImage({
           blurhash={blurhash}
           width={blurhashWidth || 32}
           height={blurhashHeight || 32}
-          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ease-out ${
-            isLoaded ? "opacity-0" : "opacity-100"
-          }`}
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ease-out ${isLoaded ? "opacity-0" : "opacity-100"
+            }`}
         />
       ) : null}
       {src ? (
@@ -79,9 +78,8 @@ function CardImage({
             }}
             src={src}
             alt={alt}
-            className={`${imgClassName || ""} ${
-              isLoaded ? "opacity-100" : "opacity-0"
-            }`}
+            className={`${imgClassName || ""} ${isLoaded ? "opacity-100" : "opacity-0"
+              }`}
             loading="lazy"
             onLoad={() => setIsLoaded(true)}
           />
@@ -108,19 +106,17 @@ function ExpandableDescription({ text }: { text: string }) {
     <div className="relative">
       <p
         ref={textRef}
-        className={`text-sm text-muted-foreground/70 leading-relaxed ${
-          isExpanded ? "pb-6" : "line-clamp-2"
-        }`}
+        className={`text-sm text-muted-foreground/70 leading-relaxed ${isExpanded ? "pb-6" : "line-clamp-2"
+          }`}
       >
         {text}
       </p>
       {isTruncated && (
         <div
-          className={`absolute bottom-0 right-0 flex items-center justify-end ${
-            isExpanded
-              ? ""
-              : "w-20 h-6 bg-linear-to-r from-transparent via-card/90 to-card"
-          }`}
+          className={`absolute bottom-0 right-0 flex items-center justify-end ${isExpanded
+            ? ""
+            : "w-20 h-6 bg-linear-to-r from-transparent via-card/90 to-card"
+            }`}
         >
           <button
             onClick={(e) => {
@@ -360,18 +356,18 @@ export function ModelCard({
   return (
     <Link
       href={`/models/${encodeURIComponent(modelSummary.run_dir)}`}
-      className="group animate-fade-in-up block outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background break-inside-avoid mb-8"
+      className="group animate-fade-in-up block outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       style={{
         animationFillMode: "forwards",
         opacity: 0,
         animationDelay: `${index * 80}ms`,
       }}
     >
-      <Card className="flex flex-col transition-all duration-300 hover:ring-1 hover:ring-primary/40 hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:hover:shadow-[0_8px_30px_rgba(255,255,255,0.02)] border-border/40 bg-card/80 backdrop-blur-sm rounded-none overflow-hidden relative p-0 gap-0">
+      <Card className="flex flex-col transition-colors duration-300 hover:ring-1 hover:ring-primary/40 hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:hover:shadow-[0_8px_30px_rgba(255,255,255,0.02)] border-border/40 bg-card/80 [-webkit-backdrop-filter:blur(8px)] backdrop-blur-sm rounded-none overflow-hidden relative p-0 gap-0">
         <div className="absolute top-0 left-0 w-full h-0.5 bg-linear-to-r from-transparent via-primary/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-10" />
 
         <div
-          className="relative w-full overflow-hidden bg-muted/40 border-b border-border/40 cursor-zoom-in"
+          className="relative w-full overflow-hidden bg-muted/40 border-b border-border/40 cursor-zoom-in will-change-transform"
           style={{ aspectRatio: coverRatio }}
           onClick={(e) => {
             e.preventDefault();
@@ -394,7 +390,7 @@ export function ModelCard({
 
           <div className="absolute inset-0 bg-linear-to-t from-background/80 via-background/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
-          <div className="absolute bottom-4 right-4 translate-x-2 opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-all duration-300 ease-out text-primary">
+          <div className="absolute bottom-4 right-4 translate-x-2 opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-[transform,opacity] duration-300 ease-out text-primary">
             <span className="font-bold text-xl leading-none">→</span>
           </div>
         </div>

@@ -100,7 +100,7 @@ export default function HomePageClient({
           ) : null}
 
           {models.length > 0 ? (
-            <div className="columns-1 md:columns-2 lg:columns-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {models.map((modelSummary, index) => (
                 <ModelCard
                   key={modelSummary.run_dir}
