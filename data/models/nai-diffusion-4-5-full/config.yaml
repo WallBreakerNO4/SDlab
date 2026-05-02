@@ -3,15 +3,33 @@ backend: novelai
 
 model:
   key: nai-diffusion-4-5-full
-  name: "NovelAI Diffusion V4 Full"
+  name: "NovelAI Diffusion V4.5 Full"
   family: novelai
   links:
     homepage: https://novelai.net/
     huggingface: null
     civitai: null
   description:
-    zh: NovelAI 官方 Diffusion V4 Full 模型，闭源
-    en: NovelAI official Diffusion V4 Full model, closed-source
+    zh: |
+      NovelAI 官方自研 Diffusion V4.5 Full 模型，闭源。
+
+      核心特性：
+      - 多角色生成：单场景最多支持 6 个独立角色，实现复杂角色互动
+      - 自然语言理解：支持英文自然语言描述，无需复杂标签系统，直接描述画面内容
+      - 动作标签：通过 source#、target#、mutual# 等标签精确控制角色间互动与姿态
+      - 角色定位：精确控制多角色组合中每个角色的位置，实现复杂构图
+      - 文字集成：支持向画面添加自定义文字元素，以自然语言描述文字外观（颜色、气泡样式等）
+      - 精确修补（Focused Inpainting）：选中区域自动放大至约百万像素后修补，实现更高分辨率的细节补充
+    en: |
+      NovelAI's in-house Diffusion V4.5 Full model, closed-source.
+
+      Key Features:
+      - Multi-Character Prompting: Generate up to 6 unique characters in a single scene with complex interactions
+      - Natural Language Understanding: Use natural English descriptions instead of complex tag systems — just describe what you want to create
+      - Action Tags: Control character interactions with smart tags like source#, target#, and mutual# for dynamic poses
+      - Character Positioning: Precisely position each character for perfect scene composition
+      - Text Integration: Add customized text elements with natural language descriptions of text appearance
+      - Focused Inpainting: Selected regions are upscaled to ~1 megapixel before inpainting for higher-resolution detail
 
 prompts:
   x_path: data/prompts/X/common_prompts.yaml
