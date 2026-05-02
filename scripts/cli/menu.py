@@ -30,6 +30,7 @@ UPLOAD_BASE_COMMAND = "uv run python scripts/r2_upload/upload_images_to_r2.py"
 CONVERT_X_BASE_COMMAND = "uv run python scripts/other/convert_x_csv_to_json.py"
 CONVERT_Y_BASE_COMMAND = "uv run python scripts/other/convert_y_csv_to_json.py"
 CLEAR_R2_BASE_COMMAND = "uv run python scripts/r2_upload/clear_bucket.py"
+DELETE_RUN_BASE_COMMAND = "uv run python -m scripts.r2_upload.delete_run --run-dir"
 
 
 @dataclass(frozen=True, slots=True)
@@ -268,6 +269,7 @@ def _handle_other(backend: QuestionaryMenuBackend) -> None:
         "其他功能",
         [
             MenuChoice("csv_to_yaml", "CSV to YAML 脚本"),
+            MenuChoice("delete_run", "删除 Run（数据库 + R2）"),
             MenuChoice("clear_r2", "R2 清空脚本"),
         ],
         allow_back=True,
@@ -276,6 +278,9 @@ def _handle_other(backend: QuestionaryMenuBackend) -> None:
         return
     if selected == "csv_to_yaml":
         _handle_csv_to_yaml(backend)
+        return
+    if selected == "delete_run":
+        _handle_delete_run(backend)
         return
     if selected == "clear_r2":
         _handle_clear_r2(backend)
@@ -354,6 +359,43 @@ def _handle_clear_r2(backend: QuestionaryMenuBackend) -> None:
         backend.write(plan.cancel_message)
         return
     _run_with_clear_target(backend, plan, selected)
+
+
+def _handle_delete_run(backend: QuestionaryMenuBackend) -> None:
+    from scripts.r2_upload.delete_run import list_remote_runs
+
+    try:
+        run_names = list_remote_runs()
+    except Exception as exc:
+        backend.write(f"无法获取远端 run 列表: {exc}")
+        return
+
+    if not run_names:
+        backend.write("数据库中未找到任何 run 记录。")
+        return
+
+    selected = backend.select(
+        "选择要删除的 Run",
+        [MenuChoice(name, name) for name in run_names],
+        allow_back=True,
+    )
+    if selected == "__back__":
+        return
+
+    plan = ExecutionPlan(
+        entry_key="delete_run",
+        argv=["--run-dir", selected],
+        base_command=f"{DELETE_RUN_BASE_COMMAND} {selected}",
+        success_prefix="删除完成，退出码: ",
+        cancel_message="已取消删除操作。",
+    )
+    backend.write(f"准备删除 run: {selected}")
+    backend.write(f"  - R2: runs/{selected}/ 前缀下所有对象")
+    backend.write("  - 数据库: runs 表记录及全部关联数据（级联删除）")
+    if not backend.confirm("确认执行删除操作？", default=False):
+        backend.write(plan.cancel_message)
+        return
+    _run_execution_plan(backend, plan)
 
 
 def _confirm_and_execute(

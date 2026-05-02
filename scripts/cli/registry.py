@@ -48,6 +48,11 @@ _DEFAULT_ENTRIES: tuple[MenuEntry, ...] = (
         label="清空 R2 桶",
         entrypoint="scripts.r2_upload.clear_bucket:main",
     ),
+    MenuEntry(
+        key="delete_run",
+        label="删除 Run（数据库 + R2）",
+        entrypoint="scripts.r2_upload.delete_run:main",
+    ),
 )
 
 _BY_KEY = MappingProxyType({entry.key: entry for entry in _DEFAULT_ENTRIES})
