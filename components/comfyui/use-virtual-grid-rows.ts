@@ -11,6 +11,8 @@ import {
 import type { CachedRow, RowCell, RowMeta } from "./virtual-grid-types";
 import { normalizeRowPayload } from "./virtual-grid-utils";
 
+const MAX_CONCURRENT = 4;
+
 type UseVirtualGridRowsOptions = {
   runDir: string;
   showNsfw: boolean;
@@ -55,13 +57,15 @@ export function useVirtualGridRows({
 }: UseVirtualGridRowsOptions) {
   const rowCacheRef = useRef<Map<number, CachedRow>>(new Map());
   const rowRequestsRef = useRef<Map<number, AbortController>>(new Map());
+  const pendingYIndexesRef = useRef<Set<number>>(new Set());
+  const runningCountRef = useRef(0);
+  const flushPendingRef = useRef<() => void>(() => {});
   const [rowCacheVersion, setRowCacheVersion] = useState(0);
 
-  const requestRow = useCallback(
-    async (yIndex: number) => {
-      if (!Number.isFinite(yIndex) || yIndex < 0 || !releaseId) return;
-      if (rowCacheRef.current.has(yIndex)) return;
-      if (rowRequestsRef.current.has(yIndex)) return;
+  const doFetchRow = useCallback(
+    async (yIndex: number): Promise<void> => {
+      const rid = releaseId;
+      if (!rid) return;
 
       const controller = new AbortController();
       rowRequestsRef.current.set(yIndex, controller);
@@ -71,7 +75,7 @@ export function useVirtualGridRows({
           buildRowManifestUrl({
             runDir,
             yIndex,
-            releaseId,
+            releaseId: rid,
             showNsfw,
             viewAccess,
           }),
@@ -146,23 +150,60 @@ export function useVirtualGridRows({
         setRowCacheVersion((value) => value + 1);
       } finally {
         rowRequestsRef.current.delete(yIndex);
+        runningCountRef.current -= 1;
+        flushPendingRef.current();
       }
     },
     [releaseId, runDir, showNsfw, viewAccess],
   );
 
+  flushPendingRef.current = useCallback(() => {
+    while (
+      runningCountRef.current < MAX_CONCURRENT &&
+      pendingYIndexesRef.current.size > 0
+    ) {
+      const iterator = pendingYIndexesRef.current.values();
+      const next = iterator.next();
+      if (next.done) break;
+      const yIndex = next.value;
+      pendingYIndexesRef.current.delete(yIndex);
+      runningCountRef.current += 1;
+      void doFetchRow(yIndex);
+    }
+  }, [doFetchRow]);
+
+  const requestRow = useCallback(
+    async (yIndex: number) => {
+      if (!Number.isFinite(yIndex) || yIndex < 0 || !releaseId) return;
+      if (rowCacheRef.current.has(yIndex)) return;
+      if (rowRequestsRef.current.has(yIndex)) return;
+      if (pendingYIndexesRef.current.has(yIndex)) return;
+
+      pendingYIndexesRef.current.add(yIndex);
+      flushPendingRef.current();
+    },
+    [releaseId],
+  );
+
   useEffect(() => {
-    rowRequestsRef.current.forEach((controller) => controller.abort());
+    for (const controller of rowRequestsRef.current.values()) {
+      controller.abort();
+    }
     rowRequestsRef.current.clear();
+    pendingYIndexesRef.current.clear();
+    runningCountRef.current = 0;
   }, []);
 
   useEffect(() => {
     const requests = rowRequestsRef.current;
+    const pending = pendingYIndexesRef.current;
     return () => {
       for (const controller of requests.values()) {
         controller.abort();
       }
       requests.clear();
+      pending.clear();
+      runningCountRef.current = 0;
     };
   }, []);
 
