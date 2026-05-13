@@ -63,9 +63,20 @@ export async function GET(request: Request): Promise<Response> {
       return jsonError(404, "Object not found");
     }
 
+    const ifNoneMatch = request.headers.get("If-None-Match");
+    if (ifNoneMatch && ifNoneMatch === object.httpEtag) {
+      const headers = new Headers();
+      headers.set("ETag", object.httpEtag);
+      return new Response(null, { status: 304, headers });
+    }
+
     const headers = new Headers();
     writeR2HttpMetadata(headers, object);
-    headers.set("Cache-Control", "private, max-age=300");
+    const isJson = key.endsWith(".json");
+    headers.set(
+      "Cache-Control",
+      isJson ? "private, max-age=300" : "private, max-age=0, no-cache",
+    );
     headers.set("Content-Length", String(object.size));
     headers.set("ETag", object.httpEtag);
     return new Response(object.body, { status: 200, headers });
