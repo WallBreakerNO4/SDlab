@@ -46,13 +46,25 @@ export function useModelDetailData({
       setGridLoadState("loading");
       setViewAccess(null);
 
-      const currentResponse = await fetch(
+      const currentPromise = fetch(
         publicObjectUrl(`runs/${runDir}/view/current.json`),
         {
           signal: abortController.signal,
           cache: "no-store",
         },
       );
+
+      const accessPromise = currentUserId
+        ? fetch(
+            `/api/comfyui/run/${encodeURIComponent(runDir)}/access`,
+            {
+              signal: abortController.signal,
+              cache: "no-store",
+            },
+          )
+        : null;
+
+      const currentResponse = await currentPromise;
 
       if (currentResponse.status === 404) {
         throw new Error("not-found");
@@ -69,14 +81,8 @@ export function useModelDetailData({
       setCurrentView(currentRaw);
 
       let access: RunViewAccess | null = null;
-      if (currentUserId) {
-        const accessResponse = await fetch(
-          `/api/comfyui/run/${encodeURIComponent(runDir)}/access`,
-          {
-            signal: abortController.signal,
-            cache: "no-store",
-          },
-        );
+      if (accessPromise) {
+        const accessResponse = await accessPromise;
         if (!accessResponse.ok) {
           throw new Error("error");
         }
@@ -98,9 +104,13 @@ export function useModelDetailData({
           )
         : publicObjectUrl(currentRaw.bootstrap_sfw_key);
 
+      const bootstrapCache = wantsPrivateNsfw
+        ? ("no-store" as const)
+        : ("force-cache" as const);
+
       const bootstrapResponse = await fetch(bootstrapUrl, {
         signal: abortController.signal,
-        cache: "no-store",
+        cache: bootstrapCache,
       });
 
       if (bootstrapResponse.status === 404) {
