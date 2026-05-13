@@ -90,6 +90,7 @@ export function useVirtualGridRows({
       }
     }
     if (didHydrate) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydration triggers re-render
       setRowCacheVersion((value) => value + 1);
     }
   }, [runDir, releaseId, viewerVariant]);
@@ -203,21 +204,6 @@ export function useVirtualGridRows({
     [releaseId, runDir, showNsfw, viewAccess],
   );
 
-  flushPendingRef.current = useCallback(() => {
-    while (
-      runningCountRef.current < MAX_CONCURRENT &&
-      pendingYIndexesRef.current.size > 0
-    ) {
-      const iterator = pendingYIndexesRef.current.values();
-      const next = iterator.next();
-      if (next.done) break;
-      const yIndex = next.value;
-      pendingYIndexesRef.current.delete(yIndex);
-      runningCountRef.current += 1;
-      void doFetchRow(yIndex);
-    }
-  }, [doFetchRow]);
-
   const requestRow = useCallback(
     async (yIndex: number) => {
       if (!Number.isFinite(yIndex) || yIndex < 0 || !releaseId) return;
@@ -230,6 +216,23 @@ export function useVirtualGridRows({
     },
     [releaseId],
   );
+
+  useEffect(() => {
+    flushPendingRef.current = () => {
+      while (
+        runningCountRef.current < MAX_CONCURRENT &&
+        pendingYIndexesRef.current.size > 0
+      ) {
+        const iterator = pendingYIndexesRef.current.values();
+        const next = iterator.next();
+        if (next.done) break;
+        const yIndex = next.value;
+        pendingYIndexesRef.current.delete(yIndex);
+        runningCountRef.current += 1;
+        void doFetchRow(yIndex);
+      }
+    };
+  });
 
   useEffect(() => {
     for (const controller of rowRequestsRef.current.values()) {

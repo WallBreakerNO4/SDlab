@@ -42,6 +42,7 @@ export function useStylePromptFavorites({
 
   useEffect(() => {
     if (!currentUserId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset deferred state on logout
       setShouldLoad(false);
       return () => {
         if (deferTimerRef.current !== null) {
