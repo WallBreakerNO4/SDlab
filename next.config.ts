@@ -4,8 +4,15 @@ import { fileURLToPath } from "node:url";
 import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 import type { NextConfig } from "next";
 
-// 本地 next dev 时启动 Miniflare，提供 R2/KV 等 Cloudflare binding
-initOpenNextCloudflareForDev();
+// 仅在 next dev 时启动 Miniflare，提供 R2/KV 等 Cloudflare binding
+// build 阶段跳过，避免触发 Wrangler remote proxy（401）
+const isDev = process.argv.some(
+  (arg) => arg.endsWith("next") || arg.endsWith("next.js"),
+) && process.argv.includes("dev");
+
+if (isDev) {
+  initOpenNextCloudflareForDev();
+}
 
 const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 const markdownLoaderPath = path.join(
