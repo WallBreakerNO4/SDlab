@@ -159,7 +159,7 @@ export function useModelDetailData({
     });
 
     return () => {
-      abortController.abort();
+      abortController.abort("cleanup");
     };
   }, [currentUserId, runDir, showNsfw]);
 
