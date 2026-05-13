@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   isStylePromptFavoriteListResponse,
@@ -34,14 +34,39 @@ export function useStylePromptFavorites({
   const [favorites, setFavorites] = useState<StylePromptFavorite[]>([]);
   const [favoritesUserId, setFavoritesUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [shouldLoad, setShouldLoad] = useState(false);
   const [pendingPromptKeys, setPendingPromptKeys] = useState<Set<string>>(
     () => new Set(),
   );
+  const deferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!currentUserId) {
+      setShouldLoad(false);
+      return () => {
+        if (deferTimerRef.current !== null) {
+          clearTimeout(deferTimerRef.current);
+          deferTimerRef.current = null;
+        }
+      };
+    }
+
+    deferTimerRef.current = setTimeout(() => {
+      setShouldLoad(true);
+    }, 500);
+
+    return () => {
+      if (deferTimerRef.current !== null) {
+        clearTimeout(deferTimerRef.current);
+        deferTimerRef.current = null;
+      }
+    };
+  }, [currentUserId]);
 
   useEffect(() => {
     const abortController = new AbortController();
 
-    if (!currentUserId) {
+    if (!currentUserId || !shouldLoad) {
       return () => abortController.abort();
     }
 
@@ -81,7 +106,7 @@ export function useStylePromptFavorites({
       });
 
     return () => abortController.abort();
-  }, [currentUserId]);
+  }, [currentUserId, shouldLoad]);
 
   const visibleFavorites = useMemo(
     () => (favoritesUserId === currentUserId ? favorites : []),
