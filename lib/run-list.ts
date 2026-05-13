@@ -1,5 +1,6 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
 
 import type { RunAssetSummary, RunSummary } from "@/lib/comfyui-types";
@@ -111,7 +112,7 @@ function readHomepageCards(
   return cards.length > 0 ? cards : null;
 }
 
-export async function listRunSummaries(): Promise<RunSummary[]> {
+export async function loadRunSummariesUncached(): Promise<RunSummary[]> {
   const { supabaseUrl, supabasePublishableKey } = getPublicEnv();
 
   const supabase = createClient(supabaseUrl, supabasePublishableKey, {
@@ -173,3 +174,9 @@ export async function listRunSummaries(): Promise<RunSummary[]> {
 
   return runs;
 }
+
+export const listRunSummaries = unstable_cache(
+  loadRunSummariesUncached,
+  ["run-list-summaries"],
+  { revalidate: 300, tags: ["run-list"] },
+);
