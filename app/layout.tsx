@@ -11,6 +11,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { UserPreferencesProvider } from "@/components/user-preferences-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { WebVitals } from "@/components/web-vitals";
 import { createSupabaseAuthClient } from "@/lib/supabase-auth";
 import {
   THEME_COOKIE_NAME,
@@ -114,6 +115,7 @@ export default async function RootLayout({
         <Script id="theme-bootstrap" strategy="beforeInteractive">
           {getThemeBootstrapScript()}
         </Script>
+        <WebVitals />
         <ThemeProvider
           attribute="class"
           defaultTheme={initialTheme ?? "system"}
