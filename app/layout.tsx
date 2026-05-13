@@ -64,14 +64,22 @@ export default async function RootLayout({
   const cookieStore = await cookies();
   let initialUser = null;
 
-  try {
-    const supabase = await createSupabaseAuthClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    initialUser = user ?? null;
-  } catch {
-    initialUser = null;
+  const hasSessionCookie = cookieStore
+    .getAll()
+    .some(
+      (c) => c.name.includes("sb-") && c.name.endsWith("-auth-token"),
+    );
+
+  if (hasSessionCookie) {
+    try {
+      const supabase = await createSupabaseAuthClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      initialUser = user ?? null;
+    } catch {
+      initialUser = null;
+    }
   }
 
   const initialTheme = parseThemePreference(
