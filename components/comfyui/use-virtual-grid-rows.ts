@@ -13,6 +13,17 @@ import { normalizeRowPayload } from "./virtual-grid-utils";
 
 const MAX_CONCURRENT = 4;
 
+const globalRowCache = new Map<string, CachedRow>();
+
+function makeGlobalCacheKey(
+  runDir: string,
+  releaseId: string,
+  viewerVariant: string,
+  yIndex: number,
+): string {
+  return `${runDir}/${releaseId}/${viewerVariant}/${yIndex}`;
+}
+
 type UseVirtualGridRowsOptions = {
   runDir: string;
   showNsfw: boolean;
@@ -61,6 +72,27 @@ export function useVirtualGridRows({
   const runningCountRef = useRef(0);
   const flushPendingRef = useRef<() => void>(() => {});
   const [rowCacheVersion, setRowCacheVersion] = useState(0);
+
+  const viewerVariant = viewAccess
+    ? showNsfw
+      ? "auth_nsfw"
+      : "auth_sfw"
+    : "public";
+
+  useEffect(() => {
+    if (!releaseId) return;
+    let didHydrate = false;
+    const prefix = `${runDir}/${releaseId}/${viewerVariant}/`;
+    for (const [key, cached] of globalRowCache) {
+      if (key.startsWith(prefix) && !rowCacheRef.current.has(cached.yIndex)) {
+        rowCacheRef.current.set(cached.yIndex, cached);
+        didHydrate = true;
+      }
+    }
+    if (didHydrate) {
+      setRowCacheVersion((value) => value + 1);
+    }
+  }, [runDir, releaseId, viewerVariant]);
 
   const doFetchRow = useCallback(
     async (yIndex: number): Promise<void> => {
@@ -129,13 +161,27 @@ export function useVirtualGridRows({
           }
         }
 
-        rowCacheRef.current.set(yIndex, {
+        const readyRow: CachedRow = {
           status: "ready",
           yIndex,
           yValue: representativeMeta?.y_value ?? null,
           representativeMeta,
           cellsByX,
-        });
+        };
+        rowCacheRef.current.set(yIndex, readyRow);
+        globalRowCache.set(
+          makeGlobalCacheKey(
+            runDir,
+            rid,
+            viewAccess
+              ? showNsfw
+                ? "auth_nsfw"
+                : "auth_sfw"
+              : "public",
+            yIndex,
+          ),
+          readyRow,
+        );
         setRowCacheVersion((value) => value + 1);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
