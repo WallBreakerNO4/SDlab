@@ -107,6 +107,13 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <head>
+        {process.env.NODE_ENV === "development" && (
+          <Script
+            src="//unpkg.com/react-grab/dist/index.global.js"
+            crossOrigin="anonymous"
+            strategy="beforeInteractive"
+          />
+        )}
         <style id="theme-critical">{getThemeCriticalCss()}</style>
       </head>
       <body
