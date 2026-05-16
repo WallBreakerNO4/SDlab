@@ -268,7 +268,7 @@ function HorizontalScrollList({
       <div
         ref={scrollRef}
         onScroll={handleScrollEvent}
-        className="flex gap-2 overflow-x-auto pb-1 pt-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] snap-x w-full relative"
+        className="flex gap-2 overflow-x-auto pb-1 pt-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] scrollbar-none snap-x w-full relative"
       >
         {displayAssets.map((thumbAsset, idx) => {
           const thumbSource = resolvePreferredImageSource(thumbAsset);
