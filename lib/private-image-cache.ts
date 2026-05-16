@@ -67,7 +67,7 @@ export async function loadPrivateImageObjectUrl(params: {
 
   const response = await fetch(url, {
     mode: "cors",
-    credentials: "omit",
+    credentials: "same-origin",
     signal,
   });
 
