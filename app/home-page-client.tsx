@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { ModelCard } from "@/components/home/model-card";
+import { MasonryGrid } from "@/components/ui/masonry-grid";
 import { PreviewDialog } from "@/components/home/preview-dialog";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -100,7 +101,7 @@ export default function HomePageClient({
           ) : null}
 
           {models.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <MasonryGrid>
               {models.map((modelSummary, index) => (
                 <ModelCard
                   key={modelSummary.run_dir}
@@ -109,7 +110,7 @@ export default function HomePageClient({
                   onPreviewImage={setPreviewImage}
                 />
               ))}
-            </div>
+            </MasonryGrid>
           ) : null}
         </section>
       </div>
