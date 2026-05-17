@@ -15,7 +15,6 @@ import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 type AuthContextValue = {
   user: User | null;
-  loading: boolean;
   signInWithGitHub: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signInWithMicrosoft: () => Promise<void>;
@@ -70,7 +69,7 @@ export function AuthProvider({
   initialUser,
 }: {
   children: React.ReactNode;
-  initialUser?: User | null;
+  initialUser: User | null;
 }) {
   const supabase = useMemo(() => {
     try {
@@ -81,10 +80,7 @@ export function AuthProvider({
     }
   }, []);
 
-  const [user, setUser] = useState<User | null>(initialUser ?? null);
-  const [loading, setLoading] = useState(
-    initialUser === undefined && !!supabase,
-  );
+  const [user, setUser] = useState<User | null>(initialUser);
 
   useEffect(() => {
     const currentUrl = new URL(window.location.href);
@@ -108,34 +104,24 @@ export function AuthProvider({
       return;
     }
 
-    if (initialUser === undefined) {
-      void supabase.auth
-        .getUser()
-        .then(({ data }) => {
-          setUser(data.user ?? null);
-        })
-        .catch(() => {
-          setUser(null);
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    }
-
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "INITIAL_SESSION" && initialUser !== undefined) {
+      // INITIAL_SESSION is the SDK's replay of whatever it found in
+      // storage on boot. The server already gave us the authoritative
+      // value via initialUser, so we ignore it. SIGNED_IN / SIGNED_OUT
+      // / TOKEN_REFRESHED / USER_UPDATED represent real state changes
+      // and must update the UI.
+      if (event === "INITIAL_SESSION") {
         return;
       }
       setUser(session?.user ?? null);
-      setLoading(false);
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [supabase, initialUser]);
+  }, [supabase]);
 
   const signInWithOAuth = useCallback(
     async (
@@ -199,7 +185,6 @@ export function AuthProvider({
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
-      loading,
       signInWithGitHub,
       signInWithGoogle,
       signInWithMicrosoft,
@@ -207,7 +192,6 @@ export function AuthProvider({
     }),
     [
       user,
-      loading,
       signInWithGitHub,
       signInWithGoogle,
       signInWithMicrosoft,

@@ -29,7 +29,7 @@ function getInitials(name: string | undefined | null): string {
 }
 
 export function SiteHeader() {
-  const { user, loading, signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const { showNsfw, setShowNsfw } = useUserPreferences();
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
 
@@ -65,7 +65,7 @@ export function SiteHeader() {
           <div className="flex items-center gap-1">
             <ThemeToggle />
 
-            {loading ? null : !user ? (
+            {!user ? (
               <Button
                 type="button"
                 size="sm"

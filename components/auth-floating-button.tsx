@@ -22,15 +22,12 @@ function getInitials(name: string | undefined | null): string {
 }
 
 export function AuthFloatingButton() {
-  const { user, loading, signOut } = useAuth()
+  const { user, signOut } = useAuth()
   const [loginDialogOpen, setLoginDialogOpen] = useState(false)
 
   const handleSignOut = useCallback(async () => {
     await signOut()
   }, [signOut])
-
-  // Don't render while loading to avoid flash
-  if (loading) return null
 
   if (!user) {
     return (

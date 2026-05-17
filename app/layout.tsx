@@ -63,24 +63,21 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const cookieStore = await cookies();
+
+  // Server is the single source of truth for the auth state.
+  // Middleware has already refreshed the session cookie on this request,
+  // so getUser() either returns the authenticated user or null without
+  // an extra round-trip in the common case.
   let initialUser = null;
-
-  const hasSessionCookie = cookieStore
-    .getAll()
-    .some(
-      (c) => c.name.includes("sb-") && c.name.endsWith("-auth-token"),
-    );
-
-  if (hasSessionCookie) {
-    try {
-      const supabase = await createSupabaseAuthClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      initialUser = user ?? null;
-    } catch {
-      initialUser = null;
-    }
+  try {
+    const supabase = await createSupabaseAuthClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    initialUser = user ?? null;
+  } catch {
+    // Supabase env vars missing or other init failure — treat as signed out.
+    initialUser = null;
   }
 
   const initialTheme = parseThemePreference(

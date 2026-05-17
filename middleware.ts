@@ -56,8 +56,16 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/auth/callback",
-    "/api/viewer/preferences/nsfw",
-    "/api/comfyui/run/:path*/access",
+    /*
+     * Match every request path except:
+     * - _next/static (static files)
+     * - _next/image (image optimization)
+     * - favicon.*
+     * - common static asset extensions
+     *
+     * Running middleware on every dynamic route ensures the Supabase
+     * auth cookies are refreshed before any Server Component reads them.
+     */
+    "/((?!_next/static|_next/image|favicon|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
