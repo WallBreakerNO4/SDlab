@@ -4,7 +4,7 @@ schema_version: image-run-config/v1
 # 模型元信息：主要用于记录这次 run 绑定的模型身份与说明，便于后续展示/追踪。
 model:
   # 机器可读的稳定 key；建议保持短且唯一。
-  key: anima-base-1.0
+  key: anima-base-1
   # 给人看的展示名。
   name: Anima base 1.0
   # 模型家族/大类，例如 stable-diffusion-xl、novelai 等。
