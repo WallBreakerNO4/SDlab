@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT))
 from scripts.generation.prompt_grid import (
     MAX_SEED,
     X_INFO_TYPE_KEY,
+    apply_y_tag_prefix,
     build_prompt_cell,
     compute_prompt_hash,
     derive_seed,
@@ -245,3 +246,33 @@ def test_read_x_descriptions_strips_whitespace(tmp_path):
     result = read_x_descriptions(json_path)
 
     assert result == [{"zh": "测试", "en": "test"}]
+
+
+def test_apply_y_tag_prefix_empty_returns_original():
+    rows = [{"y": "tag1,tag2,"}, {"y": ""}]
+    result = apply_y_tag_prefix(rows, "")
+    assert result == [{"y": "tag1,tag2,"}, {"y": ""}]
+
+
+def test_apply_y_tag_prefix_adds_prefix_to_plain_tags():
+    rows = [{"y": "tag1,tag2,tag3,"}]
+    result = apply_y_tag_prefix(rows, "@")
+    assert result == [{"y": "@tag1,@tag2,@tag3,"}]
+
+
+def test_apply_y_tag_prefix_adds_prefix_to_weighted_tags():
+    rows = [{"y": "(tag1:1.1),(tag2:1.21),"}]
+    result = apply_y_tag_prefix(rows, "@")
+    assert result == [{"y": "@(tag1:1.1),@(tag2:1.21),"}]
+
+
+def test_apply_y_tag_prefix_handles_mixed_tags():
+    rows = [{"y": "tag1,(tag2:1.1),tag3,"}]
+    result = apply_y_tag_prefix(rows, "@")
+    assert result == [{"y": "@tag1,@(tag2:1.1),@tag3,"}]
+
+
+def test_apply_y_tag_prefix_preserves_empty_rows():
+    rows = [{"y": ""}, {"y": "tag1,"}]
+    result = apply_y_tag_prefix(rows, "@")
+    assert result == [{"y": ""}, {"y": "@tag1,"}]

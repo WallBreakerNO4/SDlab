@@ -26,6 +26,7 @@ from scripts.generation.comfyui_client import (  # noqa: E402
     comfy_wait_prompt_done_with_fallback,
 )
 from scripts.generation.prompt_grid import (  # noqa: E402
+    apply_y_tag_prefix,
     compute_prompt_hash,
     derive_seed,
     read_x_descriptions,
@@ -317,7 +318,8 @@ def run(args: argparse.Namespace) -> int:
     _configure_logging()
 
     x_rows = read_x_rows(args.x_json)
-    y_rows = read_y_rows(args.y_json)
+    model_family = getattr(getattr(args, "config_model", None), "family", "")
+    y_rows = apply_y_tag_prefix(read_y_rows(args.y_json), "@" if model_family == "anima" else "")
     x_descriptions = read_x_descriptions(args.x_json)
 
     x_selected = _select_rows(
@@ -460,7 +462,14 @@ def run_retry(args: argparse.Namespace) -> int:
     _apply_replay_config_to_args(args, replay)
 
     x_rows = read_x_rows(args.x_json)
-    y_rows = read_y_rows(args.y_json)
+    model_family = ""
+    run_json_path = run_artifacts.run_dir / "run.json"
+    if run_json_path.exists():
+        run_data = json.loads(run_json_path.read_text(encoding="utf-8"))
+        model_obj = run_data.get("model")
+        if isinstance(model_obj, dict):
+            model_family = model_obj.get("family", "") or ""
+    y_rows = apply_y_tag_prefix(read_y_rows(args.y_json), "@" if model_family == "anima" else "")
     x_descriptions = read_x_descriptions(args.x_json)
 
     x_selected = _select_rows_by_fixed_indexes(

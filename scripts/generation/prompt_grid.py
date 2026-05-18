@@ -136,6 +136,21 @@ def read_x_descriptions(path: str | Path) -> list[dict[str, str]]:
     return rows
 
 
+def apply_y_tag_prefix(
+    y_rows: list[dict[str, str]], prefix: str
+) -> list[dict[str, str]]:
+    if not prefix:
+        return y_rows
+    result: list[dict[str, str]] = []
+    for row in y_rows:
+        y_value = row.get("y", "")
+        if y_value:
+            parts = [p.strip() for p in y_value.split(",") if p.strip()]
+            y_value = ",".join(f"{prefix}{part}" for part in parts) + ","
+        result.append({"y": y_value})
+    return result
+
+
 def read_y_rows(
     path: str | Path, artists_column: str = "Artists"
 ) -> list[dict[str, str]]:
