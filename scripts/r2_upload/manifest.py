@@ -60,11 +60,6 @@ def build_view_release(payload: Mapping[str, object]) -> dict[str, object]:
     }
     y_labels = _build_y_labels(y_indexes=y_indexes, images=images)
 
-    backend = _optional_non_empty_str(run_json.get("backend"))
-    if backend == "novelai":
-        from scripts.generation.novelai_client import _convert_prompt_to_novelai_format
-        y_labels = [_convert_prompt_to_novelai_format(label) for label in y_labels]
-
     run_detail = _build_run_detail(payload=payload, run_json=run_json, y_indexes=y_indexes)
 
     visible_columns_sfw = _build_visible_columns(x_columns, show_nsfw=False)

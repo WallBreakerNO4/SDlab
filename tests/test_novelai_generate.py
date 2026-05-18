@@ -188,7 +188,7 @@ def test_convert_mixed_tags() -> None:
 
 def test_convert_worker_uses_converted_prompt_for_api() -> None:
     """Verify novelai_worker passes converted prompt to client.generate
-    but metadata keeps original format."""
+    but metadata keeps original format. Y-axis is already NovelAI format."""
     calls: list[dict[str, object]] = []
 
     class FakeClient:
@@ -199,13 +199,14 @@ def test_convert_worker_uses_converted_prompt_for_api() -> None:
     client = FakeClient()
     worker = novelai_client.novelai_worker(client=client, model="nai-diffusion-4-5-full")
 
+    # Y-axis is already NovelAI format from read_y_rows_for_novelai
     plan = argparse.Namespace(
-        positive_prompt="masterpiece,(rurudo:1.21),",
+        positive_prompt="masterpiece,1.21::artist:rurudo ::,",
         negative_prompt="(lowres:0.8),",
         x_index=0,
         y_index=0,
         x_row={},
-        y_value="(rurudo:1.21),",
+        y_value="1.21::artist:rurudo ::,",
         prompt_hash="abc",
         seed=42,
         generation_params={},
@@ -245,5 +246,7 @@ def test_convert_worker_uses_converted_prompt_for_api() -> None:
     )
 
     assert len(calls) == 1
-    assert calls[0]["prompt"] == "masterpiece,1.21::rurudo ::,"
+    # Y-axis already in NovelAI format, should pass through unchanged
+    assert calls[0]["prompt"] == "masterpiece,1.21::artist:rurudo ::,"
+    # Negative prompt still in WebUI format, should be converted
     assert calls[0]["negative_prompt"] == "0.8::lowres ::,"

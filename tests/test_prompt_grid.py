@@ -18,6 +18,7 @@ from scripts.generation.prompt_grid import (
     read_x_descriptions,
     read_x_rows,
     read_y_rows,
+    read_y_rows_for_novelai,
     render_positive_prompt,
 )
 
@@ -276,3 +277,51 @@ def test_apply_y_tag_prefix_preserves_empty_rows():
     rows = [{"y": ""}, {"y": "tag1,"}]
     result = apply_y_tag_prefix(rows, "@")
     assert result == [{"y": ""}, {"y": "@tag1,"}]
+
+
+def test_read_y_rows_for_novelai_adds_artist_prefix():
+    rows = read_y_rows_for_novelai(Y_JSON)
+
+    assert rows
+    first = rows[0]["y"]
+    # weight=1.0 -> plain artist:tag
+    assert "artist:gochisousama \\(tanin050\\)" in first
+    # weight=0.59 -> 0.59::artist:tag ::
+    assert "0.59::artist:tsukareta san ::" in first
+    # weight=0.349 -> 0.349::artist:tag ::
+    assert "0.349::artist:cutesexyrobutts ::" in first
+
+
+def test_read_y_rows_for_novelai_weight_one_no_prefix():
+    from scripts.generation.prompt_grid import _render_novelai_weighted_tags
+
+    tags = [{"text": "rurudo", "weight": 1.0}]
+    assert _render_novelai_weighted_tags(tags) == "artist:rurudo,"
+
+
+def test_read_y_rows_for_novelai_with_weight():
+    from scripts.generation.prompt_grid import _render_novelai_weighted_tags
+
+    tags = [{"text": "rurudo", "weight": 1.21}]
+    assert _render_novelai_weighted_tags(tags) == "1.21::artist:rurudo ::,"
+
+
+def test_read_y_rows_for_novelai_multiple_tags():
+    from scripts.generation.prompt_grid import _render_novelai_weighted_tags
+
+    tags = [
+        {"text": "rurudo", "weight": 1.21},
+        {"text": "wlop", "weight": 1.0},
+    ]
+    result = _render_novelai_weighted_tags(tags)
+    assert result == "1.21::artist:rurudo ::,artist:wlop,"
+
+
+def test_read_y_rows_for_novelai_empty():
+    from scripts.generation.prompt_grid import _render_novelai_weighted_tags
+
+    assert _render_novelai_weighted_tags([]) == ""
+    assert _render_novelai_weighted_tags("not a list") == ""
+    assert _render_novelai_weighted_tags([{"no_text": "x"}]) == ""
+
+

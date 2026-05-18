@@ -151,6 +151,66 @@ def apply_y_tag_prefix(
     return result
 
 
+def _render_novelai_weighted_tags(tags: object) -> str:
+    """Render YAML tags directly as NovelAI native format (with artist: prefix)."""
+    if not isinstance(tags, list):
+        return ""
+
+    tokens: list[str] = []
+    tags_list = cast(list[object], tags)
+    for item_obj in tags_list:
+        if not isinstance(item_obj, dict):
+            continue
+        item = cast(dict[str, object], item_obj)
+        text = item.get("text")
+        if not isinstance(text, str):
+            continue
+        tag = text.strip()
+        if not tag:
+            continue
+
+        weight_obj = item.get("weight", 1.0)
+        weight: float
+        if isinstance(weight_obj, (int, float)):
+            weight = float(weight_obj)
+        else:
+            weight = 1.0
+
+        prefixed = f"artist:{tag}"
+
+        if abs(weight - 1.0) < 1e-9:
+            tokens.append(prefixed)
+        else:
+            weight_str = _format_weight(weight)
+            tokens.append(f"{weight_str}::{prefixed} ::")
+
+    if not tokens:
+        return ""
+    return ",".join(tokens) + ","
+
+
+def read_y_rows_for_novelai(path: str | Path) -> list[dict[str, str]]:
+    """Read Y-axis data and output NovelAI native format (with artist: prefix)."""
+    rows: list[dict[str, str]] = []
+
+    payload_obj = cast(object, yaml.safe_load(Path(path).read_text(encoding="utf-8")))
+    if not isinstance(payload_obj, dict):
+        return rows
+
+    payload = cast(dict[str, object], payload_obj)
+    items = payload.get("items")
+    if not isinstance(items, list):
+        return rows
+
+    items_list = cast(list[object], items)
+    for item_obj in items_list:
+        if not isinstance(item_obj, dict):
+            continue
+        item = cast(dict[str, object], item_obj)
+        rows.append({"y": _render_novelai_weighted_tags(item.get("tags", []))})
+    return rows
+
+
 def read_y_rows(
     path: str | Path, artists_column: str = "Artists"
 ) -> list[dict[str, str]]:
