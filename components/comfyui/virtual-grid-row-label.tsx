@@ -124,11 +124,23 @@ export function VirtualGridRowLabel({
                   ) : null}
                   {parts.map((part, index) => {
                     let weight = 1;
-                    const match = part.match(/:([0-9.]+)[)\]}]*$/);
-                    if (match) {
-                      const parsedWeight = parseFloat(match[1]);
+                    // NovelAI format: weight::tag ::
+                    const novelaiMatch = part.match(
+                      /^([\d.]+)::(.+?)( ::)?$/,
+                    );
+                    if (novelaiMatch) {
+                      const parsedWeight = parseFloat(novelaiMatch[1]);
                       if (!isNaN(parsedWeight)) {
                         weight = parsedWeight;
+                      }
+                    } else {
+                      // Legacy WebUI format: (tag:weight)
+                      const match = part.match(/:([0-9.]+)[)\]}]*$/);
+                      if (match) {
+                        const parsedWeight = parseFloat(match[1]);
+                        if (!isNaN(parsedWeight)) {
+                          weight = parsedWeight;
+                        }
                       }
                     }
 

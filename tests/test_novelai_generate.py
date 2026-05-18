@@ -108,3 +108,142 @@ def test_novelai_client_passes_request_timeout_to_sdk(
 
     assert captured["api_key"] == "test-key"
     assert captured["timeout"] == 12.5
+
+
+# --- _convert_prompt_to_novelai_format tests ---
+
+
+def test_convert_positive_weight() -> None:
+    assert (
+        novelai_client._convert_prompt_to_novelai_format("(rurudo:1.21)")
+        == "1.21::rurudo ::"
+    )
+
+
+def test_convert_weight_below_one() -> None:
+    assert (
+        novelai_client._convert_prompt_to_novelai_format("(dark:0.9)")
+        == "0.9::dark ::"
+    )
+
+
+def test_convert_weight_one_returns_plain_tag() -> None:
+    assert novelai_client._convert_prompt_to_novelai_format("(tag:1.0)") == "tag"
+    assert novelai_client._convert_prompt_to_novelai_format("(tag:1.000)") == "tag"
+
+
+def test_convert_negative_weight() -> None:
+    assert (
+        novelai_client._convert_prompt_to_novelai_format("(hat:-1)")
+        == "-1::hat ::"
+    )
+
+
+def test_convert_tag_with_colon() -> None:
+    assert (
+        novelai_client._convert_prompt_to_novelai_format("(artist:name:1.1)")
+        == "1.1::artist:name ::"
+    )
+
+
+def test_convert_strips_trailing_zeros() -> None:
+    assert (
+        novelai_client._convert_prompt_to_novelai_format("(tag:1.10)")
+        == "1.1::tag ::"
+    )
+    assert (
+        novelai_client._convert_prompt_to_novelai_format("(tag:2.00)")
+        == "2::tag ::"
+    )
+
+
+def test_convert_invalid_weight_preserved() -> None:
+    assert (
+        novelai_client._convert_prompt_to_novelai_format("(tag:not_a_number)")
+        == "(tag:not_a_number)"
+    )
+
+
+def test_convert_empty_string() -> None:
+    assert novelai_client._convert_prompt_to_novelai_format("") == ""
+
+
+def test_convert_none_returns_empty() -> None:
+    assert novelai_client._convert_prompt_to_novelai_format(None) == ""
+
+
+def test_convert_no_weighted_tags_unchanged() -> None:
+    assert (
+        novelai_client._convert_prompt_to_novelai_format("masterpiece, best quality")
+        == "masterpiece, best quality"
+    )
+
+
+def test_convert_mixed_tags() -> None:
+    result = novelai_client._convert_prompt_to_novelai_format(
+        "masterpiece,(rurudo:1.21),best quality,(dark:0.9),"
+    )
+    assert result == "masterpiece,1.21::rurudo ::,best quality,0.9::dark ::,"
+
+
+def test_convert_worker_uses_converted_prompt_for_api() -> None:
+    """Verify novelai_worker passes converted prompt to client.generate
+    but metadata keeps original format."""
+    calls: list[dict[str, object]] = []
+
+    class FakeClient:
+        def generate(self, **kwargs: Any) -> list[object]:
+            calls.append(kwargs)
+            return []
+
+    client = FakeClient()
+    worker = novelai_client.novelai_worker(client=client, model="nai-diffusion-4-5-full")
+
+    plan = argparse.Namespace(
+        positive_prompt="masterpiece,(rurudo:1.21),",
+        negative_prompt="(lowres:0.8),",
+        x_index=0,
+        y_index=0,
+        x_row={},
+        y_value="(rurudo:1.21),",
+        prompt_hash="abc",
+        seed=42,
+        generation_params={},
+        workflow_hash="wf",
+        save_image_prefix="test",
+        x_description={"zh": "", "en": ""},
+        attempt=1,
+    )
+
+    args = argparse.Namespace(
+        width=832,
+        height=1216,
+        steps=28,
+        cfg=5.0,
+        sampler_name="k_euler_ancestral",
+        batch_size=1,
+    )
+
+    def fake_final_negative(*a: Any, **kw: Any) -> str:
+        return "(lowres:0.8),"
+
+    def fake_build_meta(**kwargs: Any) -> dict[str, object]:
+        return kwargs
+
+    worker(
+        args,
+        Path("/tmp"),
+        None,
+        plan,
+        None,
+        None,
+        fake_final_negative,
+        None,
+        None,
+        fake_build_meta,
+        lambda: "2024-01-01T00:00:00",
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["prompt"] == "masterpiece,1.21::rurudo ::,"
+    assert calls[0]["negative_prompt"] == "0.8::lowres ::,"

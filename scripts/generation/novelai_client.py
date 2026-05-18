@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import random
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,39 @@ _NOVELAI_MODEL_NAMES = {
     "nai-diffusion-3",
     "nai-diffusion-3-furry",
 }
+
+_WEIGHTED_TAG_RE = re.compile(r"\(([^)]+)\)")
+
+
+def _convert_prompt_to_novelai_format(prompt: str | None) -> str:
+    """
+    Convert ComfyUI/WebUI (tag:weight) format to NovelAI weight::tag :: format.
+    Called just before API submission. Metadata should keep the original format.
+    """
+    if not prompt:
+        return prompt or ""
+
+    def _replace(match: re.Match[str]) -> str:
+        inner = match.group(1)
+        # Scan from right to find the colon that separates tag from weight.
+        # This correctly handles tags that contain colons, e.g. (artist:name:1.1).
+        for colon_pos in range(len(inner) - 1, -1, -1):
+            if inner[colon_pos] == ":":
+                tag = inner[:colon_pos].strip()
+                weight_str = inner[colon_pos + 1 :].strip()
+                try:
+                    weight = float(weight_str)
+                except ValueError:
+                    continue
+                if abs(weight - 1.0) < 1e-9:
+                    return tag
+                weight_clean = weight_str.rstrip("0").rstrip(".")
+                return f"{weight_clean}::{tag} ::"
+        # No valid weight found; preserve the original token unchanged.
+        return match.group(0)
+
+    return _WEIGHTED_TAG_RE.sub(_replace, prompt)
+
 
 _ENV_API_KEY = "NOVELAI_API_KEY"
 _ENV_MIN_INTERVAL = "NOVELAI_MIN_INTERVAL_S"
@@ -285,6 +319,13 @@ def novelai_worker(
             if negative_prompt is None:
                 negative_prompt = ""
 
+            converted_positive = _convert_prompt_to_novelai_format(
+                plan.positive_prompt
+            )
+            converted_negative = _convert_prompt_to_novelai_format(
+                negative_prompt
+            )
+
             width = getattr(args, "width", 832) or 832
             height = getattr(args, "height", 1216) or 1216
             steps = getattr(args, "steps", 28) or 28
@@ -293,8 +334,8 @@ def novelai_worker(
             n_samples = getattr(args, "batch_size", 1) or 1
 
             images = client.generate(
-                prompt=plan.positive_prompt,
-                negative_prompt=negative_prompt if negative_prompt else None,
+                prompt=converted_positive,
+                negative_prompt=converted_negative if converted_negative else None,
                 model=model,
                 width=width,
                 height=height,
