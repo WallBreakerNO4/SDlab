@@ -1663,7 +1663,7 @@ items:
     info:
       index: 82
   - tags:
-      - text: '7010'
+      - text: "7010"
         weight: 1.0
         type: artists
       - text: reoen
@@ -3694,7 +3694,7 @@ items:
       - text: healthyman
         weight: 1.611
         type: artists
-      - text: '::'
+      - text: "::"
         weight: 1.0
         type: artists
       - text: iuui
@@ -3715,7 +3715,7 @@ items:
       - text: tianliang duohe fangdongye
         weight: 1.611
         type: artists
-      - text: '::'
+      - text: "::"
         weight: 1.0
         type: artists
       - text: meinoss
@@ -4822,7 +4822,7 @@ items:
       - text: batako
         weight: 1.21
         type: artists
-      - text: '38'
+      - text: "38"
         weight: 1.21
         type: artists
       - text: kunaboto
@@ -6619,7 +6619,7 @@ items:
     info:
       index: 295
   - tags:
-      - text: '96'
+      - text: "96"
         weight: 1.1
         type: general
       - text: tsujii ruki
