@@ -19,7 +19,8 @@
   - X 轴结构化 prompt 资产（YAML + CSV）；当前主链路直接消费 YAML
 
 - `data/prompts/Y/300_NAI_Styles_Table*`
-  - Y 轴 prompt 资产（YAML + CSV）；由 CSV 转换而来，当前主链路直接消费 YAML
+  - Y 轴 prompt 资产（YAML + CSV）；由 CSV 转换并经 Danbooru 标注而来，当前主链路直接消费 YAML
+  - YAML 使用 `prompt-y-table/v3`，每个 `tags[]` 都有 `type: general | artists`；`info.type` 已移除
 
 - `data/info-page.md` / `data/privacy-policy-page.md`
   - 静态页面 Markdown 源文件，供 `app/info/` 和 `app/privacy-policy/` 页面渲染

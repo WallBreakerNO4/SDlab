@@ -84,11 +84,11 @@ def _write_json_inputs(
         ],
     }
     y_payload = {
-        "schema": "prompt-y-table/v2",
+        "schema": "prompt-y-table/v3",
         "items": [
             {
-                "tags": [{"text": "artist-a", "weight": 1.0}],
-                "info": {"index": 0, "type": "artists"},
+                "tags": [{"text": "artist-a", "weight": 1.0, "type": "artists"}],
+                "info": {"index": 0},
             }
         ],
     }

@@ -63,11 +63,11 @@ def _write_single_cell_inputs(tmp_path: Path) -> tuple[Path, Path]:
         ],
     }
     y_payload: dict[str, object] = {
-        "schema": "prompt-y-table/v2",
+        "schema": "prompt-y-table/v3",
         "items": [
             {
-                "tags": [{"text": "artist-a", "weight": 1.0}],
-                "info": {"index": 0, "type": "artists"},
+                "tags": [{"text": "artist-a", "weight": 1.0, "type": "artists"}],
+                "info": {"index": 0},
             }
         ],
     }

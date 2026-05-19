@@ -9,6 +9,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 X_YAML = ROOT / "data" / "prompts" / "X" / "common_prompts.yaml"
+Y_YAMLS = [
+    ROOT / "data" / "prompts" / "Y" / "300_NAI_Styles_Table.yaml",
+    ROOT / "data" / "prompts" / "Y" / "300_NAI_Styles_Table-test.yaml",
+]
 
 
 def test_common_prompts_json_has_items_array():
@@ -53,3 +57,21 @@ def test_common_prompts_json_info_index_preserved():
     items = data["items"]
     indices = [item["info"]["index"] for item in items]
     assert indices == list(range(len(indices)))
+
+
+def test_y_prompt_assets_use_v3_tag_types():
+    for path in Y_YAMLS:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+
+        assert data["schema"] == "prompt-y-table/v3"
+        items = data["items"]
+        assert isinstance(items, list)
+        assert len(items) > 0
+        for item_index, item in enumerate(items):
+            info = item["info"]
+            assert "type" not in info, f"{path}: item {item_index} still has info.type"
+            assert isinstance(info["index"], int)
+            for tag_index, tag in enumerate(item["tags"]):
+                assert tag.get("type") in {"general", "artists"}, (
+                    f"{path}: item {item_index} tag {tag_index} has invalid type"
+                )

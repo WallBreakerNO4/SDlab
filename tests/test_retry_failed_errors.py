@@ -163,7 +163,7 @@ def test_retry_failed_with_sha256_mismatch(
 
     # 创建一个有效的 y.json 文件
     y_json = run_dir / "y.json"
-    y_json.write_text('{"schema":"","items":[]}', encoding="utf-8")
+    y_json.write_text('{"schema":"prompt-y-table/v3","items":[]}', encoding="utf-8")
 
     # 构造 run.json，但 x_json_sha256 故意错误
     run_json = {
@@ -230,7 +230,8 @@ def test_retry_failed_with_malformed_metadata_jsonl(
 
     y_json = run_dir / "y.json"
     y_json.write_text(
-        '{"schema":"","items":[{"tags":[],"info":{"index":0}}]}', encoding="utf-8"
+        '{"schema":"prompt-y-table/v3","items":[{"tags":[],"info":{"index":0}}]}',
+        encoding="utf-8",
     )
 
     # 计算正确的 sha256

@@ -63,19 +63,19 @@ def _write_xy_inputs(tmp_path: Path) -> tuple[Path, Path]:
         ],
     }
     y_payload: dict[str, object] = {
-        "schema": "prompt-y-table/v2",
+        "schema": "prompt-y-table/v3",
         "items": [
             {
-                "tags": [{"text": "artist-a", "weight": 1.0}],
-                "info": {"index": 0, "type": "artists"},
+                "tags": [{"text": "artist-a", "weight": 1.0, "type": "artists"}],
+                "info": {"index": 0},
             },
             {
-                "tags": [{"text": "artist-b", "weight": 1.0}],
-                "info": {"index": 1, "type": "artists"},
+                "tags": [{"text": "artist-b", "weight": 1.0, "type": "artists"}],
+                "info": {"index": 1},
             },
             {
-                "tags": [{"text": "artist-c", "weight": 1.0}],
-                "info": {"index": 2, "type": "artists"},
+                "tags": [{"text": "artist-c", "weight": 1.0, "type": "artists"}],
+                "info": {"index": 2},
             },
         ],
     }

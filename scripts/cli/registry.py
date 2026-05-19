@@ -39,6 +39,11 @@ _DEFAULT_ENTRIES: tuple[MenuEntry, ...] = (
         entrypoint="scripts.other.convert_y_csv_to_json:main",
     ),
     MenuEntry(
+        key="annotate_y_tag_types",
+        label="标注 Y YAML tag 类型（Danbooru）",
+        entrypoint="scripts.other.annotate_y_tag_types_from_danbooru:main",
+    ),
+    MenuEntry(
         key="upload_r2",
         label="上传到 R2",
         entrypoint="scripts.r2_upload.upload_images_to_r2:main",

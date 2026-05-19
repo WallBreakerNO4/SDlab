@@ -4,13 +4,14 @@ import hashlib
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from scripts.generation.prompt_grid import (
     MAX_SEED,
     X_INFO_TYPE_KEY,
-    apply_y_tag_prefix,
     build_prompt_cell,
     compute_prompt_hash,
     derive_seed,
@@ -25,6 +26,20 @@ from scripts.generation.prompt_grid import (
 
 X_JSON = ROOT / "data" / "prompts" / "X" / "common_prompts.yaml"
 Y_JSON = ROOT / "data" / "prompts" / "Y" / "300_NAI_Styles_Table-test.yaml"
+
+
+def _write_y_yaml(path: Path, tags_yaml: str) -> None:
+    path.write_text(
+        f"""
+schema: prompt-y-table/v3
+items:
+  - tags:
+{tags_yaml}
+    info:
+      index: 0
+""".lstrip(),
+        encoding="utf-8",
+    )
 
 
 def test_read_x_rows_maps_real_columns_and_ignores_trailing_empty_column():
@@ -249,34 +264,76 @@ def test_read_x_descriptions_strips_whitespace(tmp_path):
     assert result == [{"zh": "测试", "en": "test"}]
 
 
-def test_apply_y_tag_prefix_empty_returns_original():
-    rows = [{"y": "tag1,tag2,"}, {"y": ""}]
-    result = apply_y_tag_prefix(rows, "")
-    assert result == [{"y": "tag1,tag2,"}, {"y": ""}]
+def test_read_y_rows_artist_prefix_applies_only_to_artist_tags(tmp_path: Path):
+    y_path = tmp_path / "y.yaml"
+    _write_y_yaml(
+        y_path,
+        """
+      - text: wlop
+        weight: 1.1
+        type: artists
+      - text: furry
+        weight: 1.0
+        type: general
+""",
+    )
+
+    rows = read_y_rows(y_path, artist_prefix="@")
+
+    assert rows == [{"y": "(@wlop:1.1),furry,"}]
 
 
-def test_apply_y_tag_prefix_adds_prefix_to_plain_tags():
-    rows = [{"y": "tag1,tag2,tag3,"}]
-    result = apply_y_tag_prefix(rows, "@")
-    assert result == [{"y": "@tag1,@tag2,@tag3,"}]
+def test_read_y_rows_without_artist_prefix_keeps_artist_text(tmp_path: Path):
+    y_path = tmp_path / "y.yaml"
+    _write_y_yaml(
+        y_path,
+        """
+      - text: wlop
+        weight: 1.1
+        type: artists
+      - text: furry
+        weight: 1.0
+        type: general
+""",
+    )
+
+    rows = read_y_rows(y_path)
+
+    assert rows == [{"y": "(wlop:1.1),furry,"}]
 
 
-def test_apply_y_tag_prefix_adds_prefix_to_weighted_tags():
-    rows = [{"y": "(tag1:1.1),(tag2:1.21),"}]
-    result = apply_y_tag_prefix(rows, "@")
-    assert result == [{"y": "@(tag1:1.1),@(tag2:1.21),"}]
+def test_read_y_rows_rejects_legacy_info_type(tmp_path: Path):
+    y_path = tmp_path / "legacy-y.yaml"
+    y_path.write_text(
+        """
+schema: prompt-y-table/v2
+items:
+  - tags:
+      - text: wlop
+        weight: 1.0
+    info:
+      index: 0
+      type: artists
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="schema"):
+        read_y_rows(y_path)
 
 
-def test_apply_y_tag_prefix_handles_mixed_tags():
-    rows = [{"y": "tag1,(tag2:1.1),tag3,"}]
-    result = apply_y_tag_prefix(rows, "@")
-    assert result == [{"y": "@tag1,@(tag2:1.1),@tag3,"}]
+def test_read_y_rows_rejects_missing_tag_type(tmp_path: Path):
+    y_path = tmp_path / "missing-type.yaml"
+    _write_y_yaml(
+        y_path,
+        """
+      - text: wlop
+        weight: 1.0
+""",
+    )
 
-
-def test_apply_y_tag_prefix_preserves_empty_rows():
-    rows = [{"y": ""}, {"y": "tag1,"}]
-    result = apply_y_tag_prefix(rows, "@")
-    assert result == [{"y": ""}, {"y": "@tag1,"}]
+    with pytest.raises(ValueError, match="type"):
+        read_y_rows(y_path)
 
 
 def test_read_y_rows_for_novelai_adds_artist_prefix():
@@ -295,14 +352,14 @@ def test_read_y_rows_for_novelai_adds_artist_prefix():
 def test_read_y_rows_for_novelai_weight_one_no_prefix():
     from scripts.generation.prompt_grid import _render_novelai_weighted_tags
 
-    tags = [{"text": "rurudo", "weight": 1.0}]
+    tags = [{"text": "rurudo", "weight": 1.0, "type": "artists"}]
     assert _render_novelai_weighted_tags(tags) == "artist:rurudo,"
 
 
 def test_read_y_rows_for_novelai_with_weight():
     from scripts.generation.prompt_grid import _render_novelai_weighted_tags
 
-    tags = [{"text": "rurudo", "weight": 1.21}]
+    tags = [{"text": "rurudo", "weight": 1.21, "type": "artists"}]
     assert _render_novelai_weighted_tags(tags) == "1.21::artist:rurudo ::,"
 
 
@@ -310,18 +367,19 @@ def test_read_y_rows_for_novelai_multiple_tags():
     from scripts.generation.prompt_grid import _render_novelai_weighted_tags
 
     tags = [
-        {"text": "rurudo", "weight": 1.21},
-        {"text": "wlop", "weight": 1.0},
+        {"text": "rurudo", "weight": 1.21, "type": "artists"},
+        {"text": "furry", "weight": 1.0, "type": "general"},
     ]
     result = _render_novelai_weighted_tags(tags)
-    assert result == "1.21::artist:rurudo ::,artist:wlop,"
+    assert result == "1.21::artist:rurudo ::,furry,"
 
 
 def test_read_y_rows_for_novelai_empty():
     from scripts.generation.prompt_grid import _render_novelai_weighted_tags
 
     assert _render_novelai_weighted_tags([]) == ""
-    assert _render_novelai_weighted_tags("not a list") == ""
-    assert _render_novelai_weighted_tags([{"no_text": "x"}]) == ""
-
+    with pytest.raises(ValueError, match="tags"):
+        _render_novelai_weighted_tags("not a list")
+    with pytest.raises(ValueError, match="text"):
+        _render_novelai_weighted_tags([{"no_text": "x"}])
 

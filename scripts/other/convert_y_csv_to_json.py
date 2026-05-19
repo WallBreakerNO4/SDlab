@@ -9,6 +9,13 @@ from pathlib import Path
 
 UP_BASE = 1.1
 DOWN_BASE = 0.9
+PROMPT_Y_SCHEMA = "prompt-y-table/v3"
+VALID_TAG_TYPES = {"general", "artists"}
+
+
+class _IndentedDumper(yaml.SafeDumper):
+    def increase_indent(self, flow: bool = False, indentless: bool = False) -> None:
+        return super().increase_indent(flow, False)
 
 
 def _is_escaped(text: str, pos: int) -> bool:
@@ -30,7 +37,13 @@ def _current_weight(paren_depth: int, bracket_depth: int) -> float:
     return _depth_weight(UP_BASE, paren_depth) * _depth_weight(DOWN_BASE, bracket_depth)
 
 
-def parse_weighted_tags(prompt: str) -> list[dict[str, object]]:
+def parse_weighted_tags(
+    prompt: str, *, default_tag_type: str | None = None
+) -> list[dict[str, object]]:
+    if default_tag_type is not None and default_tag_type not in VALID_TAG_TYPES:
+        allowed = ", ".join(sorted(VALID_TAG_TYPES))
+        raise ValueError(f"default_tag_type 必须为以下之一: {allowed}")
+
     text = prompt.strip()
     if not text:
         return []
@@ -46,7 +59,10 @@ def parse_weighted_tags(prompt: str) -> list[dict[str, object]]:
         if not token:
             return
         weight = round(_current_weight(paren_depth, bracket_depth), 3)
-        items.append({"text": token, "weight": weight})
+        item: dict[str, object] = {"text": token, "weight": weight}
+        if default_tag_type is not None:
+            item["type"] = default_tag_type
+        items.append(item)
 
     for i, ch in enumerate(text):
         if (ch == "," or ch == "，") and not _is_escaped(text, i):
@@ -92,7 +108,7 @@ def convert_csv_to_yaml(
     schema: str,
     tags_column: str,
     index_column: str,
-    item_type: str,
+    default_tag_type: str,
 ) -> int:
     items: list[dict[str, object]] = []
 
@@ -113,19 +129,25 @@ def convert_csv_to_yaml(
 
             tags_raw = row.get(tags_column, "")
             tags_str = "" if tags_raw is None else tags_raw
-            tags = parse_weighted_tags(tags_str)
+            tags = parse_weighted_tags(tags_str, default_tag_type=default_tag_type)
 
             items.append(
                 {
                     "tags": tags,
-                    "info": {"index": index, "type": item_type},
+                    "info": {"index": index},
                 }
             )
 
     payload = {"schema": schema, "items": items}
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(
-        yaml.dump(payload, allow_unicode=True, default_flow_style=False, sort_keys=False),
+        yaml.dump(
+            payload,
+            Dumper=_IndentedDumper,
+            allow_unicode=True,
+            default_flow_style=False,
+            sort_keys=False,
+        ),
         encoding="utf-8",
     )
     return len(items)
@@ -143,14 +165,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--schema",
-        default="prompt-y-table/v2",
-        help='Schema string to write (default: "prompt-y-table/v2")',
+        default=PROMPT_Y_SCHEMA,
+        help=f'Schema string to write (default: "{PROMPT_Y_SCHEMA}")',
     )
     parser.add_argument(
-        "--type",
-        default="artists",
-        dest="item_type",
-        help='info.type to write for each item (default: "artists")',
+        "--default-tag-type",
+        choices=sorted(VALID_TAG_TYPES),
+        default="general",
+        help='tags[].type to write before Danbooru annotation (default: "general")',
     )
     parser.add_argument(
         "--index-column",
@@ -185,7 +207,7 @@ def main(argv: list[str] | None = None) -> int:
             schema=args.schema,
             tags_column=args.tags_column,
             index_column=args.index_column,
-            item_type=args.item_type,
+            default_tag_type=args.default_tag_type,
         )
         print(f"Wrote {out_path.as_posix()} ({count} items)")
 

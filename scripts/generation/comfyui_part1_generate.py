@@ -26,7 +26,6 @@ from scripts.generation.comfyui_client import (  # noqa: E402
     comfy_wait_prompt_done_with_fallback,
 )
 from scripts.generation.prompt_grid import (  # noqa: E402
-    apply_y_tag_prefix,
     compute_prompt_hash,
     derive_seed,
     read_x_descriptions,
@@ -319,7 +318,10 @@ def run(args: argparse.Namespace) -> int:
 
     x_rows = read_x_rows(args.x_json)
     model_family = getattr(getattr(args, "config_model", None), "family", "")
-    y_rows = apply_y_tag_prefix(read_y_rows(args.y_json), "@" if model_family == "anima" else "")
+    y_rows = read_y_rows(
+        args.y_json,
+        artist_prefix="@" if model_family == "anima" else "",
+    )
     x_descriptions = read_x_descriptions(args.x_json)
 
     x_selected = _select_rows(
@@ -469,7 +471,10 @@ def run_retry(args: argparse.Namespace) -> int:
         model_obj = run_data.get("model")
         if isinstance(model_obj, dict):
             model_family = model_obj.get("family", "") or ""
-    y_rows = apply_y_tag_prefix(read_y_rows(args.y_json), "@" if model_family == "anima" else "")
+    y_rows = read_y_rows(
+        args.y_json,
+        artist_prefix="@" if model_family == "anima" else "",
+    )
     x_descriptions = read_x_descriptions(args.x_json)
 
     x_selected = _select_rows_by_fixed_indexes(

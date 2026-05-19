@@ -1,48 +1,62 @@
-schema: prompt-y-table/v2
+schema: prompt-y-table/v3
 items:
   - tags:
       - text: gochisousama \(tanin050\)
         weight: 1.0
+        type: artists
       - text: tsukareta san
         weight: 0.59
+        type: artists
       - text: cutesexyrobutts
         weight: 0.349
+        type: artists
     info:
       index: 9
-      type: artists
   - tags:
       - text: takemori shintarou
         weight: 1.331
+        type: artists
       - text: harada takehito
         weight: 1.331
+        type: artists
       - text: cool-kyou shinja
         weight: 1.331
+        type: artists
       - text: kojima takeshi
         weight: 1.0
+        type: artists
       - text: taketora suzume
         weight: 1.1
+        type: artists
       - text: takeuchi takashi
         weight: 0.81
+        type: artists
       - text: lambda \(kusowarota\)
         weight: 0.81
+        type: artists
       - text: cle masahiro
         weight: 0.729
+        type: artists
       - text: year 2025
         weight: 1.0
+        type: general
     info:
       index: 10
-      type: artists
   - tags:
       - text: piyodera mucha
         weight: 0.81
+        type: artists
       - text: yamamomo \(plank\)
         weight: 1.0
+        type: artists
       - text: henreader
         weight: 1.0
+        type: artists
       - text: eufoniuz
         weight: 1.0
+        type: artists
       - text: year 2025
         weight: 1.0
+        type: general
     info:
       index: 11
-      type: artists

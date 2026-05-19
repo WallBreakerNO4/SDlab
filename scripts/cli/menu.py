@@ -21,14 +21,19 @@ from .registry import ScriptMain, get_entry, load_entrypoint
 
 DEFAULT_CONVERT_X_CSV = "data/prompts/X/common_prompts.csv"
 DEFAULT_CONVERT_Y_CSV = "data/prompts/Y/300_NAI_Styles_Table-test.csv"
+DEFAULT_ANNOTATE_Y_YAML = "data/prompts/Y/300_NAI_Styles_Table.yaml"
 CONVERT_X_DEFAULT_ENV = "CONVERT_X_DEFAULT_CSV"
 CONVERT_Y_DEFAULT_ENV = "CONVERT_Y_DEFAULT_CSV"
+ANNOTATE_Y_DEFAULT_ENV = "ANNOTATE_Y_DEFAULT_YAML"
 
 GENERATE_BASE_COMMAND = "uv run python scripts/generation/comfyui_part1_generate.py"
 GENERATE_NOVELAI_BASE_COMMAND = "uv run python scripts/generation/novelai_generate.py"
 UPLOAD_BASE_COMMAND = "uv run python scripts/r2_upload/upload_images_to_r2.py"
 CONVERT_X_BASE_COMMAND = "uv run python scripts/other/convert_x_csv_to_json.py"
 CONVERT_Y_BASE_COMMAND = "uv run python scripts/other/convert_y_csv_to_json.py"
+ANNOTATE_Y_BASE_COMMAND = (
+    "uv run python scripts/other/annotate_y_tag_types_from_danbooru.py"
+)
 CLEAR_R2_BASE_COMMAND = "uv run python scripts/r2_upload/clear_bucket.py"
 DELETE_RUN_BASE_COMMAND = "uv run python -m scripts.r2_upload.delete_run --run-dir"
 
@@ -269,6 +274,7 @@ def _handle_other(backend: QuestionaryMenuBackend) -> None:
         "其他功能",
         [
             MenuChoice("csv_to_yaml", "CSV to YAML 脚本"),
+            MenuChoice("annotate_y_tag_types", "标注 Y YAML tag 类型（Danbooru）"),
             MenuChoice("delete_run", "删除 Run（数据库 + R2）"),
             MenuChoice("clear_r2", "R2 清空脚本"),
         ],
@@ -278,6 +284,9 @@ def _handle_other(backend: QuestionaryMenuBackend) -> None:
         return
     if selected == "csv_to_yaml":
         _handle_csv_to_yaml(backend)
+        return
+    if selected == "annotate_y_tag_types":
+        _handle_annotate_y_tag_types(backend)
         return
     if selected == "delete_run":
         _handle_delete_run(backend)
@@ -326,6 +335,40 @@ def _handle_csv_to_yaml(backend: QuestionaryMenuBackend) -> None:
             base_command=CONVERT_Y_BASE_COMMAND,
             success_prefix="转换完成，退出码: ",
             cancel_message="已取消转换。",
+        ),
+    )
+
+
+def _handle_annotate_y_tag_types(backend: QuestionaryMenuBackend) -> None:
+    yaml_path = backend.text(
+        "输入 Y YAML 路径（留空使用默认值）",
+        default=_default_annotate_y_yaml(),
+    )
+    mode = backend.select(
+        "选择执行方式",
+        [
+            MenuChoice("in_place", "覆盖原 YAML"),
+            MenuChoice("dry_run", "只预览"),
+        ],
+        allow_back=True,
+    )
+    if mode == "__back__":
+        return
+
+    argv = [yaml_path]
+    if mode == "in_place":
+        argv.append("--in-place")
+    else:
+        argv.append("--dry-run")
+
+    _confirm_and_execute(
+        backend,
+        ExecutionPlan(
+            entry_key="annotate_y_tag_types",
+            argv=argv,
+            base_command=ANNOTATE_Y_BASE_COMMAND,
+            success_prefix="标注完成，退出码: ",
+            cancel_message="已取消标注。",
         ),
     )
 
@@ -588,6 +631,10 @@ def _default_convert_x_csv() -> str:
 
 def _default_convert_y_csv() -> str:
     return _default_convert_csv(CONVERT_Y_DEFAULT_ENV, DEFAULT_CONVERT_Y_CSV)
+
+
+def _default_annotate_y_yaml() -> str:
+    return _default_convert_csv(ANNOTATE_Y_DEFAULT_ENV, DEFAULT_ANNOTATE_Y_YAML)
 
 
 def _default_convert_csv(env_name: str, fallback_csv: str) -> str:

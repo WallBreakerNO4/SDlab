@@ -8,6 +8,10 @@ from typing import cast
 
 MAX_SEED = 18446744073709519872
 X_INFO_TYPE_KEY = "_x_info_type"
+Y_PROMPT_SCHEMA = "prompt-y-table/v3"
+Y_TAG_TYPE_GENERAL = "general"
+Y_TAG_TYPE_ARTISTS = "artists"
+Y_TAG_TYPES = {Y_TAG_TYPE_GENERAL, Y_TAG_TYPE_ARTISTS}
 
 PROMPT_TEMPLATE_ORDER = (
     "quality",
@@ -57,6 +61,12 @@ def _render_weighted_tags(tags: object) -> str:
     if not tokens:
         return ""
     return ",".join(tokens) + ","
+
+
+def _render_weighted_tag(tag: str, weight: float) -> str:
+    if abs(weight - 1.0) < 1e-9:
+        return tag
+    return f"({tag}:{_format_weight(weight)})"
 
 
 def read_x_rows(path: str | Path) -> list[dict[str, str]]:
@@ -136,47 +146,101 @@ def read_x_descriptions(path: str | Path) -> list[dict[str, str]]:
     return rows
 
 
-def apply_y_tag_prefix(
-    y_rows: list[dict[str, str]], prefix: str
-) -> list[dict[str, str]]:
-    if not prefix:
-        return y_rows
-    result: list[dict[str, str]] = []
-    for row in y_rows:
-        y_value = row.get("y", "")
-        if y_value:
-            parts = [p.strip() for p in y_value.split(",") if p.strip()]
-            y_value = ",".join(f"{prefix}{part}" for part in parts) + ","
-        result.append({"y": y_value})
+def _load_y_items(path: str | Path) -> list[dict[str, object]]:
+    payload_obj = cast(object, yaml.safe_load(Path(path).read_text(encoding="utf-8")))
+    if not isinstance(payload_obj, dict):
+        raise ValueError("Y prompt 资产顶层必须为对象")
+
+    payload = cast(dict[str, object], payload_obj)
+    schema_obj = payload.get("schema")
+    if schema_obj != Y_PROMPT_SCHEMA:
+        raise ValueError(f"Y prompt 资产 schema 必须为 {Y_PROMPT_SCHEMA}")
+
+    items = payload.get("items")
+    if not isinstance(items, list):
+        raise ValueError("Y prompt 资产 items 必须为列表")
+
+    result: list[dict[str, object]] = []
+    items_list = cast(list[object], items)
+    for index, item_obj in enumerate(items_list):
+        if not isinstance(item_obj, dict):
+            raise ValueError(f"Y prompt 资产 items[{index}] 必须为对象")
+
+        item = cast(dict[str, object], item_obj)
+        info_obj = item.get("info")
+        if not isinstance(info_obj, dict):
+            raise ValueError(f"Y prompt 资产 items[{index}].info 必须为对象")
+        info = cast(dict[str, object], info_obj)
+        if "type" in info:
+            raise ValueError("Y prompt 资产 info.type 已移除，请迁移到 tags[].type")
+        info_index = info.get("index")
+        if isinstance(info_index, bool) or not isinstance(info_index, int):
+            raise ValueError(f"Y prompt 资产 items[{index}].info.index 必须为整数")
+
+        tags = item.get("tags")
+        if not isinstance(tags, list):
+            raise ValueError(f"Y prompt 资产 items[{index}].tags 必须为列表")
+
+        result.append(item)
     return result
 
 
-def _render_novelai_weighted_tags(tags: object) -> str:
-    """Render YAML tags directly as NovelAI native format (with artist: prefix)."""
+def _validated_y_tags(tags: object) -> list[tuple[str, float, str]]:
     if not isinstance(tags, list):
-        return ""
+        raise ValueError("Y prompt 资产 tags 必须为列表")
 
-    tokens: list[str] = []
+    result: list[tuple[str, float, str]] = []
     tags_list = cast(list[object], tags)
-    for item_obj in tags_list:
+    for index, item_obj in enumerate(tags_list):
         if not isinstance(item_obj, dict):
-            continue
+            raise ValueError(f"Y prompt 资产 tags[{index}] 必须为对象")
         item = cast(dict[str, object], item_obj)
         text = item.get("text")
         if not isinstance(text, str):
-            continue
+            raise ValueError(f"Y prompt 资产 tags[{index}].text 必须为字符串")
         tag = text.strip()
         if not tag:
-            continue
+            raise ValueError(f"Y prompt 资产 tags[{index}].text 不能为空")
 
-        weight_obj = item.get("weight", 1.0)
-        weight: float
-        if isinstance(weight_obj, (int, float)):
-            weight = float(weight_obj)
-        else:
-            weight = 1.0
+        weight_obj = item.get("weight")
+        if isinstance(weight_obj, bool) or not isinstance(weight_obj, (int, float)):
+            raise ValueError(f"Y prompt 资产 tags[{index}].weight 必须为数字")
+        weight = float(weight_obj)
 
-        prefixed = f"artist:{tag}"
+        type_obj = item.get("type")
+        if not isinstance(type_obj, str):
+            raise ValueError(f"Y prompt 资产 tags[{index}].type 必须为字符串")
+        tag_type = type_obj.strip()
+        if tag_type not in Y_TAG_TYPES:
+            allowed = ", ".join(sorted(Y_TAG_TYPES))
+            raise ValueError(
+                f"Y prompt 资产 tags[{index}].type 必须为以下之一: {allowed}"
+            )
+
+        result.append((tag, weight, tag_type))
+    return result
+
+
+def _render_y_weighted_tags(tags: object, *, artist_prefix: str = "") -> str:
+    tokens: list[str] = []
+    for tag, weight, tag_type in _validated_y_tags(tags):
+        rendered_tag = (
+            f"{artist_prefix}{tag}"
+            if artist_prefix and tag_type == Y_TAG_TYPE_ARTISTS
+            else tag
+        )
+        tokens.append(_render_weighted_tag(rendered_tag, weight))
+
+    if not tokens:
+        return ""
+    return ",".join(tokens) + ","
+
+
+def _render_novelai_weighted_tags(tags: object) -> str:
+    """Render YAML tags directly as NovelAI native format."""
+    tokens: list[str] = []
+    for tag, weight, tag_type in _validated_y_tags(tags):
+        prefixed = f"artist:{tag}" if tag_type == Y_TAG_TYPE_ARTISTS else tag
 
         if abs(weight - 1.0) < 1e-9:
             tokens.append(prefixed)
@@ -190,49 +254,30 @@ def _render_novelai_weighted_tags(tags: object) -> str:
 
 
 def read_y_rows_for_novelai(path: str | Path) -> list[dict[str, str]]:
-    """Read Y-axis data and output NovelAI native format (with artist: prefix)."""
+    """Read Y-axis data and output NovelAI native format."""
     rows: list[dict[str, str]] = []
 
-    payload_obj = cast(object, yaml.safe_load(Path(path).read_text(encoding="utf-8")))
-    if not isinstance(payload_obj, dict):
-        return rows
-
-    payload = cast(dict[str, object], payload_obj)
-    items = payload.get("items")
-    if not isinstance(items, list):
-        return rows
-
-    items_list = cast(list[object], items)
-    for item_obj in items_list:
-        if not isinstance(item_obj, dict):
-            continue
-        item = cast(dict[str, object], item_obj)
+    for item in _load_y_items(path):
         rows.append({"y": _render_novelai_weighted_tags(item.get("tags", []))})
     return rows
 
 
 def read_y_rows(
-    path: str | Path, artists_column: str = "Artists"
+    path: str | Path, artists_column: str = "Artists", *, artist_prefix: str = ""
 ) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
 
     _ = artists_column
 
-    payload_obj = cast(object, yaml.safe_load(Path(path).read_text(encoding="utf-8")))
-    if not isinstance(payload_obj, dict):
-        return rows
-
-    payload = cast(dict[str, object], payload_obj)
-    items = payload.get("items")
-    if not isinstance(items, list):
-        return rows
-
-    items_list = cast(list[object], items)
-    for item_obj in items_list:
-        if not isinstance(item_obj, dict):
-            continue
-        item = cast(dict[str, object], item_obj)
-        rows.append({"y": _render_weighted_tags(item.get("tags", []))})
+    for item in _load_y_items(path):
+        rows.append(
+            {
+                "y": _render_y_weighted_tags(
+                    item.get("tags", []),
+                    artist_prefix=artist_prefix,
+                )
+            }
+        )
     return rows
 
 

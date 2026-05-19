@@ -107,6 +107,38 @@ def test_other_convert_y_can_use_manual_path(
     assert "转换完成，退出码: 3" in outputs
 
 
+def test_other_annotate_y_tag_types_dry_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str] | None] = []
+
+    def _fake_annotate_main(argv: list[str] | None = None) -> int:
+        calls.append(argv)
+        return 0
+
+    monkeypatch.setattr(
+        "scripts.other.annotate_y_tag_types_from_danbooru.main",
+        _fake_annotate_main,
+    )
+    fake_questionary = _FakeQuestionary(
+        selects=["other", "annotate_y_tag_types", "dry_run", "__exit__"],
+        texts=["assets/y.yaml"],
+        confirms=[True],
+    )
+    monkeypatch.setattr("scripts.cli.menu._load_questionary", lambda: fake_questionary)
+
+    outputs: list[str] = []
+    exit_code = run_menu(MenuIO(print_func=outputs.append))
+
+    assert exit_code == 0
+    assert calls == [["assets/y.yaml", "--dry-run"]]
+    assert any(
+        "预览命令: uv run python scripts/other/annotate_y_tag_types_from_danbooru.py assets/y.yaml --dry-run"
+        in output
+        for output in outputs
+    )
+
+
 def test_other_clear_r2_uses_bucket_target_from_menu(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
