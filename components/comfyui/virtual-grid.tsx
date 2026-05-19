@@ -32,6 +32,7 @@ import {
   ArrowDown01Icon,
   ArrowMoveUpRightIcon,
   StarIcon,
+  Cancel01Icon,
 } from "@hugeicons/core-free-icons";
 
 import { VirtualGridPreviewCell } from "./virtual-grid-preview-cell";
@@ -566,6 +567,22 @@ export function VirtualGrid({
                                 : "无结果"}
                             </span>
                           )}
+                          {searchQuery && (
+                            <Button
+                              type="button"
+                              size="icon-xs"
+                              variant="ghost"
+                              className="size-5"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => {
+                                setSearchQuery("");
+                                setActiveMatchIndex(-1);
+                              }}
+                              title="清空搜索"
+                            >
+                              <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3" />
+                            </Button>
+                          )}
                           <Button
                             type="button"
                             size="icon-xs"
@@ -602,7 +619,6 @@ export function VirtualGrid({
                       onClick={() => {
                         setIsSearchOpen(true);
                         setIsJumpInputOpen(false);
-                        setSearchQuery("");
                         setTimeout(() => searchInputRef.current?.focus(), 0);
                       }}
                       title="搜索画师 (/)"
