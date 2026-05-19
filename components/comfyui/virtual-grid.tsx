@@ -291,7 +291,7 @@ export function VirtualGrid({
           thumbLoaded: thumbKey
             ? loadedThumbKeysRef.current.has(thumbKey)
             : false,
-          blurhash: item.blurhash ?? preloadedBlurhash,
+          blurhash: preloadedBlurhash,
         };
       });
 

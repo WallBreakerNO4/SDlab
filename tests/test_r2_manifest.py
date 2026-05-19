@@ -52,28 +52,48 @@ def _sample_payload() -> dict[str, object]:
                 "x_index": 1,
                 "y_index": 0,
                 "batch_index": 0,
-                "category": "nsfw",
-                "positive_prompt": "a beautiful landscape",
-                "prompt_hash": "p1",
+                "category": "advance",
+                "positive_prompt": "advanced composition",
+                "prompt_hash": "p2",
                 "width": 1024,
                 "height": 1024,
                 "blurhash": "L6PZfSi_.AyE_3t7t7R**0o#DgR4",
                 "seed": "222",
                 "y_value": "cfg_7.0",
                 "thumb_webp_bucket": "private",
-                "thumb_webp_r2_key": "runs/private/nsfw-thumb.webp",
+                "thumb_webp_r2_key": "runs/private/advance-thumb.webp",
                 "thumb_webp_cache_key": "ck3",
                 "display_webp_bucket": "private",
-                "display_webp_r2_key": "runs/private/nsfw-display.webp",
+                "display_webp_r2_key": "runs/private/advance-display.webp",
                 "display_webp_cache_key": "ck4",
+            },
+            {
+                "x_index": 2,
+                "y_index": 0,
+                "batch_index": 0,
+                "category": "nsfw",
+                "positive_prompt": "a beautiful landscape",
+                "prompt_hash": "p1",
+                "width": 1024,
+                "height": 1024,
+                "blurhash": "L6PZfSi_.AyE_3t7t7R**0o#DgR4",
+                "seed": "333",
+                "y_value": "cfg_7.0",
+                "thumb_webp_bucket": "private",
+                "thumb_webp_r2_key": "runs/private/nsfw-thumb.webp",
+                "thumb_webp_cache_key": "ck5",
+                "display_webp_bucket": "private",
+                "display_webp_r2_key": "runs/private/nsfw-display.webp",
+                "display_webp_cache_key": "ck6",
             },
         ],
         "x_columns": [
             {"type": "normal", "description": {"zh": "\u666e\u901a"}},
+            {"type": "advance", "description": {"zh": "\u8fdb\u9636"}},
             {"type": "nsfw", "description": {"zh": "\u654f\u611f"}},
         ],
         "y_indexes": [0],
-        "total_cells": 2,
+        "total_cells": 3,
     }
 
 
@@ -129,21 +149,22 @@ def test_release_id_changes_with_content() -> None:
 
 # ---- bootstrap sfw / nsfw ----
 
-def test_sfw_bootstrap_only_has_normal_cells() -> None:
+def test_sfw_bootstrap_has_normal_and_advance_cells() -> None:
     release = build_view_release(_sample_payload())
 
     cells = cast(list[dict[str, object]], release["bootstrap_sfw"]["blurhash_cells"])
-    assert len(cells) == 1
-    assert cells[0]["category"] == "normal"
+    assert len(cells) == 2
+    categories = {cast(str, cell["category"]) for cell in cells}
+    assert categories == {"normal", "advance"}
 
 
 def test_nsfw_bootstrap_has_all_cells() -> None:
     release = build_view_release(_sample_payload())
 
     cells = cast(list[dict[str, object]], release["bootstrap_nsfw"]["blurhash_cells"])
-    assert len(cells) == 2
+    assert len(cells) == 3
     categories = {cast(str, cell["category"]) for cell in cells}
-    assert categories == {"normal", "nsfw"}
+    assert categories == {"normal", "advance", "nsfw"}
 
 
 def test_both_bootstraps_include_prompts() -> None:
@@ -192,8 +213,7 @@ def test_auth_sfw_row_has_normal_and_advance() -> None:
     for cell in cells:
         for item in cast(list[dict[str, object]], cell["items"]):
             categories.add(cast(str, item["category"]))
-    # Our sample has normal+nsfw, so sfw should only see normal
-    assert categories == {"normal"}
+    assert categories == {"normal", "advance"}
 
 
 def test_auth_nsfw_row_has_all_categories() -> None:
@@ -207,7 +227,20 @@ def test_auth_nsfw_row_has_all_categories() -> None:
     for cell in cells:
         for item in cast(list[dict[str, object]], cell["items"]):
             categories.add(cast(str, item["category"]))
-    assert categories == {"normal", "nsfw"}
+    assert categories == {"normal", "advance", "nsfw"}
+
+
+def test_row_items_do_not_include_blurhash() -> None:
+    release = build_view_release(_sample_payload())
+
+    row_manifests = cast(dict[str, object], release["row_manifests"])
+    for variant in ("public", "auth_sfw", "auth_nsfw"):
+        rows = cast(dict[int, dict[str, object]], row_manifests[variant])
+        row = rows[0]
+        cells = cast(list[dict[str, object]], row["cells"])
+        for cell in cells:
+            for item in cast(list[dict[str, object]], cell["items"]):
+                assert "blurhash" not in item
 
 
 def test_public_row_variant_sources_not_leaked() -> None:
@@ -406,8 +439,9 @@ def test_nsfw_column_remapped_in_sfw() -> None:
     bootstrap = cast(dict[str, object], release["bootstrap_sfw"])
 
     x_columns = cast(list[dict[str, object]], bootstrap["x_columns"])
-    assert len(x_columns) == 1
-    assert x_columns[0]["type"] == "normal"
+    assert len(x_columns) == 2
+    types = {cast(str, col["type"]) for col in x_columns}
+    assert types == {"normal", "advance"}
 
 
 def test_all_columns_present_in_nsfw() -> None:
@@ -415,9 +449,9 @@ def test_all_columns_present_in_nsfw() -> None:
     bootstrap = cast(dict[str, object], release["bootstrap_nsfw"])
 
     x_columns = cast(list[dict[str, object]], bootstrap["x_columns"])
-    assert len(x_columns) == 2
+    assert len(x_columns) == 3
     types = {cast(str, col["type"]) for col in x_columns}
-    assert types == {"normal", "nsfw"}
+    assert types == {"normal", "advance", "nsfw"}
 
 
 # ---- current_manifest ----
@@ -437,24 +471,27 @@ def test_current_manifest_contains_urls() -> None:
 
 def test_prompt_rows_deduplication() -> None:
     payload = _sample_payload()
-    # Both images share the same positive_prompt and prompt_hash,
-    # so there should be only one prompt_row
     release = build_view_release(payload)
 
     prompt_rows = cast(list[dict[str, object]], release["prompt_rows"])
-    assert len(prompt_rows) == 1
-    assert prompt_rows[0]["positive_prompt"] == "a beautiful landscape"
-    assert prompt_rows[0]["prompt_hash"] == "p1"
-    assert prompt_rows[0]["run_dir"] == "chenkinnoob-xl-rf"
+    assert len(prompt_rows) == 2
+    shared_rows = [
+        row
+        for row in prompt_rows
+        if row["positive_prompt"] == "a beautiful landscape"
+        and row["prompt_hash"] == "p1"
+    ]
+    assert len(shared_rows) == 1
+    assert shared_rows[0]["run_dir"] == "chenkinnoob-xl-rf"
 
 
 def test_prompt_rows_distinct_prompts() -> None:
     payload = _sample_payload()
     images = cast(list[dict[str, object]], payload["images"])
-    images[1]["positive_prompt"] = "a different scene"
-    images[1]["prompt_hash"] = "p2"
+    images[2]["positive_prompt"] = "a different scene"
+    images[2]["prompt_hash"] = "p3"
 
     release = build_view_release(payload)
 
     prompt_rows = cast(list[dict[str, object]], release["prompt_rows"])
-    assert len(prompt_rows) == 2
+    assert len(prompt_rows) == 3

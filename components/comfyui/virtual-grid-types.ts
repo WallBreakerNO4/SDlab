@@ -22,7 +22,6 @@ export type RowItem = {
   category: string | null;
   width: number | null;
   height: number | null;
-  blurhash: string | null;
   meta: RowMeta;
   thumb: VariantSources | null;
   display: VariantSources | null;

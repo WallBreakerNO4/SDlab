@@ -73,7 +73,7 @@ def build_view_release(payload: Mapping[str, object]) -> dict[str, object]:
         images=images,
         prompts_by_key=prompts_by_key,
         visible_columns=visible_columns_sfw,
-        accessible_categories={"normal"},
+        accessible_categories={"normal", "advance"},
     )
     bootstrap_nsfw = _build_bootstrap_manifest(
         run_detail=run_detail,
@@ -484,7 +484,6 @@ def _build_row_manifest(
                 "category": category,
                 "width": image.get("width"),
                 "height": image.get("height"),
-                "blurhash": _optional_non_empty_str(image.get("blurhash")),
                 "meta": {
                     "seed": _optional_non_empty_str(image.get("seed")),
                     "prompt_id": int(prompt_row["prompt_id"]),

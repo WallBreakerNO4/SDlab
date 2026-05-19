@@ -359,7 +359,6 @@ export function normalizeRowPayload(
                     category: getNonEmptyString(item.category),
                     width: getFiniteNumber(item.width),
                     height: getFiniteNumber(item.height),
-                    blurhash: getNonEmptyString(item.blurhash),
                     meta,
                     thumb,
                     display,
