@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-06 | Updated: 2026-04-25 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-05-19 -->
 <!-- Commit: e9e3fdf | 分支: feat/info-page -->
 
 # Agent Guide (sd-style-lab/images-script)
@@ -44,6 +44,8 @@
 │   ├── models/             # 模型配置（config.yaml + api.json + workflow.json）
 │   └── prompts/            # X/Y prompt 资产（YAML + CSV）
 ├── hooks/                  # 共享前端行为
+├── loaders/                # 自定义 Webpack loader（见 loaders/AGENTS.md）
+├── public/                 # 静态资源（favicon 等）
 ├── types/                  # Next 生成类型（只读）
 ├── middleware.ts           # Supabase session refresh
 └── main.py                 # Python 顶层入口（委托到 scripts）
@@ -75,6 +77,7 @@
 | 路径安全              | `lib/comfyui-path.ts`                                                            | 共享路径工具与相对路径逃逸防护                                                 |
 | R2 URL 构建           | `lib/r2-url.ts`                                                                  | 公开/私有 URL 与变体白名单                                                     |
 | 会话刷新              | `middleware.ts`                                                                  | Edge middleware，不能引 `lib/supabase-auth.ts`                                 |
+| Webpack loader        | `loaders/markdown-source-loader.cjs`                                             | 构建时将 `.md` 内联为 JS 字符串；见 `loaders/AGENTS.md`                        |
 
 ## 代码图
 
