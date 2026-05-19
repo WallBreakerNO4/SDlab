@@ -439,13 +439,17 @@ def _sample_view_release_payload() -> dict[str, object]:
             {
                 "type": "normal",
                 "description": {"zh": "示例列"},
-            }
+            },
+            {
+                "type": "advance",
+                "description": {"zh": "进阶列"},
+            },
         ],
         "y_indexes": [0],
-        "total_cells": 1,
+        "total_cells": 2,
         "images": [
             {
-                "x_index": 0,
+                "x_index": 1,
                 "y_index": 0,
                 "batch_index": 0,
                 "category": "advance",
@@ -508,6 +512,7 @@ def test_build_view_release_filters_public_rows_to_accessible_items() -> None:
 
     assert len(items) == 1
     assert items[0]["category"] == "normal"
+    assert "blurhash" not in items[0]
 
     meta = cast(dict[str, object], items[0]["meta"])
     assert meta["positive_prompt"] == "normal prompt"
@@ -515,8 +520,14 @@ def test_build_view_release_filters_public_rows_to_accessible_items() -> None:
     bootstrap_sfw = cast(dict[str, object], release["bootstrap_sfw"])
     blurhash_cells = cast(list[dict[str, object]], bootstrap_sfw["blurhash_cells"])
     prompts = cast(list[dict[str, object]], bootstrap_sfw["prompts"])
-    assert blurhash_cells[0]["category"] == "normal"
+    categories = {cast(str, cell["category"]) for cell in blurhash_cells}
+    assert categories == {"normal", "advance"}
     assert prompts == [
+        {
+            "id": 1,
+            "prompt_hash": "advance-hash",
+            "positive_prompt": "advance prompt",
+        },
         {
             "id": 2,
             "prompt_hash": "normal-hash",

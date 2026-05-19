@@ -59,10 +59,8 @@ export function VirtualGridPreviewCell({
     : null;
 
   const preloadedCell = blurhashMap.get(`${xIndex}:${yIndex}`);
-  const effectiveBlurhash =
-    preloadedCell?.blurhash ?? representativeItem?.blurhash ?? null;
-  const effectiveCategory =
-    preloadedCell?.category ?? representativeItem?.category ?? null;
+  const effectiveBlurhash = preloadedCell?.blurhash ?? null;
+  const effectiveCategory = preloadedCell?.category ?? null;
 
   const canOpenDialog = !!rowCell && rowCell.items.length > 0;
   const isLocked =
