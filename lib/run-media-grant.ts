@@ -12,8 +12,52 @@ export type RunMediaGrantClaims = {
   exp: number;
 };
 
+const GRANT_CACHE_MAX_ENTRIES = 512;
+
+type CachedGrant = {
+  claims: RunMediaGrantClaims;
+  expiresAtMs: number;
+};
+
+let cachedGrantSecret: string | null = null;
+const verifiedGrantCache = new Map<string, CachedGrant>();
+
 function requireGrantSecret(): string {
-  return getServerEnv().runMediaGrantSecret;
+  if (!cachedGrantSecret) {
+    cachedGrantSecret = getServerEnv().runMediaGrantSecret;
+  }
+  return cachedGrantSecret;
+}
+
+function readCachedGrant(token: string, nowMs: number): RunMediaGrantClaims | null {
+  const cached = verifiedGrantCache.get(token);
+  if (!cached) {
+    return null;
+  }
+
+  if (cached.expiresAtMs <= nowMs) {
+    verifiedGrantCache.delete(token);
+    return null;
+  }
+
+  verifiedGrantCache.delete(token);
+  verifiedGrantCache.set(token, cached);
+  return cached.claims;
+}
+
+function writeCachedGrant(token: string, claims: RunMediaGrantClaims): void {
+  verifiedGrantCache.set(token, {
+    claims,
+    expiresAtMs: claims.exp * 1000,
+  });
+
+  while (verifiedGrantCache.size > GRANT_CACHE_MAX_ENTRIES) {
+    const oldestKey = verifiedGrantCache.keys().next().value;
+    if (!oldestKey) {
+      return;
+    }
+    verifiedGrantCache.delete(oldestKey);
+  }
 }
 
 function toBase64Url(value: Buffer | string): string {
@@ -43,6 +87,12 @@ export function createRunMediaGrant(claims: RunMediaGrantClaims): string {
 }
 
 export function verifyRunMediaGrant(token: string): RunMediaGrantClaims | null {
+  const nowMs = Date.now();
+  const cached = readCachedGrant(token, nowMs);
+  if (cached) {
+    return cached;
+  }
+
   const [encodedPayload, encodedSignature] = token.split(".");
   if (!encodedPayload || !encodedSignature) {
     return null;
@@ -71,11 +121,13 @@ export function verifyRunMediaGrant(token: string): RunMediaGrantClaims | null {
       return null;
     }
 
-    if (payload.exp * 1000 <= Date.now()) {
+    if (payload.exp * 1000 <= nowMs) {
       return null;
     }
 
-    return payload as RunMediaGrantClaims;
+    const claims = payload as RunMediaGrantClaims;
+    writeCachedGrant(token, claims);
+    return claims;
   } catch {
     return null;
   }

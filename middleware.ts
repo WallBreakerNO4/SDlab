@@ -62,10 +62,11 @@ export const config = {
      * - _next/image (image optimization)
      * - favicon.*
      * - common static asset extensions
+     * - high-volume object/telemetry APIs that do not read Supabase session state
      *
      * Running middleware on every dynamic route ensures the Supabase
      * auth cookies are refreshed before any Server Component reads them.
      */
-    "/((?!_next/static|_next/image|favicon|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon|api/private-object(?:/|$)|api/public-object(?:/|$)|api/telemetry/web-vitals(?:/|$)|api/comfyui/runs(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
