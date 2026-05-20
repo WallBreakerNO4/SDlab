@@ -16,9 +16,9 @@ items:
       general:
         - text: solo
           weight: 1.0
-        - text: cowboy shot
+        - text: portrait
           weight: 1.0
-        - text: smile
+        - text: face focus
           weight: 1.0
         - text: looking at viewer
           weight: 1.0
@@ -26,8 +26,8 @@ items:
       index: 0
       type: normal
     description:
-      zh: 阿米娅半身构图示例
-      en: Amiya half-body composition sample
+      zh: 面部特写
+      en: Facial close-up
   - tags:
       gender:
         - text: 1girl
@@ -64,8 +64,8 @@ items:
       index: 1
       type: normal
     description:
-      zh: 能天使街景饮品示例
-      en: Exusiai street drink sample
+      zh: 半身像
+      en: Half-body shot
   - tags:
       gender:
         - text: 1girl
@@ -92,8 +92,6 @@ items:
           weight: 1.0
         - text: holding umbrella
           weight: 1.0
-        - text: smile
-          weight: 1.0
         - text: walking
           weight: 1.0
         - text: front view
@@ -104,12 +102,14 @@ items:
           weight: 1.0
         - text: city lights
           weight: 1.0
+        - text: full shot
+          weight: 1.0
     info:
       index: 2
       type: advance
     description:
-      zh: 缪尔赛思雨夜街头示例
-      en: Muelsyse rainy night street sample
+      zh: 全身像
+      en: Full-body shot
   - tags:
       gender:
         - text: 1girl
@@ -136,7 +136,7 @@ items:
     description:
       zh: 《明日方舟》角色妮芙，2024年7月9日上线，danbooru 上 400 张图 | 观察模型能否正确绘制角色特征，训练数据集是否包含这名角色
       en:
-        Arknights character Nymph, released on July 9, 2024, with 400 images on danbooru
+        Arknights character Nymph,released on July 9,2024,with 400 images on danbooru
         | Observing whether the model can accurately depict character features and if
         the training dataset includes this character
   - tags:
@@ -165,8 +165,8 @@ items:
     description:
       zh: 《明日方舟》角色娜仁图亚，2024年8月1日上线，danbooru 上 180 张图（训练图片量少） | 观察模型能否正确绘制角色特征，训练数据集是否包含这名角色
       en:
-        Arknights character Narantuya, released on August 1, 2024, with 180 images
-        on danbooru (few training images) | Observing whether the model can accurately
+        Arknights character Narantuya,released on August 1,2024,with 180 images on
+        danbooru (few training images) | Observing whether the model can accurately
         depict character features and if the training dataset includes this character
   - tags:
       gender:
@@ -194,9 +194,9 @@ items:
     description:
       zh: 《明日方舟》角色电弧，2025年8月2日上线，danbooru 上 690 张图（角色较新） | 观察模型能否正确绘制角色特征，训练数据集是否包含这名角色
       en:
-        Arknights character Raidian, released on August 2, 2025, with 690 images on
-        danbooru (new character) | Observing whether the model can accurately depict
-        character features and if the training dataset includes this character
+        Arknights character Raidian,released on August 2,2025,with 690 images on danbooru
+        (new character) | Observing whether the model can accurately depict character
+        features and if the training dataset includes this character
   - tags:
       gender:
         - text: 2girls
@@ -229,7 +229,7 @@ items:
     description:
       zh: 双人图 | 观察双人结构，以及人物特征是否正确
       en:
-        Dual character diagram | Observe the dual structure, and whether the character
+        Dual character diagram | Observe the dual structure,and whether the character
         features are correct
   - tags:
       gender:
