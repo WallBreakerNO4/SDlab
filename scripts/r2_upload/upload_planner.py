@@ -54,6 +54,7 @@ from .variants import inspect_image_metadata, plan_image_variants
 
 LOG = logging.getLogger(__name__)
 _RUN_ASSET_DEFAULT_CATEGORY: Category = "normal"
+_PUBLISHABLE_METADATA_STATUSES = {"success", "skipped"}
 
 
 @dataclass(frozen=True)
@@ -98,6 +99,42 @@ def _int_list(value: object) -> list[int]:
     return [
         item for item in value if isinstance(item, int) and not isinstance(item, bool)
     ]
+
+
+def _is_publishable_metadata_record(metadata_record: dict[str, object]) -> bool:
+    status = _non_empty_str(metadata_record.get("status"))
+    if status is None:
+        return True
+    return status in _PUBLISHABLE_METADATA_STATUSES
+
+
+def _metadata_cell_key(metadata_record: dict[str, object]) -> tuple[int, int]:
+    return (
+        _int_with_default(metadata_record.get("x_index"), default=0),
+        _int_with_default(metadata_record.get("y_index"), default=0),
+    )
+
+
+def _fold_metadata_records_for_upload(
+    *,
+    run_dir: Path,
+    metadata_records: list[dict[str, object]],
+) -> list[tuple[dict[str, object], list[Path]]]:
+    latest_by_cell: dict[tuple[int, int], tuple[dict[str, object], list[Path]]] = {}
+    for metadata_record in metadata_records:
+        if not _is_publishable_metadata_record(metadata_record):
+            continue
+
+        image_paths = resolve_metadata_image_paths(run_dir, metadata_record)
+        if not image_paths:
+            continue
+
+        latest_by_cell[_metadata_cell_key(metadata_record)] = (
+            metadata_record,
+            image_paths,
+        )
+
+    return list(latest_by_cell.values())
 
 
 def _selection_from_run_json(run_json: dict[str, object]) -> dict[str, object] | None:
@@ -1434,19 +1471,19 @@ def _build_run_plan(
     run_json = _load_run_json(normalized_run_dir)
     run_dir_name = _resolve_run_dir_name(normalized_run_dir, run_json)
     metadata_records = _load_metadata_records(normalized_run_dir)
+    metadata_records_for_upload = _fold_metadata_records_for_upload(
+        run_dir=normalized_run_dir,
+        metadata_records=metadata_records,
+    )
     run_intermediate_dir = (intermediate_root / run_dir_name).resolve()
     run_intermediate_dir.mkdir(parents=True, exist_ok=True)
 
     image_tasks: list[PlannedImageTask] = []
     processed_images = 0
 
-    for metadata_record in metadata_records:
+    for metadata_record, image_paths in metadata_records_for_upload:
         if remaining_limit is not None and processed_images >= remaining_limit:
             break
-
-        image_paths = resolve_metadata_image_paths(normalized_run_dir, metadata_record)
-        if not image_paths:
-            continue
 
         base_batch = _int_with_default(metadata_record.get("batch_index"), default=0)
         category = _normalize_category(

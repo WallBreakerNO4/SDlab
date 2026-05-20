@@ -428,6 +428,85 @@ def test_build_run_plan_embeds_image_variants_in_public_row_manifest(
     assert len(str(display_webp["cache_key"])) == 64
 
 
+def test_build_run_plan_collapses_resume_hit_metadata_records(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "resume-hit-run"
+    images_dir = run_dir / "images"
+    images_dir.mkdir(parents=True)
+    _write_png(images_dir / "x0-y0.png")
+    base_record: dict[str, object] = {
+        "status": "success",
+        "x_index": 0,
+        "y_index": 0,
+        "batch_index": 0,
+        "x_info_type": "normal",
+        "local_image_path": "images/x0-y0.png",
+        "positive_prompt": "prompt",
+        "prompt_hash": "prompt-hash",
+        "seed": 123,
+        "y_value": "style",
+    }
+    skipped_record = {
+        **base_record,
+        "status": "skipped",
+        "skip_reason": "resume_hit",
+    }
+    run_dir = _write_run_fixture_with_metadata_records(
+        tmp_path,
+        run_name="resume-hit-run",
+        metadata_records=[base_record, *[dict(skipped_record) for _ in range(5)]],
+    )
+
+    run_json_path = run_dir / "run.json"
+    run_payload = cast(
+        dict[str, object],
+        json.loads(run_json_path.read_text(encoding="utf-8")),
+    )
+    config_snapshot = cast(dict[str, object], run_payload["config_snapshot"])
+    selection = cast(dict[str, object], config_snapshot["selection"])
+    selection["x_columns"] = [
+        {
+            "type": "normal",
+            "description": {"zh": "示例列"},
+        }
+    ]
+    selection["y_indexes"] = [0]
+    selection["x_count"] = 1
+    selection["y_count"] = 1
+    selection["total_cells"] = 1
+    run_json_path.write_text(
+        json.dumps(run_payload, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    plan = _build_run_plan(
+        run_dir,
+        intermediate_root=tmp_path / "_r2_upload_intermediate",
+        category_override=None,
+        remaining_limit=None,
+        image_workers=1,
+    )
+
+    assert plan.processed_images == 1
+    row_upload = next(
+        upload
+        for upload in plan.manifest_uploads
+        if upload.variant == "view_row_public"
+        and upload.key.endswith("/rows/public/0.json")
+    )
+    assert row_upload.body_bytes is not None
+    row_manifest = cast(
+        dict[str, object],
+        json.loads(row_upload.body_bytes.decode("utf-8")),
+    )
+    cells = cast(list[dict[str, object]], row_manifest["cells"])
+    items = cast(list[dict[str, object]], cells[0]["items"])
+
+    assert len(items) == 1
+    assert items[0]["batch_index"] == 0
+
+
 def _sample_view_release_payload() -> dict[str, object]:
     return {
         "run_dir": "demo-run",
