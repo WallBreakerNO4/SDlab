@@ -136,6 +136,7 @@ def _fake_runner_config(
             key="nai-4-full",
             name="NAI 4 Full",
             family="novelai",
+            artist_weight_profile="identity",
             links={
                 "homepage": "https://example.com/model",
                 "huggingface": None,
@@ -286,6 +287,7 @@ def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
         "key": "nai-4-full",
         "name": "NAI 4 Full",
         "family": "novelai",
+        "artist_weight_profile": "identity",
         "links": {
             "homepage": "https://example.com/model",
             "huggingface": None,

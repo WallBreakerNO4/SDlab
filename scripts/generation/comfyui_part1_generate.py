@@ -239,6 +239,13 @@ def _is_retry_mode(args: argparse.Namespace) -> bool:
     return bool(args.retry_failed or args.retry_incomplete)
 
 
+def _artist_weight_profile_from_model(model: object | None) -> str:
+    if model is None:
+        return "identity"
+    profile = getattr(model, "artist_weight_profile", None)
+    return profile if isinstance(profile, str) and profile else "identity"
+
+
 def _apply_fresh_run_config(args: argparse.Namespace) -> None:
     if not args.config:
         raise ValueError("fresh-run 模式必须提供 --config")
@@ -317,10 +324,12 @@ def run(args: argparse.Namespace) -> int:
     _configure_logging()
 
     x_rows = read_x_rows(args.x_json)
-    model_family = getattr(getattr(args, "config_model", None), "family", "")
+    model_obj = getattr(args, "config_model", None)
+    model_family = getattr(model_obj, "family", "")
     y_rows = read_y_rows(
         args.y_json,
         artist_prefix="@" if model_family == "anima" else "",
+        artist_weight_profile=_artist_weight_profile_from_model(model_obj),
     )
     x_descriptions = read_x_descriptions(args.x_json)
 
@@ -465,15 +474,20 @@ def run_retry(args: argparse.Namespace) -> int:
 
     x_rows = read_x_rows(args.x_json)
     model_family = ""
+    artist_weight_profile = "identity"
     run_json_path = run_artifacts.run_dir / "run.json"
     if run_json_path.exists():
         run_data = json.loads(run_json_path.read_text(encoding="utf-8"))
         model_obj = run_data.get("model")
         if isinstance(model_obj, dict):
             model_family = model_obj.get("family", "") or ""
+            profile_obj = model_obj.get("artist_weight_profile")
+            if isinstance(profile_obj, str) and profile_obj:
+                artist_weight_profile = profile_obj
     y_rows = read_y_rows(
         args.y_json,
         artist_prefix="@" if model_family == "anima" else "",
+        artist_weight_profile=artist_weight_profile,
     )
     x_descriptions = read_x_descriptions(args.x_json)
 

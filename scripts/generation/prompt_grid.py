@@ -12,6 +12,12 @@ Y_PROMPT_SCHEMA = "prompt-y-table/v3"
 Y_TAG_TYPE_GENERAL = "general"
 Y_TAG_TYPE_ARTISTS = "artists"
 Y_TAG_TYPES = {Y_TAG_TYPE_GENERAL, Y_TAG_TYPE_ARTISTS}
+ARTIST_WEIGHT_PROFILE_IDENTITY = "identity"
+ARTIST_WEIGHT_PROFILE_SQUARE = "square"
+ARTIST_WEIGHT_PROFILES = {
+    ARTIST_WEIGHT_PROFILE_IDENTITY,
+    ARTIST_WEIGHT_PROFILE_SQUARE,
+}
 
 PROMPT_TEMPLATE_ORDER = (
     "quality",
@@ -221,15 +227,34 @@ def _validated_y_tags(tags: object) -> list[tuple[str, float, str]]:
     return result
 
 
-def _render_y_weighted_tags(tags: object, *, artist_prefix: str = "") -> str:
+def _transform_artist_weight(weight: float, *, profile: str) -> float:
+    if profile == ARTIST_WEIGHT_PROFILE_IDENTITY:
+        return weight
+    if profile == ARTIST_WEIGHT_PROFILE_SQUARE:
+        return weight * weight
+    allowed = ", ".join(sorted(ARTIST_WEIGHT_PROFILES))
+    raise ValueError(f"artist_weight_profile 必须是以下之一: {allowed}")
+
+
+def _render_y_weighted_tags(
+    tags: object,
+    *,
+    artist_prefix: str = "",
+    artist_weight_profile: str = ARTIST_WEIGHT_PROFILE_IDENTITY,
+) -> str:
     tokens: list[str] = []
     for tag, weight, tag_type in _validated_y_tags(tags):
+        rendered_weight = (
+            _transform_artist_weight(weight, profile=artist_weight_profile)
+            if tag_type == Y_TAG_TYPE_ARTISTS
+            else weight
+        )
         rendered_tag = (
             f"{artist_prefix}{tag}"
             if artist_prefix and tag_type == Y_TAG_TYPE_ARTISTS
             else tag
         )
-        tokens.append(_render_weighted_tag(rendered_tag, weight))
+        tokens.append(_render_weighted_tag(rendered_tag, rendered_weight))
 
     if not tokens:
         return ""
@@ -263,7 +288,11 @@ def read_y_rows_for_novelai(path: str | Path) -> list[dict[str, str]]:
 
 
 def read_y_rows(
-    path: str | Path, artists_column: str = "Artists", *, artist_prefix: str = ""
+    path: str | Path,
+    artists_column: str = "Artists",
+    *,
+    artist_prefix: str = "",
+    artist_weight_profile: str = ARTIST_WEIGHT_PROFILE_IDENTITY,
 ) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
 
@@ -275,6 +304,7 @@ def read_y_rows(
                 "y": _render_y_weighted_tags(
                     item.get("tags", []),
                     artist_prefix=artist_prefix,
+                    artist_weight_profile=artist_weight_profile,
                 )
             }
         )

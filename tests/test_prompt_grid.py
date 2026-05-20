@@ -283,6 +283,43 @@ def test_read_y_rows_artist_prefix_applies_only_to_artist_tags(tmp_path: Path):
     assert rows == [{"y": "(@wlop:1.1),furry,"}]
 
 
+def test_read_y_rows_square_profile_applies_only_to_artist_weights(tmp_path: Path):
+    y_path = tmp_path / "y.yaml"
+    _write_y_yaml(
+        y_path,
+        """
+      - text: wlop
+        weight: 1.1
+        type: artists
+      - text: piyodera mucha
+        weight: 0.81
+        type: artists
+      - text: furry
+        weight: 1.1
+        type: general
+""",
+    )
+
+    rows = read_y_rows(y_path, artist_prefix="@", artist_weight_profile="square")
+
+    assert rows == [{"y": "(@wlop:1.21),(@piyodera mucha:0.656),(furry:1.1),"}]
+
+
+def test_read_y_rows_rejects_unknown_artist_weight_profile(tmp_path: Path):
+    y_path = tmp_path / "y.yaml"
+    _write_y_yaml(
+        y_path,
+        """
+      - text: wlop
+        weight: 1.1
+        type: artists
+""",
+    )
+
+    with pytest.raises(ValueError, match="artist_weight_profile"):
+        read_y_rows(y_path, artist_weight_profile="double")
+
+
 def test_read_y_rows_without_artist_prefix_keeps_artist_text(tmp_path: Path):
     y_path = tmp_path / "y.yaml"
     _write_y_yaml(
@@ -382,4 +419,3 @@ def test_read_y_rows_for_novelai_empty():
         _render_novelai_weighted_tags("not a list")
     with pytest.raises(ValueError, match="text"):
         _render_novelai_weighted_tags([{"no_text": "x"}])
-

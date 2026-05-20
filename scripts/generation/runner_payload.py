@@ -125,6 +125,7 @@ def _build_model_snapshot(args: argparse.Namespace) -> dict[str, object] | None:
         "key": model.key,
         "name": model.name,
         "family": model.family,
+        "artist_weight_profile": getattr(model, "artist_weight_profile", "identity"),
         "links": dict(model.links),
         "description": dict(model.description),
     }

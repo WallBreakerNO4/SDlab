@@ -9,6 +9,8 @@ model:
   name: Anima base 1.0
   # 模型家族/大类，例如 stable-diffusion-xl、novelai 等。
   family: anima
+  # Anima 的画师权重实验 profile；square 会将 Y 轴 artists 权重做平方变换。
+  artist_weight_profile: square
   # 可选外链；没有就填 null。
   links:
     homepage: null

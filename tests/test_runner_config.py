@@ -67,6 +67,7 @@ class _ModelConfig(Protocol):
     key: str
     name: str
     family: str
+    artist_weight_profile: str
     links: dict[str, str | None]
     description: dict[str, str]
 
@@ -303,6 +304,7 @@ def test_load_runner_config_happy_path_resolves_repo_relative_paths_and_hashes(
     assert config.model.key == "nai-4-full"
     assert config.model.name == "NAI 4 Full"
     assert config.model.family == "novelai"
+    assert config.model.artist_weight_profile == "identity"
     assert config.model.links == {
         "homepage": "https://example.com/model",
         "huggingface": None,
@@ -556,6 +558,67 @@ def test_load_runner_config_rejects_non_slug_model_key(tmp_path: Path) -> None:
     )
 
     with pytest.raises(ValueError, match="model.key"):
+        module.load_runner_config(str(config_path), repo_root=tmp_path)
+
+
+def test_load_runner_config_defaults_anima_artist_weight_profile_to_square(
+    tmp_path: Path,
+) -> None:
+    module = _import_runner_config_module()
+    _ = _write_assets(tmp_path)
+    config_path = tmp_path / "data/models/example/config.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        _valid_config_text()
+        .replace("  family: novelai", "  family: anima")
+        .replace("  key: nai-4-full", "  key: anima-base-1"),
+        encoding="utf-8",
+    )
+
+    config = module.load_runner_config(str(config_path), repo_root=tmp_path)
+
+    assert config.model.artist_weight_profile == "square"
+
+
+def test_load_runner_config_accepts_explicit_artist_weight_profile(
+    tmp_path: Path,
+) -> None:
+    module = _import_runner_config_module()
+    _ = _write_assets(tmp_path)
+    config_path = tmp_path / "data/models/example/config.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        _valid_config_text()
+        .replace("  family: novelai", "  family: anima")
+        .replace("  key: nai-4-full", "  key: anima-base-1")
+        .replace(
+            "  family: anima",
+            "  family: anima\n  artist_weight_profile: identity",
+        ),
+        encoding="utf-8",
+    )
+
+    config = module.load_runner_config(str(config_path), repo_root=tmp_path)
+
+    assert config.model.artist_weight_profile == "identity"
+
+
+def test_load_runner_config_rejects_invalid_artist_weight_profile(
+    tmp_path: Path,
+) -> None:
+    module = _import_runner_config_module()
+    _ = _write_assets(tmp_path)
+    config_path = tmp_path / "data/models/example/config.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        _valid_config_text().replace(
+            "  family: novelai",
+            "  family: novelai\n  artist_weight_profile: double",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="artist_weight_profile"):
         module.load_runner_config(str(config_path), repo_root=tmp_path)
 
 

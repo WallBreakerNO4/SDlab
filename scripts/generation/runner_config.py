@@ -31,7 +31,22 @@ _V2_ROOT_KEYS = _V1_ROOT_KEYS | {"backend"}
 
 BACKEND_COMFYUI = "comfyui"
 BACKEND_NOVELAI = "novelai"
-_MODEL_KEYS = {"key", "name", "family", "links", "description"}
+ARTIST_WEIGHT_PROFILE_IDENTITY = "identity"
+ARTIST_WEIGHT_PROFILE_SQUARE = "square"
+_ARTIST_WEIGHT_PROFILES = {
+    ARTIST_WEIGHT_PROFILE_IDENTITY,
+    ARTIST_WEIGHT_PROFILE_SQUARE,
+}
+
+_MODEL_KEYS = {
+    "key",
+    "name",
+    "family",
+    "links",
+    "description",
+    "artist_weight_profile",
+}
+_MODEL_REQUIRED_KEYS = {"key", "name", "family", "links", "description"}
 _MODEL_LINK_KEYS = {"homepage", "huggingface", "civitai"}
 _MODEL_DESCRIPTION_KEYS = {"zh", "en"}
 _PROMPTS_KEYS = {"x_path", "y_path"}
@@ -72,6 +87,7 @@ class ModelConfig:
     key: str
     name: str
     family: str
+    artist_weight_profile: str
     links: dict[str, str | None]
     description: dict[str, str]
 
@@ -326,8 +342,12 @@ def _load_assets(*, run_dir: Path, repo_root: Path) -> AssetsConfig:
 def _load_model(payload: object) -> ModelConfig:
     mapping = _require_mapping(payload, "model")
     _validate_keys(
-        mapping, field_name="model", allowed=_MODEL_KEYS, required=_MODEL_KEYS
+        mapping,
+        field_name="model",
+        allowed=_MODEL_KEYS,
+        required=_MODEL_REQUIRED_KEYS,
     )
+    family = _require_non_empty_str(mapping["family"], "model.family")
 
     links_payload = _require_mapping(mapping["links"], "model.links")
     _validate_keys(
@@ -359,10 +379,34 @@ def _load_model(payload: object) -> ModelConfig:
             field_name="model.key",
         ),
         name=_require_non_empty_str(mapping["name"], "model.name"),
-        family=_require_non_empty_str(mapping["family"], "model.family"),
+        family=family,
+        artist_weight_profile=_load_artist_weight_profile(mapping, family=family),
         links=links,
         description=description,
     )
+
+
+def _load_artist_weight_profile(
+    mapping: Mapping[str, object], *, family: str
+) -> str:
+    raw_profile = mapping.get("artist_weight_profile")
+    if raw_profile is None:
+        return (
+            ARTIST_WEIGHT_PROFILE_SQUARE
+            if family == "anima"
+            else ARTIST_WEIGHT_PROFILE_IDENTITY
+        )
+
+    profile = _require_non_empty_str(
+        raw_profile,
+        "model.artist_weight_profile",
+    )
+    if profile not in _ARTIST_WEIGHT_PROFILES:
+        allowed = ", ".join(sorted(_ARTIST_WEIGHT_PROFILES))
+        raise ValueError(
+            f"字段 model.artist_weight_profile 必须是以下之一: {allowed}"
+        )
+    return profile
 
 
 def _load_prompts(payload: object, *, repo_root: Path) -> PromptsConfig:
