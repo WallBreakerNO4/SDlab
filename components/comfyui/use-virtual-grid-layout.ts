@@ -19,10 +19,11 @@ import {
 } from "./virtual-grid-utils";
 
 const CELL_MIN_WIDTH = 184;
+const CELL_MAX_WIDTH = 400;
 const LEFT_COLUMN_WIDTH = 220;
 const CELL_PADDING_PX = 8;
 
-export { CELL_MIN_WIDTH, LEFT_COLUMN_WIDTH };
+export { CELL_MIN_WIDTH, CELL_MAX_WIDTH, LEFT_COLUMN_WIDTH };
 
 type UseVirtualGridLayoutOptions = {
   scrollElementRef: RefObject<HTMLDivElement | null>;
@@ -30,6 +31,7 @@ type UseVirtualGridLayoutOptions = {
   blurhashMap: Map<string, BlurhashCell>;
   rowCacheRef: RefObject<Map<number, CachedRow>>;
   rowCacheVersion: number;
+  xHeaders?: { key: string; label: string }[];
 };
 
 export function useVirtualGridLayout({
@@ -38,6 +40,7 @@ export function useVirtualGridLayout({
   blurhashMap,
   rowCacheRef,
   rowCacheVersion,
+  xHeaders: externalXHeaders,
 }: UseVirtualGridLayoutOptions) {
   "use no memo";
   const [scrollViewportWidth, setScrollViewportWidth] = useState<number | null>(
@@ -69,6 +72,7 @@ export function useVirtualGridLayout({
   }, []);
 
   const xHeaders = useMemo(() => {
+    if (externalXHeaders) return externalXHeaders;
     return grid.x_columns.map((col, index) => {
       const label = getXLabel(col);
       const type = getNonEmptyString(col.type) ?? "x";
@@ -77,7 +81,7 @@ export function useVirtualGridLayout({
         label,
       };
     });
-  }, [grid.x_columns]);
+  }, [externalXHeaders, grid.x_columns]);
 
   const preferredAspectRatio = useMemo(() => {
     void rowCacheVersion;
@@ -115,7 +119,10 @@ export function useVirtualGridLayout({
       return CELL_MIN_WIDTH;
     }
 
-    return Math.max(CELL_MIN_WIDTH, Math.floor(available / xCount));
+    return Math.min(
+      CELL_MAX_WIDTH,
+      Math.max(CELL_MIN_WIDTH, Math.floor(available / xCount)),
+    );
   }, [scrollViewportWidth, xHeaders.length]);
 
   const previewHeight = useMemo(() => {

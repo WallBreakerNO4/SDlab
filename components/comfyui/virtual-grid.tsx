@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { AuthLoginDialog } from "@/components/auth-login-dialog";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Command,
   CommandEmpty,
@@ -26,6 +27,7 @@ import {
   normalizeStylePromptText,
   type StylePromptFavorite,
 } from "@/lib/style-prompt-favorites";
+import { cn } from "@/lib/utils";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Search01Icon,
@@ -35,6 +37,7 @@ import {
   StarIcon,
   Cancel01Icon,
   Settings02Icon,
+  LayoutThreeColumnIcon,
 } from "@hugeicons/core-free-icons";
 
 import { VirtualGridPreviewCell } from "./virtual-grid-preview-cell";
@@ -43,7 +46,8 @@ import { VirtualGridCellDialog } from "./virtual-grid-cell-dialog";
 import { useVirtualGridLayout } from "./use-virtual-grid-layout";
 import { useVirtualGridRows } from "./use-virtual-grid-rows";
 import { useVirtualGridScroll } from "./use-virtual-grid-scroll";
-import { getPreferredVariantCacheKey } from "./virtual-grid-utils";
+import { getPreferredVariantCacheKey, getXLabel, getNonEmptyString } from "./virtual-grid-utils";
+import { useColumnVisibility } from "./use-column-visibility";
 import type { RunViewAccess } from "@/app/models/[runDir]/model-detail-types";
 import type {
   BlurhashCell,
@@ -120,12 +124,38 @@ export function VirtualGrid({
     releaseId: currentView?.release_id ?? null,
     viewAccess,
   });
+
+  const {
+    hiddenColumns,
+    visibleOriginalIndexes,
+    hasHiddenColumns,
+    toggleColumn,
+    showAll,
+    hideAll,
+  } = useColumnVisibility({ runDir, totalColumns: grid.x_columns.length });
+
+  const visibleXColumns = useMemo(() => {
+    return grid.x_columns
+      .map((col, originalIndex) => {
+        const label = getXLabel(col);
+        const type = getNonEmptyString(col.type) ?? "x";
+        return {
+          originalIndex,
+          key: `${originalIndex}:${type}:${label}`,
+          label,
+          type,
+        };
+      })
+      .filter((col) => !hiddenColumns.has(col.originalIndex));
+  }, [grid.x_columns, hiddenColumns]);
+
   const layout = useVirtualGridLayout({
     scrollElementRef,
     grid,
     blurhashMap,
     rowCacheRef,
     rowCacheVersion,
+    xHeaders: visibleXColumns.map((col) => ({ key: col.key, label: col.label })),
   });
   const {
     rowHeight,
@@ -430,10 +460,13 @@ export function VirtualGrid({
             className="size-3"
           />
           工具
-          {searchQuery.trim() ? (
+          {(searchQuery.trim() || hasHiddenColumns) ? (
             <span
               aria-hidden="true"
-              className="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-amber-400"
+              className={cn(
+                "absolute -right-0.5 -top-0.5 size-1.5 rounded-full",
+                searchQuery.trim() ? "bg-amber-400" : "bg-sky-400",
+              )}
             />
           ) : null}
         </button>
@@ -668,6 +701,60 @@ export function VirtualGrid({
             </Command>
           )}
         </div>
+
+        <div className="border-t border-border/60 p-2.5">
+          <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+            <HugeiconsIcon
+              icon={LayoutThreeColumnIcon}
+              strokeWidth={2}
+              className="size-3"
+            />
+            列显示
+          </div>
+          <div className="mb-2 flex gap-2">
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              onClick={showAll}
+            >
+              全选
+            </Button>
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              onClick={hideAll}
+            >
+              全不选
+            </Button>
+          </div>
+          <div className="flex max-h-48 flex-col gap-1 overflow-auto">
+            {grid.x_columns.map((col, originalIndex) => {
+              const label = getXLabel(col) || `列 ${originalIndex + 1}`;
+              const isHidden = hiddenColumns.has(originalIndex);
+              return (
+                <label
+                  key={originalIndex}
+                  className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-muted/30"
+                >
+                  <Checkbox
+                    checked={!isHidden}
+                    onCheckedChange={() => toggleColumn(originalIndex)}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-xs">
+                    {label}
+                  </span>
+                  {col.type ? (
+                    <span className="shrink-0 text-[10px] text-muted-foreground/60">
+                      {col.type}
+                    </span>
+                  ) : null}
+                </label>
+              );
+            })}
+          </div>
+        </div>
       </PopoverContent>
     </Popover>
   );
@@ -708,13 +795,13 @@ export function VirtualGrid({
                 >
                   {gridToolsPortalElement === undefined ? gridToolsMenu : null}
                 </div>
-                {xHeaders.map((header) => (
+                {visibleXColumns.map((col) => (
                   <div
-                    key={header.key}
+                    key={col.key}
                     className="border-r border-border/40 bg-muted/10 px-3 py-2 flex items-start"
                   >
                     <p className="text-muted-foreground text-[10px] font-medium leading-relaxed tracking-wide wrap-break-word max-w-full">
-                      {header.label}
+                      {col.label}
                     </p>
                   </div>
                 ))}
@@ -786,9 +873,10 @@ export function VirtualGrid({
                         }
                       />
 
-                      {xHeaders.map((header, xIndex) => {
-                        const xLabel = header.label;
-                        const xKey = header.key;
+                      {visibleXColumns.map((col) => {
+                        const xLabel = col.label;
+                        const xKey = col.key;
+                        const xIndex = col.originalIndex;
                         const rowEntry = rowCacheRef.current.get(yIndex);
 
                         return (
