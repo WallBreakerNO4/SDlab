@@ -89,6 +89,8 @@ type VirtualGridProps = {
 };
 
 const DEV_IMAGE_DOM_CAP_NOTE = 300;
+const PENDING_RESTORE_MAX_FRAMES = 8;
+const SCROLL_OFFSET_EPSILON = 1;
 
 export function VirtualGrid({
   runDir,
@@ -130,6 +132,7 @@ export function VirtualGrid({
   }, [gridToolsOpen]);
 
   const pendingRestoreRef = useRef<SavedScrollAnchor | null>(null);
+  const suppressScrollAnchorPersistRef = useRef(false);
 
   const [jumpInputValue, setJumpInputValue] = useState("");
   const jumpInputRef = useRef<HTMLInputElement>(null);
@@ -144,13 +147,8 @@ export function VirtualGrid({
     viewAccess,
   });
 
-  const {
-    hiddenColumns,
-    hasHiddenColumns,
-    toggleColumn,
-    showAll,
-    hideAll,
-  } = useColumnVisibility({ runDir, totalColumns: grid.x_columns.length });
+  const { hiddenColumns, hasHiddenColumns, toggleColumn, showAll, hideAll } =
+    useColumnVisibility({ runDir, totalColumns: grid.x_columns.length });
 
   const visibleXColumns = useMemo(() => {
     return grid.x_columns
@@ -173,14 +171,13 @@ export function VirtualGrid({
     blurhashMap,
     rowCacheRef,
     rowCacheVersion,
-    xHeaders: visibleXColumns.map((col) => ({ key: col.key, label: col.label })),
+    xHeaders: visibleXColumns.map((col) => ({
+      key: col.key,
+      label: col.label,
+    })),
   });
-  const {
-    rowHeight,
-    gridTemplateColumns,
-    gridMinWidth,
-    scrollViewportWidth,
-  } = layout;
+  const { rowHeight, gridTemplateColumns, gridMinWidth, scrollViewportWidth } =
+    layout;
 
   // eslint-disable-next-line react-hooks/incompatible-library
   const rowVirtualizer = useVirtualizer({
@@ -198,6 +195,7 @@ export function VirtualGrid({
       rowHeight,
       runDir,
       scrollViewportWidth,
+      suppressPersistRef: suppressScrollAnchorPersistRef,
     });
 
   const searchMatches = useMemo(() => {
@@ -301,21 +299,82 @@ export function VirtualGrid({
     void rowHeight;
     rowVirtualizer.measure();
 
-    if (pendingRestoreRef.current) {
-      const anchor = pendingRestoreRef.current;
-      pendingRestoreRef.current = null;
+    const anchor = pendingRestoreRef.current;
+    if (!anchor) {
+      return;
+    }
 
+    let frameId: number | null = null;
+    let cancelled = false;
+    suppressScrollAnchorPersistRef.current = true;
+
+    const releasePersistSuppression = () => {
+      frameId = window.requestAnimationFrame(() => {
+        if (!cancelled) {
+          suppressScrollAnchorPersistRef.current = false;
+        }
+      });
+    };
+
+    const restoreWhenScrollRangeIsReady = (attempt: number) => {
+      if (cancelled) return;
+
+      const scrollElement = scrollElementRef.current;
+      if (!scrollElement) {
+        pendingRestoreRef.current = null;
+        suppressScrollAnchorPersistRef.current = false;
+        return;
+      }
+
+      rowVirtualizer.measure();
       const targetOffset = resolveScrollOffsetFromAnchor(
         anchor,
         grid.y_indexes,
         rowHeight,
       );
-      if (targetOffset !== null) {
-        requestAnimationFrame(() => {
-          rowVirtualizer.scrollToOffset(targetOffset, { align: "start" });
-        });
+      if (targetOffset === null) {
+        pendingRestoreRef.current = null;
+        suppressScrollAnchorPersistRef.current = false;
+        return;
       }
-    }
+
+      const currentMaxOffset = Math.max(
+        0,
+        scrollElement.scrollHeight - scrollElement.clientHeight,
+      );
+      const expectedMaxOffset = Math.max(
+        0,
+        grid.y_indexes.length * rowHeight - scrollElement.clientHeight,
+      );
+      const isWaitingForDomScrollRange =
+        targetOffset <= expectedMaxOffset + SCROLL_OFFSET_EPSILON &&
+        targetOffset > currentMaxOffset + SCROLL_OFFSET_EPSILON;
+
+      if (isWaitingForDomScrollRange && attempt < PENDING_RESTORE_MAX_FRAMES) {
+        frameId = window.requestAnimationFrame(() => {
+          restoreWhenScrollRangeIsReady(attempt + 1);
+        });
+        return;
+      }
+
+      pendingRestoreRef.current = null;
+      rowVirtualizer.scrollToOffset(targetOffset, { align: "start" });
+      releasePersistSuppression();
+    };
+
+    frameId = window.requestAnimationFrame(() => {
+      restoreWhenScrollRangeIsReady(0);
+    });
+
+    return () => {
+      cancelled = true;
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      if (pendingRestoreRef.current !== anchor) {
+        suppressScrollAnchorPersistRef.current = false;
+      }
+    };
   }, [grid.y_indexes, rowHeight, rowVirtualizer, scrollViewportWidth]);
 
   useEffect(() => {
@@ -518,7 +577,7 @@ export function VirtualGrid({
           >
             工具
           </span>
-          {(searchQuery.trim() || hasHiddenColumns) ? (
+          {searchQuery.trim() || hasHiddenColumns ? (
             <span
               aria-hidden="true"
               className={cn(
@@ -866,8 +925,7 @@ export function VirtualGrid({
                   </div>
                   <div className="flex max-h-48 flex-col gap-1 overflow-auto">
                     {grid.x_columns.map((col, originalIndex) => {
-                      const label =
-                        getXLabel(col) || `列 ${originalIndex + 1}`;
+                      const label = getXLabel(col) || `列 ${originalIndex + 1}`;
                       const isHidden = hiddenColumns.has(originalIndex);
                       return (
                         <label

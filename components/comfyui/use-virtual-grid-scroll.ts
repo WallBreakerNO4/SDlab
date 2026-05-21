@@ -25,6 +25,7 @@ type UseVirtualGridScrollOptions = {
   rowHeight: number;
   runDir: string;
   scrollViewportWidth: number | null;
+  suppressPersistRef?: RefObject<boolean>;
 };
 
 export function useVirtualGridScroll({
@@ -34,6 +35,7 @@ export function useVirtualGridScroll({
   rowHeight,
   runDir,
   scrollViewportWidth,
+  suppressPersistRef,
 }: UseVirtualGridScrollOptions) {
   const didRestoreScrollRef = useRef(false);
 
@@ -77,6 +79,8 @@ export function useVirtualGridScroll({
   }, []);
 
   const persistCurrentScrollAnchor = useCallback(() => {
+    if (suppressPersistRef?.current) return;
+
     const scrollElement = scrollElementRef.current;
     if (!scrollElement) return;
 
@@ -89,7 +93,7 @@ export function useVirtualGridScroll({
 
     saveScrollAnchor(runDir, anchor);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- scrollElementRef is a stable ref
-  }, [gridYIndexes, rowHeight, runDir]);
+  }, [gridYIndexes, rowHeight, runDir, suppressPersistRef]);
 
   useLayoutEffect(() => {
     if (didRestoreScrollRef.current) {

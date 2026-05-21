@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  useEffect,
-  useMemo,
-  useState,
-  type RefObject,
-} from "react";
+import { useEffect, useMemo, useState, type RefObject } from "react";
 
 import type {
   BlurhashCell,
@@ -54,15 +49,26 @@ export function useVirtualGridLayout({
     }
 
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastWidth = element.clientWidth;
 
-    const update = () => {
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        setScrollViewportWidth(element.clientWidth);
-      }, 200);
+    const commitWidth = (width: number) => {
+      setScrollViewportWidth((previousWidth) =>
+        previousWidth === width ? previousWidth : width,
+      );
     };
 
-    update();
+    commitWidth(lastWidth);
+
+    const update = () => {
+      const nextWidth = element.clientWidth;
+      if (nextWidth === lastWidth) return;
+      lastWidth = nextWidth;
+
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        commitWidth(nextWidth);
+      }, 200);
+    };
 
     const observer = new ResizeObserver(() => {
       update();
