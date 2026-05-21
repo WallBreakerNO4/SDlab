@@ -107,8 +107,8 @@
 - 前端：大网格必须虚拟化；图片优先消费 R2 display/thumb 变体并配合 blurhash 占位，这套变体统一称为“展示页缩略图”。
 - 前端首页：`/api/comfyui/runs` 当前会输出封面图/主页缩略图字段；不要把 run 详情页的展示页缩略图直接挪作首页卡片素材。
 - 工具链：Python 用 `uv` + `pytest`（>=3.13）；Web 用 `pnpm` + Next 16 + React 19；E2E 用 Playwright。
-- Supabase CLI：本仓库默认直接使用系统安装的 `supabase ...` 命令；既然已通过 `.deb` 安装 CLI，就不要再混用 `pnpm dlx supabase ...` 或 `npx supabase ...`。
-- CI 现状：当前仓库没有 `.github/workflows/`；变更后的验证依赖本地 `uv` / `pnpm` / `supabase` 命令串联完成。
+- Supabase CLI：本仓库统一使用 `pnpm dlx supabase ...` 运行 Supabase 命令。
+- CI 现状：当前仓库没有 `.github/workflows/`；变更后的验证依赖本地 `uv` / `pnpm` 命令串联完成。
 - 协作文档与 git commit message 默认使用中文；涉及环境变量示例时优先更新 `.env.example`，不要直接读取/修改真实 `.env`。
 
 ## 反模式
@@ -147,9 +147,9 @@ pnpm lint
 # E2E / Supabase
 pnpm test:e2e
 E2E_SERVER=start E2E_PORT=3001 pnpm test:e2e -- -g "task 13"
-supabase start
-supabase db reset
-supabase migration new <name>
+pnpm dlx supabase start
+pnpm dlx supabase db reset
+pnpm dlx supabase migration new <name>
 ```
 
 ## 分层文档
