@@ -9,14 +9,12 @@ type ModelDetailHeaderProps = {
   detailData: ModelDetailResponse;
   user: User | null;
   onRequireLogin: () => void;
-  gridToolsPortalRef?: (element: HTMLDivElement | null) => void;
 };
 
 export function ModelDetailHeader({
   detailData,
   user,
   onRequireLogin,
-  gridToolsPortalRef,
 }: ModelDetailHeaderProps) {
   const modelName = detailData.run.model?.name || detailData.run.run_dir;
   const modelDesc =
@@ -85,8 +83,6 @@ export function ModelDetailHeader({
               ) : null}
             </div>
           ) : null}
-
-          <div ref={gridToolsPortalRef} className="flex items-center" />
 
           {workflow?.download_url ? (
             user ? (

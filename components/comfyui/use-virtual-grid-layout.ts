@@ -53,8 +53,13 @@ export function useVirtualGridLayout({
       return;
     }
 
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
     const update = () => {
-      setScrollViewportWidth(element.clientWidth);
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        setScrollViewportWidth(element.clientWidth);
+      }, 200);
     };
 
     update();
@@ -67,6 +72,7 @@ export function useVirtualGridLayout({
 
     return () => {
       observer.disconnect();
+      if (debounceTimer) clearTimeout(debounceTimer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- scrollElementRef is a stable ref
   }, []);

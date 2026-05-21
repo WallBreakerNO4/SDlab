@@ -2,13 +2,17 @@
 
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
 import { AuthLoginDialog } from "@/components/auth-login-dialog";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Command,
   CommandEmpty,
@@ -18,11 +22,6 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   normalizeStylePromptText,
   type StylePromptFavorite,
@@ -80,7 +79,6 @@ type VirtualGridProps = {
   }) => Promise<StylePromptFavorite>;
   onDeleteStylePromptFavorite: (favorite: StylePromptFavorite) => Promise<void>;
   onUseStylePromptFavorite: (favorite: StylePromptFavorite) => Promise<void>;
-  gridToolsPortalElement?: HTMLElement | null;
 };
 
 const DEV_IMAGE_DOM_CAP_NOTE = 300;
@@ -99,7 +97,6 @@ export function VirtualGrid({
   onCreateStylePromptFavorite,
   onDeleteStylePromptFavorite,
   onUseStylePromptFavorite,
-  gridToolsPortalElement,
 }: VirtualGridProps) {
   "use no memo";
 
@@ -111,7 +108,25 @@ export function VirtualGrid({
   );
   const { user } = useAuth();
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
-  const [gridToolsOpen, setGridToolsOpen] = useState(false);
+  const [gridToolsOpen, setGridToolsOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("sd-style-lab:grid-tools-open") === "true";
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(
+        "sd-style-lab:grid-tools-open",
+        String(gridToolsOpen),
+      );
+    }
+  }, [gridToolsOpen]);
+
+  const pendingRestoreRef = useRef<{
+    index: number;
+    offsetRatio: number;
+  } | null>(null);
+
   const [jumpInputValue, setJumpInputValue] = useState("");
   const jumpInputRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -260,14 +275,40 @@ export function VirtualGrid({
   const virtualRows = rowVirtualizer.getVirtualItems();
   const isDevEnv = process.env.NODE_ENV !== "production";
 
+  const toggleGridTools = useCallback(
+    (nextOpen: boolean) => {
+      const firstVisible = rowVirtualizer.getVirtualItems()[0];
+      const scrollElement = scrollElementRef.current;
+      if (firstVisible && scrollElement) {
+        const offsetInRow = scrollElement.scrollTop - firstVisible.start;
+        pendingRestoreRef.current = {
+          index: firstVisible.index,
+          offsetRatio: offsetInRow / rowHeight,
+        };
+      }
+      setGridToolsOpen(nextOpen);
+    },
+    [rowVirtualizer, rowHeight],
+  );
+
   const openGridToolsForSearch = useCallback(() => {
-    setGridToolsOpen(true);
+    toggleGridTools(true);
     setTimeout(() => searchInputRef.current?.focus(), 0);
-  }, []);
+  }, [toggleGridTools]);
 
   useEffect(() => {
     void rowHeight;
     rowVirtualizer.measure();
+
+    if (pendingRestoreRef.current) {
+      const { index, offsetRatio } = pendingRestoreRef.current;
+      pendingRestoreRef.current = null;
+
+      requestAnimationFrame(() => {
+        const targetOffset = index * rowHeight + offsetRatio * rowHeight;
+        rowVirtualizer.scrollToOffset(targetOffset, { align: "start" });
+      });
+    }
   }, [rowHeight, rowVirtualizer]);
 
   useEffect(() => {
@@ -284,7 +325,7 @@ export function VirtualGrid({
       if (document.activeElement === searchInputRef.current) {
         if (e.key === "Escape") {
           e.preventDefault();
-          setGridToolsOpen(false);
+          toggleGridTools(false);
           searchInputRef.current?.blur();
           return;
         }
@@ -299,7 +340,7 @@ export function VirtualGrid({
       if (document.activeElement === jumpInputRef.current) {
         if (e.key === "Escape") {
           e.preventDefault();
-          setGridToolsOpen(false);
+          toggleGridTools(false);
           jumpInputRef.current?.blur();
         }
         return;
@@ -419,7 +460,6 @@ export function VirtualGrid({
       const lineNum = match.rowIndex + 1;
       scrollToLineNumber(lineNum);
       syncUrlHashWithLineNumber(lineNum);
-      setGridToolsOpen(false);
 
       void onUseStylePromptFavorite(favorite).catch((error: unknown) => {
         console.error("[style-prompt-favorites] Failed to mark used", error);
@@ -445,333 +485,421 @@ export function VirtualGrid({
     [onDeleteStylePromptFavorite],
   );
 
-  const gridToolsMenu = (
-    <Popover open={gridToolsOpen} onOpenChange={setGridToolsOpen}>
-      <PopoverTrigger asChild>
+  const toolsPanel = (
+    <div
+      className={cn(
+        "flex flex-col border-l border-border/40 bg-background/95 backdrop-blur-sm transition-all duration-300 ease-in-out overflow-hidden",
+        gridToolsOpen ? "w-96" : "w-10",
+      )}
+    >
+      {!gridToolsOpen ? (
         <button
           type="button"
-          className="hover:bg-primary/10 hover:text-primary data-[state=open]:bg-background/70 data-[state=open]:text-foreground focus-visible:ring-border relative inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/50 px-2 py-1 font-medium text-muted-foreground transition-colors backdrop-blur-sm focus-visible:outline-none focus-visible:ring-1"
-          title="网格工具"
-          aria-label="网格工具"
+          onClick={() => toggleGridTools(true)}
+          className="hover:bg-muted/50 relative flex flex-1 flex-col items-center justify-center gap-1 py-3 transition-colors"
+          title="打开网格工具"
+          aria-label="打开网格工具"
         >
           <HugeiconsIcon
             icon={Settings02Icon}
             strokeWidth={2}
-            className="size-3"
+            className="size-4"
           />
-          工具
+          <span
+            className="text-[10px] font-medium leading-tight"
+            style={{ writingMode: "vertical-rl" }}
+          >
+            工具
+          </span>
           {(searchQuery.trim() || hasHiddenColumns) ? (
             <span
               aria-hidden="true"
               className={cn(
-                "absolute -right-0.5 -top-0.5 size-1.5 rounded-full",
+                "absolute top-2 right-1 size-1.5 rounded-full",
                 searchQuery.trim() ? "bg-amber-400" : "bg-sky-400",
               )}
             />
           ) : null}
         </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        sideOffset={6}
-        className="w-[calc(100vw-2rem)] max-w-96 gap-0 p-0 sm:w-96"
-        onOpenAutoFocus={(event) => {
-          event.preventDefault();
-          searchInputRef.current?.focus();
-        }}
-      >
-        <form
-          className="border-b border-border/60 p-2.5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            goToMatch(1);
-          }}
-        >
-          <div className="mb-1.5 text-[10px] font-medium text-muted-foreground">
-            搜索画师串
+      ) : (
+        <>
+          <div className="flex items-center justify-between border-b border-border/40 px-3 py-2.5">
+            <span className="text-sm font-medium">网格工具</span>
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              onClick={() => toggleGridTools(false)}
+              title="收起工具面板"
+              aria-label="收起工具面板"
+            >
+              <HugeiconsIcon
+                icon={Cancel01Icon}
+                strokeWidth={2}
+                className="size-3.5"
+              />
+            </Button>
           </div>
-          <div className="relative">
-            <HugeiconsIcon
-              icon={Search01Icon}
-              strokeWidth={2}
-              className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50 pointer-events-none"
-            />
-            <Input
-              ref={searchInputRef}
-              type="text"
-              className="h-7 w-full rounded-none border-border/50 py-0 pl-7 pr-28 text-xs shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-1 focus-visible:ring-ring/30"
-              placeholder="搜索画师..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
-              {searchQuery.trim() ? (
-                <span className="mr-0.5 text-[10px] tabular-nums text-muted-foreground/60">
-                  {searchMatches.length > 0
-                    ? `${activeMatchIndex >= 0 ? activeMatchIndex + 1 : 0}/${searchMatches.length}`
-                    : "无结果"}
-                </span>
-              ) : null}
-              {searchQuery ? (
-                <Button
-                  type="button"
-                  size="icon-xs"
-                  variant="ghost"
-                  className="size-5"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => {
-                    setSearchQuery("");
-                    setActiveMatchIndex(-1);
-                  }}
-                  title="清空搜索"
-                >
+          <div className="flex flex-1 flex-col gap-0 overflow-y-auto">
+            {/* 搜索画师串 */}
+            <Collapsible defaultOpen>
+              <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-center justify-between border-b border-border/40 px-3 py-2 text-left text-xs font-medium transition-colors">
+                <span className="flex items-center gap-1.5">
                   <HugeiconsIcon
-                    icon={Cancel01Icon}
+                    icon={Search01Icon}
                     strokeWidth={2}
-                    className="size-3"
+                    className="size-3 text-muted-foreground"
                   />
-                </Button>
-              ) : null}
-              <Button
-                type="button"
-                size="icon-xs"
-                variant="ghost"
-                className="size-5"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => goToMatch(-1)}
-                title="上一个匹配"
-                disabled={searchMatches.length === 0}
-              >
-                <HugeiconsIcon
-                  icon={ArrowUp01Icon}
-                  strokeWidth={2}
-                  className="size-3"
-                />
-              </Button>
-              <Button
-                type="button"
-                size="icon-xs"
-                variant="ghost"
-                className="size-5"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => goToMatch(1)}
-                title="下一个匹配"
-                disabled={searchMatches.length === 0}
-              >
+                  搜索画师串
+                </span>
                 <HugeiconsIcon
                   icon={ArrowDown01Icon}
                   strokeWidth={2}
-                  className="size-3"
+                  className="size-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
                 />
-              </Button>
-            </div>
-          </div>
-        </form>
-
-        <form
-          className="flex items-end gap-2 border-b border-border/60 p-2.5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const lineNum = parseInt(jumpInputValue, 10);
-            if (scrollToLineNumber(lineNum)) {
-              syncUrlHashWithLineNumber(lineNum);
-              setJumpInputValue("");
-              setGridToolsOpen(false);
-            } else {
-              toast.error(`行号必须在 1 到 ${grid.y_indexes.length} 之间`);
-            }
-          }}
-        >
-          <label className="min-w-0 flex-1">
-            <span className="mb-1.5 block text-[10px] font-medium text-muted-foreground">
-              跳转到行
-            </span>
-            <Input
-              ref={jumpInputRef}
-              type="number"
-              min={1}
-              max={grid.y_indexes.length}
-              className="h-7 w-full rounded-none border-border/50 py-0 pl-2 pr-2 text-xs shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-1 focus-visible:ring-ring/30 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
-              placeholder="行号"
-              value={jumpInputValue}
-              onChange={(e) => setJumpInputValue(e.target.value)}
-            />
-          </label>
-          <Button type="submit" size="xs" variant="outline">
-            <HugeiconsIcon
-              icon={ArrowMoveUpRightIcon}
-              strokeWidth={2}
-              data-icon="inline-start"
-            />
-            跳转
-          </Button>
-        </form>
-
-        <div className="p-2.5">
-          <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
-            <HugeiconsIcon icon={StarIcon} strokeWidth={2} className="size-3" />
-            收藏
-          </div>
-          {!user ? (
-            <Button
-              type="button"
-              size="xs"
-              variant="outline"
-              className="w-full justify-start text-muted-foreground/80"
-              onClick={() => {
-                setGridToolsOpen(false);
-                setLoginDialogOpen(true);
-              }}
-              title="登录后同步收藏"
-            >
-              <HugeiconsIcon
-                icon={StarIcon}
-                strokeWidth={2}
-                data-icon="inline-start"
-              />
-              登录后同步收藏
-            </Button>
-          ) : (
-            <Command className="max-h-72">
-              <CommandInput placeholder="搜索收藏..." />
-              <CommandList className="max-h-56">
-                <CommandEmpty>
-                  {isStylePromptFavoritesLoading ? "加载中" : "暂无收藏"}
-                </CommandEmpty>
-                <CommandGroup>
-                  {stylePromptFavorites.map((favorite) => {
-                    const match = stylePromptMatchesByPrompt.get(
-                      normalizeStylePromptText(favorite.prompt_text),
-                    );
-
-                    return (
-                      <CommandItem
-                        key={favorite.id}
-                        value={`${favorite.prompt_text} ${favorite.source_run_dir ?? ""}`}
-                        onSelect={() => {
-                          if (!match) {
-                            toast.error("当前模型未包含这个画师串");
-                            return;
-                          }
-                          void jumpToStylePromptFavorite(favorite);
-                        }}
-                        className={`items-start gap-2 py-2 ${match ? "" : "opacity-60"}`}
-                      >
+              </CollapsibleTrigger>
+              <CollapsibleContent className="border-b border-border/40">
+                <form
+                  className="p-2.5"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    goToMatch(1);
+                  }}
+                >
+                  <div className="relative">
+                    <HugeiconsIcon
+                      icon={Search01Icon}
+                      strokeWidth={2}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50 pointer-events-none"
+                    />
+                    <Input
+                      ref={searchInputRef}
+                      type="text"
+                      className="h-7 w-full rounded-none border-border/50 py-0 pl-7 pr-28 text-xs shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-1 focus-visible:ring-ring/30"
+                      placeholder="搜索画师..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
+                      {searchQuery.trim() ? (
+                        <span className="mr-0.5 text-[10px] tabular-nums text-muted-foreground/60">
+                          {searchMatches.length > 0
+                            ? `${activeMatchIndex >= 0 ? activeMatchIndex + 1 : 0}/${searchMatches.length}`
+                            : "无结果"}
+                        </span>
+                      ) : null}
+                      {searchQuery ? (
                         <Button
                           type="button"
                           size="icon-xs"
                           variant="ghost"
-                          className="mt-0.5 size-5 text-amber-500 hover:text-amber-600"
-                          title="取消收藏"
-                          aria-label="取消收藏画师串"
-                          disabled={pendingStylePromptKeys.has(
-                            normalizeStylePromptText(favorite.prompt_text),
-                          )}
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
+                          className="size-5"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setSearchQuery("");
+                            setActiveMatchIndex(-1);
                           }}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            void removeStylePromptFavoriteFromList(favorite);
-                          }}
+                          title="清空搜索"
                         >
                           <HugeiconsIcon
-                            icon={StarIcon}
+                            icon={Cancel01Icon}
                             strokeWidth={2}
-                            className="size-3.5"
+                            className="size-3"
                           />
                         </Button>
-                        <span className="min-w-0 flex-1">
-                          <span className="line-clamp-2 font-mono text-[10px] leading-relaxed">
-                            {favorite.prompt_text}
-                          </span>
-                          <span className="mt-0.5 block text-[10px] text-muted-foreground/60">
-                            {match
-                              ? `第 ${match.rowIndex + 1} 行`
-                              : "当前模型无匹配"}
-                          </span>
-                        </span>
-                      </CommandItem>
-                    );
-                  })}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          )}
-        </div>
+                      ) : null}
+                      <Button
+                        type="button"
+                        size="icon-xs"
+                        variant="ghost"
+                        className="size-5"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => goToMatch(-1)}
+                        title="上一个匹配"
+                        disabled={searchMatches.length === 0}
+                      >
+                        <HugeiconsIcon
+                          icon={ArrowUp01Icon}
+                          strokeWidth={2}
+                          className="size-3"
+                        />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon-xs"
+                        variant="ghost"
+                        className="size-5"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => goToMatch(1)}
+                        title="下一个匹配"
+                        disabled={searchMatches.length === 0}
+                      >
+                        <HugeiconsIcon
+                          icon={ArrowDown01Icon}
+                          strokeWidth={2}
+                          className="size-3"
+                        />
+                      </Button>
+                    </div>
+                  </div>
+                </form>
+              </CollapsibleContent>
+            </Collapsible>
 
-        <div className="border-t border-border/60 p-2.5">
-          <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
-            <HugeiconsIcon
-              icon={LayoutThreeColumnIcon}
-              strokeWidth={2}
-              className="size-3"
-            />
-            列显示
-          </div>
-          <div className="mb-2 flex gap-2">
-            <Button
-              type="button"
-              size="xs"
-              variant="outline"
-              onClick={showAll}
-            >
-              全选
-            </Button>
-            <Button
-              type="button"
-              size="xs"
-              variant="outline"
-              onClick={hideAll}
-            >
-              全不选
-            </Button>
-          </div>
-          <div className="flex max-h-48 flex-col gap-1 overflow-auto">
-            {grid.x_columns.map((col, originalIndex) => {
-              const label = getXLabel(col) || `列 ${originalIndex + 1}`;
-              const isHidden = hiddenColumns.has(originalIndex);
-              return (
-                <label
-                  key={originalIndex}
-                  className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-muted/30"
-                >
-                  <Checkbox
-                    checked={!isHidden}
-                    onCheckedChange={() => toggleColumn(originalIndex)}
+            {/* 跳转到行 */}
+            <Collapsible defaultOpen>
+              <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-center justify-between border-b border-border/40 px-3 py-2 text-left text-xs font-medium transition-colors">
+                <span className="flex items-center gap-1.5">
+                  <HugeiconsIcon
+                    icon={ArrowMoveUpRightIcon}
+                    strokeWidth={2}
+                    className="size-3 text-muted-foreground"
                   />
-                  <span className="min-w-0 flex-1 truncate text-xs">
-                    {label}
-                  </span>
-                  {col.type ? (
-                    <span className="shrink-0 text-[10px] text-muted-foreground/60">
-                      {col.type}
-                    </span>
-                  ) : null}
-                </label>
-              );
-            })}
+                  跳转到行
+                </span>
+                <HugeiconsIcon
+                  icon={ArrowDown01Icon}
+                  strokeWidth={2}
+                  className="size-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
+                />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="border-b border-border/40">
+                <form
+                  className="flex items-end gap-2 p-2.5"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const lineNum = parseInt(jumpInputValue, 10);
+                    if (scrollToLineNumber(lineNum)) {
+                      syncUrlHashWithLineNumber(lineNum);
+                      setJumpInputValue("");
+                    } else {
+                      toast.error(
+                        `行号必须在 1 到 ${grid.y_indexes.length} 之间`,
+                      );
+                    }
+                  }}
+                >
+                  <label className="min-w-0 flex-1">
+                    <Input
+                      ref={jumpInputRef}
+                      type="number"
+                      min={1}
+                      max={grid.y_indexes.length}
+                      className="h-7 w-full rounded-none border-border/50 py-0 pl-2 pr-2 text-xs shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-1 focus-visible:ring-ring/30 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                      placeholder="行号"
+                      value={jumpInputValue}
+                      onChange={(e) => setJumpInputValue(e.target.value)}
+                    />
+                  </label>
+                  <Button type="submit" size="xs" variant="outline">
+                    <HugeiconsIcon
+                      icon={ArrowMoveUpRightIcon}
+                      strokeWidth={2}
+                      data-icon="inline-start"
+                    />
+                    跳转
+                  </Button>
+                </form>
+              </CollapsibleContent>
+            </Collapsible>
+
+            {/* 收藏 */}
+            <Collapsible>
+              <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-center justify-between border-b border-border/40 px-3 py-2 text-left text-xs font-medium transition-colors">
+                <span className="flex items-center gap-1.5">
+                  <HugeiconsIcon
+                    icon={StarIcon}
+                    strokeWidth={2}
+                    className="size-3 text-muted-foreground"
+                  />
+                  收藏
+                </span>
+                <HugeiconsIcon
+                  icon={ArrowDown01Icon}
+                  strokeWidth={2}
+                  className="size-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
+                />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="border-b border-border/40">
+                <div className="p-2.5">
+                  {!user ? (
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="outline"
+                      className="w-full justify-start text-muted-foreground/80"
+                      onClick={() => {
+                        toggleGridTools(false);
+                        setLoginDialogOpen(true);
+                      }}
+                      title="登录后同步收藏"
+                    >
+                      <HugeiconsIcon
+                        icon={StarIcon}
+                        strokeWidth={2}
+                        data-icon="inline-start"
+                      />
+                      登录后同步收藏
+                    </Button>
+                  ) : (
+                    <Command className="max-h-72">
+                      <CommandInput placeholder="搜索收藏..." />
+                      <CommandList className="max-h-56">
+                        <CommandEmpty>
+                          {isStylePromptFavoritesLoading
+                            ? "加载中"
+                            : "暂无收藏"}
+                        </CommandEmpty>
+                        <CommandGroup>
+                          {stylePromptFavorites.map((favorite) => {
+                            const match = stylePromptMatchesByPrompt.get(
+                              normalizeStylePromptText(favorite.prompt_text),
+                            );
+
+                            return (
+                              <CommandItem
+                                key={favorite.id}
+                                value={`${favorite.prompt_text} ${favorite.source_run_dir ?? ""}`}
+                                onSelect={() => {
+                                  if (!match) {
+                                    toast.error("当前模型未包含这个画师串");
+                                    return;
+                                  }
+                                  void jumpToStylePromptFavorite(favorite);
+                                }}
+                                className={`items-start gap-2 py-2 ${match ? "" : "opacity-60"}`}
+                              >
+                                <Button
+                                  type="button"
+                                  size="icon-xs"
+                                  variant="ghost"
+                                  className="mt-0.5 size-5 text-amber-500 hover:text-amber-600"
+                                  title="取消收藏"
+                                  aria-label="取消收藏画师串"
+                                  disabled={pendingStylePromptKeys.has(
+                                    normalizeStylePromptText(
+                                      favorite.prompt_text,
+                                    ),
+                                  )}
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                  }}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    void removeStylePromptFavoriteFromList(
+                                      favorite,
+                                    );
+                                  }}
+                                >
+                                  <HugeiconsIcon
+                                    icon={StarIcon}
+                                    strokeWidth={2}
+                                    className="size-3.5"
+                                  />
+                                </Button>
+                                <span className="min-w-0 flex-1">
+                                  <span className="line-clamp-2 font-mono text-[10px] leading-relaxed">
+                                    {favorite.prompt_text}
+                                  </span>
+                                  <span className="mt-0.5 block text-[10px] text-muted-foreground/60">
+                                    {match
+                                      ? `第 ${match.rowIndex + 1} 行`
+                                      : "当前模型无匹配"}
+                                  </span>
+                                </span>
+                              </CommandItem>
+                            );
+                          })}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  )}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+
+            {/* 列显示 */}
+            <Collapsible>
+              <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-center justify-between border-b border-border/40 px-3 py-2 text-left text-xs font-medium transition-colors">
+                <span className="flex items-center gap-1.5">
+                  <HugeiconsIcon
+                    icon={LayoutThreeColumnIcon}
+                    strokeWidth={2}
+                    className="size-3 text-muted-foreground"
+                  />
+                  列显示
+                </span>
+                <HugeiconsIcon
+                  icon={ArrowDown01Icon}
+                  strokeWidth={2}
+                  className="size-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
+                />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="p-2.5">
+                  <div className="mb-2 flex gap-2">
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="outline"
+                      onClick={showAll}
+                    >
+                      全选
+                    </Button>
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="outline"
+                      onClick={hideAll}
+                    >
+                      全不选
+                    </Button>
+                  </div>
+                  <div className="flex max-h-48 flex-col gap-1 overflow-auto">
+                    {grid.x_columns.map((col, originalIndex) => {
+                      const label =
+                        getXLabel(col) || `列 ${originalIndex + 1}`;
+                      const isHidden = hiddenColumns.has(originalIndex);
+                      return (
+                        <label
+                          key={originalIndex}
+                          className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-muted/30"
+                        >
+                          <Checkbox
+                            checked={!isHidden}
+                            onCheckedChange={() => toggleColumn(originalIndex)}
+                          />
+                          <span className="min-w-0 flex-1 truncate text-xs">
+                            {label}
+                          </span>
+                          {col.type ? (
+                            <span className="shrink-0 text-[10px] text-muted-foreground/60">
+                              {col.type}
+                            </span>
+                          ) : null}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
-        </div>
-      </PopoverContent>
-    </Popover>
+        </>
+      )}
+    </div>
   );
 
-  const gridToolsPortal = gridToolsPortalElement
-    ? createPortal(gridToolsMenu, gridToolsPortalElement)
-    : null;
-
   return (
-    <>
-      {gridToolsPortal}
-      <div
-        className="flex h-full min-h-0 flex-col overflow-hidden border border-border/40 rounded-sm"
-        data-testid="run-grid"
-        data-row-count={grid.y_indexes.length}
-        data-row-height={rowHeight}
-      >
+    <div
+      className="flex h-full min-h-0 flex-row overflow-hidden border border-border/40 rounded-sm"
+      data-testid="run-grid"
+      data-row-count={grid.y_indexes.length}
+      data-row-height={rowHeight}
+    >
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {isDevEnv ? (
           <div
             className="text-muted-foreground border-b bg-muted/30 px-3 py-1 text-[10px]"
@@ -792,9 +920,7 @@ export function VirtualGrid({
                 <div
                   className="bg-background/95 sticky left-0 z-40 flex flex-col gap-1.5 border-r border-border/40 px-3 py-2 backdrop-blur supports-backdrop-filter:bg-background/80"
                   data-testid="run-grid-corner"
-                >
-                  {gridToolsPortalElement === undefined ? gridToolsMenu : null}
-                </div>
+                />
                 {visibleXColumns.map((col) => (
                   <div
                     key={col.key}
@@ -920,6 +1046,7 @@ export function VirtualGrid({
           onOpenChange={setLoginDialogOpen}
         />
       </div>
-    </>
+      {toolsPanel}
+    </div>
   );
 }
