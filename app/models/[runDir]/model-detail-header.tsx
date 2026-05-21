@@ -9,12 +9,14 @@ type ModelDetailHeaderProps = {
   detailData: ModelDetailResponse;
   user: User | null;
   onRequireLogin: () => void;
+  gridToolsPortalRef?: (element: HTMLDivElement | null) => void;
 };
 
 export function ModelDetailHeader({
   detailData,
   user,
   onRequireLogin,
+  gridToolsPortalRef,
 }: ModelDetailHeaderProps) {
   const modelName = detailData.run.model?.name || detailData.run.run_dir;
   const modelDesc =
@@ -29,7 +31,11 @@ export function ModelDetailHeader({
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-semibold tracking-tight">{modelName}</h1>
           <div className="text-muted-foreground flex items-center gap-1.5 bg-muted/30 px-2 py-0.5 rounded-md border border-border/40">
-            <HugeiconsIcon icon={FileIcon} className="size-3.5" strokeWidth={2} />
+            <HugeiconsIcon
+              icon={FileIcon}
+              className="size-3.5"
+              strokeWidth={2}
+            />
             <span className="font-mono text-xs">{detailData.run.run_dir}</span>
           </div>
         </div>
@@ -79,6 +85,8 @@ export function ModelDetailHeader({
               ) : null}
             </div>
           ) : null}
+
+          <div ref={gridToolsPortalRef} className="flex items-center" />
 
           {workflow?.download_url ? (
             user ? (

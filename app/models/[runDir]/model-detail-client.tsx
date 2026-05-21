@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { AuthLoginDialog } from "@/components/auth-login-dialog";
@@ -33,6 +33,8 @@ export function ModelDetailClientPage({ runDir }: { runDir: string }) {
   const { user } = useAuth();
   const { showNsfw } = useUserPreferences();
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
+  const [gridToolsPortalElement, setGridToolsPortalElement] =
+    useState<HTMLDivElement | null>(null);
   const {
     detailLoadState,
     gridLoadState,
@@ -70,6 +72,13 @@ export function ModelDetailClientPage({ runDir }: { runDir: string }) {
     }
     return map;
   }, [gridData]);
+
+  const setGridToolsPortalRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      setGridToolsPortalElement(element);
+    },
+    [],
+  );
 
   return (
     <main className="mx-auto flex h-full w-full max-w-none flex-col gap-2 overflow-hidden p-2">
@@ -119,6 +128,7 @@ export function ModelDetailClientPage({ runDir }: { runDir: string }) {
           detailData={detailData}
           user={user}
           onRequireLogin={() => setLoginDialogOpen(true)}
+          gridToolsPortalRef={setGridToolsPortalRef}
         />
       ) : null}
 
@@ -142,6 +152,7 @@ export function ModelDetailClientPage({ runDir }: { runDir: string }) {
               onCreateStylePromptFavorite={stylePromptFavorites.createFavorite}
               onDeleteStylePromptFavorite={stylePromptFavorites.deleteFavorite}
               onUseStylePromptFavorite={stylePromptFavorites.markFavoriteUsed}
+              gridToolsPortalElement={gridToolsPortalElement}
             />
           </div>
         ) : null}
