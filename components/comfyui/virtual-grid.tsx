@@ -146,7 +146,6 @@ export function VirtualGrid({
 
   const {
     hiddenColumns,
-    visibleOriginalIndexes,
     hasHiddenColumns,
     toggleColumn,
     showAll,
@@ -181,7 +180,6 @@ export function VirtualGrid({
     gridTemplateColumns,
     gridMinWidth,
     scrollViewportWidth,
-    xHeaders,
   } = layout;
 
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -365,7 +363,7 @@ export function VirtualGrid({
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [goToMatch, openGridToolsForSearch]);
+  }, [goToMatch, openGridToolsForSearch, toggleGridTools]);
 
   const openCellDialog = useCallback(
     (
