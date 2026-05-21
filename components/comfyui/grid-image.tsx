@@ -7,6 +7,7 @@ import { useRenderableVariantSource } from "./use-renderable-variant-source";
 import { getPreferredVariantSource } from "./virtual-grid-utils";
 
 import type { VariantSources } from "./virtual-grid";
+import type { RunViewAccess } from "@/app/models/[runDir]/model-detail-types";
 
 type GridImageProps = {
   thumbVariants: VariantSources | null;
@@ -14,6 +15,7 @@ type GridImageProps = {
   alt: string;
   currentUserId: string | null;
   grant: string | null;
+  onRefreshViewAccess: () => Promise<RunViewAccess | null>;
   /** When true, show only the blurhash with a lock overlay instead of the real image. */
   locked?: boolean;
   /** Callback when the locked overlay is clicked. */
@@ -29,6 +31,7 @@ export function GridImage({
   alt,
   currentUserId,
   grant,
+  onRefreshViewAccess,
   locked,
   onLockedClick,
   onImageLoaded,
@@ -41,6 +44,7 @@ export function GridImage({
       variants: thumbVariants,
       currentUserId,
       grant,
+      onRefreshViewAccess,
     });
   const isGloballyLoaded =
     privateCacheKey && globallyLoadedKeys

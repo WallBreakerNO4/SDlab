@@ -3,6 +3,13 @@
 const PRIVATE_IMAGE_CACHE_NAME_PREFIX = "sd-style-lab:private-images:v1:";
 const PRIVATE_IMAGE_CACHE_REQUEST_PATH = "/__private-image-cache__/";
 
+export class PrivateImageLoadError extends Error {
+  constructor(public readonly status: number) {
+    super(`Failed to load private image: ${status}`);
+    this.name = "PrivateImageLoadError";
+  }
+}
+
 function buildCacheName(userId: string): string {
   return `${PRIVATE_IMAGE_CACHE_NAME_PREFIX}${userId}`;
 }
@@ -72,7 +79,7 @@ export async function loadPrivateImageObjectUrl(params: {
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to load private image: ${response.status}`);
+    throw new PrivateImageLoadError(response.status);
   }
 
   if (cache) {

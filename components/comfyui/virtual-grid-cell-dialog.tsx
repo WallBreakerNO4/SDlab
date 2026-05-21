@@ -23,6 +23,7 @@ import { useRenderableVariantSource } from "./use-renderable-variant-source";
 import { BlurhashCanvas } from "./blurhash-canvas";
 import { formatValue } from "./virtual-grid-utils";
 import type { SelectedCellPreview } from "./virtual-grid-types";
+import type { RunViewAccess } from "@/app/models/[runDir]/model-detail-types";
 
 type VirtualGridCellDialogProps = {
   open: boolean;
@@ -30,6 +31,7 @@ type VirtualGridCellDialogProps = {
   cell: SelectedCellPreview | null;
   currentUserId: string | null;
   grant: string | null;
+  onRefreshViewAccess: () => Promise<RunViewAccess | null>;
 };
 
 export function VirtualGridCellDialog({
@@ -38,6 +40,7 @@ export function VirtualGridCellDialog({
   cell,
   currentUserId,
   grant,
+  onRefreshViewAccess,
 }: VirtualGridCellDialogProps) {
   "use no memo";
 
@@ -60,17 +63,20 @@ export function VirtualGridCellDialog({
     variants: currentPreviewVariants,
     currentUserId,
     grant,
+    onRefreshViewAccess,
   });
   const { src: cachedDisplayUrl } = useRenderableVariantSource({
     variants: currentDisplayCacheVariants,
     currentUserId,
     grant,
+    onRefreshViewAccess,
     cacheOnly: true,
   });
   const { src: fetchedDisplayUrl } = useRenderableVariantSource({
     variants: currentDisplayVariants,
     currentUserId,
     grant,
+    onRefreshViewAccess,
   });
   const currentDownloadUrl = fetchedDisplayUrl ?? cachedDisplayUrl ?? null;
   const showPreviewPlaceholder =

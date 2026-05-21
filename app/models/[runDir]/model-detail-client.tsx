@@ -40,6 +40,7 @@ export function ModelDetailClientPage({ runDir }: { runDir: string }) {
     gridData,
     currentView,
     viewAccess,
+    refreshViewAccess,
   } = useModelDetailData({
     runDir,
     showNsfw,
@@ -128,13 +129,14 @@ export function ModelDetailClientPage({ runDir }: { runDir: string }) {
         {isGridReady ? (
           <div className="min-h-0 flex-1">
             <VirtualGrid
-              key={`${runDir}:${currentView?.release_id ?? "no-release"}:${showNsfw ? "nsfw" : "sfw"}:${viewAccess?.viewer_variant ?? "public"}:${viewAccess?.grant ?? "public"}`}
+              key={`${runDir}:${currentView?.release_id ?? "no-release"}:${showNsfw ? "nsfw" : "sfw"}:${viewAccess?.viewer_variant ?? "public"}`}
               runDir={runDir}
               grid={gridData}
               blurhashMap={blurhashMap}
               showNsfw={showNsfw}
               currentView={currentView}
               viewAccess={viewAccess}
+              onRefreshViewAccess={refreshViewAccess}
               stylePromptFavorites={stylePromptFavorites.favorites}
               favoriteByPrompt={stylePromptFavorites.favoriteByPrompt}
               isStylePromptFavoritesLoading={stylePromptFavorites.isLoading}

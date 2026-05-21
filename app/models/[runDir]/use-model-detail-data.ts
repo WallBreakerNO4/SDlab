@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   publicObjectUrl,
@@ -26,6 +26,46 @@ type UseModelDetailDataOptions = {
   currentUserId: string | null;
 };
 
+const ACCESS_REFRESH_SKEW_MS = 60 * 1000;
+const ACCESS_REFRESH_MIN_DELAY_MS = 5 * 1000;
+const SHORT_ACCESS_REFRESH_SKEW_MS = 5 * 1000;
+
+function getAccessRefreshDelayMs(expiresAtSeconds: number): number {
+  const timeUntilExpiryMs = expiresAtSeconds * 1000 - Date.now();
+  if (!Number.isFinite(timeUntilExpiryMs) || timeUntilExpiryMs <= 0) {
+    return ACCESS_REFRESH_MIN_DELAY_MS;
+  }
+
+  const skewMs =
+    timeUntilExpiryMs > ACCESS_REFRESH_SKEW_MS
+      ? ACCESS_REFRESH_SKEW_MS
+      : SHORT_ACCESS_REFRESH_SKEW_MS;
+  return Math.max(ACCESS_REFRESH_MIN_DELAY_MS, timeUntilExpiryMs - skewMs);
+}
+
+async function fetchRunViewAccess(
+  runDir: string,
+  signal?: AbortSignal,
+): Promise<RunViewAccess> {
+  const response = await fetch(
+    `/api/comfyui/run/${encodeURIComponent(runDir)}/access`,
+    {
+      signal,
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) {
+    throw new Error("error");
+  }
+
+  const raw: unknown = await response.json();
+  if (!isRunViewAccess(raw)) {
+    throw new Error("error");
+  }
+
+  return raw;
+}
+
 export function useModelDetailData({
   runDir,
   showNsfw,
@@ -37,6 +77,30 @@ export function useModelDetailData({
   const [gridData, setGridData] = useState<RunGridIndexData | null>(null);
   const [currentView, setCurrentView] = useState<CurrentRunView | null>(null);
   const [viewAccess, setViewAccess] = useState<RunViewAccess | null>(null);
+  const refreshPromiseRef = useRef<Promise<RunViewAccess | null> | null>(null);
+
+  const refreshViewAccess = useCallback(async () => {
+    if (!currentUserId) {
+      setViewAccess(null);
+      return null;
+    }
+
+    if (refreshPromiseRef.current) {
+      return refreshPromiseRef.current;
+    }
+
+    const refreshPromise = fetchRunViewAccess(runDir)
+      .then((access) => {
+        setViewAccess(access);
+        return access;
+      })
+      .finally(() => {
+        refreshPromiseRef.current = null;
+      });
+
+    refreshPromiseRef.current = refreshPromise;
+    return refreshPromise;
+  }, [currentUserId, runDir]);
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -55,13 +119,7 @@ export function useModelDetailData({
       );
 
       const accessPromise = currentUserId
-        ? fetch(
-            `/api/comfyui/run/${encodeURIComponent(runDir)}/access`,
-            {
-              signal: abortController.signal,
-              cache: "no-store",
-            },
-          )
+        ? fetchRunViewAccess(runDir, abortController.signal)
         : null;
 
       // 防止 cleanup 时 abort 导致的 rejection 成为 unhandled rejection
@@ -85,17 +143,9 @@ export function useModelDetailData({
 
       let access: RunViewAccess | null = null;
       if (accessPromise) {
-        const accessResponse = await accessPromise;
-        if (!accessResponse.ok) {
-          throw new Error("error");
-        }
-        const accessRaw: unknown = await accessResponse.json();
-        if (!isRunViewAccess(accessRaw)) {
-          throw new Error("error");
-        }
-        access = accessRaw;
+        access = await accessPromise;
         if (!abortController.signal.aborted) {
-          setViewAccess(accessRaw);
+          setViewAccess(access);
         }
       }
 
@@ -166,6 +216,23 @@ export function useModelDetailData({
     };
   }, [currentUserId, runDir, showNsfw]);
 
+  useEffect(() => {
+    if (!currentUserId || !viewAccess) {
+      return;
+    }
+
+    const delayMs = getAccessRefreshDelayMs(viewAccess.expires_at);
+    const timeoutId = window.setTimeout(() => {
+      void refreshViewAccess().catch((error: unknown) => {
+        console.error("[model-detail] Failed to refresh run view access", error);
+      });
+    }, delayMs);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [currentUserId, refreshViewAccess, viewAccess]);
+
   return {
     detailLoadState,
     gridLoadState,
@@ -173,5 +240,6 @@ export function useModelDetailData({
     gridData,
     currentView,
     viewAccess,
+    refreshViewAccess,
   };
 }

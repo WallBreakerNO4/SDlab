@@ -1,5 +1,6 @@
 import { GridImage } from "./grid-image";
 import { pickBestVariants } from "./virtual-grid-utils";
+import type { RunViewAccess } from "@/app/models/[runDir]/model-detail-types";
 import type {
   BlurhashCell,
   CachedRow,
@@ -18,6 +19,7 @@ type VirtualGridPreviewCellProps = {
   isAuthenticated: boolean;
   currentUserId: string | null;
   grant: string | null;
+  onRefreshViewAccess: () => Promise<RunViewAccess | null>;
   onRequireLogin: () => void;
   onOpenCellDialog: (
     cell: RowCell,
@@ -44,6 +46,7 @@ export function VirtualGridPreviewCell({
   isAuthenticated,
   currentUserId,
   grant,
+  onRefreshViewAccess,
   onRequireLogin,
   onOpenCellDialog,
   onThumbLoad,
@@ -95,6 +98,7 @@ export function VirtualGridPreviewCell({
           }
           currentUserId={currentUserId}
           grant={grant}
+          onRefreshViewAccess={onRefreshViewAccess}
           locked={isLocked}
           onLockedClick={onRequireLogin}
           onImageLoaded={onThumbLoad}

@@ -76,6 +76,7 @@ type VirtualGridProps = {
   showNsfw: boolean;
   currentView: { release_id: string } | null;
   viewAccess: RunViewAccess | null;
+  onRefreshViewAccess: () => Promise<RunViewAccess | null>;
   stylePromptFavorites: StylePromptFavorite[];
   favoriteByPrompt: Map<string, StylePromptFavorite>;
   isStylePromptFavoritesLoading: boolean;
@@ -99,6 +100,7 @@ export function VirtualGrid({
   showNsfw,
   currentView,
   viewAccess,
+  onRefreshViewAccess,
   stylePromptFavorites,
   favoriteByPrompt,
   isStylePromptFavoritesLoading,
@@ -145,6 +147,7 @@ export function VirtualGrid({
     showNsfw,
     releaseId: currentView?.release_id ?? null,
     viewAccess,
+    onRefreshViewAccess,
   });
 
   const { hiddenColumns, hasHiddenColumns, toggleColumn, showAll, hideAll } =
@@ -1084,6 +1087,7 @@ export function VirtualGrid({
                             isAuthenticated={!!user}
                             currentUserId={user?.id ?? null}
                             grant={viewAccess?.grant ?? null}
+                            onRefreshViewAccess={onRefreshViewAccess}
                             onRequireLogin={() => setLoginDialogOpen(true)}
                             onOpenCellDialog={openCellDialog}
                             onThumbLoad={markThumbAsLoaded}
@@ -1105,6 +1109,7 @@ export function VirtualGrid({
           cell={selectedCell}
           currentUserId={user?.id ?? null}
           grant={viewAccess?.grant ?? null}
+          onRefreshViewAccess={onRefreshViewAccess}
         />
 
         <AuthLoginDialog

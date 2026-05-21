@@ -29,6 +29,7 @@ type UseVirtualGridRowsOptions = {
   showNsfw: boolean;
   releaseId: string | null;
   viewAccess: RunViewAccess | null;
+  onRefreshViewAccess: () => Promise<RunViewAccess | null>;
 };
 
 function buildRowManifestUrl(options: {
@@ -65,6 +66,7 @@ export function useVirtualGridRows({
   showNsfw,
   releaseId,
   viewAccess,
+  onRefreshViewAccess,
 }: UseVirtualGridRowsOptions) {
   const rowCacheRef = useRef<Map<number, CachedRow>>(new Map());
   const rowRequestsRef = useRef<Map<number, AbortController>>(new Map());
@@ -104,19 +106,33 @@ export function useVirtualGridRows({
       rowRequestsRef.current.set(yIndex, controller);
 
       try {
-        const response = await fetch(
-          buildRowManifestUrl({
-            runDir,
-            yIndex,
-            releaseId: rid,
-            showNsfw,
-            viewAccess,
-          }),
-          {
-            signal: controller.signal,
-            cache: "force-cache",
-          },
-        );
+        const fetchRow = (access: RunViewAccess | null) =>
+          fetch(
+            buildRowManifestUrl({
+              runDir,
+              yIndex,
+              releaseId: rid,
+              showNsfw,
+              viewAccess: access,
+            }),
+            {
+              signal: controller.signal,
+              cache: access ? "no-store" : "force-cache",
+            },
+          );
+
+        let response = await fetchRow(viewAccess);
+
+        if (response.status === 403 && viewAccess) {
+          const refreshedAccess = await onRefreshViewAccess();
+          const expectedViewerVariant = showNsfw ? "auth_nsfw" : "auth_sfw";
+          if (
+            refreshedAccess?.release_id === rid &&
+            refreshedAccess.viewer_variant === expectedViewerVariant
+          ) {
+            response = await fetchRow(refreshedAccess);
+          }
+        }
 
         if (response.status === 404) {
           rowCacheRef.current.set(yIndex, {
@@ -201,7 +217,7 @@ export function useVirtualGridRows({
         flushPendingRef.current();
       }
     },
-    [releaseId, runDir, showNsfw, viewAccess],
+    [onRefreshViewAccess, releaseId, runDir, showNsfw, viewAccess],
   );
 
   const requestRow = useCallback(

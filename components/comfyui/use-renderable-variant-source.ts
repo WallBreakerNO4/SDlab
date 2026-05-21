@@ -4,17 +4,20 @@ import { useEffect, useState } from "react";
 
 import {
   loadPrivateImageObjectUrl,
+  PrivateImageLoadError,
   readCachedPrivateImageObjectUrl,
 } from "@/lib/private-image-cache";
 import { privateObjectProxyUrl, publicObjectUrl } from "@/lib/r2-url";
 
 import { getPreferredVariantSource } from "./virtual-grid-utils";
 import type { VariantSources } from "./virtual-grid-types";
+import type { RunViewAccess } from "@/app/models/[runDir]/model-detail-types";
 
 type UseRenderableVariantSourceOptions = {
   variants: VariantSources | null;
   currentUserId: string | null;
   grant: string | null;
+  onRefreshViewAccess: () => Promise<RunViewAccess | null>;
   cacheOnly?: boolean;
 };
 
@@ -22,6 +25,7 @@ export function useRenderableVariantSource({
   variants,
   currentUserId,
   grant,
+  onRefreshViewAccess,
   cacheOnly = false,
 }: UseRenderableVariantSourceOptions) {
   const preferredVariant = getPreferredVariantSource(variants);
@@ -76,11 +80,8 @@ export function useRenderableVariantSource({
 
       try {
         const objectUrl = cacheOnly
-          ? await readCachedPrivateImageObjectUrl(
-              userId,
-              variantCacheKey,
-            )
-            : variant.key
+          ? await readCachedPrivateImageObjectUrl(userId, variantCacheKey)
+          : variant.key
             ? await loadPrivateImageObjectUrl({
                 userId,
                 cacheKey: variantCacheKey,
@@ -102,7 +103,41 @@ export function useRenderableVariantSource({
           src: objectUrl,
           loading: false,
         });
-      } catch {
+      } catch (error) {
+        if (
+          !cacheOnly &&
+          variant.key &&
+          error instanceof PrivateImageLoadError &&
+          error.status === 403
+        ) {
+          try {
+            const refreshedAccess = await onRefreshViewAccess();
+            if (refreshedAccess?.grant && active) {
+              const objectUrl = await loadPrivateImageObjectUrl({
+                userId,
+                cacheKey: variantCacheKey,
+                url: privateObjectProxyUrl(variant.key, refreshedAccess.grant),
+                signal: controller.signal,
+              });
+
+              if (!active) {
+                URL.revokeObjectURL(objectUrl);
+                return;
+              }
+
+              objectUrlToRevoke = objectUrl;
+              setPrivateState({
+                cacheKey: variantCacheKey,
+                src: objectUrl,
+                loading: false,
+              });
+              return;
+            }
+          } catch {
+            // Fall through to the normal failed-image state below.
+          }
+        }
+
         if (!active) {
           return;
         }
@@ -123,7 +158,14 @@ export function useRenderableVariantSource({
         URL.revokeObjectURL(objectUrlToRevoke);
       }
     };
-  }, [cacheKey, cacheOnly, currentUserId, grant, preferredVariant]);
+  }, [
+    cacheKey,
+    cacheOnly,
+    currentUserId,
+    grant,
+    onRefreshViewAccess,
+    preferredVariant,
+  ]);
 
   return {
     src,
