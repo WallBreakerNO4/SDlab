@@ -64,6 +64,9 @@ export function useModelDetailData({
           )
         : null;
 
+      // 防止 cleanup 时 abort 导致的 rejection 成为 unhandled rejection
+      if (accessPromise) void accessPromise.catch(() => {});
+
       const currentResponse = await currentPromise;
 
       if (currentResponse.status === 404) {
