@@ -28,6 +28,8 @@ type VirtualGridPreviewCellProps = {
     preloadedBlurhash: string | null,
   ) => void;
   onThumbLoad: (cacheKey: string) => void;
+  /** Global set of already-loaded image cache keys, persisted across re-renders. */
+  globallyLoadedKeys?: Set<string>;
 };
 
 export function VirtualGridPreviewCell({
@@ -45,6 +47,7 @@ export function VirtualGridPreviewCell({
   onRequireLogin,
   onOpenCellDialog,
   onThumbLoad,
+  globallyLoadedKeys,
 }: VirtualGridPreviewCellProps) {
   const rowCell =
     rowEntry && rowEntry.status === "ready"
@@ -95,6 +98,7 @@ export function VirtualGridPreviewCell({
           locked={isLocked}
           onLockedClick={onRequireLogin}
           onImageLoaded={onThumbLoad}
+          globallyLoadedKeys={globallyLoadedKeys}
         />
       </div>
       <div className="absolute inset-0 bg-foreground/0 transition-colors duration-300 pointer-events-none group-hover/cell:bg-foreground/5" />

@@ -19,6 +19,8 @@ type GridImageProps = {
   /** Callback when the locked overlay is clicked. */
   onLockedClick?: () => void;
   onImageLoaded?: (cacheKey: string) => void;
+  /** Global set of already-loaded image cache keys, persisted across re-renders. */
+  globallyLoadedKeys?: Set<string>;
 };
 
 export function GridImage({
@@ -30,6 +32,7 @@ export function GridImage({
   locked,
   onLockedClick,
   onImageLoaded,
+  globallyLoadedKeys,
 }: GridImageProps) {
   const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
   const preferredVariant = getPreferredVariantSource(thumbVariants);
@@ -39,7 +42,11 @@ export function GridImage({
       currentUserId,
       grant,
     });
-  const isLoaded = src !== null && loadedSrc === src;
+  const isGloballyLoaded =
+    privateCacheKey && globallyLoadedKeys
+      ? globallyLoadedKeys.has(privateCacheKey)
+      : false;
+  const isLoaded = src !== null && (loadedSrc === src || isGloballyLoaded);
 
   if (locked) {
     return (
@@ -108,6 +115,7 @@ export function GridImage({
                 preferredVariant?.cache_key ??
                 null;
               if (cacheKey) {
+                globallyLoadedKeys?.add(cacheKey);
                 onImageLoaded?.(cacheKey);
               }
             }}

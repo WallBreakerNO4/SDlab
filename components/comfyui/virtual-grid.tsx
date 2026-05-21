@@ -45,13 +45,20 @@ import { VirtualGridCellDialog } from "./virtual-grid-cell-dialog";
 import { useVirtualGridLayout } from "./use-virtual-grid-layout";
 import { useVirtualGridRows } from "./use-virtual-grid-rows";
 import { useVirtualGridScroll } from "./use-virtual-grid-scroll";
-import { getPreferredVariantCacheKey, getXLabel, getNonEmptyString } from "./virtual-grid-utils";
+import {
+  buildScrollAnchor,
+  getPreferredVariantCacheKey,
+  getXLabel,
+  getNonEmptyString,
+  resolveScrollOffsetFromAnchor,
+} from "./virtual-grid-utils";
 import { useColumnVisibility } from "./use-column-visibility";
 import type { RunViewAccess } from "@/app/models/[runDir]/model-detail-types";
 import type {
   BlurhashCell,
   RowCell,
   RunGridIndexData,
+  SavedScrollAnchor,
   SelectedCellPreview,
 } from "./virtual-grid-types";
 
@@ -122,10 +129,7 @@ export function VirtualGrid({
     }
   }, [gridToolsOpen]);
 
-  const pendingRestoreRef = useRef<{
-    index: number;
-    offsetRatio: number;
-  } | null>(null);
+  const pendingRestoreRef = useRef<SavedScrollAnchor | null>(null);
 
   const [jumpInputValue, setJumpInputValue] = useState("");
   const jumpInputRef = useRef<HTMLInputElement>(null);
@@ -277,18 +281,17 @@ export function VirtualGrid({
 
   const toggleGridTools = useCallback(
     (nextOpen: boolean) => {
-      const firstVisible = rowVirtualizer.getVirtualItems()[0];
       const scrollElement = scrollElementRef.current;
-      if (firstVisible && scrollElement) {
-        const offsetInRow = scrollElement.scrollTop - firstVisible.start;
-        pendingRestoreRef.current = {
-          index: firstVisible.index,
-          offsetRatio: offsetInRow / rowHeight,
-        };
+      if (scrollElement) {
+        pendingRestoreRef.current = buildScrollAnchor(
+          scrollElement.scrollTop,
+          grid.y_indexes,
+          rowHeight,
+        );
       }
       setGridToolsOpen(nextOpen);
     },
-    [rowVirtualizer, rowHeight],
+    [grid.y_indexes, rowHeight],
   );
 
   const openGridToolsForSearch = useCallback(() => {
@@ -301,15 +304,21 @@ export function VirtualGrid({
     rowVirtualizer.measure();
 
     if (pendingRestoreRef.current) {
-      const { index, offsetRatio } = pendingRestoreRef.current;
+      const anchor = pendingRestoreRef.current;
       pendingRestoreRef.current = null;
 
-      requestAnimationFrame(() => {
-        const targetOffset = index * rowHeight + offsetRatio * rowHeight;
-        rowVirtualizer.scrollToOffset(targetOffset, { align: "start" });
-      });
+      const targetOffset = resolveScrollOffsetFromAnchor(
+        anchor,
+        grid.y_indexes,
+        rowHeight,
+      );
+      if (targetOffset !== null) {
+        requestAnimationFrame(() => {
+          rowVirtualizer.scrollToOffset(targetOffset, { align: "start" });
+        });
+      }
     }
-  }, [rowHeight, rowVirtualizer]);
+  }, [grid.y_indexes, rowHeight, rowVirtualizer, scrollViewportWidth]);
 
   useEffect(() => {
     const yIndexes = grid.y_indexes;
@@ -1022,6 +1031,7 @@ export function VirtualGrid({
                             onRequireLogin={() => setLoginDialogOpen(true)}
                             onOpenCellDialog={openCellDialog}
                             onThumbLoad={markThumbAsLoaded}
+                            globallyLoadedKeys={loadedThumbKeysRef.current}
                           />
                         );
                       })}
