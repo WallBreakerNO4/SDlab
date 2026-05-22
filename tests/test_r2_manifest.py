@@ -27,6 +27,17 @@ def _sample_payload() -> dict[str, object]:
         "run_json": {
             "run_id": "chenkinnoob-xl-rf",
             "created_at": "2025-01-01T00:00:00Z",
+            "selection": {
+                "y_prompt_refs": [
+                    {
+                        "y_index": 0,
+                        "style_key": "nai-styles-table:0",
+                        "collection_id": "nai-styles-table",
+                        "item_index": 0,
+                        "label": "cfg_7.0",
+                    }
+                ]
+            },
         },
         "images": [
             {
@@ -430,6 +441,22 @@ def test_bootstrap_includes_y_labels() -> None:
         y_labels = cast(list[str], release[key]["yLabels"])
         assert len(y_labels) == 1
         assert y_labels[0] == "cfg_7.0"
+
+
+def test_bootstrap_includes_y_prompt_refs() -> None:
+    release = build_view_release(_sample_payload())
+
+    for key in ("bootstrap_sfw", "bootstrap_nsfw"):
+        y_prompt_refs = cast(list[dict[str, object]], release[key]["yPromptRefs"])
+        assert y_prompt_refs == [
+            {
+                "y_index": 0,
+                "style_key": "nai-styles-table:0",
+                "collection_id": "nai-styles-table",
+                "item_index": 0,
+                "label": "cfg_7.0",
+            }
+        ]
 
 
 # ---- x_columns remap ----

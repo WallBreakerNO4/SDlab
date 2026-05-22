@@ -15,9 +15,10 @@ type VirtualGridRowLabelProps = {
   virtualRowIndex: number;
   onCopyRowLabel: (value: string) => void | Promise<void>;
   highlightTerm?: string;
+  styleKey: string | null;
   favorite: StylePromptFavorite | null;
   isFavoritePending: boolean;
-  onToggleFavorite: (value: string) => void | Promise<void>;
+  onToggleFavorite: (value: string, styleKey: string) => void | Promise<void>;
 };
 
 function renderHighlightedText(text: string, term: string | undefined): ReactNode {
@@ -58,6 +59,7 @@ export function VirtualGridRowLabel({
   virtualRowIndex,
   onCopyRowLabel,
   highlightTerm,
+  styleKey,
   favorite,
   isFavoritePending,
   onToggleFavorite,
@@ -83,7 +85,7 @@ export function VirtualGridRowLabel({
               );
             }
 
-            const canFavorite = labelText !== "加载失败";
+            const canFavorite = labelText !== "加载失败" && styleKey !== null;
 
             if (labelText.includes(",")) {
               const parts = labelText
@@ -116,7 +118,9 @@ export function VirtualGridRowLabel({
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        void onToggleFavorite(labelText);
+                        if (styleKey !== null) {
+                          void onToggleFavorite(labelText, styleKey);
+                        }
                       }}
                     >
                       <HugeiconsIcon icon={StarIcon} strokeWidth={2} className="size-3" />
@@ -212,7 +216,9 @@ export function VirtualGridRowLabel({
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      void onToggleFavorite(labelText);
+                      if (styleKey !== null) {
+                        void onToggleFavorite(labelText, styleKey);
+                      }
                     }}
                   >
                     <HugeiconsIcon icon={StarIcon} strokeWidth={2} className="size-3" />

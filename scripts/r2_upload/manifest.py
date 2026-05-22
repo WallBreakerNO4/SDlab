@@ -59,6 +59,12 @@ def build_view_release(payload: Mapping[str, object]) -> dict[str, object]:
         (row["prompt_hash"], row["positive_prompt"]): row for row in prompt_rows
     }
     y_labels = _build_y_labels(y_indexes=y_indexes, images=images)
+    y_prompt_refs = _build_y_prompt_refs(
+        y_indexes=y_indexes,
+        y_labels=y_labels,
+        run_json=run_json,
+        images=images,
+    )
 
     run_detail = _build_run_detail(payload=payload, run_json=run_json, y_indexes=y_indexes)
 
@@ -70,6 +76,7 @@ def build_view_release(payload: Mapping[str, object]) -> dict[str, object]:
         run_detail=run_detail,
         y_indexes=y_indexes,
         y_labels=y_labels,
+        y_prompt_refs=y_prompt_refs,
         images=images,
         prompts_by_key=prompts_by_key,
         visible_columns=visible_columns_sfw,
@@ -79,6 +86,7 @@ def build_view_release(payload: Mapping[str, object]) -> dict[str, object]:
         run_detail=run_detail,
         y_indexes=y_indexes,
         y_labels=y_labels,
+        y_prompt_refs=y_prompt_refs,
         images=images,
         prompts_by_key=prompts_by_key,
         visible_columns=visible_columns_nsfw,
@@ -122,6 +130,7 @@ def build_view_release(payload: Mapping[str, object]) -> dict[str, object]:
         "bootstrap_nsfw": bootstrap_nsfw,
         "row_manifests": row_manifests,
         "prompt_rows": prompt_rows,
+        "y_prompt_refs": y_prompt_refs,
     }
     release_id = _manifest_sha256(release_seed)[:20]
 
@@ -148,6 +157,7 @@ def build_view_release(payload: Mapping[str, object]) -> dict[str, object]:
         "bootstrap_nsfw": bootstrap_nsfw,
         "row_manifests": row_manifests,
         "prompt_rows": prompt_rows,
+        "y_prompt_refs": y_prompt_refs,
     }
 
 
@@ -304,6 +314,102 @@ def _build_y_labels(
     return [labels_by_index.get(y_index, "") for y_index in y_indexes]
 
 
+def _build_y_prompt_refs(
+    *,
+    y_indexes: list[int],
+    y_labels: list[str],
+    run_json: Mapping[str, object],
+    images: Sequence[Mapping[str, object]],
+) -> list[dict[str, object]]:
+    labels_by_index = {
+        y_index: y_labels[index]
+        for index, y_index in enumerate(y_indexes)
+        if index < len(y_labels)
+    }
+    refs_by_index: dict[int, dict[str, object]] = {}
+    source = _run_y_prompt_source(run_json)
+
+    selection = run_json.get("selection")
+    if isinstance(selection, Mapping):
+        for ref in _optional_mapping_list(selection.get("y_prompt_refs")):
+            parsed = _normalize_y_prompt_ref(ref, labels_by_index=labels_by_index)
+            if parsed is not None:
+                parsed.update(source)
+                refs_by_index.setdefault(cast(int, parsed["y_index"]), parsed)
+
+    for image in images:
+        parsed = _normalize_y_prompt_ref(image, labels_by_index=labels_by_index)
+        if parsed is not None:
+            parsed.update(source)
+            refs_by_index.setdefault(cast(int, parsed["y_index"]), parsed)
+
+    return [
+        refs_by_index[y_index]
+        for y_index in y_indexes
+        if y_index in refs_by_index
+    ]
+
+
+def _optional_mapping_list(value: object) -> list[Mapping[str, object]]:
+    if not isinstance(value, list):
+        return []
+    return [cast(Mapping[str, object], item) for item in value if isinstance(item, Mapping)]
+
+
+def _normalize_y_prompt_ref(
+    value: Mapping[str, object],
+    *,
+    labels_by_index: Mapping[int, str],
+) -> dict[str, object] | None:
+    y_index = value.get("y_index")
+    style_key = _optional_non_empty_str(value.get("style_key")) or _optional_non_empty_str(
+        value.get("y_style_key")
+    )
+    collection_id = _optional_non_empty_str(
+        value.get("collection_id")
+    ) or _optional_non_empty_str(value.get("y_collection_id"))
+    item_index = value.get("item_index")
+    if not isinstance(item_index, int) or isinstance(item_index, bool):
+        item_index = value.get("y_item_index")
+
+    if (
+        not isinstance(y_index, int)
+        or isinstance(y_index, bool)
+        or style_key is None
+        or collection_id is None
+        or not isinstance(item_index, int)
+        or isinstance(item_index, bool)
+    ):
+        return None
+
+    label = _optional_non_empty_str(value.get("label")) or labels_by_index.get(y_index, "")
+    return {
+        "y_index": y_index,
+        "style_key": style_key,
+        "collection_id": collection_id,
+        "item_index": item_index,
+        "label": label,
+    }
+
+
+def _run_y_prompt_source(run_json: Mapping[str, object]) -> dict[str, object]:
+    config_snapshot = run_json.get("config_snapshot")
+    if not isinstance(config_snapshot, Mapping):
+        return {}
+    prompts = config_snapshot.get("prompts")
+    if not isinstance(prompts, Mapping):
+        return {}
+
+    result: dict[str, object] = {}
+    y_path = _optional_non_empty_str(prompts.get("y_path"))
+    y_sha256 = _optional_non_empty_str(prompts.get("y_sha256"))
+    if y_path is not None:
+        result["source_y_path"] = y_path
+    if y_sha256 is not None:
+        result["source_y_sha256"] = y_sha256
+    return result
+
+
 def _build_prompt_rows(
     *,
     run_dir: str,
@@ -357,6 +463,7 @@ def _build_bootstrap_manifest(
     run_detail: Mapping[str, object],
     y_indexes: list[int],
     y_labels: list[str],
+    y_prompt_refs: list[dict[str, object]],
     images: Sequence[Mapping[str, object]],
     prompts_by_key: Mapping[tuple[str | None, str], Mapping[str, object]],
     visible_columns: Mapping[str, object],
@@ -433,6 +540,7 @@ def _build_bootstrap_manifest(
         "run": copy.deepcopy(run_detail),
         "xLabels": [_build_x_label(column) for column in cast(list[dict[str, object]], visible_columns["columns"])],
         "yLabels": list(y_labels),
+        "yPromptRefs": copy.deepcopy(y_prompt_refs),
         "x_columns": copy.deepcopy(visible_columns["columns"]),
         "y_indexes": list(y_indexes),
         "prompts": prompts,

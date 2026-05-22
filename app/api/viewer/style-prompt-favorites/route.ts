@@ -1,10 +1,10 @@
-import { createHash } from "node:crypto";
-
 import { isValidRunDir } from "@/lib/comfyui-types";
 import { createSupabaseAuthClient } from "@/lib/supabase-auth";
 import {
+  normalizeStyleKey,
   normalizeStylePromptText,
-  STYLE_PROMPT_MAX_LENGTH,
+  STYLE_PROMPT_KEY_MAX_LENGTH,
+  STYLE_PROMPT_LABEL_MAX_LENGTH,
   type StylePromptFavorite,
 } from "@/lib/style-prompt-favorites";
 
@@ -15,17 +15,19 @@ type FavoriteRow = StylePromptFavorite & {
 };
 
 type CreateFavoriteBody = {
-  prompt_text: string;
+  style_key: string;
+  label: string;
   source_run_dir: string | null;
   source_y_index: number | null;
 };
 
+type RunYPromptRefRow = {
+  style_key: string;
+  label: string;
+};
+
 function jsonError(status: number, message: string): Response {
   return Response.json({ error: message }, { status });
-}
-
-function stylePromptKey(promptText: string): string {
-  return createHash("sha256").update(promptText, "utf8").digest("hex");
 }
 
 function parseCreateBody(value: unknown): CreateFavoriteBody | null {
@@ -34,17 +36,24 @@ function parseCreateBody(value: unknown): CreateFavoriteBody | null {
   }
 
   const candidate = value as {
-    prompt_text?: unknown;
+    style_key?: unknown;
+    label?: unknown;
     source_run_dir?: unknown;
     source_y_index?: unknown;
   };
 
-  if (typeof candidate.prompt_text !== "string") {
+  if (typeof candidate.style_key !== "string" || typeof candidate.label !== "string") {
     return null;
   }
 
-  const promptText = normalizeStylePromptText(candidate.prompt_text);
-  if (!promptText || promptText.length > STYLE_PROMPT_MAX_LENGTH) {
+  const styleKey = normalizeStyleKey(candidate.style_key);
+  const label = normalizeStylePromptText(candidate.label);
+  if (
+    !styleKey ||
+    styleKey.length > STYLE_PROMPT_KEY_MAX_LENGTH ||
+    !label ||
+    label.length > STYLE_PROMPT_LABEL_MAX_LENGTH
+  ) {
     return null;
   }
 
@@ -64,7 +73,8 @@ function parseCreateBody(value: unknown): CreateFavoriteBody | null {
       : null;
 
   return {
-    prompt_text: promptText,
+    style_key: styleKey,
+    label,
     source_run_dir: sourceRunDir,
     source_y_index: sourceYIndex,
   };
@@ -73,8 +83,8 @@ function parseCreateBody(value: unknown): CreateFavoriteBody | null {
 function toFavorite(row: FavoriteRow): StylePromptFavorite {
   return {
     id: row.id,
-    prompt_key: row.prompt_key,
-    prompt_text: row.prompt_text,
+    style_key: row.style_key,
+    label: row.label,
     source_run_dir: row.source_run_dir,
     source_y_index: row.source_y_index,
     created_at: row.created_at,
@@ -98,7 +108,7 @@ export async function GET(): Promise<Response> {
     const { data, error } = await supabase
       .from("user_style_prompt_favorites")
       .select(
-        "id,prompt_key,prompt_text,source_run_dir,source_y_index,created_at,updated_at,last_used_at",
+        "id,style_key,label,source_run_dir,source_y_index,created_at,updated_at,last_used_at",
       )
       .order("last_used_at", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false });
@@ -134,21 +144,43 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const now = new Date().toISOString();
+    let styleKey = body.style_key;
+    let label = body.label;
+
+    if (body.source_run_dir !== null && body.source_y_index !== null) {
+      const { data: refData, error: refError } = await supabase
+        .from("run_y_prompt_refs")
+        .select("style_key,label")
+        .eq("run_dir", body.source_run_dir)
+        .eq("y_index", body.source_y_index)
+        .maybeSingle();
+
+      if (refError) {
+        return jsonError(500, "Failed to save style prompt favorite");
+      }
+
+      const ref = refData as RunYPromptRefRow | null;
+      if (ref) {
+        styleKey = ref.style_key;
+        label = ref.label;
+      }
+    }
+
     const { data, error } = await supabase
       .from("user_style_prompt_favorites")
       .upsert(
         {
           user_id: user.id,
-          prompt_key: stylePromptKey(body.prompt_text),
-          prompt_text: body.prompt_text,
+          style_key: styleKey,
+          label,
           source_run_dir: body.source_run_dir,
           source_y_index: body.source_y_index,
           updated_at: now,
         },
-        { onConflict: "user_id,prompt_key" },
+        { onConflict: "user_id,style_key" },
       )
       .select(
-        "id,prompt_key,prompt_text,source_run_dir,source_y_index,created_at,updated_at,last_used_at",
+        "id,style_key,label,source_run_dir,source_y_index,created_at,updated_at,last_used_at",
       )
       .single();
 

@@ -23,8 +23,9 @@ import {
 } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import {
-  normalizeStylePromptText,
+  normalizeStyleKey,
   type StylePromptFavorite,
+  type YPromptRef,
 } from "@/lib/style-prompt-favorites";
 import { cn } from "@/lib/utils";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -78,11 +79,12 @@ type VirtualGridProps = {
   viewAccess: RunViewAccess | null;
   onRefreshViewAccess: () => Promise<RunViewAccess | null>;
   stylePromptFavorites: StylePromptFavorite[];
-  favoriteByPrompt: Map<string, StylePromptFavorite>;
+  favoriteByStyleKey: Map<string, StylePromptFavorite>;
   isStylePromptFavoritesLoading: boolean;
   pendingStylePromptKeys: Set<string>;
   onCreateStylePromptFavorite: (options: {
-    promptText: string;
+    styleKey: string;
+    label: string;
     sourceYIndex: number | null;
   }) => Promise<StylePromptFavorite>;
   onDeleteStylePromptFavorite: (favorite: StylePromptFavorite) => Promise<void>;
@@ -102,7 +104,7 @@ export function VirtualGrid({
   viewAccess,
   onRefreshViewAccess,
   stylePromptFavorites,
-  favoriteByPrompt,
+  favoriteByStyleKey,
   isStylePromptFavoritesLoading,
   pendingStylePromptKeys,
   onCreateStylePromptFavorite,
@@ -216,25 +218,38 @@ export function VirtualGrid({
     return matches;
   }, [searchQuery, grid.y_labels, grid.y_indexes]);
 
-  const stylePromptMatchesByPrompt = useMemo(() => {
+  const yPromptRefByYIndex = useMemo(() => {
+    const map = new Map<number, YPromptRef>();
+    for (const ref of grid.y_prompt_refs ?? []) {
+      map.set(ref.y_index, ref);
+    }
+    return map;
+  }, [grid.y_prompt_refs]);
+
+  const stylePromptMatchesByStyleKey = useMemo(() => {
     const map = new Map<
       string,
       { rowIndex: number; yIndex: number; label: string }
     >();
-    const yLabels = grid.y_labels ?? [];
-    for (let i = 0; i < yLabels.length; i++) {
-      const label = yLabels[i];
-      if (typeof label !== "string") continue;
-      const key = normalizeStylePromptText(label);
+    const rowIndexByYIndex = new Map<number, number>();
+    for (let i = 0; i < grid.y_indexes.length; i++) {
+      rowIndexByYIndex.set(grid.y_indexes[i] ?? i, i);
+    }
+
+    for (const ref of grid.y_prompt_refs ?? []) {
+      const rowIndex = rowIndexByYIndex.get(ref.y_index);
+      if (rowIndex === undefined) continue;
+      const key = normalizeStyleKey(ref.style_key);
       if (!key || map.has(key)) continue;
+      const label = grid.y_labels?.[rowIndex] || ref.label;
       map.set(key, {
-        rowIndex: i,
-        yIndex: grid.y_indexes[i] ?? i,
+        rowIndex,
+        yIndex: ref.y_index,
         label,
       });
     }
     return map;
-  }, [grid.y_labels, grid.y_indexes]);
+  }, [grid.y_labels, grid.y_indexes, grid.y_prompt_refs]);
 
   const goToMatch = useCallback(
     (delta: number) => {
@@ -491,7 +506,8 @@ export function VirtualGrid({
 
   const toggleStylePromptFavorite = useCallback(
     async (
-      promptText: string,
+      label: string,
+      styleKey: string,
       yIndex: number | null,
       favorite: StylePromptFavorite | null,
     ) => {
@@ -507,7 +523,11 @@ export function VirtualGrid({
           return;
         }
 
-        await onCreateStylePromptFavorite({ promptText, sourceYIndex: yIndex });
+        await onCreateStylePromptFavorite({
+          styleKey,
+          label,
+          sourceYIndex: yIndex,
+        });
         toast.success("已收藏画师串");
       } catch {
         toast.error("收藏更新失败");
@@ -518,8 +538,8 @@ export function VirtualGrid({
 
   const jumpToStylePromptFavorite = useCallback(
     async (favorite: StylePromptFavorite) => {
-      const match = stylePromptMatchesByPrompt.get(
-        normalizeStylePromptText(favorite.prompt_text),
+      const match = stylePromptMatchesByStyleKey.get(
+        normalizeStyleKey(favorite.style_key),
       );
       if (!match) {
         toast.error("当前模型未包含这个画师串");
@@ -537,7 +557,7 @@ export function VirtualGrid({
     [
       onUseStylePromptFavorite,
       scrollToLineNumber,
-      stylePromptMatchesByPrompt,
+      stylePromptMatchesByStyleKey,
       syncUrlHashWithLineNumber,
     ],
   );
@@ -821,14 +841,14 @@ export function VirtualGrid({
                         </CommandEmpty>
                         <CommandGroup>
                           {stylePromptFavorites.map((favorite) => {
-                            const match = stylePromptMatchesByPrompt.get(
-                              normalizeStylePromptText(favorite.prompt_text),
+                            const match = stylePromptMatchesByStyleKey.get(
+                              normalizeStyleKey(favorite.style_key),
                             );
 
                             return (
                               <CommandItem
                                 key={favorite.id}
-                                value={`${favorite.prompt_text} ${favorite.source_run_dir ?? ""}`}
+                                value={`${favorite.label} ${favorite.source_run_dir ?? ""}`}
                                 onSelect={() => {
                                   if (!match) {
                                     toast.error("当前模型未包含这个画师串");
@@ -846,9 +866,7 @@ export function VirtualGrid({
                                   title="取消收藏"
                                   aria-label="取消收藏画师串"
                                   disabled={pendingStylePromptKeys.has(
-                                    normalizeStylePromptText(
-                                      favorite.prompt_text,
-                                    ),
+                                    normalizeStyleKey(favorite.style_key),
                                   )}
                                   onMouseDown={(e) => {
                                     e.preventDefault();
@@ -870,7 +888,7 @@ export function VirtualGrid({
                                 </Button>
                                 <span className="min-w-0 flex-1">
                                   <span className="line-clamp-2 font-mono text-[10px] leading-relaxed">
-                                    {favorite.prompt_text}
+                                    {favorite.label}
                                   </span>
                                   <span className="mt-0.5 block text-[10px] text-muted-foreground/60">
                                     {match
@@ -1015,19 +1033,10 @@ export function VirtualGrid({
                   cachedRow && cachedRow.status === "ready"
                     ? (cachedRow.yValue ?? preloadedYLabel)
                     : preloadedYLabel;
-                const labelText =
-                  cachedRow && cachedRow.status === "ready"
-                    ? (cachedRow.yValue ?? preloadedYLabel) || "-"
-                    : cachedRow && cachedRow.status === "error"
-                      ? preloadedYLabel || "加载失败"
-                      : yLabel;
-                const normalizedLabelText = normalizeStylePromptText(
-                  labelText === "-" || labelText === "加载失败"
-                    ? ""
-                    : labelText,
-                );
-                const stylePromptFavorite = normalizedLabelText
-                  ? (favoriteByPrompt.get(normalizedLabelText) ?? null)
+                const yPromptRef = yPromptRefByYIndex.get(yIndex) ?? null;
+                const styleKey = yPromptRef?.style_key ?? null;
+                const stylePromptFavorite = styleKey
+                  ? (favoriteByStyleKey.get(normalizeStyleKey(styleKey)) ?? null)
                   : null;
 
                 return (
@@ -1052,15 +1061,19 @@ export function VirtualGrid({
                         virtualRowIndex={virtualRow.index}
                         onCopyRowLabel={copyRowLabel}
                         highlightTerm={searchQuery.trim() || undefined}
+                        styleKey={styleKey}
                         favorite={stylePromptFavorite}
                         isFavoritePending={
-                          normalizedLabelText
-                            ? pendingStylePromptKeys.has(normalizedLabelText)
+                          styleKey
+                            ? pendingStylePromptKeys.has(
+                                normalizeStyleKey(styleKey),
+                              )
                             : false
                         }
-                        onToggleFavorite={(value) =>
+                        onToggleFavorite={(value, nextStyleKey) =>
                           toggleStylePromptFavorite(
                             value,
+                            nextStyleKey,
                             yIndex,
                             stylePromptFavorite,
                           )

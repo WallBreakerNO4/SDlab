@@ -373,6 +373,7 @@ def novelai_worker(
                 attempt=plan.attempt,
             )
             record["x_description"] = plan.x_description
+            _apply_plan_y_prompt_ref(record, plan)
             record["local_image_paths"] = local_paths
             record["local_image_path"] = local_paths[0] if local_paths else None
             record["started_at"] = started_at
@@ -399,6 +400,7 @@ def novelai_worker(
                 attempt=plan.attempt,
             )
             record["x_description"] = plan.x_description
+            _apply_plan_y_prompt_ref(record, plan)
             record["started_at"] = started_at
             record["finished_at"] = finished_at
             record["elapsed_ms"] = elapsed_ms
@@ -406,6 +408,21 @@ def novelai_worker(
             return _GenOutcome(record=record, download=None)
 
     return _worker
+
+
+def _apply_plan_y_prompt_ref(record: dict[str, object], plan: Any) -> None:
+    y_prompt_ref = getattr(plan, "y_prompt_ref", None)
+    if not isinstance(y_prompt_ref, dict):
+        return
+    style_key = y_prompt_ref.get("style_key")
+    collection_id = y_prompt_ref.get("collection_id")
+    item_index = y_prompt_ref.get("item_index")
+    if isinstance(style_key, str) and style_key:
+        record["y_style_key"] = style_key
+    if isinstance(collection_id, str) and collection_id:
+        record["y_collection_id"] = collection_id
+    if isinstance(item_index, int) and not isinstance(item_index, bool):
+        record["y_item_index"] = item_index
 
 
 __all__ = [

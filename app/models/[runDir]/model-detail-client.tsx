@@ -138,9 +138,9 @@ export function ModelDetailClientPage({ runDir }: { runDir: string }) {
               viewAccess={viewAccess}
               onRefreshViewAccess={refreshViewAccess}
               stylePromptFavorites={stylePromptFavorites.favorites}
-              favoriteByPrompt={stylePromptFavorites.favoriteByPrompt}
+              favoriteByStyleKey={stylePromptFavorites.favoriteByStyleKey}
               isStylePromptFavoritesLoading={stylePromptFavorites.isLoading}
-              pendingStylePromptKeys={stylePromptFavorites.pendingPromptKeys}
+              pendingStylePromptKeys={stylePromptFavorites.pendingStyleKeys}
               onCreateStylePromptFavorite={stylePromptFavorites.createFavorite}
               onDeleteStylePromptFavorite={stylePromptFavorites.deleteFavorite}
               onUseStylePromptFavorite={stylePromptFavorites.markFavoriteUsed}

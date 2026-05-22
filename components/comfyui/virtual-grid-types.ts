@@ -1,3 +1,5 @@
+import type { YPromptRef } from "@/lib/style-prompt-favorites";
+
 export type ImageVariantSource = {
   bucket: "public" | "private";
   cache_key: string;
@@ -64,6 +66,7 @@ export type RunGridIndexData = {
   x_columns: RunGridXColumn[];
   y_indexes: number[];
   y_labels?: string[];
+  y_prompt_refs?: YPromptRef[];
   prompts: RunPrompt[];
   blurhash_cells: BlurhashCell[];
 };

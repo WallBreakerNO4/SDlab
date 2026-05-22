@@ -2,6 +2,7 @@ import type {
   RunGridIndexData,
   RunGridXColumn,
 } from "@/components/comfyui/virtual-grid";
+import { isYPromptRef } from "@/lib/style-prompt-favorites";
 
 export type ModelDetailSummary = {
   run_id: string;
@@ -124,6 +125,10 @@ export function isRunGridIndexData(value: unknown): value is RunGridIndexData {
   );
   const yLabelsOk =
     value.y_labels === undefined || isStringArray(value.y_labels);
+  const yPromptRefsOk =
+    value.y_prompt_refs === undefined ||
+    (Array.isArray(value.y_prompt_refs) &&
+      value.y_prompt_refs.every(isYPromptRef));
   const promptsOk = (value.prompts as unknown[]).every((prompt) => {
     return (
       isRecord(prompt) &&
@@ -133,7 +138,7 @@ export function isRunGridIndexData(value: unknown): value is RunGridIndexData {
     );
   });
 
-  return xColumnsOk && yIndexesOk && yLabelsOk && promptsOk;
+  return xColumnsOk && yIndexesOk && yLabelsOk && yPromptRefsOk && promptsOk;
 }
 
 export function isCurrentRunView(value: unknown): value is CurrentRunView {

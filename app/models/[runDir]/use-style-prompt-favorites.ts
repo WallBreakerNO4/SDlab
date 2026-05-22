@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   isStylePromptFavoriteListResponse,
   isStylePromptFavoriteResponse,
+  normalizeStyleKey,
   normalizeStylePromptText,
   type StylePromptFavorite,
 } from "@/lib/style-prompt-favorites";
@@ -15,7 +16,8 @@ type UseStylePromptFavoritesOptions = {
 };
 
 type FavoriteCreateOptions = {
-  promptText: string;
+  styleKey: string;
+  label: string;
   sourceYIndex: number | null;
 };
 
@@ -35,7 +37,7 @@ export function useStylePromptFavorites({
   const [favoritesUserId, setFavoritesUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [shouldLoad, setShouldLoad] = useState(false);
-  const [pendingPromptKeys, setPendingPromptKeys] = useState<Set<string>>(
+  const [pendingStyleKeys, setPendingStyleKeys] = useState<Set<string>>(
     () => new Set(),
   );
   const deferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -113,15 +115,15 @@ export function useStylePromptFavorites({
     () => (favoritesUserId === currentUserId ? favorites : []),
     [currentUserId, favorites, favoritesUserId],
   );
-  const visiblePendingPromptKeys = useMemo(
-    () => (currentUserId ? pendingPromptKeys : new Set<string>()),
-    [currentUserId, pendingPromptKeys],
+  const visiblePendingStyleKeys = useMemo(
+    () => (currentUserId ? pendingStyleKeys : new Set<string>()),
+    [currentUserId, pendingStyleKeys],
   );
 
-  const favoriteByPrompt = useMemo(() => {
+  const favoriteByStyleKey = useMemo(() => {
     const map = new Map<string, StylePromptFavorite>();
     for (const favorite of visibleFavorites) {
-      const key = normalizeStylePromptText(favorite.prompt_text);
+      const key = normalizeStyleKey(favorite.style_key);
       if (key) {
         map.set(key, favorite);
       }
@@ -129,10 +131,10 @@ export function useStylePromptFavorites({
     return map;
   }, [visibleFavorites]);
 
-  const setPromptPending = useCallback((promptText: string, pending: boolean) => {
-    const key = normalizeStylePromptText(promptText);
+  const setStyleKeyPending = useCallback((styleKey: string, pending: boolean) => {
+    const key = normalizeStyleKey(styleKey);
     if (!key) return;
-    setPendingPromptKeys((current) => {
+    setPendingStyleKeys((current) => {
       const next = new Set(current);
       if (pending) {
         next.add(key);
@@ -144,20 +146,22 @@ export function useStylePromptFavorites({
   }, []);
 
   const createFavorite = useCallback(
-    async ({ promptText, sourceYIndex }: FavoriteCreateOptions) => {
-      const normalizedPrompt = normalizeStylePromptText(promptText);
-      if (!currentUserId || !normalizedPrompt) {
+    async ({ styleKey, label, sourceYIndex }: FavoriteCreateOptions) => {
+      const normalizedStyleKey = normalizeStyleKey(styleKey);
+      const normalizedLabel = normalizeStylePromptText(label);
+      if (!currentUserId || !normalizedStyleKey || !normalizedLabel) {
         throw new Error("Authentication required");
       }
 
-      setPromptPending(normalizedPrompt, true);
+      setStyleKeyPending(normalizedStyleKey, true);
       try {
         const response = await fetch("/api/viewer/style-prompt-favorites", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           cache: "no-store",
           body: JSON.stringify({
-            prompt_text: normalizedPrompt,
+            style_key: normalizedStyleKey,
+            label: normalizedLabel,
             source_run_dir: runDir,
             source_y_index: sourceYIndex,
           }),
@@ -174,7 +178,7 @@ export function useStylePromptFavorites({
 
         setFavorites((current) => {
           const next = current.filter(
-            (favorite) => favorite.prompt_key !== raw.favorite.prompt_key,
+            (favorite) => favorite.style_key !== raw.favorite.style_key,
           );
           next.unshift(raw.favorite);
           return sortFavorites(next);
@@ -183,10 +187,10 @@ export function useStylePromptFavorites({
 
         return raw.favorite;
       } finally {
-        setPromptPending(normalizedPrompt, false);
+        setStyleKeyPending(normalizedStyleKey, false);
       }
     },
-    [currentUserId, runDir, setPromptPending],
+    [currentUserId, runDir, setStyleKeyPending],
   );
 
   const deleteFavorite = useCallback(
@@ -195,7 +199,7 @@ export function useStylePromptFavorites({
         throw new Error("Authentication required");
       }
 
-      setPromptPending(favorite.prompt_text, true);
+      setStyleKeyPending(favorite.style_key, true);
       try {
         const response = await fetch(
           `/api/viewer/style-prompt-favorites/${encodeURIComponent(favorite.id)}`,
@@ -213,10 +217,10 @@ export function useStylePromptFavorites({
           current.filter((item) => item.id !== favorite.id),
         );
       } finally {
-        setPromptPending(favorite.prompt_text, false);
+        setStyleKeyPending(favorite.style_key, false);
       }
     },
-    [currentUserId, setPromptPending],
+    [currentUserId, setStyleKeyPending],
   );
 
   const markFavoriteUsed = useCallback(
@@ -251,9 +255,9 @@ export function useStylePromptFavorites({
 
   return {
     favorites: visibleFavorites,
-    favoriteByPrompt,
+    favoriteByStyleKey,
     isLoading: Boolean(currentUserId) && isLoading,
-    pendingPromptKeys: visiblePendingPromptKeys,
+    pendingStyleKeys: visiblePendingStyleKeys,
     createFavorite,
     deleteFavorite,
     markFavoriteUsed,

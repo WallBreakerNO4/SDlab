@@ -174,23 +174,36 @@ export function useModelDetailData({
       }
 
       const bootstrapRaw: unknown = await bootstrapResponse.json();
-      if (
-        !isModelDetailResponse(bootstrapRaw) ||
-        !isRunGridIndexData(bootstrapRaw)
-      ) {
-        throw new Error("error");
-      }
-
       // Production bootstrap JSON uses camelCase `yLabels` (ModelDetailResponse).
       // Grid components expect snake_case `y_labels` (RunGridIndexData).
       // Normalize here so downstream consumers don't need dual-field handling.
       if (
-        !bootstrapRaw.y_labels &&
+        typeof bootstrapRaw === "object" &&
+        bootstrapRaw !== null &&
+        !Array.isArray(bootstrapRaw) &&
+        !("y_labels" in bootstrapRaw) &&
         Array.isArray((bootstrapRaw as Record<string, unknown>).yLabels)
       ) {
         (bootstrapRaw as { y_labels?: string[] }).y_labels = (
           bootstrapRaw as Record<string, unknown>
         ).yLabels as string[];
+      }
+      if (
+        typeof bootstrapRaw === "object" &&
+        bootstrapRaw !== null &&
+        !Array.isArray(bootstrapRaw) &&
+        !("y_prompt_refs" in bootstrapRaw) &&
+        Array.isArray((bootstrapRaw as Record<string, unknown>).yPromptRefs)
+      ) {
+        (bootstrapRaw as { y_prompt_refs?: unknown[] }).y_prompt_refs = (
+          bootstrapRaw as Record<string, unknown>
+        ).yPromptRefs as unknown[];
+      }
+      if (
+        !isModelDetailResponse(bootstrapRaw) ||
+        !isRunGridIndexData(bootstrapRaw)
+      ) {
+        throw new Error("error");
       }
 
       if (abortController.signal.aborted) return;

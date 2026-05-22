@@ -155,6 +155,8 @@ class _InMemorySupabaseClient:
             "run_grid_item_snapshots": {},
             "run_grid_cells": {},
             "run_view_index": {},
+            "run_prompts": {},
+            "run_y_prompt_refs": {},
         }
         self._next_id = {
             "runs": 1,
