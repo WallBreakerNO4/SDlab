@@ -69,7 +69,7 @@ def _render_weighted_tags(tags: object) -> str:
 
     if not tokens:
         return ""
-    return ",".join(tokens) + ","
+    return ", ".join(tokens) + ", "
 
 
 def _render_weighted_tag(tag: str, weight: float) -> str:
@@ -301,7 +301,7 @@ def _render_y_weighted_tags(
 
     if not tokens:
         return ""
-    return ",".join(tokens) + ","
+    return ", ".join(tokens) + ", "
 
 
 def _render_novelai_weighted_tags(tags: object) -> str:
@@ -318,7 +318,7 @@ def _render_novelai_weighted_tags(tags: object) -> str:
 
     if not tokens:
         return ""
-    return ",".join(tokens) + ","
+    return ", ".join(tokens) + ", "
 
 
 def read_y_rows_for_novelai(path: str | Path) -> list[dict[str, str]]:
@@ -389,8 +389,7 @@ def render_positive_prompt(
         segment = segments[key].strip()
         if not segment:
             continue
-        if not segment.endswith(","):
-            segment = f"{segment},"
+        segment = segment.rstrip(", ").rstrip() + ", "
         rendered.append(segment)
     return "".join(rendered)
 

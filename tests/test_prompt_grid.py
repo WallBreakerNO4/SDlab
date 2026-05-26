@@ -58,8 +58,8 @@ def test_read_x_rows_maps_real_columns_and_ignores_trailing_empty_column():
         "general",
         X_INFO_TYPE_KEY,
     }
-    assert first["gender"] == "1girl,"
-    assert first["characters"] == "amiya \\(arknights\\),"
+    assert first["gender"] == "1girl, "
+    assert first["characters"] == "amiya \\(arknights\\), "
     assert first[X_INFO_TYPE_KEY] == "normal"
 
 
@@ -113,7 +113,7 @@ def test_render_positive_prompt_template_and_segment_rules():
 
     rendered = render_positive_prompt(x_row, " artist-name ", " masterpiece, ")
 
-    assert rendered == "masterpiece,1girl,arknights,safe,artist-name,solo, smiling,"
+    assert rendered == "masterpiece, 1girl, arknights, safe, artist-name, solo, smiling, "
 
 
 def test_normalize_prompt_whitespace_and_comma_rules_keep_case():
