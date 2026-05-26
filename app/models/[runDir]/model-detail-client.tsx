@@ -27,7 +27,6 @@ import {
 import { ModelDetailHeader } from "./model-detail-header";
 import { GridSkeleton, SummarySkeleton } from "./model-detail-skeletons";
 import { useModelDetailData } from "./use-model-detail-data";
-import { useStylePromptFavorites } from "./use-style-prompt-favorites";
 
 export function ModelDetailClientPage({ runDir }: { runDir: string }) {
   const { user } = useAuth();
@@ -40,13 +39,10 @@ export function ModelDetailClientPage({ runDir }: { runDir: string }) {
     gridData,
     currentView,
     viewAccess,
+    refreshViewAccess,
   } = useModelDetailData({
     runDir,
     showNsfw,
-    currentUserId: user?.id ?? null,
-  });
-  const stylePromptFavorites = useStylePromptFavorites({
-    runDir,
     currentUserId: user?.id ?? null,
   });
 
@@ -128,20 +124,14 @@ export function ModelDetailClientPage({ runDir }: { runDir: string }) {
         {isGridReady ? (
           <div className="min-h-0 flex-1">
             <VirtualGrid
-              key={`${runDir}:${currentView?.release_id ?? "no-release"}:${showNsfw ? "nsfw" : "sfw"}:${viewAccess?.viewer_variant ?? "public"}:${viewAccess?.grant ?? "public"}`}
+              key={`${runDir}:${currentView?.release_id ?? "no-release"}:${showNsfw ? "nsfw" : "sfw"}:${viewAccess?.viewer_variant ?? "public"}`}
               runDir={runDir}
               grid={gridData}
               blurhashMap={blurhashMap}
               showNsfw={showNsfw}
               currentView={currentView}
               viewAccess={viewAccess}
-              stylePromptFavorites={stylePromptFavorites.favorites}
-              favoriteByPrompt={stylePromptFavorites.favoriteByPrompt}
-              isStylePromptFavoritesLoading={stylePromptFavorites.isLoading}
-              pendingStylePromptKeys={stylePromptFavorites.pendingPromptKeys}
-              onCreateStylePromptFavorite={stylePromptFavorites.createFavorite}
-              onDeleteStylePromptFavorite={stylePromptFavorites.deleteFavorite}
-              onUseStylePromptFavorite={stylePromptFavorites.markFavoriteUsed}
+              onRefreshViewAccess={refreshViewAccess}
             />
           </div>
         ) : null}

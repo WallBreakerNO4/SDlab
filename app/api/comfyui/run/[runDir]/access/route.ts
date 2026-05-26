@@ -78,13 +78,14 @@ export async function GET(
     }
 
     const viewerVariant = readViewerVariant(request);
+    const expiresAt = Math.floor(Date.now() / 1000) + 60 * 15;
     const grant = createRunMediaGrant({
       sub: user.id,
       run_dir: runDir,
       release_id: row.release_id,
       viewer_variant: viewerVariant,
       media_access_version: row.media_access_version,
-      exp: Math.floor(Date.now() / 1000) + 60 * 15,
+      exp: expiresAt,
     });
 
     return Response.json({
@@ -92,6 +93,7 @@ export async function GET(
       release_id: row.release_id,
       viewer_variant: viewerVariant,
       grant,
+      expires_at: expiresAt,
     });
   } catch (error) {
     console.error("[api/comfyui/run/access]", error);

@@ -1050,7 +1050,13 @@ def estimate_upload_index_records(payload: Mapping[str, object]) -> int:
         x_index = int_with_default(image, "x_index", default=0)
         y_index = int_with_default(image, "y_index", default=0)
         unique_grid_cells.add((x_index, y_index))
-    return 4 + len(prompts) + len(images) + len(images) + len(unique_grid_cells)
+    return (
+        4
+        + len(prompts)
+        + len(images)
+        + len(images)
+        + len(unique_grid_cells)
+    )
 
 
 def _default_client_factory(

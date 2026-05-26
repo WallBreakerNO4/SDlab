@@ -12,6 +12,9 @@ Y_PROMPT_SCHEMA = "prompt-y-table/v3"
 Y_TAG_TYPE_GENERAL = "general"
 Y_TAG_TYPE_ARTISTS = "artists"
 Y_TAG_TYPES = {Y_TAG_TYPE_GENERAL, Y_TAG_TYPE_ARTISTS}
+Y_STYLE_KEY = "_y_style_key"
+Y_COLLECTION_ID = "_y_collection_id"
+Y_ITEM_INDEX = "_y_item_index"
 ARTIST_WEIGHT_PROFILE_IDENTITY = "identity"
 ARTIST_WEIGHT_PROFILE_SQUARE = "square"
 ARTIST_WEIGHT_PROFILES = {
@@ -66,7 +69,7 @@ def _render_weighted_tags(tags: object) -> str:
 
     if not tokens:
         return ""
-    return ",".join(tokens) + ","
+    return ", ".join(tokens) + ", "
 
 
 def _render_weighted_tag(tag: str, weight: float) -> str:
@@ -153,7 +156,7 @@ def read_x_descriptions(path: str | Path) -> list[dict[str, str]]:
 
 
 def _load_y_items(path: str | Path) -> list[dict[str, object]]:
-    payload_obj = cast(object, yaml.safe_load(Path(path).read_text(encoding="utf-8")))
+    payload_obj = _load_y_payload(path)
     if not isinstance(payload_obj, dict):
         raise ValueError("Y prompt 资产顶层必须为对象")
 
@@ -189,6 +192,46 @@ def _load_y_items(path: str | Path) -> list[dict[str, object]]:
 
         result.append(item)
     return result
+
+
+def _load_y_payload(path: str | Path) -> object:
+    return cast(object, yaml.safe_load(Path(path).read_text(encoding="utf-8")))
+
+
+def _y_collection_id(path: str | Path, payload: Mapping[str, object]) -> str:
+    raw_collection_id = payload.get("collection_id")
+    if isinstance(raw_collection_id, str):
+        normalized = _normalize_collection_id(raw_collection_id)
+        if normalized:
+            return normalized
+
+    stem = Path(path).stem
+    normalized_stem = _normalize_collection_id(stem)
+    return normalized_stem or "y-prompts"
+
+
+def _normalize_collection_id(value: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "-", value.strip().lower())
+    return normalized.strip("-")
+
+
+def _y_identity_fields(
+    *,
+    collection_id: str,
+    item: Mapping[str, object],
+) -> dict[str, str]:
+    info_obj = item.get("info")
+    info = cast(Mapping[str, object], info_obj) if isinstance(info_obj, Mapping) else {}
+    item_index = info.get("index")
+    if not isinstance(item_index, int) or isinstance(item_index, bool):
+        return {}
+
+    item_index_text = str(item_index)
+    return {
+        Y_COLLECTION_ID: collection_id,
+        Y_ITEM_INDEX: item_index_text,
+        Y_STYLE_KEY: f"{collection_id}:{item_index_text}",
+    }
 
 
 def _validated_y_tags(tags: object) -> list[tuple[str, float, str]]:
@@ -258,7 +301,7 @@ def _render_y_weighted_tags(
 
     if not tokens:
         return ""
-    return ",".join(tokens) + ","
+    return ", ".join(tokens) + ", "
 
 
 def _render_novelai_weighted_tags(tags: object) -> str:
@@ -275,15 +318,26 @@ def _render_novelai_weighted_tags(tags: object) -> str:
 
     if not tokens:
         return ""
-    return ",".join(tokens) + ","
+    return ", ".join(tokens) + ", "
 
 
 def read_y_rows_for_novelai(path: str | Path) -> list[dict[str, str]]:
     """Read Y-axis data and output NovelAI native format."""
     rows: list[dict[str, str]] = []
 
+    payload_obj = _load_y_payload(path)
+    if not isinstance(payload_obj, Mapping):
+        raise ValueError("Y prompt 资产顶层必须为对象")
+    payload = cast(Mapping[str, object], payload_obj)
+    collection_id = _y_collection_id(path, payload)
+
     for item in _load_y_items(path):
-        rows.append({"y": _render_novelai_weighted_tags(item.get("tags", []))})
+        rows.append(
+            {
+                "y": _render_novelai_weighted_tags(item.get("tags", [])),
+                **_y_identity_fields(collection_id=collection_id, item=item),
+            }
+        )
     return rows
 
 
@@ -298,6 +352,12 @@ def read_y_rows(
 
     _ = artists_column
 
+    payload_obj = _load_y_payload(path)
+    if not isinstance(payload_obj, Mapping):
+        raise ValueError("Y prompt 资产顶层必须为对象")
+    payload = cast(Mapping[str, object], payload_obj)
+    collection_id = _y_collection_id(path, payload)
+
     for item in _load_y_items(path):
         rows.append(
             {
@@ -305,7 +365,8 @@ def read_y_rows(
                     item.get("tags", []),
                     artist_prefix=artist_prefix,
                     artist_weight_profile=artist_weight_profile,
-                )
+                ),
+                **_y_identity_fields(collection_id=collection_id, item=item),
             }
         )
     return rows
@@ -328,8 +389,7 @@ def render_positive_prompt(
         segment = segments[key].strip()
         if not segment:
             continue
-        if not segment.endswith(","):
-            segment = f"{segment},"
+        segment = segment.rstrip(", ").rstrip() + ", "
         rendered.append(segment)
     return "".join(rendered)
 

@@ -27,6 +27,17 @@ def _sample_payload() -> dict[str, object]:
         "run_json": {
             "run_id": "chenkinnoob-xl-rf",
             "created_at": "2025-01-01T00:00:00Z",
+            "selection": {
+                "y_prompt_refs": [
+                    {
+                        "y_index": 0,
+                        "style_key": "nai-styles-table:0",
+                        "collection_id": "nai-styles-table",
+                        "item_index": 0,
+                        "label": "cfg_7.0",
+                    }
+                ]
+            },
         },
         "images": [
             {

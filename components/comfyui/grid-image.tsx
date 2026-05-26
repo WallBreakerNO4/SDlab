@@ -7,6 +7,7 @@ import { useRenderableVariantSource } from "./use-renderable-variant-source";
 import { getPreferredVariantSource } from "./virtual-grid-utils";
 
 import type { VariantSources } from "./virtual-grid";
+import type { RunViewAccess } from "@/app/models/[runDir]/model-detail-types";
 
 type GridImageProps = {
   thumbVariants: VariantSources | null;
@@ -14,11 +15,14 @@ type GridImageProps = {
   alt: string;
   currentUserId: string | null;
   grant: string | null;
+  onRefreshViewAccess: () => Promise<RunViewAccess | null>;
   /** When true, show only the blurhash with a lock overlay instead of the real image. */
   locked?: boolean;
   /** Callback when the locked overlay is clicked. */
   onLockedClick?: () => void;
   onImageLoaded?: (cacheKey: string) => void;
+  /** Global set of already-loaded image cache keys, persisted across re-renders. */
+  globallyLoadedKeys?: Set<string>;
 };
 
 export function GridImage({
@@ -27,9 +31,11 @@ export function GridImage({
   alt,
   currentUserId,
   grant,
+  onRefreshViewAccess,
   locked,
   onLockedClick,
   onImageLoaded,
+  globallyLoadedKeys,
 }: GridImageProps) {
   const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
   const preferredVariant = getPreferredVariantSource(thumbVariants);
@@ -38,8 +44,13 @@ export function GridImage({
       variants: thumbVariants,
       currentUserId,
       grant,
+      onRefreshViewAccess,
     });
-  const isLoaded = src !== null && loadedSrc === src;
+  const isGloballyLoaded =
+    privateCacheKey && globallyLoadedKeys
+      ? globallyLoadedKeys.has(privateCacheKey)
+      : false;
+  const isLoaded = src !== null && (loadedSrc === src || isGloballyLoaded);
 
   if (locked) {
     return (
@@ -108,6 +119,7 @@ export function GridImage({
                 preferredVariant?.cache_key ??
                 null;
               if (cacheKey) {
+                globallyLoadedKeys?.add(cacheKey);
                 onImageLoaded?.(cacheKey);
               }
             }}

@@ -69,7 +69,6 @@ def _render_prompt_by_template(
         segment = key_map[key].strip()
         if not segment:
             continue
-        if not segment.endswith(","):
-            segment = f"{segment},"
+        segment = segment.rstrip(", ").rstrip() + ", "
         rendered.append(segment)
     return "".join(rendered)

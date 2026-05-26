@@ -41,6 +41,7 @@ export type RunViewAccess = {
   release_id: string;
   viewer_variant: "auth_sfw" | "auth_nsfw";
   grant: string;
+  expires_at: number;
 };
 
 export type LoadState = "loading" | "ready" | "not-found" | "error";
@@ -152,6 +153,8 @@ export function isRunViewAccess(value: unknown): value is RunViewAccess {
     typeof value.run_dir === "string" &&
     typeof value.release_id === "string" &&
     typeof value.grant === "string" &&
+    typeof value.expires_at === "number" &&
+    Number.isFinite(value.expires_at) &&
     (value.viewer_variant === "auth_sfw" || value.viewer_variant === "auth_nsfw")
   );
 }

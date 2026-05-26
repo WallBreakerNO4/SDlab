@@ -1,5 +1,6 @@
 import { GridImage } from "./grid-image";
 import { pickBestVariants } from "./virtual-grid-utils";
+import type { RunViewAccess } from "@/app/models/[runDir]/model-detail-types";
 import type {
   BlurhashCell,
   CachedRow,
@@ -18,6 +19,7 @@ type VirtualGridPreviewCellProps = {
   isAuthenticated: boolean;
   currentUserId: string | null;
   grant: string | null;
+  onRefreshViewAccess: () => Promise<RunViewAccess | null>;
   onRequireLogin: () => void;
   onOpenCellDialog: (
     cell: RowCell,
@@ -28,6 +30,8 @@ type VirtualGridPreviewCellProps = {
     preloadedBlurhash: string | null,
   ) => void;
   onThumbLoad: (cacheKey: string) => void;
+  /** Global set of already-loaded image cache keys, persisted across re-renders. */
+  globallyLoadedKeys?: Set<string>;
 };
 
 export function VirtualGridPreviewCell({
@@ -42,9 +46,11 @@ export function VirtualGridPreviewCell({
   isAuthenticated,
   currentUserId,
   grant,
+  onRefreshViewAccess,
   onRequireLogin,
   onOpenCellDialog,
   onThumbLoad,
+  globallyLoadedKeys,
 }: VirtualGridPreviewCellProps) {
   const rowCell =
     rowEntry && rowEntry.status === "ready"
@@ -92,9 +98,11 @@ export function VirtualGridPreviewCell({
           }
           currentUserId={currentUserId}
           grant={grant}
+          onRefreshViewAccess={onRefreshViewAccess}
           locked={isLocked}
           onLockedClick={onRequireLogin}
           onImageLoaded={onThumbLoad}
+          globallyLoadedKeys={globallyLoadedKeys}
         />
       </div>
       <div className="absolute inset-0 bg-foreground/0 transition-colors duration-300 pointer-events-none group-hover/cell:bg-foreground/5" />

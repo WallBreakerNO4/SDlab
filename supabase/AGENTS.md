@@ -19,16 +19,16 @@
 
 ## 约定（本目录特有）
 
-- 本目录所有 Supabase CLI 命令统一直接使用 `supabase ...`。
-- 迁移文件用 `supabase migration new <name>` 生成；不要手动创建/重命名迁移文件
+- 本目录所有 Supabase CLI 命令统一使用 `pnpm dlx supabase ...`。
+- 迁移文件用 `pnpm dlx supabase migration new <name>` 生成；不要手动创建/重命名迁移文件
 - 迁移必须幂等：用 `CREATE TABLE IF NOT EXISTS`、`DO $$ ... $$` 等模式
 - RLS 策略：所有表默认启用 RLS；新表必须附带明确的 policy
 - 不要在迁移文件中硬编码凭证或环境特定值
-- 本地重置：`supabase db reset` 会依次执行所有 migrations + seed.sql
+- 本地重置：`pnpm dlx supabase db reset` 会依次执行所有 migrations + seed.sql
 
 ## 反模式
 
 - 不要直接修改已提交的迁移文件内容（如需修改则新建迁移）
 - 不要在迁移中使用 `DROP TABLE` 等破坏性操作，除非有明确的数据迁移计划
 - 不要把 `.temp/` 目录下的内容提交到版本控制
-- 不要混用 `supabase ...`、`pnpm dlx supabase ...` 与 `npx supabase ...`；本仓库以直接执行 `supabase` 为准
+- 本仓库统一使用 `pnpm dlx supabase ...` 运行 Supabase 命令，不要混用其他方式

@@ -11,6 +11,8 @@ from time import monotonic, sleep
 from typing import Any, Callable, cast
 import uuid
 
+from scripts.generation.prompt_grid import Y_COLLECTION_ID, Y_ITEM_INDEX, Y_STYLE_KEY
+
 
 LOG = logging.getLogger(__name__)
 
@@ -37,6 +39,7 @@ class _CellPlan:
     save_image_prefix: str
     x_description: dict[str, str]
     attempt: int = 1
+    y_prompt_ref: dict[str, object] | None = None
 
 
 @dataclass(slots=True)
@@ -203,6 +206,7 @@ class GenerationCoordinator:
             y_index = y_item.index
             x_row = x_item.value
             y_value = y_item.value.get("y", "")
+            y_prompt_ref = _extract_y_prompt_ref(y_item)
 
             positive_prompt = self.render_prompt(self.args.template, x_row, y_value)
             prompt_hash = self.compute_prompt_hash(positive_prompt)
@@ -235,6 +239,7 @@ class GenerationCoordinator:
                     attempt=skip_attempt,
                 )
                 record["skip_reason"] = "resume_hit"
+                _apply_y_prompt_ref(record, y_prompt_ref)
                 record["x_description"] = self._get_x_description(x_index)
                 record["local_image_path"] = self.extract_local_image_path(
                     resume_record
@@ -269,6 +274,7 @@ class GenerationCoordinator:
                     attempt=skip_attempt,
                 )
                 record["skip_reason"] = "dry_run"
+                _apply_y_prompt_ref(record, y_prompt_ref)
                 record["x_description"] = self._get_x_description(x_index)
                 self._write_record(record)
                 continue
@@ -299,6 +305,7 @@ class GenerationCoordinator:
                     x_row,
                     seed,
                 ),
+                y_prompt_ref=y_prompt_ref,
                 workflow_hash=self.workflow_hash,
                 save_image_prefix=save_image_prefix,
                 x_description=self._get_x_description(x_index),
@@ -519,6 +526,7 @@ def _worker_submit_and_wait(
             attempt=plan.attempt,
         )
         record["x_description"] = plan.x_description
+        _apply_y_prompt_ref(record, plan.y_prompt_ref)
         record["comfyui_prompt_id"] = prompt_id
         record["started_at"] = started_at
         record["finished_at"] = finished_at
@@ -581,6 +589,7 @@ def _worker_fetch_and_download(
             attempt=plan.attempt,
         )
         record["x_description"] = plan.x_description
+        _apply_y_prompt_ref(record, plan.y_prompt_ref)
         record["comfyui_prompt_id"] = prompt_id
         record["remote_images"] = remote_images
         record["local_image_paths"] = local_image_paths
@@ -607,6 +616,7 @@ def _worker_fetch_and_download(
             attempt=plan.attempt,
         )
         record["x_description"] = plan.x_description
+        _apply_y_prompt_ref(record, plan.y_prompt_ref)
         record["comfyui_prompt_id"] = prompt_id
         record["remote_images"] = remote_images
         record["local_image_paths"] = local_image_paths
@@ -639,6 +649,46 @@ def _fetch_remote_images_with_retry(
         if monotonic() >= deadline:
             return []
         sleep(0.25)
+
+
+def _extract_y_prompt_ref(y_item: Any) -> dict[str, object] | None:
+    value = getattr(y_item, "value", None)
+    if not isinstance(value, dict):
+        return None
+
+    style_key = value.get(Y_STYLE_KEY)
+    collection_id = value.get(Y_COLLECTION_ID)
+    item_index_raw = value.get(Y_ITEM_INDEX)
+    label = value.get("y")
+    if (
+        not isinstance(style_key, str)
+        or not style_key.strip()
+        or not isinstance(collection_id, str)
+        or not collection_id.strip()
+        or not isinstance(item_index_raw, str)
+        or not item_index_raw.isdigit()
+    ):
+        return None
+
+    ref: dict[str, object] = {
+        "style_key": style_key.strip(),
+        "collection_id": collection_id.strip(),
+        "item_index": int(item_index_raw),
+    }
+    if isinstance(label, str):
+        ref["label"] = label
+    return ref
+
+
+def _apply_y_prompt_ref(
+    record: dict[str, object],
+    y_prompt_ref: dict[str, object] | None,
+) -> None:
+    if y_prompt_ref is None:
+        return
+    record["y_style_key"] = y_prompt_ref["style_key"]
+    record["y_collection_id"] = y_prompt_ref["collection_id"]
+    record["y_item_index"] = y_prompt_ref["item_index"]
 
 
 def _build_local_image_paths(

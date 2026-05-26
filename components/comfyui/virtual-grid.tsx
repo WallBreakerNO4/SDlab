@@ -7,32 +7,23 @@ import { toast } from "sonner";
 import { AuthLoginDialog } from "@/components/auth-login-dialog";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  normalizeStylePromptText,
-  type StylePromptFavorite,
-} from "@/lib/style-prompt-favorites";
+import { cn } from "@/lib/utils";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Search01Icon,
   ArrowUp01Icon,
   ArrowDown01Icon,
   ArrowMoveUpRightIcon,
-  StarIcon,
   Cancel01Icon,
+  Settings02Icon,
+  LayoutThreeColumnIcon,
 } from "@hugeicons/core-free-icons";
 
 import { VirtualGridPreviewCell } from "./virtual-grid-preview-cell";
@@ -41,12 +32,20 @@ import { VirtualGridCellDialog } from "./virtual-grid-cell-dialog";
 import { useVirtualGridLayout } from "./use-virtual-grid-layout";
 import { useVirtualGridRows } from "./use-virtual-grid-rows";
 import { useVirtualGridScroll } from "./use-virtual-grid-scroll";
-import { getPreferredVariantCacheKey } from "./virtual-grid-utils";
+import {
+  buildScrollAnchor,
+  getPreferredVariantCacheKey,
+  getXLabel,
+  getNonEmptyString,
+  resolveScrollOffsetFromAnchor,
+} from "./virtual-grid-utils";
+import { useColumnVisibility } from "./use-column-visibility";
 import type { RunViewAccess } from "@/app/models/[runDir]/model-detail-types";
 import type {
   BlurhashCell,
   RowCell,
   RunGridIndexData,
+  SavedScrollAnchor,
   SelectedCellPreview,
 } from "./virtual-grid-types";
 
@@ -64,21 +63,12 @@ type VirtualGridProps = {
   showNsfw: boolean;
   currentView: { release_id: string } | null;
   viewAccess: RunViewAccess | null;
-  stylePromptFavorites: StylePromptFavorite[];
-  favoriteByPrompt: Map<string, StylePromptFavorite>;
-  isStylePromptFavoritesLoading: boolean;
-  pendingStylePromptKeys: Set<string>;
-  onCreateStylePromptFavorite: (options: {
-    promptText: string;
-    sourceYIndex: number | null;
-  }) => Promise<StylePromptFavorite>;
-  onDeleteStylePromptFavorite: (
-    favorite: StylePromptFavorite,
-  ) => Promise<void>;
-  onUseStylePromptFavorite: (favorite: StylePromptFavorite) => Promise<void>;
+  onRefreshViewAccess: () => Promise<RunViewAccess | null>;
 };
 
 const DEV_IMAGE_DOM_CAP_NOTE = 300;
+const PENDING_RESTORE_MAX_FRAMES = 8;
+const SCROLL_OFFSET_EPSILON = 1;
 
 export function VirtualGrid({
   runDir,
@@ -87,13 +77,7 @@ export function VirtualGrid({
   showNsfw,
   currentView,
   viewAccess,
-  stylePromptFavorites,
-  favoriteByPrompt,
-  isStylePromptFavoritesLoading,
-  pendingStylePromptKeys,
-  onCreateStylePromptFavorite,
-  onDeleteStylePromptFavorite,
-  onUseStylePromptFavorite,
+  onRefreshViewAccess,
 }: VirtualGridProps) {
   "use no memo";
 
@@ -103,31 +87,69 @@ export function VirtualGrid({
   const [selectedCell, setSelectedCell] = useState<SelectedCellPreview | null>(
     null,
   );
-  const { user } = useAuth();
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
-  const [isJumpInputOpen, setIsJumpInputOpen] = useState(false);
+  const { user } = useAuth();
+  const [gridToolsOpen, setGridToolsOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("sd-style-lab:grid-tools-open") === "true";
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(
+        "sd-style-lab:grid-tools-open",
+        String(gridToolsOpen),
+      );
+    }
+  }, [gridToolsOpen]);
+
+  const pendingRestoreRef = useRef<SavedScrollAnchor | null>(null);
+  const suppressScrollAnchorPersistRef = useRef(false);
+
   const [jumpInputValue, setJumpInputValue] = useState("");
   const jumpInputRef = useRef<HTMLInputElement>(null);
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeMatchIndex, setActiveMatchIndex] = useState(-1);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const [favoritesPopoverOpen, setFavoritesPopoverOpen] = useState(false);
 
   const { rowCacheRef, rowCacheVersion, requestRow } = useVirtualGridRows({
     runDir,
     showNsfw,
     releaseId: currentView?.release_id ?? null,
     viewAccess,
+    onRefreshViewAccess,
   });
+
+  const { hiddenColumns, hasHiddenColumns, toggleColumn, showAll, hideAll } =
+    useColumnVisibility({ runDir, totalColumns: grid.x_columns.length });
+
+  const visibleXColumns = useMemo(() => {
+    return grid.x_columns
+      .map((col, originalIndex) => {
+        const label = getXLabel(col);
+        const type = getNonEmptyString(col.type) ?? "x";
+        return {
+          originalIndex,
+          key: `${originalIndex}:${type}:${label}`,
+          label,
+          type,
+        };
+      })
+      .filter((col) => !hiddenColumns.has(col.originalIndex));
+  }, [grid.x_columns, hiddenColumns]);
+
   const layout = useVirtualGridLayout({
     scrollElementRef,
     grid,
     blurhashMap,
     rowCacheRef,
     rowCacheVersion,
+    xHeaders: visibleXColumns.map((col) => ({
+      key: col.key,
+      label: col.label,
+    })),
   });
-  const { rowHeight, gridTemplateColumns, gridMinWidth, scrollViewportWidth, xHeaders } =
+  const { rowHeight, gridTemplateColumns, gridMinWidth, scrollViewportWidth } =
     layout;
 
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -146,6 +168,7 @@ export function VirtualGrid({
       rowHeight,
       runDir,
       scrollViewportWidth,
+      suppressPersistRef: suppressScrollAnchorPersistRef,
     });
 
   const searchMatches = useMemo(() => {
@@ -162,26 +185,6 @@ export function VirtualGrid({
     }
     return matches;
   }, [searchQuery, grid.y_labels, grid.y_indexes]);
-
-  const stylePromptMatchesByPrompt = useMemo(() => {
-    const map = new Map<
-      string,
-      { rowIndex: number; yIndex: number; label: string }
-    >();
-    const yLabels = grid.y_labels ?? [];
-    for (let i = 0; i < yLabels.length; i++) {
-      const label = yLabels[i];
-      if (typeof label !== "string") continue;
-      const key = normalizeStylePromptText(label);
-      if (!key || map.has(key)) continue;
-      map.set(key, {
-        rowIndex: i,
-        yIndex: grid.y_indexes[i] ?? i,
-        label,
-      });
-    }
-    return map;
-  }, [grid.y_labels, grid.y_indexes]);
 
   const goToMatch = useCallback(
     (delta: number) => {
@@ -225,10 +228,107 @@ export function VirtualGrid({
   const virtualRows = rowVirtualizer.getVirtualItems();
   const isDevEnv = process.env.NODE_ENV !== "production";
 
+  const toggleGridTools = useCallback(
+    (nextOpen: boolean) => {
+      const scrollElement = scrollElementRef.current;
+      if (scrollElement) {
+        pendingRestoreRef.current = buildScrollAnchor(
+          scrollElement.scrollTop,
+          grid.y_indexes,
+          rowHeight,
+        );
+      }
+      setGridToolsOpen(nextOpen);
+    },
+    [grid.y_indexes, rowHeight],
+  );
+
+  const openGridToolsForSearch = useCallback(() => {
+    toggleGridTools(true);
+    setTimeout(() => searchInputRef.current?.focus(), 0);
+  }, [toggleGridTools]);
+
   useEffect(() => {
     void rowHeight;
     rowVirtualizer.measure();
-  }, [rowHeight, rowVirtualizer]);
+
+    const anchor = pendingRestoreRef.current;
+    if (!anchor) {
+      return;
+    }
+
+    let frameId: number | null = null;
+    let cancelled = false;
+    suppressScrollAnchorPersistRef.current = true;
+
+    const releasePersistSuppression = () => {
+      frameId = window.requestAnimationFrame(() => {
+        if (!cancelled) {
+          suppressScrollAnchorPersistRef.current = false;
+        }
+      });
+    };
+
+    const restoreWhenScrollRangeIsReady = (attempt: number) => {
+      if (cancelled) return;
+
+      const scrollElement = scrollElementRef.current;
+      if (!scrollElement) {
+        pendingRestoreRef.current = null;
+        suppressScrollAnchorPersistRef.current = false;
+        return;
+      }
+
+      rowVirtualizer.measure();
+      const targetOffset = resolveScrollOffsetFromAnchor(
+        anchor,
+        grid.y_indexes,
+        rowHeight,
+      );
+      if (targetOffset === null) {
+        pendingRestoreRef.current = null;
+        suppressScrollAnchorPersistRef.current = false;
+        return;
+      }
+
+      const currentMaxOffset = Math.max(
+        0,
+        scrollElement.scrollHeight - scrollElement.clientHeight,
+      );
+      const expectedMaxOffset = Math.max(
+        0,
+        grid.y_indexes.length * rowHeight - scrollElement.clientHeight,
+      );
+      const isWaitingForDomScrollRange =
+        targetOffset <= expectedMaxOffset + SCROLL_OFFSET_EPSILON &&
+        targetOffset > currentMaxOffset + SCROLL_OFFSET_EPSILON;
+
+      if (isWaitingForDomScrollRange && attempt < PENDING_RESTORE_MAX_FRAMES) {
+        frameId = window.requestAnimationFrame(() => {
+          restoreWhenScrollRangeIsReady(attempt + 1);
+        });
+        return;
+      }
+
+      pendingRestoreRef.current = null;
+      rowVirtualizer.scrollToOffset(targetOffset, { align: "start" });
+      releasePersistSuppression();
+    };
+
+    frameId = window.requestAnimationFrame(() => {
+      restoreWhenScrollRangeIsReady(0);
+    });
+
+    return () => {
+      cancelled = true;
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      if (pendingRestoreRef.current !== anchor) {
+        suppressScrollAnchorPersistRef.current = false;
+      }
+    };
+  }, [grid.y_indexes, rowHeight, rowVirtualizer, scrollViewportWidth]);
 
   useEffect(() => {
     const yIndexes = grid.y_indexes;
@@ -244,7 +344,7 @@ export function VirtualGrid({
       if (document.activeElement === searchInputRef.current) {
         if (e.key === "Escape") {
           e.preventDefault();
-          setIsSearchOpen(false);
+          toggleGridTools(false);
           searchInputRef.current?.blur();
           return;
         }
@@ -256,19 +356,26 @@ export function VirtualGrid({
         return;
       }
 
+      if (document.activeElement === jumpInputRef.current) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          toggleGridTools(false);
+          jumpInputRef.current?.blur();
+        }
+        return;
+      }
+
       if (e.key === "/" || (e.ctrlKey && e.key.toLowerCase() === "f")) {
         const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
         if (tag === "input" || tag === "textarea" || tag === "select") return;
         e.preventDefault();
-        setIsSearchOpen(true);
-        setIsJumpInputOpen(false);
-        setTimeout(() => searchInputRef.current?.focus(), 0);
+        openGridToolsForSearch();
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [goToMatch]);
+  }, [goToMatch, openGridToolsForSearch, toggleGridTools]);
 
   const openCellDialog = useCallback(
     (
@@ -332,469 +439,425 @@ export function VirtualGrid({
     }
   }, []);
 
-  const toggleStylePromptFavorite = useCallback(
-    async (
-      promptText: string,
-      yIndex: number | null,
-      favorite: StylePromptFavorite | null,
-    ) => {
-      if (!user) {
-        setLoginDialogOpen(true);
-        return;
-      }
-
-      try {
-        if (favorite) {
-          await onDeleteStylePromptFavorite(favorite);
-          toast.success("已取消收藏画师串");
-          return;
-        }
-
-        await onCreateStylePromptFavorite({ promptText, sourceYIndex: yIndex });
-        toast.success("已收藏画师串");
-      } catch {
-        toast.error("收藏更新失败");
-      }
-    },
-    [onCreateStylePromptFavorite, onDeleteStylePromptFavorite, user],
-  );
-
-  const jumpToStylePromptFavorite = useCallback(
-    async (favorite: StylePromptFavorite) => {
-      const match = stylePromptMatchesByPrompt.get(
-        normalizeStylePromptText(favorite.prompt_text),
-      );
-      if (!match) {
-        toast.error("当前模型未包含这个画师串");
-        return;
-      }
-
-      const lineNum = match.rowIndex + 1;
-      scrollToLineNumber(lineNum);
-      syncUrlHashWithLineNumber(lineNum);
-      setFavoritesPopoverOpen(false);
-
-      void onUseStylePromptFavorite(favorite).catch((error: unknown) => {
-        console.error("[style-prompt-favorites] Failed to mark used", error);
-      });
-    },
-    [
-      onUseStylePromptFavorite,
-      scrollToLineNumber,
-      stylePromptMatchesByPrompt,
-      syncUrlHashWithLineNumber,
-    ],
-  );
-
-  const removeStylePromptFavoriteFromList = useCallback(
-    async (favorite: StylePromptFavorite) => {
-      try {
-        await onDeleteStylePromptFavorite(favorite);
-        toast.success("已取消收藏画师串");
-      } catch {
-        toast.error("收藏更新失败");
-      }
-    },
-    [onDeleteStylePromptFavorite],
-  );
-
-  return (
+  const toolsPanel = (
     <div
-      className="flex h-full min-h-0 flex-col overflow-hidden border border-border/40 rounded-sm"
-      data-testid="run-grid"
-      data-row-count={grid.y_indexes.length}
-      data-row-height={rowHeight}
+      className={cn(
+        "flex flex-col border-l border-border/40 bg-background/95 backdrop-blur-sm transition-all duration-300 ease-in-out overflow-hidden",
+        gridToolsOpen ? "w-96" : "w-10",
+      )}
     >
-      {isDevEnv ? (
-        <div
-          className="text-muted-foreground border-b bg-muted/30 px-3 py-1 text-[10px]"
-          data-testid="run-grid-dev-debug"
+      {!gridToolsOpen ? (
+        <button
+          type="button"
+          onClick={() => toggleGridTools(true)}
+          className="hover:bg-muted/50 relative flex flex-1 flex-col items-center justify-center gap-1 py-3 transition-colors"
+          title="打开网格工具"
+          aria-label="打开网格工具"
         >
-          {`dev: rendered rows ${virtualRows.length}, img cap target < ${DEV_IMAGE_DOM_CAP_NOTE}`}
-        </div>
-      ) : null}
-
-      <div
-        ref={scrollElementRef}
-        className="relative min-h-0 flex-1 overflow-auto"
-        data-testid="run-grid-scroll"
-      >
-        <div className="relative" style={{ minWidth: gridMinWidth }}>
-          <div className="bg-background/95 sticky top-0 z-30 border-b backdrop-blur supports-backdrop-filter:bg-background/80">
-            <div className="grid" style={{ gridTemplateColumns }}>
-              <div
-                className="bg-background/95 sticky left-0 z-40 flex flex-col gap-1.5 border-r border-border/40 px-3 py-2 backdrop-blur supports-backdrop-filter:bg-background/80"
-                data-testid="run-grid-corner"
-              >
-                <div className="flex items-center justify-end w-full gap-1.5">
-                  {!isSearchOpen && !isJumpInputOpen && !user ? (
-                    <Button
-                      type="button"
-                      size="xs"
-                      variant="ghost"
-                      className="text-muted-foreground/70 hover:text-foreground"
-                      onClick={() => setLoginDialogOpen(true)}
-                      title="登录后同步收藏"
-                    >
-                      <HugeiconsIcon icon={StarIcon} strokeWidth={2} data-icon="inline-start" />
-                      收藏
-                    </Button>
-                  ) : !isSearchOpen && !isJumpInputOpen ? (
-                    <Popover
-                      open={favoritesPopoverOpen}
-                      onOpenChange={setFavoritesPopoverOpen}
-                    >
-                      <PopoverTrigger asChild>
-                        <Button
-                          type="button"
-                          size="xs"
-                          variant="ghost"
-                          className="text-muted-foreground/70 hover:text-foreground"
-                          title="收藏的画师串"
-                        >
-                          <HugeiconsIcon icon={StarIcon} strokeWidth={2} data-icon="inline-start" />
-                          收藏
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent
-                        align="start"
-                        className="w-80 gap-1 p-1.5"
-                      >
-                        <Command>
-                          <CommandInput placeholder="搜索收藏..." />
-                          <CommandList>
-                            <CommandEmpty>
-                              {isStylePromptFavoritesLoading
-                                ? "加载中"
-                                : "暂无收藏"}
-                            </CommandEmpty>
-                            <CommandGroup>
-                              {stylePromptFavorites.map((favorite) => {
-                                const match = stylePromptMatchesByPrompt.get(
-                                  normalizeStylePromptText(favorite.prompt_text),
-                                );
-
-                                return (
-                                  <CommandItem
-                                    key={favorite.id}
-                                    value={`${favorite.prompt_text} ${favorite.source_run_dir ?? ""}`}
-                                    onSelect={() => {
-                                      if (!match) {
-                                        toast.error("当前模型未包含这个画师串");
-                                        return;
-                                      }
-                                      void jumpToStylePromptFavorite(favorite);
-                                    }}
-                                    className={`items-start gap-2 py-2 ${match ? "" : "opacity-60"}`}
-                                  >
-                                    <Button
-                                      type="button"
-                                      size="icon-xs"
-                                      variant="ghost"
-                                      className="mt-0.5 size-5 text-amber-500 hover:text-amber-600"
-                                      title="取消收藏"
-                                      aria-label="取消收藏画师串"
-                                      disabled={pendingStylePromptKeys.has(
-                                        normalizeStylePromptText(
-                                          favorite.prompt_text,
-                                        ),
-                                      )}
-                                      onMouseDown={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                      }}
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        void removeStylePromptFavoriteFromList(
-                                          favorite,
-                                        );
-                                      }}
-                                    >
-                                      <HugeiconsIcon
-                                        icon={StarIcon}
-                                        strokeWidth={2}
-                                        className="size-3.5"
-                                      />
-                                    </Button>
-                                    <span className="min-w-0 flex-1">
-                                      <span className="line-clamp-2 font-mono text-[10px] leading-relaxed">
-                                        {favorite.prompt_text}
-                                      </span>
-                                      <span className="mt-0.5 block text-[10px] text-muted-foreground/60">
-                                        {match
-                                          ? `第 ${match.rowIndex + 1} 行`
-                                          : "当前模型无匹配"}
-                                      </span>
-                                    </span>
-                                  </CommandItem>
-                                );
-                              })}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                  ) : null}
-                  {isSearchOpen ? (
-                    <form
-                      className="flex items-center justify-end w-full max-w-full"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        goToMatch(1);
-                      }}
-                    >
-                      <div className="relative w-full max-w-48">
-                        <HugeiconsIcon
-                          icon={Search01Icon}
-                          strokeWidth={2}
-                          className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50 pointer-events-none"
-                        />
-                        <Input
-                          ref={searchInputRef}
-                          type="text"
-                          className="h-6 pl-7 pr-16 py-0 text-xs w-full rounded-none shadow-none focus-visible:ring-1 focus-visible:ring-ring/30 border-border/50 placeholder:text-muted-foreground/50"
-                          placeholder="搜索画师..."
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          onBlur={() => setIsSearchOpen(false)}
-                        />
-                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-                          {searchQuery.trim() && (
-                            <span className="text-[10px] tabular-nums text-muted-foreground/60 mr-0.5">
-                              {searchMatches.length > 0
-                                ? `${activeMatchIndex >= 0 ? activeMatchIndex + 1 : 0}/${searchMatches.length}`
-                                : "无结果"}
-                            </span>
-                          )}
-                          {searchQuery && (
-                            <Button
-                              type="button"
-                              size="icon-xs"
-                              variant="ghost"
-                              className="size-5"
-                              onMouseDown={(e) => e.preventDefault()}
-                              onClick={() => {
-                                setSearchQuery("");
-                                setActiveMatchIndex(-1);
-                              }}
-                              title="清空搜索"
-                            >
-                              <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3" />
-                            </Button>
-                          )}
-                          <Button
-                            type="button"
-                            size="icon-xs"
-                            variant="ghost"
-                            className="size-5"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => goToMatch(-1)}
-                            title="上一个匹配"
-                            disabled={searchMatches.length === 0}
-                          >
-                            <HugeiconsIcon icon={ArrowUp01Icon} strokeWidth={2} className="size-3" />
-                          </Button>
-                          <Button
-                            type="button"
-                            size="icon-xs"
-                            variant="ghost"
-                            className="size-5"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => goToMatch(1)}
-                            title="下一个匹配"
-                            disabled={searchMatches.length === 0}
-                          >
-                            <HugeiconsIcon icon={ArrowDown01Icon} strokeWidth={2} className="size-3" />
-                          </Button>
-                        </div>
-                      </div>
-                    </form>
-                  ) : !isJumpInputOpen ? (
-                    <Button
-                      type="button"
-                      size="xs"
-                      variant="ghost"
-                      className="text-muted-foreground/70 hover:text-foreground"
-                      onClick={() => {
-                        setIsSearchOpen(true);
-                        setIsJumpInputOpen(false);
-                        setTimeout(() => searchInputRef.current?.focus(), 0);
-                      }}
-                      title="搜索画师 (/)"
-                    >
-                      <HugeiconsIcon icon={Search01Icon} strokeWidth={2} data-icon="inline-start" />
-                      搜索
-                    </Button>
-                  ) : null}
-                  {isJumpInputOpen ? (
-                    <form
-                      className="flex items-center gap-1.5"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const lineNum = parseInt(jumpInputValue, 10);
-                        if (scrollToLineNumber(lineNum)) {
-                          syncUrlHashWithLineNumber(lineNum);
-                          setIsJumpInputOpen(false);
-                        } else {
-                          toast.error(`行号必须在 1 到 ${grid.y_indexes.length} 之间`);
-                        }
-                      }}
-                    >
-                      <div className="relative w-20">
-                        <Input
-                          ref={jumpInputRef}
-                          type="number"
-                          min={1}
-                          max={grid.y_indexes.length}
-                          className="h-6 pl-1.5 pr-6 py-0 text-xs w-full rounded-none shadow-none focus-visible:ring-1 focus-visible:ring-ring/30 border-border/50 placeholder:text-muted-foreground/50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
-                          placeholder="行号"
-                          value={jumpInputValue}
-                          onChange={(e) => setJumpInputValue(e.target.value)}
-                          onBlur={() => setIsJumpInputOpen(false)}
-                        />
-                        <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground/40 text-[9px] pointer-events-none">
-                          ↵
-                        </span>
-                      </div>
-                    </form>
-                  ) : !isSearchOpen ? (
-                    <Button
-                      type="button"
-                      size="xs"
-                      variant="ghost"
-                      className="text-muted-foreground/70 hover:text-foreground"
-                      onClick={() => {
-                        setIsJumpInputOpen(true);
-                        setIsSearchOpen(false);
-                        setJumpInputValue("");
-                        setTimeout(() => jumpInputRef.current?.focus(), 0);
-                      }}
-                      title="跳转到指定行"
-                    >
-                      <HugeiconsIcon icon={ArrowMoveUpRightIcon} strokeWidth={2} data-icon="inline-start" />
-                      跳转
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-              {xHeaders.map((header) => (
-                <div
-                  key={header.key}
-                  className="border-r border-border/40 bg-muted/10 px-3 py-2 flex items-start"
-                >
-                  <p className="text-muted-foreground text-[10px] font-medium leading-relaxed tracking-wide wrap-break-word max-w-full">
-                    {header.label}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div
-            className="relative"
-            style={{ height: rowVirtualizer.getTotalSize() }}
+          <HugeiconsIcon
+            icon={Settings02Icon}
+            strokeWidth={2}
+            className="size-4"
+          />
+          <span
+            className="text-[10px] font-medium leading-tight"
+            style={{ writingMode: "vertical-rl" }}
           >
-            {virtualRows.map((virtualRow) => {
-              const yIndex = grid.y_indexes[virtualRow.index] ?? virtualRow.index;
-              const cachedRow = rowCacheRef.current.get(yIndex);
-              const preloadedYLabel = grid.y_labels?.[virtualRow.index] ?? "";
-              const yLabel =
-                cachedRow && cachedRow.status === "ready"
-                  ? (cachedRow.yValue ?? preloadedYLabel)
-                  : preloadedYLabel;
-              const labelText =
-                cachedRow && cachedRow.status === "ready"
-                  ? ((cachedRow.yValue ?? preloadedYLabel) || "-")
-                  : cachedRow && cachedRow.status === "error"
-                    ? (preloadedYLabel || "加载失败")
-                    : yLabel;
-              const normalizedLabelText = normalizeStylePromptText(
-                labelText === "-" || labelText === "加载失败" ? "" : labelText,
-              );
-              const stylePromptFavorite = normalizedLabelText
-                ? (favoriteByPrompt.get(normalizedLabelText) ?? null)
-                : null;
-
-              return (
-                <div
-                  key={virtualRow.key}
-                  className="absolute left-0 top-0 w-full border-b border-border/40"
-                  data-testid="run-grid-row"
-                  data-row-index={yIndex}
-                  style={{
-                    height: virtualRow.size,
-                    transform: `translateY(${virtualRow.start}px)`,
+            工具
+          </span>
+          {searchQuery.trim() || hasHiddenColumns ? (
+            <span
+              aria-hidden="true"
+              className={cn(
+                "absolute top-2 right-1 size-1.5 rounded-full",
+                searchQuery.trim() ? "bg-amber-400" : "bg-sky-400",
+              )}
+            />
+          ) : null}
+        </button>
+      ) : (
+        <>
+          <div className="flex items-center justify-between border-b border-border/40 px-3 py-2.5">
+            <span className="text-sm font-medium">网格工具</span>
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              onClick={() => toggleGridTools(false)}
+              title="收起工具面板"
+              aria-label="收起工具面板"
+            >
+              <HugeiconsIcon
+                icon={Cancel01Icon}
+                strokeWidth={2}
+                className="size-3.5"
+              />
+            </Button>
+          </div>
+          <div className="flex flex-1 flex-col gap-0 overflow-y-auto">
+            {/* 搜索画师串 */}
+            <Collapsible defaultOpen>
+              <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-center justify-between border-b border-border/40 px-3 py-2 text-left text-xs font-medium transition-colors">
+                <span className="flex items-center gap-1.5">
+                  <HugeiconsIcon
+                    icon={Search01Icon}
+                    strokeWidth={2}
+                    className="size-3 text-muted-foreground"
+                  />
+                  搜索画师串
+                </span>
+                <HugeiconsIcon
+                  icon={ArrowDown01Icon}
+                  strokeWidth={2}
+                  className="size-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
+                />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="border-b border-border/40">
+                <form
+                  className="p-2.5"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    goToMatch(1);
                   }}
                 >
-                  <div className="grid h-full" style={{ gridTemplateColumns }}>
-                    <VirtualGridRowLabel
-                      cachedRow={cachedRow}
-                      preloadedYLabel={preloadedYLabel}
-                      yLabel={yLabel}
-                      virtualRowIndex={virtualRow.index}
-                      onCopyRowLabel={copyRowLabel}
-                      highlightTerm={searchQuery.trim() || undefined}
-                      favorite={stylePromptFavorite}
-                      isFavoritePending={
-                        normalizedLabelText
-                          ? pendingStylePromptKeys.has(normalizedLabelText)
-                          : false
-                      }
-                      onToggleFavorite={(value) =>
-                        toggleStylePromptFavorite(
-                          value,
-                          yIndex,
-                          stylePromptFavorite,
-                        )
-                      }
+                  <div className="relative">
+                    <HugeiconsIcon
+                      icon={Search01Icon}
+                      strokeWidth={2}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50 pointer-events-none"
                     />
-
-                    {xHeaders.map((header, xIndex) => {
-                      const xLabel = header.label;
-                      const xKey = header.key;
-                      const rowEntry = rowCacheRef.current.get(yIndex);
-
-                      return (
-                        <VirtualGridPreviewCell
-                          key={`${xKey}-${yIndex}`}
-                          xKey={xKey}
-                          xIndex={xIndex}
-                          xLabel={xLabel}
-                          yIndex={yIndex}
-                          yLabel={yLabel}
-                          rowEntry={rowEntry}
-                          blurhashMap={blurhashMap}
-                          previewHeight={layout.previewHeight}
-                          isAuthenticated={!!user}
-                          currentUserId={user?.id ?? null}
-                          grant={viewAccess?.grant ?? null}
-                          onRequireLogin={() => setLoginDialogOpen(true)}
-                          onOpenCellDialog={openCellDialog}
-                          onThumbLoad={markThumbAsLoaded}
+                    <Input
+                      ref={searchInputRef}
+                      type="text"
+                      className="h-7 w-full rounded-none border-border/50 py-0 pl-7 pr-28 text-xs shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-1 focus-visible:ring-ring/30"
+                      placeholder="搜索画师..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
+                      {searchQuery.trim() ? (
+                        <span className="mr-0.5 text-[10px] tabular-nums text-muted-foreground/60">
+                          {searchMatches.length > 0
+                            ? `${activeMatchIndex >= 0 ? activeMatchIndex + 1 : 0}/${searchMatches.length}`
+                            : "无结果"}
+                        </span>
+                      ) : null}
+                      {searchQuery ? (
+                        <Button
+                          type="button"
+                          size="icon-xs"
+                          variant="ghost"
+                          className="size-5"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setSearchQuery("");
+                            setActiveMatchIndex(-1);
+                          }}
+                          title="清空搜索"
+                        >
+                          <HugeiconsIcon
+                            icon={Cancel01Icon}
+                            strokeWidth={2}
+                            className="size-3"
+                          />
+                        </Button>
+                      ) : null}
+                      <Button
+                        type="button"
+                        size="icon-xs"
+                        variant="ghost"
+                        className="size-5"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => goToMatch(-1)}
+                        title="上一个匹配"
+                        disabled={searchMatches.length === 0}
+                      >
+                        <HugeiconsIcon
+                          icon={ArrowUp01Icon}
+                          strokeWidth={2}
+                          className="size-3"
                         />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon-xs"
+                        variant="ghost"
+                        className="size-5"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => goToMatch(1)}
+                        title="下一个匹配"
+                        disabled={searchMatches.length === 0}
+                      >
+                        <HugeiconsIcon
+                          icon={ArrowDown01Icon}
+                          strokeWidth={2}
+                          className="size-3"
+                        />
+                      </Button>
+                    </div>
+                  </div>
+                </form>
+              </CollapsibleContent>
+            </Collapsible>
+
+            {/* 跳转到行 */}
+            <Collapsible defaultOpen>
+              <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-center justify-between border-b border-border/40 px-3 py-2 text-left text-xs font-medium transition-colors">
+                <span className="flex items-center gap-1.5">
+                  <HugeiconsIcon
+                    icon={ArrowMoveUpRightIcon}
+                    strokeWidth={2}
+                    className="size-3 text-muted-foreground"
+                  />
+                  跳转到行
+                </span>
+                <HugeiconsIcon
+                  icon={ArrowDown01Icon}
+                  strokeWidth={2}
+                  className="size-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
+                />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="border-b border-border/40">
+                <form
+                  className="flex items-end gap-2 p-2.5"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const lineNum = parseInt(jumpInputValue, 10);
+                    if (scrollToLineNumber(lineNum)) {
+                      syncUrlHashWithLineNumber(lineNum);
+                      setJumpInputValue("");
+                    } else {
+                      toast.error(
+                        `行号必须在 1 到 ${grid.y_indexes.length} 之间`,
+                      );
+                    }
+                  }}
+                >
+                  <label className="min-w-0 flex-1">
+                    <Input
+                      ref={jumpInputRef}
+                      type="number"
+                      min={1}
+                      max={grid.y_indexes.length}
+                      className="h-7 w-full rounded-none border-border/50 py-0 pl-2 pr-2 text-xs shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-1 focus-visible:ring-ring/30 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                      placeholder="行号"
+                      value={jumpInputValue}
+                      onChange={(e) => setJumpInputValue(e.target.value)}
+                    />
+                  </label>
+                  <Button type="submit" size="xs" variant="outline">
+                    <HugeiconsIcon
+                      icon={ArrowMoveUpRightIcon}
+                      strokeWidth={2}
+                      data-icon="inline-start"
+                    />
+                    跳转
+                  </Button>
+                </form>
+              </CollapsibleContent>
+            </Collapsible>
+
+            {/* 列显示 */}
+            <Collapsible>
+              <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-center justify-between border-b border-border/40 px-3 py-2 text-left text-xs font-medium transition-colors">
+                <span className="flex items-center gap-1.5">
+                  <HugeiconsIcon
+                    icon={LayoutThreeColumnIcon}
+                    strokeWidth={2}
+                    className="size-3 text-muted-foreground"
+                  />
+                  列显示
+                </span>
+                <HugeiconsIcon
+                  icon={ArrowDown01Icon}
+                  strokeWidth={2}
+                  className="size-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
+                />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="p-2.5">
+                  <div className="mb-2 flex gap-2">
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="outline"
+                      onClick={showAll}
+                    >
+                      全选
+                    </Button>
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="outline"
+                      onClick={hideAll}
+                    >
+                      全不选
+                    </Button>
+                  </div>
+                  <div className="flex max-h-48 flex-col gap-1 overflow-auto">
+                    {grid.x_columns.map((col, originalIndex) => {
+                      const label = getXLabel(col) || `列 ${originalIndex + 1}`;
+                      const isHidden = hiddenColumns.has(originalIndex);
+                      return (
+                        <label
+                          key={originalIndex}
+                          className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-muted/30"
+                        >
+                          <Checkbox
+                            checked={!isHidden}
+                            onCheckedChange={() => toggleColumn(originalIndex)}
+                          />
+                          <span className="min-w-0 flex-1 truncate text-xs">
+                            {label}
+                          </span>
+                          {col.type ? (
+                            <span className="shrink-0 text-[10px] text-muted-foreground/60">
+                              {col.type}
+                            </span>
+                          ) : null}
+                        </label>
                       );
                     })}
                   </div>
                 </div>
-              );
-            })}
+              </CollapsibleContent>
+            </Collapsible>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  return (
+    <div
+      className="flex h-full min-h-0 flex-row overflow-hidden border border-border/40 rounded-sm"
+      data-testid="run-grid"
+      data-row-count={grid.y_indexes.length}
+      data-row-height={rowHeight}
+    >
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {isDevEnv ? (
+          <div
+            className="text-muted-foreground border-b bg-muted/30 px-3 py-1 text-[10px]"
+            data-testid="run-grid-dev-debug"
+          >
+            {`dev: rendered rows ${virtualRows.length}, img cap target < ${DEV_IMAGE_DOM_CAP_NOTE}`}
+          </div>
+        ) : null}
+
+        <div
+          ref={scrollElementRef}
+          className="relative min-h-0 flex-1 overflow-auto"
+          data-testid="run-grid-scroll"
+        >
+          <div className="relative" style={{ minWidth: gridMinWidth }}>
+            <div className="bg-background/95 sticky top-0 z-30 border-b backdrop-blur supports-backdrop-filter:bg-background/80">
+              <div className="grid" style={{ gridTemplateColumns }}>
+                <div
+                  className="bg-background/95 sticky left-0 z-40 flex flex-col gap-1.5 border-r border-border/40 px-3 py-2 backdrop-blur supports-backdrop-filter:bg-background/80"
+                  data-testid="run-grid-corner"
+                />
+                {visibleXColumns.map((col) => (
+                  <div
+                    key={col.key}
+                    className="border-r border-border/40 bg-muted/10 px-3 py-2 flex items-start"
+                  >
+                    <p className="text-muted-foreground text-[10px] font-medium leading-relaxed tracking-wide wrap-break-word max-w-full">
+                      {col.label}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div
+              className="relative"
+              style={{ height: rowVirtualizer.getTotalSize() }}
+            >
+              {virtualRows.map((virtualRow) => {
+                const yIndex =
+                  grid.y_indexes[virtualRow.index] ?? virtualRow.index;
+                const cachedRow = rowCacheRef.current.get(yIndex);
+                const preloadedYLabel = grid.y_labels?.[virtualRow.index] ?? "";
+                const yLabel =
+                  cachedRow && cachedRow.status === "ready"
+                    ? (cachedRow.yValue ?? preloadedYLabel)
+                    : preloadedYLabel;
+                return (
+                  <div
+                    key={virtualRow.key}
+                    className="absolute left-0 top-0 w-full border-b border-border/40"
+                    data-testid="run-grid-row"
+                    data-row-index={yIndex}
+                    style={{
+                      height: virtualRow.size,
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                  >
+                    <div
+                      className="grid h-full"
+                      style={{ gridTemplateColumns }}
+                    >
+                      <VirtualGridRowLabel
+                        cachedRow={cachedRow}
+                        preloadedYLabel={preloadedYLabel}
+                        yLabel={yLabel}
+                        virtualRowIndex={virtualRow.index}
+                        onCopyRowLabel={copyRowLabel}
+                        highlightTerm={searchQuery.trim() || undefined}
+                      />
+
+                      {visibleXColumns.map((col) => {
+                        const xLabel = col.label;
+                        const xKey = col.key;
+                        const xIndex = col.originalIndex;
+                        const rowEntry = rowCacheRef.current.get(yIndex);
+
+                        return (
+                          <VirtualGridPreviewCell
+                            key={`${xKey}-${yIndex}`}
+                            xKey={xKey}
+                            xIndex={xIndex}
+                            xLabel={xLabel}
+                            yIndex={yIndex}
+                            yLabel={yLabel}
+                            rowEntry={rowEntry}
+                            blurhashMap={blurhashMap}
+                            previewHeight={layout.previewHeight}
+                            isAuthenticated={!!user}
+                            currentUserId={user?.id ?? null}
+                            grant={viewAccess?.grant ?? null}
+                            onRefreshViewAccess={onRefreshViewAccess}
+                            onRequireLogin={() => setLoginDialogOpen(true)}
+                            onOpenCellDialog={openCellDialog}
+                            onThumbLoad={markThumbAsLoaded}
+                            globallyLoadedKeys={loadedThumbKeysRef.current}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
+
+        <VirtualGridCellDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          cell={selectedCell}
+          currentUserId={user?.id ?? null}
+          grant={viewAccess?.grant ?? null}
+          onRefreshViewAccess={onRefreshViewAccess}
+        />
+
+        <AuthLoginDialog
+          open={loginDialogOpen}
+          onOpenChange={setLoginDialogOpen}
+        />
       </div>
-
-      <VirtualGridCellDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        cell={selectedCell}
-        currentUserId={user?.id ?? null}
-        grant={viewAccess?.grant ?? null}
-      />
-
-      <AuthLoginDialog
-        open={loginDialogOpen}
-        onOpenChange={setLoginDialogOpen}
-      />
+      {toolsPanel}
     </div>
   );
 }

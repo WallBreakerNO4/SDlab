@@ -1,11 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
 
-import { HugeiconsIcon } from "@hugeicons/react";
-import { StarIcon } from "@hugeicons/core-free-icons";
-
-import { Button } from "@/components/ui/button";
-import type { StylePromptFavorite } from "@/lib/style-prompt-favorites";
-
 import type { CachedRow } from "./virtual-grid-types";
 
 type VirtualGridRowLabelProps = {
@@ -15,9 +9,6 @@ type VirtualGridRowLabelProps = {
   virtualRowIndex: number;
   onCopyRowLabel: (value: string) => void | Promise<void>;
   highlightTerm?: string;
-  favorite: StylePromptFavorite | null;
-  isFavoritePending: boolean;
-  onToggleFavorite: (value: string) => void | Promise<void>;
 };
 
 function renderHighlightedText(text: string, term: string | undefined): ReactNode {
@@ -58,9 +49,6 @@ export function VirtualGridRowLabel({
   virtualRowIndex,
   onCopyRowLabel,
   highlightTerm,
-  favorite,
-  isFavoritePending,
-  onToggleFavorite,
 }: VirtualGridRowLabelProps) {
   return (
     <div
@@ -83,8 +71,6 @@ export function VirtualGridRowLabel({
               );
             }
 
-            const canFavorite = labelText !== "加载失败";
-
             if (labelText.includes(",")) {
               const parts = labelText
                 .split(",")
@@ -100,28 +86,6 @@ export function VirtualGridRowLabel({
                   }}
                   title="点击复制"
                 >
-                  {canFavorite ? (
-                    <Button
-                      type="button"
-                      size="icon-xs"
-                      variant="ghost"
-                      className={
-                        favorite
-                          ? "absolute -right-1 -top-1 size-5 bg-background/80 text-amber-500 hover:text-amber-600"
-                          : "absolute -right-1 -top-1 size-5 bg-background/80 text-muted-foreground/40 opacity-0 hover:text-amber-500 group-hover/y-label:opacity-100 focus-visible:opacity-100"
-                      }
-                      disabled={isFavoritePending}
-                      aria-label={favorite ? "取消收藏画师串" : "收藏画师串"}
-                      title={favorite ? "取消收藏" : "收藏画师串"}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        void onToggleFavorite(labelText);
-                      }}
-                    >
-                      <HugeiconsIcon icon={StarIcon} strokeWidth={2} className="size-3" />
-                    </Button>
-                  ) : null}
                   {parts.map((part, index) => {
                     let weight = 1;
                     // NovelAI format: weight::tag ::
@@ -195,30 +159,7 @@ export function VirtualGridRowLabel({
             }
 
             return (
-              <>
-                {canFavorite ? (
-                  <Button
-                    type="button"
-                    size="icon-xs"
-                    variant="ghost"
-                    className={
-                      favorite
-                        ? "absolute -right-1 -top-1 size-5 bg-background/80 text-amber-500 hover:text-amber-600"
-                        : "absolute -right-1 -top-1 size-5 bg-background/80 text-muted-foreground/40 opacity-0 hover:text-amber-500 group-hover/y-label:opacity-100 focus-visible:opacity-100"
-                    }
-                    disabled={isFavoritePending}
-                    aria-label={favorite ? "取消收藏画师串" : "收藏画师串"}
-                    title={favorite ? "取消收藏" : "收藏画师串"}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      void onToggleFavorite(labelText);
-                    }}
-                  >
-                    <HugeiconsIcon icon={StarIcon} strokeWidth={2} className="size-3" />
-                  </Button>
-                ) : null}
-                <p
+              <p
                   className="text-muted-foreground text-[10px] leading-relaxed wrap-break-word w-full cursor-pointer hover:opacity-80 transition-opacity"
                   onClick={(e) => {
                     e.preventDefault();
@@ -229,7 +170,6 @@ export function VirtualGridRowLabel({
                 >
                   {renderHighlightedText(labelText, highlightTerm)}
                 </p>
-              </>
             );
           })()}
         </div>

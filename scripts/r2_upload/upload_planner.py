@@ -51,6 +51,12 @@ from .upload_io import (
     _write_intermediate_variant,
 )
 from .variants import inspect_image_metadata, plan_image_variants
+from scripts.generation.prompt_grid import (
+    Y_COLLECTION_ID,
+    Y_ITEM_INDEX,
+    Y_STYLE_KEY,
+    read_y_rows,
+)
 
 LOG = logging.getLogger(__name__)
 _RUN_ASSET_DEFAULT_CATEGORY: Category = "normal"
@@ -99,7 +105,6 @@ def _int_list(value: object) -> list[int]:
     return [
         item for item in value if isinstance(item, int) and not isinstance(item, bool)
     ]
-
 
 def _is_publishable_metadata_record(metadata_record: dict[str, object]) -> bool:
     status = _non_empty_str(metadata_record.get("status"))
@@ -308,6 +313,18 @@ def _build_image_db_fields(metadata_record: dict[str, object]) -> dict[str, obje
     y_value = _non_empty_str(metadata_record.get("y_value"))
     if y_value is not None:
         fields["y_value"] = y_value
+
+    y_style_key = _non_empty_str(metadata_record.get("y_style_key"))
+    if y_style_key is not None:
+        fields["y_style_key"] = y_style_key
+
+    y_collection_id = _non_empty_str(metadata_record.get("y_collection_id"))
+    if y_collection_id is not None:
+        fields["y_collection_id"] = y_collection_id
+
+    y_item_index = metadata_record.get("y_item_index")
+    if isinstance(y_item_index, int) and not isinstance(y_item_index, bool):
+        fields["y_item_index"] = y_item_index
 
     return fields
 

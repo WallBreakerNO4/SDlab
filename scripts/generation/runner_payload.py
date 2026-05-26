@@ -116,6 +116,7 @@ def _build_run_payload(
     }
 
 
+
 def _build_model_snapshot(args: argparse.Namespace) -> dict[str, object] | None:
     model = cast(Any, getattr(args, "config_model", None))
     if model is None:

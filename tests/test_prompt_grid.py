@@ -11,6 +11,9 @@ sys.path.insert(0, str(ROOT))
 
 from scripts.generation.prompt_grid import (
     MAX_SEED,
+    Y_COLLECTION_ID,
+    Y_ITEM_INDEX,
+    Y_STYLE_KEY,
     X_INFO_TYPE_KEY,
     build_prompt_cell,
     compute_prompt_hash,
@@ -55,8 +58,8 @@ def test_read_x_rows_maps_real_columns_and_ignores_trailing_empty_column():
         "general",
         X_INFO_TYPE_KEY,
     }
-    assert first["gender"] == "1girl,"
-    assert first["characters"] == "amiya \\(arknights\\),"
+    assert first["gender"] == "1girl, "
+    assert first["characters"] == "amiya \\(arknights\\), "
     assert first[X_INFO_TYPE_KEY] == "normal"
 
 
@@ -65,6 +68,9 @@ def test_read_y_rows_uses_artists_column_by_default():
 
     assert rows
     assert rows[0]["y"].startswith("gochisousama")
+    assert rows[0][Y_COLLECTION_ID] == "300-nai-styles-table-test"
+    assert rows[0][Y_ITEM_INDEX] == "9"
+    assert rows[0][Y_STYLE_KEY] == "300-nai-styles-table-test:9"
 
 
 def test_read_x_rows_rejects_legacy_quality_field(tmp_path: Path) -> None:
@@ -107,7 +113,7 @@ def test_render_positive_prompt_template_and_segment_rules():
 
     rendered = render_positive_prompt(x_row, " artist-name ", " masterpiece, ")
 
-    assert rendered == "masterpiece,1girl,arknights,safe,artist-name,solo, smiling,"
+    assert rendered == "masterpiece, 1girl, arknights, safe, artist-name, solo, smiling, "
 
 
 def test_normalize_prompt_whitespace_and_comma_rules_keep_case():
@@ -280,7 +286,8 @@ def test_read_y_rows_artist_prefix_applies_only_to_artist_tags(tmp_path: Path):
 
     rows = read_y_rows(y_path, artist_prefix="@")
 
-    assert rows == [{"y": "(@wlop:1.1),furry,"}]
+    assert rows[0]["y"] == "(@wlop:1.1),furry,"
+    assert rows[0][Y_STYLE_KEY] == "y:0"
 
 
 def test_read_y_rows_square_profile_applies_only_to_artist_weights(tmp_path: Path):
@@ -302,7 +309,8 @@ def test_read_y_rows_square_profile_applies_only_to_artist_weights(tmp_path: Pat
 
     rows = read_y_rows(y_path, artist_prefix="@", artist_weight_profile="square")
 
-    assert rows == [{"y": "(@wlop:1.21),(@piyodera mucha:0.656),(furry:1.1),"}]
+    assert rows[0]["y"] == "(@wlop:1.21),(@piyodera mucha:0.656),(furry:1.1),"
+    assert rows[0][Y_STYLE_KEY] == "y:0"
 
 
 def test_read_y_rows_rejects_unknown_artist_weight_profile(tmp_path: Path):
@@ -336,7 +344,8 @@ def test_read_y_rows_without_artist_prefix_keeps_artist_text(tmp_path: Path):
 
     rows = read_y_rows(y_path)
 
-    assert rows == [{"y": "(wlop:1.1),furry,"}]
+    assert rows[0]["y"] == "(wlop:1.1),furry,"
+    assert rows[0][Y_STYLE_KEY] == "y:0"
 
 
 def test_read_y_rows_rejects_legacy_info_type(tmp_path: Path):
