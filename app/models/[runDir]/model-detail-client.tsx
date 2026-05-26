@@ -27,7 +27,6 @@ import {
 import { ModelDetailHeader } from "./model-detail-header";
 import { GridSkeleton, SummarySkeleton } from "./model-detail-skeletons";
 import { useModelDetailData } from "./use-model-detail-data";
-import { useStylePromptFavorites } from "./use-style-prompt-favorites";
 
 export function ModelDetailClientPage({ runDir }: { runDir: string }) {
   const { user } = useAuth();
@@ -44,10 +43,6 @@ export function ModelDetailClientPage({ runDir }: { runDir: string }) {
   } = useModelDetailData({
     runDir,
     showNsfw,
-    currentUserId: user?.id ?? null,
-  });
-  const stylePromptFavorites = useStylePromptFavorites({
-    runDir,
     currentUserId: user?.id ?? null,
   });
 
@@ -137,13 +132,6 @@ export function ModelDetailClientPage({ runDir }: { runDir: string }) {
               currentView={currentView}
               viewAccess={viewAccess}
               onRefreshViewAccess={refreshViewAccess}
-              stylePromptFavorites={stylePromptFavorites.favorites}
-              favoriteByStyleKey={stylePromptFavorites.favoriteByStyleKey}
-              isStylePromptFavoritesLoading={stylePromptFavorites.isLoading}
-              pendingStylePromptKeys={stylePromptFavorites.pendingStyleKeys}
-              onCreateStylePromptFavorite={stylePromptFavorites.createFavorite}
-              onDeleteStylePromptFavorite={stylePromptFavorites.deleteFavorite}
-              onUseStylePromptFavorite={stylePromptFavorites.markFavoriteUsed}
             />
           </div>
         ) : null}

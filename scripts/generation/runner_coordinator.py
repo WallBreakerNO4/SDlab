@@ -35,11 +35,11 @@ class _CellPlan:
     prompt_hash: str
     seed: int
     generation_params: dict[str, object | None]
-    y_prompt_ref: dict[str, object] | None
     workflow_hash: str
     save_image_prefix: str
     x_description: dict[str, str]
     attempt: int = 1
+    y_prompt_ref: dict[str, object] | None = None
 
 
 @dataclass(slots=True)

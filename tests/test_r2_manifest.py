@@ -443,22 +443,6 @@ def test_bootstrap_includes_y_labels() -> None:
         assert y_labels[0] == "cfg_7.0"
 
 
-def test_bootstrap_includes_y_prompt_refs() -> None:
-    release = build_view_release(_sample_payload())
-
-    for key in ("bootstrap_sfw", "bootstrap_nsfw"):
-        y_prompt_refs = cast(list[dict[str, object]], release[key]["yPromptRefs"])
-        assert y_prompt_refs == [
-            {
-                "y_index": 0,
-                "style_key": "nai-styles-table:0",
-                "collection_id": "nai-styles-table",
-                "item_index": 0,
-                "label": "cfg_7.0",
-            }
-        ]
-
-
 # ---- x_columns remap ----
 
 def test_nsfw_column_remapped_in_sfw() -> None:

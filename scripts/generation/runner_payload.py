@@ -6,12 +6,7 @@ from pathlib import Path
 from typing import Any, cast
 from datetime import datetime, timezone
 
-from scripts.generation.prompt_grid import (
-    Y_COLLECTION_ID,
-    Y_ITEM_INDEX,
-    Y_STYLE_KEY,
-    read_x_descriptions,
-)
+from scripts.generation.prompt_grid import read_x_descriptions
 from scripts.generation.runner_selection import _extract_x_info_type
 
 
@@ -99,11 +94,6 @@ def _build_run_payload(
                 }
                 for item in x_selected
             ],
-            "y_prompt_refs": [
-                _build_y_prompt_ref(item)
-                for item in y_selected
-                if _build_y_prompt_ref(item) is not None
-            ],
             "x_limit": args.x_limit,
             "y_limit": args.y_limit,
             "x_indexes_raw": args.x_indexes,
@@ -125,35 +115,6 @@ def _build_run_payload(
         "config_snapshot": _build_config_snapshot(args),
     }
 
-
-def _build_y_prompt_ref(item: Any) -> dict[str, object] | None:
-    value = getattr(item, "value", None)
-    if not isinstance(value, dict):
-        return None
-
-    style_key = value.get(Y_STYLE_KEY)
-    collection_id = value.get(Y_COLLECTION_ID)
-    item_index_raw = value.get(Y_ITEM_INDEX)
-    label = value.get("y")
-    if (
-        not isinstance(style_key, str)
-        or not style_key.strip()
-        or not isinstance(collection_id, str)
-        or not collection_id.strip()
-        or not isinstance(item_index_raw, str)
-        or not item_index_raw.isdigit()
-    ):
-        return None
-
-    ref: dict[str, object] = {
-        "y_index": item.index,
-        "style_key": style_key.strip(),
-        "collection_id": collection_id.strip(),
-        "item_index": int(item_index_raw),
-    }
-    if isinstance(label, str):
-        ref["label"] = label
-    return ref
 
 
 def _build_model_snapshot(args: argparse.Namespace) -> dict[str, object] | None:

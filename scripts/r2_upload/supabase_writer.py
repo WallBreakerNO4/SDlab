@@ -208,10 +208,6 @@ class SupabaseWriter:
             run_json = required_json_object(payload, "run_json")
             images = optional_object_list(payload.get("images"), field="images")
             prompts = optional_object_list(payload.get("prompts"), field="prompts")
-            y_prompt_refs = optional_object_list(
-                payload.get("y_prompt_refs"),
-                field="y_prompt_refs",
-            )
             run_assets = optional_object_list(
                 payload.get("run_assets"), field="run_assets"
             )
@@ -264,11 +260,6 @@ class SupabaseWriter:
             run_id=run_id,
             run_dir=run_dir,
         )
-        y_prompt_ref_rows = self._build_y_prompt_ref_rows(
-            refs=y_prompt_refs,
-            run_id=run_id,
-            run_dir=run_dir,
-        )
 
         grid_item_rows: list[dict[str, object]] = []
         grid_item_snapshot_rows: list[dict[str, object]] = []
@@ -306,14 +297,6 @@ class SupabaseWriter:
                 table_name="run_prompts",
                 rows=prompt_rows,
                 on_conflict="run_id,prompt_id",
-                context_key="row_count",
-            )
-        )
-        write_operations.extend(
-            self._build_chunked_upsert_operations(
-                table_name="run_y_prompt_refs",
-                rows=y_prompt_ref_rows,
-                on_conflict="run_id,y_index",
                 context_key="row_count",
             )
         )
@@ -557,36 +540,6 @@ class SupabaseWriter:
                     "positive_prompt": required_str(prompt, "positive_prompt"),
                 }
             )
-        return rows
-
-    def _build_y_prompt_ref_rows(
-        self,
-        *,
-        refs: list[Mapping[str, object]],
-        run_id: str,
-        run_dir: str,
-    ) -> list[dict[str, object]]:
-        rows: list[dict[str, object]] = []
-        for ref in refs:
-            row: dict[str, object] = {
-                "run_id": run_id,
-                "run_dir": run_dir,
-                "y_index": required_int(ref, "y_index"),
-                "style_key": required_str(ref, "style_key"),
-                "collection_id": required_str(ref, "collection_id"),
-                "item_index": required_int(ref, "item_index"),
-                "label": required_str(ref, "label"),
-            }
-            source_y_path = optional_str(ref.get("source_y_path"), field="source_y_path")
-            if source_y_path is not None:
-                row["source_y_path"] = source_y_path
-            source_y_sha256 = optional_str(
-                ref.get("source_y_sha256"),
-                field="source_y_sha256",
-            )
-            if source_y_sha256 is not None:
-                row["source_y_sha256"] = source_y_sha256
-            rows.append(row)
         return rows
 
     def _build_run_asset_summary(
@@ -1092,10 +1045,6 @@ def upsert_upload_index(
 def estimate_upload_index_records(payload: Mapping[str, object]) -> int:
     images = optional_object_list(payload.get("images"), field="images")
     prompts = optional_object_list(payload.get("prompts"), field="prompts")
-    y_prompt_refs = optional_object_list(
-        payload.get("y_prompt_refs"),
-        field="y_prompt_refs",
-    )
     unique_grid_cells: set[tuple[int, int]] = set()
     for image in images:
         x_index = int_with_default(image, "x_index", default=0)
@@ -1104,7 +1053,6 @@ def estimate_upload_index_records(payload: Mapping[str, object]) -> int:
     return (
         4
         + len(prompts)
-        + len(y_prompt_refs)
         + len(images)
         + len(images)
         + len(unique_grid_cells)

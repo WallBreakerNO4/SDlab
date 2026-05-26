@@ -106,75 +106,6 @@ def _int_list(value: object) -> list[int]:
         item for item in value if isinstance(item, int) and not isinstance(item, bool)
     ]
 
-
-def _ensure_run_y_prompt_refs(run_json: dict[str, object]) -> None:
-    selection = _json_object(run_json.get("selection"))
-    if selection is None:
-        return
-    existing_refs = _json_object_list(selection.get("y_prompt_refs"))
-    if existing_refs:
-        return
-
-    y_indexes = _int_list(selection.get("y_indexes"))
-    if not y_indexes:
-        return
-
-    y_path = _run_json_y_path(run_json)
-    if y_path is None:
-        return
-
-    path = Path(y_path)
-    if not path.exists():
-        return
-
-    try:
-        rows = read_y_rows(path)
-    except ValueError:
-        return
-
-    refs: list[dict[str, object]] = []
-    for y_index in y_indexes:
-        if y_index < 0 or y_index >= len(rows):
-            continue
-        row = rows[y_index]
-        style_key = row.get(Y_STYLE_KEY)
-        collection_id = row.get(Y_COLLECTION_ID)
-        item_index_raw = row.get(Y_ITEM_INDEX)
-        if (
-            not isinstance(style_key, str)
-            or not style_key
-            or not isinstance(collection_id, str)
-            or not collection_id
-            or not isinstance(item_index_raw, str)
-            or not item_index_raw.isdigit()
-        ):
-            continue
-        refs.append(
-            {
-                "y_index": y_index,
-                "style_key": style_key,
-                "collection_id": collection_id,
-                "item_index": int(item_index_raw),
-            }
-        )
-
-    if refs:
-        selection["y_prompt_refs"] = refs
-        run_json["selection"] = selection
-
-
-def _run_json_y_path(run_json: dict[str, object]) -> str | None:
-    config_snapshot = _json_object(run_json.get("config_snapshot"))
-    if config_snapshot is not None:
-        prompts = _json_object(config_snapshot.get("prompts"))
-        if prompts is not None:
-            y_path = _non_empty_str(prompts.get("y_path"))
-            if y_path is not None:
-                return y_path
-
-    return _non_empty_str(run_json.get("y_json_path"))
-
-
 def _is_publishable_metadata_record(metadata_record: dict[str, object]) -> bool:
     status = _non_empty_str(metadata_record.get("status"))
     if status is None:
@@ -1555,7 +1486,6 @@ def _build_run_plan(
 ) -> RunPlan:
     normalized_run_dir = normalize_run_dir(run_dir)
     run_json = _load_run_json(normalized_run_dir)
-    _ensure_run_y_prompt_refs(run_json)
     run_dir_name = _resolve_run_dir_name(normalized_run_dir, run_json)
     metadata_records = _load_metadata_records(normalized_run_dir)
     metadata_records_for_upload = _fold_metadata_records_for_upload(
@@ -1676,7 +1606,6 @@ def _build_run_plan(
         "media_access_version": 1,
     }
     db_payload["prompts"] = view_release["prompt_rows"]
-    db_payload["y_prompt_refs"] = view_release["y_prompt_refs"]
 
     manifest_uploads: list[PlannedUpload] = []
 

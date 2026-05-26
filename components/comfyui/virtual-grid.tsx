@@ -13,20 +13,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
-import {
-  normalizeStyleKey,
-  type StylePromptFavorite,
-  type YPromptRef,
-} from "@/lib/style-prompt-favorites";
 import { cn } from "@/lib/utils";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -34,7 +21,6 @@ import {
   ArrowUp01Icon,
   ArrowDown01Icon,
   ArrowMoveUpRightIcon,
-  StarIcon,
   Cancel01Icon,
   Settings02Icon,
   LayoutThreeColumnIcon,
@@ -78,17 +64,6 @@ type VirtualGridProps = {
   currentView: { release_id: string } | null;
   viewAccess: RunViewAccess | null;
   onRefreshViewAccess: () => Promise<RunViewAccess | null>;
-  stylePromptFavorites: StylePromptFavorite[];
-  favoriteByStyleKey: Map<string, StylePromptFavorite>;
-  isStylePromptFavoritesLoading: boolean;
-  pendingStylePromptKeys: Set<string>;
-  onCreateStylePromptFavorite: (options: {
-    styleKey: string;
-    label: string;
-    sourceYIndex: number | null;
-  }) => Promise<StylePromptFavorite>;
-  onDeleteStylePromptFavorite: (favorite: StylePromptFavorite) => Promise<void>;
-  onUseStylePromptFavorite: (favorite: StylePromptFavorite) => Promise<void>;
 };
 
 const DEV_IMAGE_DOM_CAP_NOTE = 300;
@@ -103,13 +78,6 @@ export function VirtualGrid({
   currentView,
   viewAccess,
   onRefreshViewAccess,
-  stylePromptFavorites,
-  favoriteByStyleKey,
-  isStylePromptFavoritesLoading,
-  pendingStylePromptKeys,
-  onCreateStylePromptFavorite,
-  onDeleteStylePromptFavorite,
-  onUseStylePromptFavorite,
 }: VirtualGridProps) {
   "use no memo";
 
@@ -119,8 +87,8 @@ export function VirtualGrid({
   const [selectedCell, setSelectedCell] = useState<SelectedCellPreview | null>(
     null,
   );
-  const { user } = useAuth();
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
+  const { user } = useAuth();
   const [gridToolsOpen, setGridToolsOpen] = useState(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("sd-style-lab:grid-tools-open") === "true";
@@ -217,39 +185,6 @@ export function VirtualGrid({
     }
     return matches;
   }, [searchQuery, grid.y_labels, grid.y_indexes]);
-
-  const yPromptRefByYIndex = useMemo(() => {
-    const map = new Map<number, YPromptRef>();
-    for (const ref of grid.y_prompt_refs ?? []) {
-      map.set(ref.y_index, ref);
-    }
-    return map;
-  }, [grid.y_prompt_refs]);
-
-  const stylePromptMatchesByStyleKey = useMemo(() => {
-    const map = new Map<
-      string,
-      { rowIndex: number; yIndex: number; label: string }
-    >();
-    const rowIndexByYIndex = new Map<number, number>();
-    for (let i = 0; i < grid.y_indexes.length; i++) {
-      rowIndexByYIndex.set(grid.y_indexes[i] ?? i, i);
-    }
-
-    for (const ref of grid.y_prompt_refs ?? []) {
-      const rowIndex = rowIndexByYIndex.get(ref.y_index);
-      if (rowIndex === undefined) continue;
-      const key = normalizeStyleKey(ref.style_key);
-      if (!key || map.has(key)) continue;
-      const label = grid.y_labels?.[rowIndex] || ref.label;
-      map.set(key, {
-        rowIndex,
-        yIndex: ref.y_index,
-        label,
-      });
-    }
-    return map;
-  }, [grid.y_labels, grid.y_indexes, grid.y_prompt_refs]);
 
   const goToMatch = useCallback(
     (delta: number) => {
@@ -504,76 +439,6 @@ export function VirtualGrid({
     }
   }, []);
 
-  const toggleStylePromptFavorite = useCallback(
-    async (
-      label: string,
-      styleKey: string,
-      yIndex: number | null,
-      favorite: StylePromptFavorite | null,
-    ) => {
-      if (!user) {
-        setLoginDialogOpen(true);
-        return;
-      }
-
-      try {
-        if (favorite) {
-          await onDeleteStylePromptFavorite(favorite);
-          toast.success("已取消收藏画师串");
-          return;
-        }
-
-        await onCreateStylePromptFavorite({
-          styleKey,
-          label,
-          sourceYIndex: yIndex,
-        });
-        toast.success("已收藏画师串");
-      } catch {
-        toast.error("收藏更新失败");
-      }
-    },
-    [onCreateStylePromptFavorite, onDeleteStylePromptFavorite, user],
-  );
-
-  const jumpToStylePromptFavorite = useCallback(
-    async (favorite: StylePromptFavorite) => {
-      const match = stylePromptMatchesByStyleKey.get(
-        normalizeStyleKey(favorite.style_key),
-      );
-      if (!match) {
-        toast.error("当前模型未包含这个画师串");
-        return;
-      }
-
-      const lineNum = match.rowIndex + 1;
-      scrollToLineNumber(lineNum);
-      syncUrlHashWithLineNumber(lineNum);
-
-      void onUseStylePromptFavorite(favorite).catch((error: unknown) => {
-        console.error("[style-prompt-favorites] Failed to mark used", error);
-      });
-    },
-    [
-      onUseStylePromptFavorite,
-      scrollToLineNumber,
-      stylePromptMatchesByStyleKey,
-      syncUrlHashWithLineNumber,
-    ],
-  );
-
-  const removeStylePromptFavoriteFromList = useCallback(
-    async (favorite: StylePromptFavorite) => {
-      try {
-        await onDeleteStylePromptFavorite(favorite);
-        toast.success("已取消收藏画师串");
-      } catch {
-        toast.error("收藏更新失败");
-      }
-    },
-    [onDeleteStylePromptFavorite],
-  );
-
   const toolsPanel = (
     <div
       className={cn(
@@ -792,121 +657,6 @@ export function VirtualGrid({
               </CollapsibleContent>
             </Collapsible>
 
-            {/* 收藏 */}
-            <Collapsible>
-              <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-center justify-between border-b border-border/40 px-3 py-2 text-left text-xs font-medium transition-colors">
-                <span className="flex items-center gap-1.5">
-                  <HugeiconsIcon
-                    icon={StarIcon}
-                    strokeWidth={2}
-                    className="size-3 text-muted-foreground"
-                  />
-                  收藏
-                </span>
-                <HugeiconsIcon
-                  icon={ArrowDown01Icon}
-                  strokeWidth={2}
-                  className="size-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
-                />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="border-b border-border/40">
-                <div className="p-2.5">
-                  {!user ? (
-                    <Button
-                      type="button"
-                      size="xs"
-                      variant="outline"
-                      className="w-full justify-start text-muted-foreground/80"
-                      onClick={() => {
-                        toggleGridTools(false);
-                        setLoginDialogOpen(true);
-                      }}
-                      title="登录后同步收藏"
-                    >
-                      <HugeiconsIcon
-                        icon={StarIcon}
-                        strokeWidth={2}
-                        data-icon="inline-start"
-                      />
-                      登录后同步收藏
-                    </Button>
-                  ) : (
-                    <Command className="max-h-72">
-                      <CommandInput placeholder="搜索收藏..." />
-                      <CommandList className="max-h-56">
-                        <CommandEmpty>
-                          {isStylePromptFavoritesLoading
-                            ? "加载中"
-                            : "暂无收藏"}
-                        </CommandEmpty>
-                        <CommandGroup>
-                          {stylePromptFavorites.map((favorite) => {
-                            const match = stylePromptMatchesByStyleKey.get(
-                              normalizeStyleKey(favorite.style_key),
-                            );
-
-                            return (
-                              <CommandItem
-                                key={favorite.id}
-                                value={`${favorite.label} ${favorite.source_run_dir ?? ""}`}
-                                onSelect={() => {
-                                  if (!match) {
-                                    toast.error("当前模型未包含这个画师串");
-                                    return;
-                                  }
-                                  void jumpToStylePromptFavorite(favorite);
-                                }}
-                                className={`items-start gap-2 py-2 ${match ? "" : "opacity-60"}`}
-                              >
-                                <Button
-                                  type="button"
-                                  size="icon-xs"
-                                  variant="ghost"
-                                  className="mt-0.5 size-5 text-amber-500 hover:text-amber-600"
-                                  title="取消收藏"
-                                  aria-label="取消收藏画师串"
-                                  disabled={pendingStylePromptKeys.has(
-                                    normalizeStyleKey(favorite.style_key),
-                                  )}
-                                  onMouseDown={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                  }}
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    void removeStylePromptFavoriteFromList(
-                                      favorite,
-                                    );
-                                  }}
-                                >
-                                  <HugeiconsIcon
-                                    icon={StarIcon}
-                                    strokeWidth={2}
-                                    className="size-3.5"
-                                  />
-                                </Button>
-                                <span className="min-w-0 flex-1">
-                                  <span className="line-clamp-2 font-mono text-[10px] leading-relaxed">
-                                    {favorite.label}
-                                  </span>
-                                  <span className="mt-0.5 block text-[10px] text-muted-foreground/60">
-                                    {match
-                                      ? `第 ${match.rowIndex + 1} 行`
-                                      : "当前模型无匹配"}
-                                  </span>
-                                </span>
-                              </CommandItem>
-                            );
-                          })}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  )}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-
             {/* 列显示 */}
             <Collapsible>
               <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-center justify-between border-b border-border/40 px-3 py-2 text-left text-xs font-medium transition-colors">
@@ -1033,12 +783,6 @@ export function VirtualGrid({
                   cachedRow && cachedRow.status === "ready"
                     ? (cachedRow.yValue ?? preloadedYLabel)
                     : preloadedYLabel;
-                const yPromptRef = yPromptRefByYIndex.get(yIndex) ?? null;
-                const styleKey = yPromptRef?.style_key ?? null;
-                const stylePromptFavorite = styleKey
-                  ? (favoriteByStyleKey.get(normalizeStyleKey(styleKey)) ?? null)
-                  : null;
-
                 return (
                   <div
                     key={virtualRow.key}
@@ -1061,23 +805,6 @@ export function VirtualGrid({
                         virtualRowIndex={virtualRow.index}
                         onCopyRowLabel={copyRowLabel}
                         highlightTerm={searchQuery.trim() || undefined}
-                        styleKey={styleKey}
-                        favorite={stylePromptFavorite}
-                        isFavoritePending={
-                          styleKey
-                            ? pendingStylePromptKeys.has(
-                                normalizeStyleKey(styleKey),
-                              )
-                            : false
-                        }
-                        onToggleFavorite={(value, nextStyleKey) =>
-                          toggleStylePromptFavorite(
-                            value,
-                            nextStyleKey,
-                            yIndex,
-                            stylePromptFavorite,
-                          )
-                        }
                       />
 
                       {visibleXColumns.map((col) => {

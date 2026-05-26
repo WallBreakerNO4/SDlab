@@ -189,17 +189,6 @@ export function useModelDetailData({
         ).yLabels as string[];
       }
       if (
-        typeof bootstrapRaw === "object" &&
-        bootstrapRaw !== null &&
-        !Array.isArray(bootstrapRaw) &&
-        !("y_prompt_refs" in bootstrapRaw) &&
-        Array.isArray((bootstrapRaw as Record<string, unknown>).yPromptRefs)
-      ) {
-        (bootstrapRaw as { y_prompt_refs?: unknown[] }).y_prompt_refs = (
-          bootstrapRaw as Record<string, unknown>
-        ).yPromptRefs as unknown[];
-      }
-      if (
         !isModelDetailResponse(bootstrapRaw) ||
         !isRunGridIndexData(bootstrapRaw)
       ) {
