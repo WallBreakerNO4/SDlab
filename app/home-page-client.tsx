@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { ModelCard } from "@/components/home/model-card";
@@ -24,6 +25,7 @@ export default function HomePageClient({
   models,
   hasError = false,
 }: HomePageClientProps) {
+  const t = useTranslations("home");
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const isEmpty = models.length === 0;
 
@@ -47,21 +49,20 @@ export default function HomePageClient({
                 className="px-3 py-1 font-mono text-[10px] tracking-[0.2em] border-primary/20 text-primary bg-primary/5 rounded-none uppercase flex items-center gap-2"
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                Stable Diffusion Research
+                {t("badge")}
               </Badge>
             </div>
 
             <h1 className="text-5xl md:text-7xl font-black tracking-tight leading-[1.05] text-foreground">
-              AI 图像风格
+              {t("title")}
               <span className="block mt-1 bg-linear-to-br from-primary to-primary/40 bg-clip-text text-transparent">
-                实验室
+                {t("titleAccent")}
               </span>
             </h1>
           </div>
 
           <p className="text-lg md:text-xl text-muted-foreground leading-relaxed max-w-2xl font-light">
-            系统化的 Stable Diffusion
-            模型画风评估平台。通过可复现的测试与画风组合实验，展示可对比的画风实验。
+            {t("subtitle")}
           </p>
         </section>
 
@@ -70,16 +71,16 @@ export default function HomePageClient({
           <div className="flex flex-col sm:flex-row sm:items-end justify-between border-b border-border/40 pb-5 gap-4">
             <div className="space-y-1">
               <h2 className="text-2xl md:text-3xl font-bold tracking-tight">
-                模型目录
+                {t("modelsSection")}
               </h2>
               <p className="text-sm text-muted-foreground">
-                浏览最近收录的模型评测与风格网格
+                {t("modelsDescription")}
               </p>
             </div>
             {!isEmpty && (
               <div className="flex items-center gap-3 shrink-0">
                 <span className="text-muted-foreground font-mono text-[10px] tracking-widest uppercase border border-border/40 px-2 py-1 bg-muted/20">
-                  {models.length} Models Found
+                  {t("modelsCount", { count: models.length })}
                 </span>
               </div>
             )}
@@ -89,12 +90,12 @@ export default function HomePageClient({
             <Empty className="py-24 border border-dashed border-border/50 bg-background/30 backdrop-blur-sm">
               <EmptyHeader>
                 <EmptyTitle className="text-xl">
-                  {hasError ? "加载失败" : "暂无模型"}
+                  {hasError ? t("errorTitle") : t("emptyTitle")}
                 </EmptyTitle>
                 <EmptyDescription className="text-sm max-w-sm mx-auto">
                   {hasError
-                    ? "请查看终端日志或 Network 面板定位首页数据链路错误。"
-                    : "暂无可用模型数据，等待后端数据同步。"}
+                    ? t("errorDescription")
+                    : t("emptyDescription")}
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -44,6 +45,7 @@ export function VirtualGridCellDialog({
 }: VirtualGridCellDialogProps) {
   "use no memo";
 
+  const t = useTranslations("cellDialog");
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [copiedField, setCopiedField] = useState<"prompt" | "seed" | null>(
     null,
@@ -143,6 +145,8 @@ export function VirtualGridCellDialog({
     [],
   );
 
+  const displayPrompt = cell?.positivePrompt ?? t("noPositivePrompt");
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -150,9 +154,9 @@ export function VirtualGridCellDialog({
         data-testid="cell-dialog"
       >
         <DialogHeader className="sr-only">
-          <DialogTitle>单元格预览</DialogTitle>
+          <DialogTitle>{t("title")}</DialogTitle>
           <DialogDescription className="sr-only">
-            单元格图片预览
+            {t("title")}
           </DialogDescription>
         </DialogHeader>
 
@@ -216,7 +220,7 @@ export function VirtualGridCellDialog({
               {!isDialogImageLoaded ? (
                 <div className="absolute right-3 bottom-3 z-10 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 text-xs text-white backdrop-blur-md pointer-events-none transition-opacity duration-300">
                   <Spinner className="h-3 w-3" />
-                  <span>加载中...</span>
+                  <span>{t("loading")}</span>
                 </div>
               ) : null}
             </div>
@@ -230,9 +234,9 @@ export function VirtualGridCellDialog({
                   onClick={showPreviousImage}
                   disabled={currentImageIndex <= 0}
                 >
-                  上一张
+                  {t("prevImage")}
                 </Button>
-                <p className="text-muted-foreground text-xs">{`${currentImageIndex + 1}/${totalImages}`}</p>
+                <p className="text-muted-foreground text-xs">{t("imageCount", { current: currentImageIndex + 1, total: totalImages })}</p>
                 <Button
                   type="button"
                   size="sm"
@@ -240,7 +244,7 @@ export function VirtualGridCellDialog({
                   onClick={showNextImage}
                   disabled={currentImageIndex >= totalImages - 1}
                 >
-                  下一张
+                  {t("nextImage")}
                 </Button>
               </div>
             ) : null}
@@ -250,7 +254,7 @@ export function VirtualGridCellDialog({
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <p className="text-muted-foreground text-xs font-medium">
-                  Positive Prompt
+                  {t("positivePrompt")}
                 </p>
                 <Button
                   type="button"
@@ -262,7 +266,7 @@ export function VirtualGridCellDialog({
                     void copyText("prompt", cell?.positivePrompt ?? "");
                   }}
                   disabled={!cell}
-                  title="复制 Prompt"
+                  title={t("copyPrompt")}
                 >
                   {copiedField === "prompt" ? (
                     <HugeiconsIcon icon={Tick01Icon} className="h-3 w-3" />
@@ -275,18 +279,18 @@ export function VirtualGridCellDialog({
                 className="bg-muted/30 max-h-64 overflow-auto rounded-md border p-3 text-xs leading-relaxed whitespace-pre-wrap"
                 data-testid="cell-dialog-prompt"
               >
-                {cell?.positivePrompt ?? "（无 positive prompt）"}
+                {displayPrompt}
               </div>
             </div>
 
             <div className="space-y-3">
               <p className="text-muted-foreground text-xs font-medium">
-                Parameters
+                {t("parameters")}
               </p>
               <div className="bg-muted/20 rounded-md border p-3 text-xs">
                 <div className="flex flex-col gap-y-4">
                   <div className="space-y-1.5">
-                    <p className="text-muted-foreground font-medium">Seed</p>
+                    <p className="text-muted-foreground font-medium">{t("seed")}</p>
                     <div className="group flex items-start gap-2">
                       <p
                         className="break-all font-mono"
@@ -309,7 +313,7 @@ export function VirtualGridCellDialog({
                           );
                         }}
                         disabled={!cell || cell.seed === null}
-                        title="复制 Seed"
+                        title={t("copySeed")}
                       >
                         {copiedField === "seed" ? (
                           <HugeiconsIcon icon={Tick01Icon} className="h-3 w-3" />
@@ -320,7 +324,7 @@ export function VirtualGridCellDialog({
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <p className="text-muted-foreground font-medium">Size</p>
+                    <p className="text-muted-foreground font-medium">{t("size")}</p>
                     <p className="font-mono">{sizeText}</p>
                   </div>
                 </div>
@@ -335,7 +339,7 @@ export function VirtualGridCellDialog({
                       icon={Download01Icon}
                       className="mr-2 h-4 w-4"
                     />
-                    下载图片
+                    {t("downloadImage")}
                   </a>
                 </Button>
               ) : (
@@ -344,7 +348,7 @@ export function VirtualGridCellDialog({
                     icon={Download01Icon}
                     className="mr-2 h-4 w-4"
                   />
-                  下载图片
+                  {t("downloadImage")}
                 </Button>
               )}
             </div>

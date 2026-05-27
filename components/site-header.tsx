@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-
+import { useTranslations } from "next-intl";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { AuthLoginDialog } from "@/components/auth-login-dialog";
@@ -20,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { clearAllPrivateImageCaches } from "@/lib/private-image-cache";
+import { Link, usePathname } from "@/i18n/navigation";
 
 function getInitials(name: string | undefined | null): string {
   if (!name) return "?";
@@ -30,7 +30,32 @@ function getInitials(name: string | undefined | null): string {
   return name.slice(0, 2).toUpperCase();
 }
 
+function LanguageSwitcher() {
+  const pathname = usePathname();
+
+  return (
+    <div className="flex items-center gap-0.5 text-xs">
+      <Link
+        href={pathname}
+        locale="zh"
+        className="px-1.5 py-0.5 rounded hover:bg-muted transition-colors"
+      >
+        中
+      </Link>
+      <span className="text-muted-foreground">/</span>
+      <Link
+        href={pathname}
+        locale="en"
+        className="px-1.5 py-0.5 rounded hover:bg-muted transition-colors"
+      >
+        EN
+      </Link>
+    </div>
+  );
+}
+
 export function SiteHeader() {
+  const t = useTranslations("header");
   const { user, signOut } = useAuth();
   const { showNsfw, setShowNsfw } = useUserPreferences();
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
@@ -41,15 +66,15 @@ export function SiteHeader() {
 
   const handleClearCache = useCallback(async () => {
     await clearAllPrivateImageCaches();
-    toast.success("图片缓存已清除，正在刷新...");
+    toast.success(t("cacheCleared"));
     window.location.reload();
-  }, []);
+  }, [t]);
 
   const displayName =
     user?.user_metadata?.full_name ??
     user?.user_metadata?.name ??
     user?.email ??
-    "用户";
+    t("user");
   const avatarUrl = user?.user_metadata?.avatar_url as string | undefined;
 
   return (
@@ -62,15 +87,16 @@ export function SiteHeader() {
             className="flex items-center gap-2 transition-opacity hover:opacity-80"
           >
             <span className="from-primary to-primary/70 bg-linear-to-r bg-clip-text text-base font-bold tracking-tight text-transparent">
-              SD Style Lab
+              {t("brand")}
             </span>
             <Badge variant="secondary" className="text-[10px] font-normal">
-              Beta
+              {t("beta")}
             </Badge>
           </Link>
 
           {/* Right side */}
           <div className="flex items-center gap-1">
+            <LanguageSwitcher />
             <ThemeToggle />
 
             {!user ? (
@@ -80,7 +106,7 @@ export function SiteHeader() {
                 variant="outline"
                 onClick={() => setLoginDialogOpen(true)}
               >
-                登录
+                {t("login")}
               </Button>
             ) : (
               <DropdownMenu>
@@ -88,7 +114,7 @@ export function SiteHeader() {
                   <button
                     type="button"
                     className="focus-visible:ring-ring ml-1 rounded-full focus-visible:outline-none focus-visible:ring-2"
-                    aria-label="用户菜单"
+                    aria-label={t("userMenu")}
                   >
                     <Avatar size="default" className="size-7">
                       {avatarUrl ? (
@@ -116,15 +142,15 @@ export function SiteHeader() {
                       void setShowNsfw(checked === true);
                     }}
                   >
-                    显示 NSFW
+                    {t("showNsfw")}
                   </DropdownMenuCheckboxItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => void handleClearCache()}>
-                    清除图片缓存
+                    {t("clearCache")}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => void handleSignOut()}>
-                    退出登录
+                    {t("logout")}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { HuggingFace, Civitai, ComfyUI } from "@lobehub/icons";
 import type { User } from "@supabase/supabase-js";
@@ -16,6 +17,7 @@ export function ModelDetailHeader({
   user,
   onRequireLogin,
 }: ModelDetailHeaderProps) {
+  const t = useTranslations("modelDetail");
   const modelName = detailData.run.model?.name || detailData.run.run_dir;
   const modelDesc =
     detailData.run.model?.description?.zh ||
@@ -46,7 +48,6 @@ export function ModelDetailHeader({
                   href={links.homepage}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label="打开模型官网"
                   className="hover:bg-primary/10 hover:text-primary text-muted-foreground inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/50 px-2 py-1 font-medium transition-colors backdrop-blur-sm"
                 >
                   <HugeiconsIcon
@@ -54,7 +55,7 @@ export function ModelDetailHeader({
                     className="size-3"
                     strokeWidth={2}
                   />
-                  官网
+                  {t("homepage")}
                 </a>
               ) : null}
               {links.huggingface ? (
@@ -62,11 +63,10 @@ export function ModelDetailHeader({
                   href={links.huggingface}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label="打开 Hugging Face 页面"
                   className="hover:bg-primary/10 hover:text-primary text-muted-foreground inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/50 px-2 py-1 font-medium transition-colors backdrop-blur-sm"
                 >
                   <HuggingFace.Color className="size-3" />
-                  Hugging Face 链接
+                  {t("huggingface")}
                 </a>
               ) : null}
               {links.civitai ? (
@@ -74,11 +74,10 @@ export function ModelDetailHeader({
                   href={links.civitai}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label="打开 Civitai 页面"
                   className="hover:bg-primary/10 hover:text-primary text-muted-foreground inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/50 px-2 py-1 font-medium transition-colors backdrop-blur-sm"
                 >
                   <Civitai.Color className="size-3" />
-                  Civitai 链接
+                  {t("civitai")}
                 </a>
               ) : null}
             </div>
@@ -92,7 +91,7 @@ export function ModelDetailHeader({
                 className="hover:bg-primary/10 hover:text-primary text-muted-foreground inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/50 px-2 py-1 font-medium transition-colors backdrop-blur-sm"
               >
                 <ComfyUI.Color className="size-3" />
-                下载 Comfy UI 工作流
+                {t("downloadWorkflow")}
               </a>
             ) : (
               <button
@@ -101,7 +100,7 @@ export function ModelDetailHeader({
                 className="hover:bg-primary/10 hover:text-primary text-muted-foreground inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/50 px-2 py-1 font-medium transition-colors backdrop-blur-sm"
               >
                 <ComfyUI.Color className="size-3" />
-                下载 Comfy UI 工作流
+                {t("downloadWorkflow")}
               </button>
             )
           ) : null}

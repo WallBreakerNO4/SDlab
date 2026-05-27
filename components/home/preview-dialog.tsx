@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 type PreviewDialogProps = {
@@ -9,13 +10,14 @@ export function PreviewDialog({
   imageUrl,
   onOpenChange,
 }: PreviewDialogProps) {
+  const t = useTranslations("modelCard");
   return (
     <Dialog open={!!imageUrl} onOpenChange={onOpenChange}>
       <DialogContent
         className="sm:max-w-[90vw] md:max-w-[80vw] lg:max-w-300 w-fit p-0 border-none bg-transparent shadow-none"
         showCloseButton={false}
       >
-        <DialogTitle className="sr-only">查看大图</DialogTitle>
+        <DialogTitle className="sr-only">{t("viewLarge")}</DialogTitle>
         {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img

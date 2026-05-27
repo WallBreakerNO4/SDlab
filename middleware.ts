@@ -1,16 +1,27 @@
+import createMiddleware from "next-intl/middleware";
 import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { getPublicEnv } from "@/lib/env/public";
+import { routing } from "./i18n/routing";
+
+const intlMiddleware = createMiddleware(routing);
 
 /**
- * Middleware that refreshes the Supabase auth session on every request.
+ * Middleware that handles i18n routing and refreshes the Supabase auth session.
  *
  * IMPORTANT: This file must NOT import from `lib/supabase-auth.ts` because
  * that module uses `server-only` + `next/headers` which are unavailable in
  * Edge middleware. We create the client inline instead.
  */
 export async function middleware(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
+  // 1. Handle i18n routing first (redirects, locale detection)
+  const intlResponse = intlMiddleware(request);
+  if (intlResponse.status !== 200) {
+    return intlResponse;
+  }
+
+  // 2. Continue with Supabase auth session refresh
+  let response = intlResponse;
 
   let url: string;
   let anonKey: string;
@@ -19,54 +30,32 @@ export async function middleware(request: NextRequest) {
     url = publicEnv.supabaseUrl;
     anonKey = publicEnv.supabasePublishableKey;
   } catch {
-    return supabaseResponse;
+    return response;
   }
 
-  // If Supabase env vars are not configured, skip auth session refresh
   const supabase = createServerClient(url, anonKey, {
     cookies: {
       getAll() {
         return request.cookies.getAll();
       },
       setAll(cookiesToSet) {
-        // 1. Forward cookies on the request so downstream Server Components
-        //    can read the refreshed session.
         for (const { name, value } of cookiesToSet) {
           request.cookies.set(name, value);
         }
-
-        // 2. Re-create the response with the updated request cookies.
-        supabaseResponse = NextResponse.next({ request });
-
-        // 3. Set cookies on the response so the browser stores them.
+        response = NextResponse.next({ request });
         for (const { name, value, options } of cookiesToSet) {
-          supabaseResponse.cookies.set(name, value, options);
+          response.cookies.set(name, value, options);
         }
       },
     },
   });
 
-  // Calling getUser() triggers token refresh if the access token is expired.
-  // We intentionally ignore the result — we only need the side-effect of
-  // refreshing cookies.
   await supabase.auth.getUser();
-
-  return supabaseResponse;
+  return response;
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match every request path except:
-     * - _next/static (static files)
-     * - _next/image (image optimization)
-     * - favicon.*
-     * - common static asset extensions
-     * - high-volume object/telemetry APIs that do not read Supabase session state
-     *
-     * Running middleware on every dynamic route ensures the Supabase
-     * auth cookies are refreshed before any Server Component reads them.
-     */
     "/((?!_next/static|_next/image|favicon|api/private-object(?:/|$)|api/public-object(?:/|$)|api/telemetry/web-vitals(?:/|$)|api/comfyui/runs(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

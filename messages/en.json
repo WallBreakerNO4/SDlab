@@ -1,0 +1,114 @@
+{
+  "metadata": {
+    "home": {
+      "title": "SD Style Lab — AI Style Lab",
+      "description": "An AI image style exploration platform that generates Stable Diffusion style comparison grids using ComfyUI."
+    },
+    "info": {
+      "title": "About - SD Style Lab",
+      "description": "About SD Style Lab and project introduction"
+    },
+    "privacy": {
+      "title": "Privacy Policy - SD Style Lab",
+      "description": "Privacy policy of SD Style Lab"
+    }
+  },
+  "header": {
+    "brand": "SD Style Lab",
+    "beta": "Beta",
+    "login": "Login",
+    "userMenu": "User Menu",
+    "user": "User",
+    "showNsfw": "Show NSFW",
+    "clearCache": "Clear Image Cache",
+    "cacheCleared": "Image cache cleared, refreshing...",
+    "logout": "Log Out",
+    "toggleTheme": "Toggle Theme"
+  },
+  "home": {
+    "badge": "Stable Diffusion Research",
+    "title": "AI Image Style",
+    "titleAccent": "Lab",
+    "subtitle": "A systematic Stable Diffusion model art style evaluation platform. Through reproducible tests and style combination experiments, comparable art style experiments are presented.",
+    "modelsSection": "Model Catalog",
+    "modelsDescription": "Browse recently added model evaluations and style grids",
+    "modelsCount": "{count} Models Found",
+    "errorTitle": "Loading Failed",
+    "errorDescription": "Please check the terminal logs or Network panel to locate the homepage data pipeline error.",
+    "emptyTitle": "No Models",
+    "emptyDescription": "No model data available, waiting for backend data synchronization."
+  },
+  "footer": {
+    "copyright": "© {year} SD Style Lab · AI Image Style Exploration Platform",
+    "about": "About",
+    "privacy": "Privacy Policy"
+  },
+  "auth": {
+    "title": "Login",
+    "description": "Log in to access advanced content and download images",
+    "github": "Continue with GitHub",
+    "google": "Continue with Google",
+    "microsoft": "Continue with Microsoft",
+    "redirecting": "Redirecting…"
+  },
+  "modelDetail": {
+    "breadcrumbHome": "Home",
+    "notFoundTitle": "Model Not Found",
+    "notFoundDesc": "This model page may have been deleted, or you may not have access in the current session.",
+    "errorTitle": "Loading Failed",
+    "errorDesc": "Please check the terminal logs, browser Console, or Network panel to locate the model page error.",
+    "noGridTitle": "No Grid Available",
+    "noGridDesc": "Please check the terminal logs, browser Console, or Network panel to locate the grid loading error.",
+    "homepage": "Homepage",
+    "huggingface": "Hugging Face",
+    "civitai": "Civitai",
+    "downloadWorkflow": "Download ComfyUI Workflow"
+  },
+  "virtualGrid": {
+    "toolsLabel": "Tools",
+    "gridTools": "Grid Tools",
+    "openTools": "Open Grid Tools",
+    "collapseTools": "Collapse Tool Panel",
+    "loadFailed": "Load Failed",
+    "clickToCopy": "Click to copy",
+    "searchPrompt": "Search Artist Tags",
+    "searchPlaceholder": "Search artists...",
+    "clearSearch": "Clear Search",
+    "prevMatch": "Previous Match",
+    "nextMatch": "Next Match",
+    "noResults": "No Results",
+    "matchCount": "{current}/{total}",
+    "jumpToRow": "Jump to Row",
+    "rowPlaceholder": "Row Number",
+    "jumpButton": "Jump",
+    "columnVisibility": "Column Visibility",
+    "selectAll": "Select All",
+    "selectNone": "Select None",
+    "columnLabel": "Column {index}",
+    "copiedPrompt": "Artist tags copied",
+    "copyFailed": "Copy failed",
+    "rowRangeError": "Row number must be between 1 and {max}"
+  },
+  "cellDialog": {
+    "title": "Cell Preview",
+    "positivePrompt": "Positive Prompt",
+    "noPositivePrompt": "(No positive prompt)",
+    "copyPrompt": "Copy Prompt",
+    "parameters": "Parameters",
+    "seed": "Seed",
+    "size": "Size",
+    "copySeed": "Copy Seed",
+    "downloadImage": "Download Image",
+    "loading": "Loading...",
+    "prevImage": "Previous",
+    "nextImage": "Next",
+    "imageCount": "{current}/{total}"
+  },
+  "modelCard": {
+    "viewLarge": "View Full Size",
+    "collapse": "Collapse",
+    "expand": "Expand",
+    "scrollLeft": "Scroll left",
+    "scrollRight": "Scroll right"
+  }
+}

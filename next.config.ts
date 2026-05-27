@@ -2,6 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
+import createNextIntlPlugin from "next-intl/plugin";
 import type { NextConfig } from "next";
 
 // 仅在 next dev 时启动 Miniflare，提供 R2/KV 等 Cloudflare binding
@@ -17,7 +18,7 @@ const markdownLoaderPath = path.join(
   "loaders",
   "markdown-source-loader.cjs",
 );
-const contentPageMarkdownPattern = /(^|[\\/])data[\\/].*-page\.md$/i;
+const contentPageMarkdownPattern = /(^|[\\/])data[\\/].*-page(?:\.en)?\.md$/i;
 
 const nextConfig: NextConfig = {
   env: {
@@ -52,4 +53,6 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
+
+export default withNextIntl(nextConfig);

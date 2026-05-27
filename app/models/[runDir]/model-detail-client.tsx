@@ -1,7 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
-import Link from "next/link";
 
 import { AuthLoginDialog } from "@/components/auth-login-dialog";
 import { useAuth } from "@/components/auth-provider";
@@ -27,8 +27,10 @@ import {
 import { ModelDetailHeader } from "./model-detail-header";
 import { GridSkeleton, SummarySkeleton } from "./model-detail-skeletons";
 import { useModelDetailData } from "./use-model-detail-data";
+import { Link } from "@/i18n/navigation";
 
 export function ModelDetailClientPage({ runDir }: { runDir: string }) {
+  const t = useTranslations("modelDetail");
   const { user } = useAuth();
   const { showNsfw } = useUserPreferences();
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
@@ -73,7 +75,7 @@ export function ModelDetailClientPage({ runDir }: { runDir: string }) {
         <BreadcrumbList>
           <BreadcrumbItem>
             <BreadcrumbLink asChild>
-              <Link href="/">首页</Link>
+              <Link href="/">{t("breadcrumbHome")}</Link>
             </BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
@@ -91,10 +93,8 @@ export function ModelDetailClientPage({ runDir }: { runDir: string }) {
       {detailLoadState === "not-found" ? (
         <Empty data-testid="model-not-found">
           <EmptyHeader>
-            <EmptyTitle>未找到模型</EmptyTitle>
-            <EmptyDescription>
-              这个模型页可能已被删除，或当前会话无权访问。
-            </EmptyDescription>
+            <EmptyTitle>{t("notFoundTitle")}</EmptyTitle>
+            <EmptyDescription>{t("notFoundDesc")}</EmptyDescription>
           </EmptyHeader>
         </Empty>
       ) : null}
@@ -102,10 +102,8 @@ export function ModelDetailClientPage({ runDir }: { runDir: string }) {
       {detailLoadState === "error" ? (
         <Empty data-testid="model-error">
           <EmptyHeader>
-            <EmptyTitle>加载失败</EmptyTitle>
-            <EmptyDescription>
-              请查看终端日志、浏览器 Console 或 Network 面板定位模型页错误。
-            </EmptyDescription>
+            <EmptyTitle>{t("errorTitle")}</EmptyTitle>
+            <EmptyDescription>{t("errorDesc")}</EmptyDescription>
           </EmptyHeader>
         </Empty>
       ) : null}
@@ -140,10 +138,8 @@ export function ModelDetailClientPage({ runDir }: { runDir: string }) {
         isDetailReady ? (
           <Empty>
             <EmptyHeader>
-              <EmptyTitle>暂无网格可展示</EmptyTitle>
-              <EmptyDescription>
-                请查看终端日志、浏览器 Console 或 Network 面板定位网格加载错误。
-              </EmptyDescription>
+              <EmptyTitle>{t("noGridTitle")}</EmptyTitle>
+              <EmptyDescription>{t("noGridDesc")}</EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : null}

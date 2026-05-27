@@ -1,0 +1,114 @@
+{
+  "metadata": {
+    "home": {
+      "title": "SD Style Lab — AI 风格实验室",
+      "description": "AI 图像风格探索平台，使用 ComfyUI 生成 Stable Diffusion 风格对比网格。"
+    },
+    "info": {
+      "title": "关于 - SD Style Lab",
+      "description": "关于 SD Style Lab 与项目介绍"
+    },
+    "privacy": {
+      "title": "隐私权政策 - SD Style Lab",
+      "description": "SD Style Lab 的隐私权政策说明"
+    }
+  },
+  "header": {
+    "brand": "SD Style Lab",
+    "beta": "Beta",
+    "login": "登录",
+    "userMenu": "用户菜单",
+    "user": "用户",
+    "showNsfw": "显示 NSFW",
+    "clearCache": "清除图片缓存",
+    "cacheCleared": "图片缓存已清除，正在刷新...",
+    "logout": "退出登录",
+    "toggleTheme": "切换主题"
+  },
+  "home": {
+    "badge": "Stable Diffusion Research",
+    "title": "AI 图像风格",
+    "titleAccent": "实验室",
+    "subtitle": "系统化的 Stable Diffusion 模型画风评估平台。通过可复现的测试与画风组合实验，展示可对比的画风实验。",
+    "modelsSection": "模型目录",
+    "modelsDescription": "浏览最近收录的模型评测与风格网格",
+    "modelsCount": "{count} Models Found",
+    "errorTitle": "加载失败",
+    "errorDescription": "请查看终端日志或 Network 面板定位首页数据链路错误。",
+    "emptyTitle": "暂无模型",
+    "emptyDescription": "暂无可用模型数据，等待后端数据同步。"
+  },
+  "footer": {
+    "copyright": "© {year} SD Style Lab · AI 图像风格探索平台",
+    "about": "关于",
+    "privacy": "隐私权政策"
+  },
+  "auth": {
+    "title": "登录",
+    "description": "登录后可查看高级内容和下载图片",
+    "github": "使用 GitHub 登录",
+    "google": "使用 Google 登录",
+    "microsoft": "使用 Microsoft 登录",
+    "redirecting": "正在跳转…"
+  },
+  "modelDetail": {
+    "breadcrumbHome": "首页",
+    "notFoundTitle": "未找到模型",
+    "notFoundDesc": "这个模型页可能已被删除，或当前会话无权访问。",
+    "errorTitle": "加载失败",
+    "errorDesc": "请查看终端日志、浏览器 Console 或 Network 面板定位模型页错误。",
+    "noGridTitle": "暂无网格可展示",
+    "noGridDesc": "请查看终端日志、浏览器 Console 或 Network 面板定位网格加载错误。",
+    "homepage": "官网",
+    "huggingface": "Hugging Face 链接",
+    "civitai": "Civitai 链接",
+    "downloadWorkflow": "下载 Comfy UI 工作流"
+  },
+  "virtualGrid": {
+    "toolsLabel": "工具",
+    "gridTools": "网格工具",
+    "openTools": "打开网格工具",
+    "collapseTools": "收起工具面板",
+    "loadFailed": "加载失败",
+    "clickToCopy": "点击复制",
+    "searchPrompt": "搜索画师串",
+    "searchPlaceholder": "搜索画师...",
+    "clearSearch": "清空搜索",
+    "prevMatch": "上一个匹配",
+    "nextMatch": "下一个匹配",
+    "noResults": "无结果",
+    "matchCount": "{current}/{total}",
+    "jumpToRow": "跳转到行",
+    "rowPlaceholder": "行号",
+    "jumpButton": "跳转",
+    "columnVisibility": "列显示",
+    "selectAll": "全选",
+    "selectNone": "全不选",
+    "columnLabel": "列 {index}",
+    "copiedPrompt": "已复制画师串",
+    "copyFailed": "复制失败",
+    "rowRangeError": "行号必须在 1 到 {max} 之间"
+  },
+  "cellDialog": {
+    "title": "单元格预览",
+    "positivePrompt": "Positive Prompt",
+    "noPositivePrompt": "（无 positive prompt）",
+    "copyPrompt": "复制 Prompt",
+    "parameters": "Parameters",
+    "seed": "Seed",
+    "size": "Size",
+    "copySeed": "复制 Seed",
+    "downloadImage": "下载图片",
+    "loading": "加载中...",
+    "prevImage": "上一张",
+    "nextImage": "下一张",
+    "imageCount": "{current}/{total}"
+  },
+  "modelCard": {
+    "viewLarge": "查看大图",
+    "collapse": "收起",
+    "expand": "展开",
+    "scrollLeft": "Scroll left",
+    "scrollRight": "Scroll right"
+  }
+}

@@ -1,10 +1,11 @@
 "use client";
 
-import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 
 import { BlurhashCanvas } from "@/components/comfyui/blurhash-canvas";
 import { Card, CardContent } from "@/components/ui/card";
+import { Link } from "@/i18n/navigation";
 
 import type { RunAssetSummary, RunSummary } from "@/lib/comfyui-types";
 
@@ -90,6 +91,7 @@ function CardImage({
 }
 
 function ExpandableDescription({ text }: { text: string }) {
+  const t = useTranslations("modelCard");
   const [isExpanded, setIsExpanded] = useState(false);
   const [isTruncated, setIsTruncated] = useState(false);
   const textRef = useRef<HTMLParagraphElement>(null);
@@ -125,7 +127,7 @@ function ExpandableDescription({ text }: { text: string }) {
               setIsExpanded((prev) => !prev);
             }}
             className="flex items-center justify-center p-1 text-muted-foreground hover:text-primary transition-colors focus:outline-none cursor-pointer"
-            title={isExpanded ? "收起" : "展开"}
+            title={isExpanded ? t("collapse") : t("expand")}
           >
             {isExpanded ? (
               <svg
@@ -181,6 +183,7 @@ function HorizontalScrollList({
   assets: RunAssetSummary[];
   onImageClick: (url: string) => void;
 }) {
+  const t = useTranslations("modelCard");
   const scrollRef = useRef<HTMLDivElement>(null);
   const scrollTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -249,7 +252,7 @@ function HorizontalScrollList({
       <button
         onClick={(e) => scroll("left", e)}
         className="absolute left-0 z-20 bg-background/80 hover:bg-background text-foreground shadow-sm rounded-r-md p-1 opacity-0 group-hover/list:opacity-100 transition-opacity cursor-pointer"
-        aria-label="Scroll left"
+        aria-label={t("scrollLeft")}
       >
         <svg
           width="20"
@@ -261,7 +264,7 @@ function HorizontalScrollList({
           strokeLinecap="round"
           strokeLinejoin="round"
         >
-          <path d="m15 18-6-6 6-6" />
+          <path d="m15 18-6-6-6 6" />
         </svg>
       </button>
 
@@ -290,7 +293,7 @@ function HorizontalScrollList({
                 const url = getFullResUrl(thumbAsset);
                 if (url) onImageClick(url);
               }}
-              title="查看大图"
+              title={t("viewLarge")}
             >
               <CardImage
                 src={thumbSource.imgSrc}
@@ -310,7 +313,7 @@ function HorizontalScrollList({
       <button
         onClick={(e) => scroll("right", e)}
         className="absolute right-0 z-20 bg-background/80 hover:bg-background text-foreground shadow-sm rounded-l-md p-1 opacity-0 group-hover/list:opacity-100 transition-opacity cursor-pointer"
-        aria-label="Scroll right"
+        aria-label={t("scrollRight")}
       >
         <svg
           width="20"
@@ -340,6 +343,7 @@ export function ModelCard({
   modelSummary,
   onPreviewImage,
 }: ModelCardProps) {
+  const t = useTranslations("modelCard");
   const modelName = modelSummary.model?.name || modelSummary.run_dir;
   const modelDesc =
     modelSummary.model?.description?.zh || modelSummary.model?.description?.en;
@@ -375,7 +379,7 @@ export function ModelCard({
             const url = getFullResUrl(coverAsset);
             if (url) onPreviewImage(url);
           }}
-          title="查看大图"
+          title={t("viewLarge")}
         >
           <CardImage
             src={coverSource?.imgSrc}

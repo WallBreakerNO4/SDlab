@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import type { CSSProperties, ReactNode } from "react";
 
 import type { CachedRow } from "./virtual-grid-types";
@@ -50,6 +51,7 @@ export function VirtualGridRowLabel({
   onCopyRowLabel,
   highlightTerm,
 }: VirtualGridRowLabelProps) {
+  const t = useTranslations("virtualGrid");
   return (
     <div
       className="bg-background/95 sticky left-0 z-20 flex h-full w-full border-r border-border/40 px-3 py-2 text-xs backdrop-blur supports-backdrop-filter:bg-background/80 overflow-hidden"
@@ -62,7 +64,7 @@ export function VirtualGridRowLabel({
               cachedRow && cachedRow.status === "ready"
                 ? ((cachedRow.yValue ?? preloadedYLabel) || "-")
                 : cachedRow && cachedRow.status === "error"
-                  ? (preloadedYLabel || "加载失败")
+                  ? (preloadedYLabel || t("loadFailed"))
                   : yLabel;
 
             if (!labelText || labelText === "-") {
@@ -84,7 +86,7 @@ export function VirtualGridRowLabel({
                     e.stopPropagation();
                     void onCopyRowLabel(labelText);
                   }}
-                  title="点击复制"
+                  title={t("clickToCopy")}
                 >
                   {parts.map((part, index) => {
                     let weight = 1;
@@ -166,7 +168,7 @@ export function VirtualGridRowLabel({
                     e.stopPropagation();
                     void onCopyRowLabel(labelText);
                   }}
-                  title="点击复制"
+                  title={t("clickToCopy")}
                 >
                   {renderHighlightedText(labelText, highlightTerm)}
                 </p>

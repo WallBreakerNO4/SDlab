@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -81,6 +82,7 @@ export function VirtualGrid({
 }: VirtualGridProps) {
   "use no memo";
 
+  const t = useTranslations("virtualGrid");
   const scrollElementRef = useRef<HTMLDivElement | null>(null);
   const loadedThumbKeysRef = useRef(new Set<string>());
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -422,7 +424,7 @@ export function VirtualGrid({
         positivePrompt:
           positivePrompt ??
           representative?.positive_prompt ??
-          "（无 positive prompt）",
+          "",
         items,
       });
       setDialogOpen(true);
@@ -433,11 +435,11 @@ export function VirtualGrid({
   const copyRowLabel = useCallback(async (value: string) => {
     try {
       await navigator.clipboard.writeText(value);
-      toast.success("已复制画师串");
+      toast.success(t("copiedPrompt"));
     } catch {
-      toast.error("复制失败");
+      toast.error(t("copyFailed"));
     }
-  }, []);
+  }, [t]);
 
   const toolsPanel = (
     <div
@@ -451,8 +453,8 @@ export function VirtualGrid({
           type="button"
           onClick={() => toggleGridTools(true)}
           className="hover:bg-muted/50 relative flex flex-1 flex-col items-center justify-center gap-1 py-3 transition-colors"
-          title="打开网格工具"
-          aria-label="打开网格工具"
+          title={t("openTools")}
+          aria-label={t("openTools")}
         >
           <HugeiconsIcon
             icon={Settings02Icon}
@@ -463,7 +465,7 @@ export function VirtualGrid({
             className="text-[10px] font-medium leading-tight"
             style={{ writingMode: "vertical-rl" }}
           >
-            工具
+            {t("toolsLabel")}
           </span>
           {searchQuery.trim() || hasHiddenColumns ? (
             <span
@@ -478,14 +480,14 @@ export function VirtualGrid({
       ) : (
         <>
           <div className="flex items-center justify-between border-b border-border/40 px-3 py-2.5">
-            <span className="text-sm font-medium">网格工具</span>
+            <span className="text-sm font-medium">{t("gridTools")}</span>
             <Button
               type="button"
               size="icon-xs"
               variant="ghost"
               onClick={() => toggleGridTools(false)}
-              title="收起工具面板"
-              aria-label="收起工具面板"
+              title={t("collapseTools")}
+              aria-label={t("collapseTools")}
             >
               <HugeiconsIcon
                 icon={Cancel01Icon}
@@ -504,7 +506,7 @@ export function VirtualGrid({
                     strokeWidth={2}
                     className="size-3 text-muted-foreground"
                   />
-                  搜索画师串
+                  {t("searchPrompt")}
                 </span>
                 <HugeiconsIcon
                   icon={ArrowDown01Icon}
@@ -530,7 +532,7 @@ export function VirtualGrid({
                       ref={searchInputRef}
                       type="text"
                       className="h-7 w-full rounded-none border-border/50 py-0 pl-7 pr-28 text-xs shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-1 focus-visible:ring-ring/30"
-                      placeholder="搜索画师..."
+                      placeholder={t("searchPlaceholder")}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
@@ -538,8 +540,14 @@ export function VirtualGrid({
                       {searchQuery.trim() ? (
                         <span className="mr-0.5 text-[10px] tabular-nums text-muted-foreground/60">
                           {searchMatches.length > 0
-                            ? `${activeMatchIndex >= 0 ? activeMatchIndex + 1 : 0}/${searchMatches.length}`
-                            : "无结果"}
+                            ? t("matchCount", {
+                                current:
+                                  activeMatchIndex >= 0
+                                    ? activeMatchIndex + 1
+                                    : 0,
+                                total: searchMatches.length,
+                              })
+                            : t("noResults")}
                         </span>
                       ) : null}
                       {searchQuery ? (
@@ -553,7 +561,7 @@ export function VirtualGrid({
                             setSearchQuery("");
                             setActiveMatchIndex(-1);
                           }}
-                          title="清空搜索"
+                          title={t("clearSearch")}
                         >
                           <HugeiconsIcon
                             icon={Cancel01Icon}
@@ -569,7 +577,7 @@ export function VirtualGrid({
                         className="size-5"
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => goToMatch(-1)}
-                        title="上一个匹配"
+                        title={t("prevMatch")}
                         disabled={searchMatches.length === 0}
                       >
                         <HugeiconsIcon
@@ -585,7 +593,7 @@ export function VirtualGrid({
                         className="size-5"
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => goToMatch(1)}
-                        title="下一个匹配"
+                        title={t("nextMatch")}
                         disabled={searchMatches.length === 0}
                       >
                         <HugeiconsIcon
@@ -609,7 +617,7 @@ export function VirtualGrid({
                     strokeWidth={2}
                     className="size-3 text-muted-foreground"
                   />
-                  跳转到行
+                  {t("jumpToRow")}
                 </span>
                 <HugeiconsIcon
                   icon={ArrowDown01Icon}
@@ -628,7 +636,7 @@ export function VirtualGrid({
                       setJumpInputValue("");
                     } else {
                       toast.error(
-                        `行号必须在 1 到 ${grid.y_indexes.length} 之间`,
+                        t("rowRangeError", { max: grid.y_indexes.length }),
                       );
                     }
                   }}
@@ -640,7 +648,7 @@ export function VirtualGrid({
                       min={1}
                       max={grid.y_indexes.length}
                       className="h-7 w-full rounded-none border-border/50 py-0 pl-2 pr-2 text-xs shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-1 focus-visible:ring-ring/30 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
-                      placeholder="行号"
+                      placeholder={t("rowPlaceholder")}
                       value={jumpInputValue}
                       onChange={(e) => setJumpInputValue(e.target.value)}
                     />
@@ -651,7 +659,7 @@ export function VirtualGrid({
                       strokeWidth={2}
                       data-icon="inline-start"
                     />
-                    跳转
+                    {t("jumpButton")}
                   </Button>
                 </form>
               </CollapsibleContent>
@@ -666,7 +674,7 @@ export function VirtualGrid({
                     strokeWidth={2}
                     className="size-3 text-muted-foreground"
                   />
-                  列显示
+                  {t("columnVisibility")}
                 </span>
                 <HugeiconsIcon
                   icon={ArrowDown01Icon}
@@ -683,7 +691,7 @@ export function VirtualGrid({
                       variant="outline"
                       onClick={showAll}
                     >
-                      全选
+                      {t("selectAll")}
                     </Button>
                     <Button
                       type="button"
@@ -691,12 +699,12 @@ export function VirtualGrid({
                       variant="outline"
                       onClick={hideAll}
                     >
-                      全不选
+                      {t("selectNone")}
                     </Button>
                   </div>
                   <div className="flex max-h-48 flex-col gap-1 overflow-auto">
                     {grid.x_columns.map((col, originalIndex) => {
-                      const label = getXLabel(col) || `列 ${originalIndex + 1}`;
+                      const label = getXLabel(col) || t("columnLabel", { index: originalIndex + 1 });
                       const isHidden = hiddenColumns.has(originalIndex);
                       return (
                         <label

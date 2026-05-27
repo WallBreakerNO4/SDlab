@@ -1,8 +1,5 @@
-import HomePageClient from "./home-page-client";
+import { redirect } from "next/navigation";
 
-import { listRunSummaries } from "@/lib/run-list";
-
-export default async function Page() {
-  const models = await listRunSummaries();
-  return <HomePageClient models={models} />;
+export default function RootPage() {
+  redirect("/zh");
 }
