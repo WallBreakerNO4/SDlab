@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { useCallback, useState } from "react";
+import { toast } from "sonner";
 import { AuthLoginDialog } from "@/components/auth-login-dialog";
 import { useAuth } from "@/components/auth-provider";
 import { useUserPreferences } from "@/components/user-preferences-provider";
@@ -18,6 +19,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { clearAllPrivateImageCaches } from "@/lib/private-image-cache";
 
 function getInitials(name: string | undefined | null): string {
   if (!name) return "?";
@@ -36,6 +38,12 @@ export function SiteHeader() {
   const handleSignOut = useCallback(async () => {
     await signOut();
   }, [signOut]);
+
+  const handleClearCache = useCallback(async () => {
+    await clearAllPrivateImageCaches();
+    toast.success("图片缓存已清除，正在刷新...");
+    window.location.reload();
+  }, []);
 
   const displayName =
     user?.user_metadata?.full_name ??
@@ -110,6 +118,10 @@ export function SiteHeader() {
                   >
                     显示 NSFW
                   </DropdownMenuCheckboxItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => void handleClearCache()}>
+                    清除图片缓存
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => void handleSignOut()}>
                     退出登录
