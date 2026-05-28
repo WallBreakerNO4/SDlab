@@ -6,22 +6,20 @@ import { routing } from "./i18n/routing";
 
 const intlMiddleware = createMiddleware(routing);
 
-/**
- * Middleware that handles i18n routing and refreshes the Supabase auth session.
- *
- * IMPORTANT: This file must NOT import from `lib/supabase-auth.ts` because
- * that module uses `server-only` + `next/headers` which are unavailable in
- * Edge middleware. We create the client inline instead.
- */
-export async function middleware(request: NextRequest) {
-  // 1. Handle i18n routing first (redirects, locale detection)
-  const intlResponse = intlMiddleware(request);
-  if (intlResponse.status !== 200) {
-    return intlResponse;
-  }
+function shouldRunIntlMiddleware(pathname: string): boolean {
+  return !(
+    pathname.startsWith("/api/") ||
+    pathname === "/auth/callback" ||
+    pathname.startsWith("/auth/callback/")
+  );
+}
 
-  // 2. Continue with Supabase auth session refresh
-  let response = intlResponse;
+async function refreshSupabaseSession(
+  request: NextRequest,
+  initialResponse: NextResponse,
+  createResponse: () => NextResponse,
+): Promise<NextResponse> {
+  let response = initialResponse;
 
   let url: string;
   let anonKey: string;
@@ -42,7 +40,7 @@ export async function middleware(request: NextRequest) {
         for (const { name, value } of cookiesToSet) {
           request.cookies.set(name, value);
         }
-        response = NextResponse.next({ request });
+        response = createResponse();
         for (const { name, value, options } of cookiesToSet) {
           response.cookies.set(name, value, options);
         }
@@ -52,6 +50,26 @@ export async function middleware(request: NextRequest) {
 
   await supabase.auth.getUser();
   return response;
+}
+
+/**
+ * Middleware that handles i18n routing and refreshes the Supabase auth session.
+ *
+ * IMPORTANT: This file must NOT import from `lib/supabase-auth.ts` because
+ * that module uses `server-only` + `next/headers` which are unavailable in
+ * Edge middleware. We create the client inline instead.
+ */
+export async function middleware(request: NextRequest) {
+  const runIntl = shouldRunIntlMiddleware(request.nextUrl.pathname);
+  const createResponse = () =>
+    runIntl ? intlMiddleware(request) : NextResponse.next({ request });
+  const intlResponse = createResponse();
+
+  if (runIntl && intlResponse.status !== 200) {
+    return intlResponse;
+  }
+
+  return refreshSupabaseSession(request, intlResponse, createResponse);
 }
 
 export const config = {
