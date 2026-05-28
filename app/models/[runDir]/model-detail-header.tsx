@@ -1,4 +1,4 @@
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { HuggingFace, Civitai, ComfyUI } from "@lobehub/icons";
 import type { User } from "@supabase/supabase-js";
@@ -18,9 +18,11 @@ export function ModelDetailHeader({
   onRequireLogin,
 }: ModelDetailHeaderProps) {
   const t = useTranslations("modelDetail");
+  const locale = useLocale();
   const modelName = detailData.run.model?.name || detailData.run.run_dir;
   const modelDesc =
-    detailData.run.model?.description?.zh ||
+    detailData.run.model?.description?.[locale as "zh" | "en"] ??
+    detailData.run.model?.description?.zh ??
     detailData.run.model?.description?.en;
   const links = detailData.run.model?.links;
   const workflow = detailData.run.workflow;

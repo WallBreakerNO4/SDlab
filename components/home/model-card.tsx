@@ -1,6 +1,6 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 
 import { BlurhashCanvas } from "@/components/comfyui/blurhash-canvas";
@@ -345,8 +345,10 @@ export function ModelCard({
 }: ModelCardProps) {
   const t = useTranslations("modelCard");
   const modelName = modelSummary.model?.name || modelSummary.run_dir;
+  const locale = useLocale();
+  const description = modelSummary.model?.description;
   const modelDesc =
-    modelSummary.model?.description?.zh || modelSummary.model?.description?.en;
+    description?.[locale as "zh" | "en"] ?? description?.zh ?? description?.en;
 
   const coverAsset = modelSummary.assets?.cover;
   const coverSource = resolvePreferredImageSource(coverAsset);
