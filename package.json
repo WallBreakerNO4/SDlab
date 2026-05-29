@@ -1,6 +1,6 @@
 {
   "name": "sdlab",
-  "version": "0.4.1",
+  "version": "0.6.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -13,7 +13,7 @@
     "@base-ui/react": "^1.5.0",
     "@hugeicons/core-free-icons": "^3.3.0",
     "@hugeicons/react": "^1.1.6",
-    "@lobehub/icons": "^5.8.0",
+    "@lobehub/icons": "^5.10.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.106.2",
     "@tanstack/react-virtual": "^3.13.26",
@@ -55,5 +55,5 @@
     "typescript": "^5.9.3",
     "wrangler": "^4.95.0"
   },
-  "packageManager": "pnpm@11.3.0+sha512.2c403d6594527287672b1f7056343a1f7c3634036a67ffabfcc2b3d7595d843768f8787148d1b57cf7956c90606bbd192857c363af19e96d2d0ec9ec5741d215"
+  "packageManager": "pnpm@11.4.0+sha512.f0febc7e37552ab485494a914241b338e0b3580b93d54ce31f00933015880863129038a1b4ae4e414a0ee63ac35bf21197e990172c4a68256450b5636310968f"
 }
