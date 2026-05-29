@@ -15,7 +15,7 @@
 | 虚拟网格 + 预览 | `virtual-grid.tsx`           | `@tanstack/react-virtual` + Dialog + 复制/切图 |
 | Blurhash 占位   | `blurhash-canvas.tsx`        | 从 blurhash 字符串渲染 canvas 占位图           |
 | 网格图片组件    | `grid-image.tsx`             | R2 图片 + blurhash 占位 + 加载/错误状态        |
-| 页面侧消费      | `app/models/[runDir]/page.tsx` | fetch + type guard + skeleton/empty 状态       |
+| 页面侧消费      | `app/[locale]/models/[runDir]/page.tsx` | Server Component → `ModelDetailClientPage` → 虚拟网格       |
 
 ## 约定（本目录特有）
 

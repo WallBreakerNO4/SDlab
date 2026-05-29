@@ -11,6 +11,21 @@
     "privacy": {
       "title": "Privacy Policy - SD Style Lab",
       "description": "Privacy policy of SD Style Lab"
+    },
+    "modelDetail": {
+      "titleSuffix": " - SD Style Lab",
+      "descriptionFallback": "Stable Diffusion style model evaluation detail page, browse multi-dimensional style comparison grid images."
+    },
+    "error": {
+      "title": "Page Error - SD Style Lab",
+      "description": "An unexpected error occurred while loading the page. Please try again later.",
+      "retry": "Retry",
+      "goHome": "Back to Home"
+    },
+    "notFound": {
+      "title": "Page Not Found - SD Style Lab",
+      "description": "The page you are looking for does not exist or has been removed.",
+      "goHome": "Back to Home"
     }
   },
   "header": {

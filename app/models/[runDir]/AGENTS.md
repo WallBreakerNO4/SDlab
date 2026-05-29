@@ -1,17 +1,18 @@
 <!-- Parent: ../../AGENTS.md -->
-<!-- Generated: 2026-04-25 | Updated: 2026-04-25 -->
+<!-- Generated: 2026-04-25 | Updated: 2026-05-30 -->
 
-# app/models/[runDir]/ — 模型详情页
+# app/models/[runDir]/ — 模型详情页共享组件
 
 ## 概览
 
-- 模型详情页：并行拉取 run 详情（detail）+ 网格索引（grid），渲染虚拟网格 + 模型描述 header + workflow 下载入口。支持 NSFW 切换、用户风格提示词收藏。
+- 模型详情页的客户端组件模块：并行拉取 run 详情 + 网格索引，渲染虚拟网格 + 模型描述 header + workflow 下载入口。支持 NSFW 切换、用户风格提示词收藏。
+- 本目录组件由 `app/[locale]/models/[runDir]/page.tsx`（Server Component）消费，不是独立页面路由。
 
 ## 去哪儿看
 
 | 场景                   | 位置                           | 备注                                                                        |
 | ---------------------- | ------------------------------ | --------------------------------------------------------------------------- |
-| 服务端页面入口         | `page.tsx`                     | Server Component；`params: Promise<{ runDir }>`，校验 `isValidRunDir()`     |
+| 服务端页面入口         | `app/[locale]/models/[runDir]/page.tsx` | Server Component；`params: Promise<{ locale, runDir }>`，校验 `hasLocale()` + `isValidRunDir()` |
 | 客户端状态与渲染       | `model-detail-client.tsx`      | `useModelDetailData` 并行拉取，状态机：loading / ready / not-found / error  |
 | 数据拉取 hook          | `use-model-detail-data.ts`     | 拉取 view/current.json → access → bootstrap，含 abort 清理与 type guard    |
 | 模型详情 Header        | `model-detail-header.tsx`      | 模型名、描述、外部链接（homepage/HuggingFace/Civitai）、workflow 下载入口   |
@@ -23,7 +24,7 @@
 
 ## 约定（本目录特有）
 
-- `page.tsx` 是 Server Component，只校验 `runDir` 合法后渲染 `ModelDetailClientPage`；不在此做数据获取。
+- 本目录只放客户端组件和类型，不作为独立页面路由；页面入口在 `app/[locale]/models/[runDir]/page.tsx`。
 - `use-model-detail-data.ts` 是本页面核心数据 hook：先拉 `view/current.json`（公开）→ 认证用户再拉 `/api/comfyui/run/{runDir}/access` → 最后拉 bootstrap JSON。
 - SFW 场景 bootstrap 通过 `publicObjectUrl()`；NSFW 场景通过 `privateObjectProxyUrl()` + grant token。
 - bootstrap JSON 的 `yLabels`（camelCase）会被归一化为 `y_labels`（snake_case）以匹配网格组件预期。
@@ -35,7 +36,7 @@
 ## 反模式
 
 - 不要绕过 type guard 直接消费 API 返回值；所有 fetch 结果都经 `is*` 守卫校验。
-- 不要在 `page.tsx` 中做数据获取；所有数据逻辑应由 client component 的 hook 负责。
+- 不要在本目录中创建新的 `page.tsx` 作为路由入口；页面入口已迁至 `app/[locale]/models/[runDir]/page.tsx`。
 - 不要手动拼接 bootstrap URL 或 R2 路径；使用 `publicObjectUrl()` / `privateObjectProxyUrl()`。
 - 不要把展示页缩略图语义用于此页面的首页卡片展示。
 - 不要在这里引入 `server-only` 的 Supabase auth client。

@@ -1,10 +1,11 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 
 import { AuthLoginDialog } from "@/components/auth-login-dialog";
 import { useAuth } from "@/components/auth-provider";
+import { JsonLdBreadcrumbList } from "@/components/json-ld";
 import {
   type BlurhashCell,
   VirtualGrid,
@@ -28,9 +29,11 @@ import { ModelDetailHeader } from "./model-detail-header";
 import { GridSkeleton, SummarySkeleton } from "./model-detail-skeletons";
 import { useModelDetailData } from "./use-model-detail-data";
 import { Link } from "@/i18n/navigation";
+import { SITE_ORIGIN } from "@/lib/site-origin";
 
 export function ModelDetailClientPage({ runDir }: { runDir: string }) {
   const t = useTranslations("modelDetail");
+  const locale = useLocale();
   const { user } = useAuth();
   const { showNsfw } = useUserPreferences();
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
@@ -71,6 +74,15 @@ export function ModelDetailClientPage({ runDir }: { runDir: string }) {
 
   return (
     <main className="mx-auto flex h-full w-full max-w-none flex-col gap-2 overflow-hidden p-2">
+      <JsonLdBreadcrumbList
+        items={[
+          { name: t("breadcrumbHome"), url: `${SITE_ORIGIN}/${locale}` },
+          {
+            name: breadcrumbTitle,
+            url: `${SITE_ORIGIN}/${locale}/models/${encodeURIComponent(runDir)}`,
+          },
+        ]}
+      />
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>
