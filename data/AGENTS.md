@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-04-25 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-05-30 -->
 
 # data/ — 输入资产（只读）
 
@@ -22,8 +22,10 @@
   - Y 轴 prompt 资产（YAML + CSV）；由 CSV 转换并经 Danbooru 标注而来，当前主链路直接消费 YAML
   - YAML 使用 `prompt-y-table/v3`，每个 `tags[]` 都有 `type: general | artists`；`info.type` 已移除
 
-- `data/info-page.md` / `data/privacy-policy-page.md`
-  - 静态页面 Markdown 源文件，供 `app/info/` 和 `app/privacy-policy/` 页面渲染
+- `data/info-page.md` / `data/info-page.en.md`
+  - 静态页面 Markdown 源文件，由 `app/[locale]/info/page.tsx` 根据 locale 选择渲染
+- `data/privacy-policy-page.md` / `data/privacy-policy-page.en.md`
+  - 静态页面 Markdown 源文件，由 `app/[locale]/privacy-policy/page.tsx` 根据 locale 选择渲染
 
 ## 约定
 

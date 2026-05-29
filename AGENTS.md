@@ -1,5 +1,5 @@
-<!-- Generated: 2026-04-06 | Updated: 2026-05-19 -->
-<!-- Commit: e9e3fdf | 分支: feat/info-page -->
+<!-- Generated: 2026-04-06 | Updated: 2026-05-30 -->
+<!-- Commit: I18N | 分支: feat/i18n -->
 
 # Agent Guide (sd-style-lab/images-script)
 
@@ -21,15 +21,16 @@
 ```text
 ./
 ├── app/                    # App Router 页面与 API route
+│   ├── [locale]/           # 区域化页面入口（layout + 首页 + info + privacy-policy + models）
 │   ├── api/comfyui/        # runs/access/workflow + 公开/私有对象代理
 │   ├── auth/               # Supabase PKCE callback
-│   ├── models/[runDir]/    # 模型详情页（虚拟网格 + workflow 下载）
-│   ├── info/               # 关于页面（静态 Markdown）
-│   └── privacy-policy/     # 隐私政策页面（静态 Markdown）
+│   └── models/[runDir]/    # 模型详情页共享组件（由 [locale]/models/[runDir] 消费）
 ├── components/             # 业务组件 + UI primitives + auth provider
 │   ├── comfyui/            # 虚拟网格/图片预览/blurhash
 │   ├── home/               # 首页模型卡片/封面图/预览弹窗
 │   └── ui/                 # shadcn/radix primitives
+├── i18n/                   # next-intl 国际化配置（路由/请求/导航）
+├── messages/               # 翻译消息 JSON（zh.json / en.json）
 ├── lib/                    # Supabase/R2/路径安全/共享类型
 │   └── env/                # 环境变量集中读取
 ├── scripts/                # Python 生图、上传、CLI、辅助转换
@@ -47,7 +48,7 @@
 ├── loaders/                # 自定义 Webpack loader（见 loaders/AGENTS.md）
 ├── public/                 # 静态资源（favicon 等）
 ├── types/                  # Next 生成类型（只读）
-├── middleware.ts           # Supabase session refresh
+├── middleware.ts           # I18N 路由 + Supabase session refresh
 └── main.py                 # Python 顶层入口（委托到 scripts）
 ```
 
@@ -64,19 +65,21 @@
 | 上传规划              | `scripts/r2_upload/upload_planner.py`                                            | 多变体规划 + 并发编码；也处理 run 级静态图片资产上传                           |
 | 资产转换脚本          | `scripts/other/convert_*.py`                                                     | 文件名遗留 `json`，实际输出 YAML 资产                                          |
 | run 配置示例          | `data/models/example/config.yaml`                                                | `image-run-config/v1` 示例                                                     |
-| 网站首页              | `app/page.tsx`                                                                   | 读取 `/api/comfyui/runs`；消费 `assets.cover` / `assets.homepage_cards`        |
-| 模型详情页           | `app/models/[runDir]/page.tsx`                                                   | 拉取 view bootstrap JSON + 虚拟网格 + workflow 下载                            |
+| 网站首页              | `app/[locale]/page.tsx`                                                          | 读取 `/api/comfyui/runs`；消费 `assets.cover` / `assets.homepage_cards`        |
+| 模型详情页           | `app/[locale]/models/[runDir]/page.tsx`                                          | 拉取 view bootstrap JSON + 虚拟网格 + workflow 下载                            |
 | App API 总约定        | `app/api/AGENTS.md`                                                              | `app/api/**/route.ts` 共享约束                                                 |
 | ComfyUI API           | `app/api/comfyui/**/route.ts`                                                    | runs 列表 / access 授权 / workflow 下载                                        |
 | Auth 回调特例         | `app/auth/AGENTS.md`                                                             | PKCE callback 直接交换 session                                                 |
-| 站点壳层 / 登录入口   | `app/layout.tsx`、`components/site-header.tsx`                                   | ThemeProvider + AuthProvider + 登录弹窗入口                                    |
+| 站点壳层 / 登录入口   | `app/[locale]/layout.tsx`、`components/site-header.tsx`                          | ThemeProvider + AuthProvider + NextIntlClientProvider + 登录弹窗入口             |
+| 国际化路由配置        | `i18n/routing.ts`                                                                | `defineRouting({ locales, defaultLocale, localePrefix })`                      |
+| 翻译消息文件          | `messages/zh.json`、`messages/en.json`                                           | 各 namespace 的翻译 key-value                                                  |
 | Cloudflare / OpenNext | `next.config.ts`、`open-next.config.ts`、`cloudflare-env.d.ts`、`wrangler.jsonc` | 本地 Miniflare + Workers bindings / vars                                       |
 | 服务端 Supabase       | `lib/supabase-auth.ts`                                                           | `server-only` + cookie session                                                 |
 | 浏览器端 Supabase     | `lib/supabase-browser.ts`                                                        | AuthProvider 使用                                                              |
 | runDir 校验           | `lib/comfyui-types.ts`                                                           | API 侧 `isValidRunDir()` type guard                                            |
 | 路径安全              | `lib/comfyui-path.ts`                                                            | 共享路径工具与相对路径逃逸防护                                                 |
 | R2 URL 构建           | `lib/r2-url.ts`                                                                  | 公开/私有 URL 与变体白名单                                                     |
-| 会话刷新              | `middleware.ts`                                                                  | Edge middleware，不能引 `lib/supabase-auth.ts`                                 |
+| 会话刷新 + I18N       | `middleware.ts`                                                                  | Edge middleware：next-intl 路由 + Supabase session refresh                     |
 | Webpack loader        | `loaders/markdown-source-loader.cjs`                                             | 构建时将 `.md` 内联为 JS 字符串；见 `loaders/AGENTS.md`                        |
 
 ## 代码图
@@ -106,6 +109,7 @@
 - 路径与 URL：API 入口的 `runDir` 先用 `lib/comfyui-types.ts:isValidRunDir()` 判形态；共享路径处理再走 `lib/comfyui-path.ts`；R2 URL 统一走 `lib/r2-url.ts`。
 - 前端：大网格必须虚拟化；图片优先消费 R2 display/thumb 变体并配合 blurhash 占位，这套变体统一称为“展示页缩略图”。
 - 前端首页：`/api/comfyui/runs` 当前会输出封面图/主页缩略图字段；不要把 run 详情页的展示页缩略图直接挪作首页卡片素材。
+- I18N：使用 `next-intl`，locale 前缀始终显示（`localePrefix: "always"`）。页面入口必须 `hasLocale()` + `setRequestLocale()`；导航链接统一走 `@/i18n/navigation` 的 `Link`/`useRouter`。翻译 key 变更需同时更新 `zh.json` 和 `en.json`，禁止只改一个。
 - 工具链：Python 用 `uv` + `pytest`（>=3.13）；Web 用 `pnpm` + Next 16 + React 19；E2E 用 Playwright。
 - Supabase CLI：本仓库统一使用 `pnpm dlx supabase ...` 运行 Supabase 命令。
 - CI 现状：当前仓库没有 `.github/workflows/`；变更后的验证依赖本地 `uv` / `pnpm` 命令串联完成。
@@ -154,8 +158,9 @@ pnpm dlx supabase migration new <name>
 
 ## 分层文档
 
-- `app/AGENTS.md`、`app/api/AGENTS.md`、`app/api/comfyui/AGENTS.md`、`app/auth/AGENTS.md`、`app/info/AGENTS.md`、`app/privacy-policy/AGENTS.md`、`app/models/[runDir]/AGENTS.md`：页面/API/Auth 的分层规则与 PKCE 特例。
+- `app/AGENTS.md`、`app/api/AGENTS.md`、`app/api/comfyui/AGENTS.md`、`app/auth/AGENTS.md`、`app/[locale]/AGENTS.md`、`app/models/[runDir]/AGENTS.md`：页面/API/Auth/I18N 的分层规则与 PKCE 特例。
 - `components/AGENTS.md`、`components/ui/AGENTS.md`、`components/comfyui/AGENTS.md`、`components/home/AGENTS.md`：业务组件、UI primitives、虚拟网格/图片渲染约定。
+- `i18n/AGENTS.md`、`messages/AGENTS.md`：国际化路由配置与翻译消息约定。
 - `lib/AGENTS.md`、`lib/env/AGENTS.md`：Supabase/R2/路径安全/共享类型边界与环境变量读取。
 - `scripts/AGENTS.md`、`scripts/generation/AGENTS.md`、`scripts/r2_upload/AGENTS.md`、`scripts/cli/AGENTS.md`、`scripts/other/AGENTS.md`：Python 主代码域与子系统边界。
 - `tests/AGENTS.md`、`e2e/AGENTS.md`、`supabase/AGENTS.md`、`data/AGENTS.md`、`hooks/AGENTS.md`、`types/AGENTS.md`：测试、迁移、资产、hooks、生成类型的局部规则。

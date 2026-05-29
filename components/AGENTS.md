@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-04-25 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-05-30 -->
 
 # components/ — 前端组件（业务 + 基础 UI）
 
@@ -18,7 +18,8 @@
 | 首页模型卡片          | `components/home/model-card.tsx`         | 封面图 + 描述展开 + 主页缩略图水平卷轴             |
 | 首页预览弹窗          | `components/home/preview-dialog.tsx`     | 全屏大图预览弹窗                                   |
 | 首页组件约定          | `components/home/AGENTS.md`              | 封面图/主页缩略图消费约定                          |
-| 站点头部              | `components/site-header.tsx`             | 品牌、ThemeToggle、登录弹窗入口、用户菜单          |
+| 站点头部              | `components/site-header.tsx`             | 品牌、ThemeToggle、登录弹窗入口、用户菜单；`useTranslations("header")` 驱动多语言 |
+| 站点头部组件约定       | `components/site-footer.tsx`              | 版权、关于/隐私政策链接；`useTranslations("footer")` + `@/i18n/navigation` Link |
 | 浏览器端认证 Provider | `components/auth-provider.tsx`           | `createSupabaseBrowserClient()` + session 监听     |
 | 登录弹窗              | `components/auth-login-dialog.tsx`       | GitHub / Google / Microsoft OAuth 入口             |
 | 主题切换              | `components/theme-toggle.tsx`            | `next-themes` + mounted guard，避免 hydration 闪烁 |
@@ -34,6 +35,7 @@
 - 性能：大网格依赖虚拟化（`@tanstack/react-virtual`），避免一次性渲染全部 cell
 - Blurhash：图片加载前展示 blurhash 占位（`blurhash-canvas.tsx`），提升感知加载速度
 - 主题切换通过 `next-themes`；按钮类组件需处理 mounted 前后的 hydration 差异
+- 多语言：客户端组件使用 `useTranslations("namespace")` 获取翻译文案；导航链接使用 `@/i18n/navigation` 的 `Link` 而非 `next/link`
 
 ## 反模式
 

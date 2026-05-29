@@ -1,11 +1,11 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-25 | Updated: 2026-04-25 -->
+<!-- Generated: 2026-04-25 | Updated: 2026-05-30 -->
 
 # components/home/ — 首页模型卡片组件
 
 ## 概览
 
-- 首页（`app/page.tsx`）使用的模型卡片组件：封面图展示、描述展开/收起、主页缩略图水平卷轴与预览弹窗。
+- 首页（`app/[locale]/page.tsx` + `app/home-page-client.tsx`）使用的模型卡片组件：封面图展示、描述展开/收起、主页缩略图水平卷轴与预览弹窗。
 
 ## 去哪儿看
 
