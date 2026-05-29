@@ -125,5 +125,22 @@
     "expand": "展开",
     "scrollLeft": "Scroll left",
     "scrollRight": "Scroll right"
+  },
+  "prompts": {
+    "title": "Prompt 法典 — SD Style Lab",
+    "description": "浏览结构化 prompt 标签，选择并复制用于生图。支持 NovelAI 和 ComfyUI 格式。",
+    "searchPlaceholder": "搜索标签或名称...",
+    "loading": "加载中...",
+    "noResults": "无匹配结果",
+    "noEntries": "无条目",
+    "copySuccess": "已复制 prompt",
+    "modelLabel": "目标模型",
+    "fileLabel": "选择法典",
+    "filterScopeAll": "全部",
+    "filterScopeName": "名称",
+    "filterScopeTag": "标签",
+    "filterExact": "精确",
+    "filterFuzzy": "模糊",
+    "characterBlock": "角色 {id}"
   }
 }

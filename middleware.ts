@@ -10,7 +10,8 @@ function shouldRunIntlMiddleware(pathname: string): boolean {
   return !(
     pathname.startsWith("/api/") ||
     pathname === "/auth/callback" ||
-    pathname.startsWith("/auth/callback/")
+    pathname.startsWith("/auth/callback/") ||
+    pathname.startsWith("/data/")
   );
 }
 
