@@ -11,8 +11,10 @@
 
 | 文件 | 描述 |
 |------|------|
-| `layout.tsx` | 全站根 Layout：字体系列、ThemeProvider、NextIntlClientProvider、AuthProvider、UserPreferencesProvider、SiteHeader、SiteFooter、Toaster、WebVitals |
+| `layout.tsx` | 全站根 Layout：字体系列、ThemeProvider、NextIntlClientProvider、AuthProvider、UserPreferencesProvider、SiteHeader、SiteFooter、Toaster、WebVitals、JSON-LD |
 | `page.tsx` | 首页（Server Component）：验证 locale → `setRequestLocale()` → `listRunSummaries()` → 渲染 `HomePageClient` |
+| `error.tsx` | 客户端错误页：`"use client"` + `Empty` 组件 + i18n + 重试按钮 + 回首页链接 |
+| `not-found.tsx` | 客户端 404 页：`"use client"` + `Empty` 组件 + i18n + 回首页链接 |
 | `info/page.tsx` | 关于页面：`force-static` + `react-markdown`，根据 locale 选择 `info-page.md` 或 `info-page.en.md` |
 | `privacy-policy/page.tsx` | 隐私政策页：`force-static` + `react-markdown`，根据 locale 选择 `privacy-policy-page.md` 或 `privacy-policy-page.en.md` |
 | `models/[runDir]/page.tsx` | 模型详情页（Server Component）：验证 locale + `isValidRunDir()` → 渲染 `ModelDetailClientPage(runDir)` |
@@ -26,6 +28,7 @@
 - `app/[locale]/layout.tsx` 替代了旧 `app/layout.tsx` 的大部分职责；不要在旧的 `app/layout.tsx` 里加 Provider 或字体
 - 根 `/` 的 redirect（`app/page.tsx` → `/zh`）保持不变；新增语言时需要同步更新默认跳转目标
 - 页面元数据（`generateMetadata`）使用 `getTranslations({ locale, namespace: "metadata.xxx" })` 获取翻译后的 title/description
+- error 和 not-found 页面都是客户端组件（`"use client"`），通过 `useTranslations("metadata.error")` / `useTranslations("metadata.notFound")` 获取翻译文案
 
 ### Common Patterns
 - 服务端入口模板：

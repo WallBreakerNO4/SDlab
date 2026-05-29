@@ -25,6 +25,7 @@
 | 主题切换              | `components/theme-toggle.tsx`            | `next-themes` + mounted guard，避免 hydration 闪烁 |
 | Sidebar primitive     | `components/ui/sidebar.tsx`              | cookie 持久化 + 快捷键 + mobile Sheet fallback     |
 | UI 组件使用示例       | `components/component-example.tsx`       | 用于展示/验证 UI primitives                        |
+| JSON-LD 结构化数据    | `components/json-ld.tsx`                | `JsonLdWebsite` + `JsonLdBreadcrumbList`，客户端注入 schema.org 标签 |
 | shadcn 配置           | `components.json`                        | aliases、style、cssVariables 等                    |
 
 ## 约定（本目录特有）
@@ -34,6 +35,7 @@
 - 图片源：优先使用 R2 公开 URL（`lib/r2-url.ts`）；私有图片使用 `privateObjectUrl()` 生成的短期签名 URL
 - 性能：大网格依赖虚拟化（`@tanstack/react-virtual`），避免一次性渲染全部 cell
 - Blurhash：图片加载前展示 blurhash 占位（`blurhash-canvas.tsx`），提升感知加载速度
+- JSON-LD：结构化数据组件（`json-ld.tsx`）是客户端组件，通过 `dangerouslySetInnerHTML` 注入 `<script type="application/ld+json">`；这样做避免在 Cloudflare Worker 侧执行 React 渲染，不消耗 Worker CPU
 - 主题切换通过 `next-themes`；按钮类组件需处理 mounted 前后的 hydration 差异
 - 多语言：客户端组件使用 `useTranslations("namespace")` 获取翻译文案；导航链接使用 `@/i18n/navigation` 的 `Link` 而非 `next/link`
 

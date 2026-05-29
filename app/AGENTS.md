@@ -29,6 +29,8 @@
 | 隐私政策页          | `app/[locale]/privacy-policy/page.tsx`           | `force-static` + locale 选择 .md 或 .en.md                    |
 | 全站 Layout          | `app/[locale]/layout.tsx`                        | ThemeProvider + AuthProvider + NextIntlClientProvider + SiteHeader + SiteFooter |
 | 根壳层（透传）       | `app/layout.tsx`                                 | 仅透传 `children`，实际 Layout 在 `[locale]/layout.tsx`       |
+| robots.txt            | `app/robots.ts`                                  | 爬虫规则 + sitemap 引用；通过 `SITE_ORIGIN` 构建完整 URL      |
+| sitemap.xml           | `app/sitemap.ts`                                 | 多语言 sitemap + hreflang alternates；动态注入模型详情页     |
 | API 局部约定        | `app/api/comfyui/AGENTS.md`                      | 当前已落地的 route 细则                                       |
 | I18N 页面层约定      | `app/[locale]/AGENTS.md`                         | locale 校验 + 导航 + 翻译约定                                  |
 | 模型详情页组件约定   | `app/models/[runDir]/AGENTS.md`                  | 数据流、type guard、hook 设计                                 |
@@ -46,6 +48,7 @@
 - run 详情页当前使用 view bootstrap JSON（`view/current.json` → `view/v2/{release_id}/bootstrap.*.json`）获取 detail + grid 数据，而非独立调用多个 API route。
 - 脚本侧已经适配 run 级封面图与主页缩略图资产；网页首页当前通过 `/api/comfyui/runs` 返回的 `assets.cover` / `assets.homepage_cards` 消费这些字段。
 - 首页当前使用独立的封面图/主页缩略图字段；不要把 run 详情页的展示页缩略图语义直接挪作首页卡片素材。
+- SEO：`sitemap.ts` 为每个页面生成两个 locale 的条目并添加 hreflang alternates；`robots.ts` 允许所有爬虫爬取页面但禁止 `/api/` 和 `/auth/`。二者均引用 `lib/site-origin.ts` 的 `SITE_ORIGIN`。
 - 页面 fetch 后先做 type guard，再进入渲染状态机；错误态与 not-found 分开处理。
 - 图片路径/对象 key 不在页面层手拼；公开变体走 `publicObjectUrl()`，私有对象走 `privateObjectUrl()` 返回的短期签名 URL。
 - 本目录当前不维护本地文件流降级 route；Web 侧以 Supabase + R2 为准。
@@ -58,3 +61,4 @@
 - 不要在 ComfyUI API 里直接创建裸 `createServerClient()`；统一走 `lib/supabase-auth.ts`。
 - 不要往 `app/layout.tsx` 里加 Provider（它是透传壳）；所有全局 Provider 放 `app/[locale]/layout.tsx`。
 - 不要使用 `next/link` 或 `next/navigation` 的原生 API 做用户页面导航；统一使用 `@/i18n/navigation` 的 `Link` / `useRouter`。
+- 不要在页面 `generateMetadata` 中手写 OG/Twitter Card 模板；统一使用 `lib/metadata-utils.ts:buildSeoMetadata()`。

@@ -1,5 +1,5 @@
 <!-- Generated: 2026-04-06 | Updated: 2026-05-30 -->
-<!-- Commit: I18N | 分支: feat/i18n -->
+<!-- Commit: SEO | 分支: dev -->
 
 # Agent Guide (sd-style-lab/images-script)
 
@@ -81,6 +81,14 @@
 | R2 URL 构建           | `lib/r2-url.ts`                                                                  | 公开/私有 URL 与变体白名单                                                     |
 | 会话刷新 + I18N       | `middleware.ts`                                                                  | Edge middleware：next-intl 路由 + Supabase session refresh                     |
 | Webpack loader        | `loaders/markdown-source-loader.cjs`                                             | 构建时将 `.md` 内联为 JS 字符串；见 `loaders/AGENTS.md`                        |
+| SEO metadata 工具     | `lib/metadata-utils.ts`                                                          | `buildSeoMetadata()`：统一生成 OG/Twitter Card/canonical/hreflang 标签        |
+| 模型 SEO 元数据       | `lib/model-metadata.ts`                                                          | 从 Supabase 查询模型 name/description/cover 用于 og:image，带 1h cache        |
+| 站点根 URL            | `lib/site-origin.ts`                                                             | `SITE_ORIGIN` 常量，供 sitemap/robots/metadata 共享                           |
+| JSON-LD 结构化数据    | `components/json-ld.tsx`                                                         | `JsonLdWebsite` + `JsonLdBreadcrumbList` 客户端组件                           |
+| robots.txt            | `app/robots.ts`                                                                  | 爬虫规则 + sitemap 引用                                                       |
+| sitemap.xml           | `app/sitemap.ts`                                                                 | 多语言 sitemap + hreflang alternates，动态包含模型详情页                      |
+| 错误页                | `app/[locale]/error.tsx`                                                         | 客户端错误页 + i18n + 重试/回首页                                            |
+| 404 页                | `app/[locale]/not-found.tsx`                                                     | 客户端 404 页 + i18n + 回首页链接                                            |
 
 ## 代码图
 
@@ -96,6 +104,11 @@
 | `privateObjectUrl`            | function | `lib/r2-url.ts`                                | 私有图签名 URL      |
 | `isValidRunDir`               | function | `lib/comfyui-types.ts`                         | runDir 形态校验     |
 | `assertSafeRelativeImagePath` | function | `lib/comfyui-path.ts`                          | 相对图片路径校验    |
+| `buildSeoMetadata`           | function | `lib/metadata-utils.ts`                       | SEO metadata 构建   |
+| `getModelMetadata`           | function | `lib/model-metadata.ts`                       | 模型 SEO metadata   |
+| `JsonLdWebsite`              | component | `components/json-ld.tsx`                     | WebSite schema     |
+| `JsonLdBreadcrumbList`       | component | `components/json-ld.tsx`                     | BreadcrumbList schema |
+| `SITE_ORIGIN`                | const    | `lib/site-origin.ts`                          | 站点根 URL          |
 
 ## 约定（项目特有）
 
@@ -109,7 +122,7 @@
 - 路径与 URL：API 入口的 `runDir` 先用 `lib/comfyui-types.ts:isValidRunDir()` 判形态；共享路径处理再走 `lib/comfyui-path.ts`；R2 URL 统一走 `lib/r2-url.ts`。
 - 前端：大网格必须虚拟化；图片优先消费 R2 display/thumb 变体并配合 blurhash 占位，这套变体统一称为“展示页缩略图”。
 - 前端首页：`/api/comfyui/runs` 当前会输出封面图/主页缩略图字段；不要把 run 详情页的展示页缩略图直接挪作首页卡片素材。
-- I18N：使用 `next-intl`，locale 前缀始终显示（`localePrefix: "always"`）。页面入口必须 `hasLocale()` + `setRequestLocale()`；导航链接统一走 `@/i18n/navigation` 的 `Link`/`useRouter`。翻译 key 变更需同时更新 `zh.json` 和 `en.json`，禁止只改一个。
+- SEO：所有页面 `generateMetadata` 统一使用 `lib/metadata-utils.ts:buildSeoMetadata()` 构建 OG/Twitter Card/canonical/hreflang 标签，不要手写重复模板。模型详情页的 `og:image` 通过 `lib/model-metadata.ts:getModelMetadata()` 从 Supabase 查询封面图 URL。JSON-LD 结构化数据使用 `components/json-ld.tsx` 的客户端组件注入，不消耗 Worker CPU。
 - 工具链：Python 用 `uv` + `pytest`（>=3.13）；Web 用 `pnpm` + Next 16 + React 19；E2E 用 Playwright。
 - Supabase CLI：本仓库统一使用 `pnpm dlx supabase ...` 运行 Supabase 命令。
 - CI 现状：当前仓库没有 `.github/workflows/`；变更后的验证依赖本地 `uv` / `pnpm` 命令串联完成。

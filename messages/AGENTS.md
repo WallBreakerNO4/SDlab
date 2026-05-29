@@ -18,7 +18,7 @@
 
 | Namespace | 用途 |
 |-----------|------|
-| `metadata` | 页面 `<title>` 与 `<meta description>`（home / info / privacy） |
+| `metadata` | 页面 `<title>` 与 `<meta description>`（home / info / privacy / error / notFound） |
 | `header` | 站点头部：品牌名、登录入口、用户菜单、NSFW 切换、主题切换 |
 | `home` | 首页：Hero 区文案、模型目录标题、空/错误状态 |
 | `footer` | 页脚：版权声明、关于链接、隐私政策链接 |
