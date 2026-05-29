@@ -11,6 +11,21 @@
     "privacy": {
       "title": "隐私权政策 - SD Style Lab",
       "description": "SD Style Lab 的隐私权政策说明"
+    },
+    "modelDetail": {
+      "titleSuffix": " — SD Style Lab",
+      "descriptionFallback": "Stable Diffusion 风格模型评测详情页，浏览多维度的画风对比网格图像。"
+    },
+    "error": {
+      "title": "页面出错 - SD Style Lab",
+      "description": "页面加载过程中发生了意外错误，请稍后重试。",
+      "retry": "重试",
+      "goHome": "返回首页"
+    },
+    "notFound": {
+      "title": "页面未找到 - SD Style Lab",
+      "description": "您访问的页面不存在或已被移除。",
+      "goHome": "返回首页"
     }
   },
   "header": {

@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const SITE_ORIGIN = "https://sdlab.wall-breaker-no4.xyz";
+import { SITE_ORIGIN } from "@/lib/site-origin";
 
 export default function robots(): MetadataRoute.Robots {
   return {

@@ -2,12 +2,40 @@ import type { MetadataRoute } from "next";
 
 import { isValidRunDir } from "@/lib/comfyui-types";
 import { listRunSummaries } from "@/lib/run-list";
-
-const SITE_ORIGIN = "https://sdlab.wall-breaker-no4.xyz";
+import { SITE_ORIGIN } from "@/lib/site-origin";
+import { routing } from "@/i18n/routing";
 
 function toLastModified(value: string): Date | undefined {
   const date = new Date(value);
   return Number.isNaN(date.valueOf()) ? undefined : date;
+}
+
+/** 为给定路径生成两个 locale 的 hreflang 映射 */
+function makeLanguages(path: string): Record<string, string> {
+  const languages: Record<string, string> = {};
+  for (const loc of routing.locales) {
+    languages[loc] = `${SITE_ORIGIN}/${loc}${path}`;
+  }
+  return languages;
+}
+
+/** 生成一个页面在两个 locale 下的 sitemap 条目（含 hreflang） */
+function makeLocaleEntries(params: {
+  path: string;
+  lastModified?: Date;
+  changeFrequency?: MetadataRoute.Sitemap[number]["changeFrequency"];
+  priority?: number;
+}): MetadataRoute.Sitemap {
+  const { path, lastModified, changeFrequency, priority } = params;
+  const languages = makeLanguages(path);
+
+  return routing.locales.map((locale) => ({
+    url: languages[locale],
+    lastModified,
+    changeFrequency,
+    priority,
+    alternates: { languages },
+  }));
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
@@ -23,20 +51,28 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ? toLastModified(models[0].created_at)
     : undefined;
 
-  const entries: MetadataRoute.Sitemap = [
-    {
-      url: SITE_ORIGIN,
+  const entries: MetadataRoute.Sitemap = [];
+
+  // 首页 — daily, priority 1
+  entries.push(
+    ...makeLocaleEntries({
+      path: "/",
       lastModified: latestModelModified,
       changeFrequency: "daily",
       priority: 1,
-    },
-    {
-      url: `${SITE_ORIGIN}/info`,
+    }),
+  );
+
+  // 信息页 — monthly, priority 0.6
+  entries.push(
+    ...makeLocaleEntries({
+      path: "/info",
       changeFrequency: "monthly",
       priority: 0.6,
-    },
-  ];
+    }),
+  );
 
+  // 模型详情页 — weekly, priority 0.8
   const seenModelRunDirs = new Set<string>();
   for (const model of models) {
     if (
@@ -47,12 +83,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
 
     seenModelRunDirs.add(model.run_dir);
-    entries.push({
-      url: `${SITE_ORIGIN}/models/${encodeURIComponent(model.run_dir)}`,
-      lastModified: toLastModified(model.created_at),
-      changeFrequency: "weekly",
-      priority: 0.8,
-    });
+    entries.push(
+      ...makeLocaleEntries({
+        path: `/models/${encodeURIComponent(model.run_dir)}`,
+        lastModified: toLastModified(model.created_at),
+        changeFrequency: "weekly",
+        priority: 0.8,
+      }),
+    );
   }
 
   return entries;

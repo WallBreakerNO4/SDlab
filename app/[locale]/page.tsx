@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { routing } from "@/i18n/routing";
 import { listRunSummaries } from "@/lib/run-list";
+import { buildSeoMetadata } from "@/lib/metadata-utils";
 import HomePageClient from "../home-page-client";
 
 export async function generateMetadata({
@@ -13,10 +14,9 @@ export async function generateMetadata({
 }) {
   const { locale } = await params;
   const t = await getTranslations({ locale, namespace: "metadata.home" });
-  return {
-    title: t("title"),
-    description: t("description"),
-  };
+  const title = t("title");
+  const description = t("description");
+  return buildSeoMetadata({ locale, path: "/", title, description });
 }
 
 export default async function HomePage({

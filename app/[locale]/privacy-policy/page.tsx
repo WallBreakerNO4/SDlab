@@ -5,6 +5,7 @@ import { hasLocale } from "next-intl";
 import { notFound } from "next/navigation";
 
 import { routing } from "@/i18n/routing";
+import { buildSeoMetadata } from "@/lib/metadata-utils";
 import privacyZh from "@/data/privacy-policy-page.md";
 import privacyEn from "@/data/privacy-policy-page.en.md";
 
@@ -17,10 +18,9 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale } = await params;
   const t = await getTranslations({ locale, namespace: "metadata.privacy" });
-  return {
-    title: t("title"),
-    description: t("description"),
-  };
+  const title = t("title");
+  const description = t("description");
+  return buildSeoMetadata({ locale, path: "/privacy-policy", title, description });
 }
 
 export default async function PrivacyPolicyPage({
