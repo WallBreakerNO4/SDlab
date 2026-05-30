@@ -2,7 +2,7 @@
  * Prompt 格式化引擎
  * 将结构化 Prompt 转换为目标模型的文本格式
  */
-import type { TagNode, ChoiceNode, PromptNode, Prompt, TargetModel } from "@/lib/prompt-types"
+import type { TagNode, PromptNode, Prompt, TargetModel } from "@/lib/prompt-types"
 
 function formatTagNode(node: TagNode, model: TargetModel, effectiveWeight: number): string {
   const text = node.text.trim()

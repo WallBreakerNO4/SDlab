@@ -29,6 +29,7 @@ type FileExpandedMap = Record<string, string[]>
 
 function loadExpandedMap(): FileExpandedMap {
   try {
+    if (typeof window === "undefined") return {}
     const raw = localStorage.getItem(EXPAND_STORAGE_KEY)
     if (raw) return JSON.parse(raw)
   } catch {
@@ -69,7 +70,7 @@ export default function PromptBrowserPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [scrollTarget, setScrollTarget] = useState<ScrollTarget | null>(null)
-  const [fileExpandedMap, setFileExpandedMap] = useState<FileExpandedMap>({})
+  const [fileExpandedMap, setFileExpandedMap] = useState<FileExpandedMap>(() => loadExpandedMap())
 
   const [filterQuery, setFilterQuery] = useState("")
   const [filterScope, setFilterScope] = useState<FilterScope>("all")
@@ -77,11 +78,10 @@ export default function PromptBrowserPage() {
   const [debouncedQuery, setDebouncedQuery] = useState("")
 
   const loadedFileIdRef = useRef<string>("")
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const debouncedQueryRef = useRef("")
 
-  useEffect(() => {
-    setFileExpandedMap(loadExpandedMap())
-  }, [])
-
+  // --- 加载索引 ---
   useEffect(() => {
     loadIndex()
       .then((idx) => {
@@ -100,6 +100,7 @@ export default function PromptBrowserPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // --- 加载文件数据（含滚动恢复 + 默认展开 key 初始化） ---
   useEffect(() => {
     if (!currentFileId) return
     if (loadedFileIdRef.current === currentFileId) return
@@ -109,6 +110,19 @@ export default function PromptBrowserPage() {
     loadFileData(currentFileId)
       .then((data) => {
         setFileData(data)
+        // 恢复滚动位置
+        const savedEntryId = getScrollPosition(currentFileId)
+        if (savedEntryId) {
+          setScrollTarget({ type: "entry", value: savedEntryId })
+        }
+        // 为新文件初始化默认展开的 TOC key
+        setFileExpandedMap((prev) => {
+          if (prev[currentFileId]) return prev
+          const defaults = getDefaultExpandedKeys(data.toc)
+          const newMap = { ...prev, [currentFileId]: defaults }
+          saveExpandedMap(newMap)
+          return newMap
+        })
         setLoading(false)
       })
       .catch((e) => {
@@ -117,6 +131,7 @@ export default function PromptBrowserPage() {
       })
   }, [currentFileId])
 
+  // --- 同步 URL ---
   useEffect(() => {
     if (!currentFileId) return
     const currentFile = searchParams.get("file")
@@ -135,6 +150,7 @@ export default function PromptBrowserPage() {
     [currentFileId]
   )
 
+  // --- IntersectionObserver 跟踪当前章节 ---
   useEffect(() => {
     if (!fileData) return
 
@@ -155,15 +171,6 @@ export default function PromptBrowserPage() {
 
     return () => observer.disconnect()
   }, [fileData])
-
-  useEffect(() => {
-    if (!fileData || scrollTarget) return
-
-    const savedEntryId = getScrollPosition(currentFileId)
-    if (savedEntryId) {
-      setScrollTarget({ type: "entry", value: savedEntryId })
-    }
-  }, [fileData, currentFileId])
 
   const handleToggleExpand = useCallback(
     (key: string) => {
@@ -199,16 +206,37 @@ export default function PromptBrowserPage() {
     [fileData]
   )
 
-  // --- 搜索逻辑 ---
+  // --- 搜索防抖（事件处理模式，避免在 effect 中 setState） ---
+  const handleFilterChange = useCallback(
+    (value: string) => {
+      setFilterQuery(value)
+      clearTimeout(debounceRef.current)
 
-  useEffect(() => {
-    if (filterMode === "exact") {
-      setDebouncedQuery(filterQuery)
-      return
-    }
-    const timer = setTimeout(() => setDebouncedQuery(filterQuery), 200)
-    return () => clearTimeout(timer)
-  }, [filterQuery, filterMode])
+      const wasFiltering = debouncedQueryRef.current.trim().length > 0
+      const isNowFiltering = value.trim().length > 0
+
+      if (filterMode === "exact") {
+        setDebouncedQuery(value)
+        if (isNowFiltering && !wasFiltering) {
+          setActiveSection(null)
+          setScrollTarget({ type: "section", value: "__top__" })
+        }
+        return
+      }
+
+      debounceRef.current = setTimeout(() => {
+        // 取闭包中的 value，debouncedQueryRef 在 render 中同步但此处仍是旧值
+        const wasFiltering = debouncedQueryRef.current.trim().length > 0
+        const isNowFiltering = value.trim().length > 0
+        setDebouncedQuery(value)
+        if (isNowFiltering && !wasFiltering) {
+          setActiveSection(null)
+          setScrollTarget({ type: "section", value: "__top__" })
+        }
+      }, 200)
+    },
+    [filterMode]
+  )
 
   const filterFuse = useMemo(() => {
     if (!fileData || filterMode !== "fuzzy") return null
@@ -227,25 +255,23 @@ export default function PromptBrowserPage() {
     return fileData.entries
   }, [fileData, debouncedQuery, filterScope, filterMode, filterFuse])
 
+  // 提取 toc 为独立变量，避免 memo deps 中 fileData?.toc 被编译器视为依赖整个 fileData
+  const toc = fileData?.toc
   const filteredToc = useMemo(() => {
-    if (!fileData?.toc) return []
-    if (!debouncedQuery.trim()) return fileData.toc
-    return filterToc(fileData.toc, filteredEntries)
-  }, [fileData?.toc, filteredEntries, debouncedQuery])
+    if (!toc) return []
+    if (!debouncedQuery.trim()) return toc
+    return filterToc(toc, filteredEntries)
+  }, [toc, filteredEntries, debouncedQuery])
 
   const isFiltering = debouncedQuery.trim().length > 0
 
+  // 保持 ref 同步（在 effect 中写入，供事件处理器读取上一个值）
   useEffect(() => {
-    if (isFiltering) {
-      setActiveSection(null)
-    }
-  }, [isFiltering])
+    debouncedQueryRef.current = debouncedQuery
+  }, [debouncedQuery])
 
-  useEffect(() => {
-    if (isFiltering) {
-      setScrollTarget({ type: "section", value: "__top__" })
-    }
-  }, [isFiltering])
+  // 过滤中时关闭章节高亮（render 中派生，避免 effect setState）
+  const effectiveActiveSection = isFiltering ? null : activeSection
 
   const expandedNodes = useMemo(() => {
     if (isFiltering && filteredToc.length > 0) {
@@ -254,24 +280,11 @@ export default function PromptBrowserPage() {
     if (fileExpandedMap[currentFileId]) {
       return new Set<string>(fileExpandedMap[currentFileId])
     }
-    if (fileData?.toc) {
-      return new Set<string>(getDefaultExpandedKeys(fileData.toc))
+    if (toc) {
+      return new Set<string>(getDefaultExpandedKeys(toc))
     }
     return new Set<string>()
-  }, [isFiltering, filteredToc, fileExpandedMap, currentFileId, fileData?.toc])
-
-  useEffect(() => {
-    if (!fileData?.toc || !currentFileId) return
-    if (fileExpandedMap[currentFileId]) return
-
-    const defaults = getDefaultExpandedKeys(fileData.toc)
-    setFileExpandedMap((prev) => {
-      if (prev[currentFileId]) return prev
-      const newMap = { ...prev, [currentFileId]: defaults }
-      saveExpandedMap(newMap)
-      return newMap
-    })
-  }, [fileData?.toc, currentFileId, fileExpandedMap])
+  }, [isFiltering, filteredToc, fileExpandedMap, currentFileId, toc])
 
   // 未登录时显示登录引导
   if (!user) {
@@ -317,7 +330,7 @@ export default function PromptBrowserPage() {
         currentFileId={currentFileId}
         onFileChange={handleFileChange}
         filterQuery={filterQuery}
-        onFilterChange={setFilterQuery}
+        onFilterChange={handleFilterChange}
         filterScope={filterScope}
         onFilterScopeChange={setFilterScope}
         filterMode={filterMode}
@@ -328,7 +341,7 @@ export default function PromptBrowserPage() {
         {fileData && (
           <TocSidebar
             toc={filteredToc}
-            activeSection={activeSection}
+            activeSection={effectiveActiveSection}
             onSectionClick={handleSectionClick}
             expandedNodes={expandedNodes}
             onToggleExpand={handleToggleExpand}
@@ -350,7 +363,7 @@ export default function PromptBrowserPage() {
             <PromptEntryList
               entries={filteredEntries}
               model={model}
-              activeSection={activeSection}
+              activeSection={effectiveActiveSection}
               scrollTarget={scrollTarget}
               onScrollComplete={() => setScrollTarget(null)}
               onTopEntryChange={handleTopEntryChange}

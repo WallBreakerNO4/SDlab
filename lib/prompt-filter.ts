@@ -61,11 +61,6 @@ function buildFuseDocs(entries: Entry[]): FuseEntry[] {
   return entries.map((e) => ({ ...e, _searchText: getEntrySearchableTags(e) }))
 }
 
-function unwrapFuseResult(item: FuseEntry): Entry {
-  const { _searchText: _, ...entry } = item
-  return entry as Entry
-}
-
 export function createFilterFuse(entries: Entry[], scope: FilterScope): Fuse<FuseEntry> {
   const docs = buildFuseDocs(entries)
   const keys: Array<{ name: keyof FuseEntry; weight: number }> = []
@@ -93,7 +88,7 @@ export function filterEntriesFuzzy(
   query: string
 ): Entry[] {
   if (!query.trim()) return []
-  return fuse.search(query.trim()).map((r) => unwrapFuseResult(r.item))
+  return fuse.search(query.trim()).map((r) => r.item)
 }
 
 export function filterToc(toc: TocNode[], matchedEntries: Entry[]): TocNode[] {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useSyncExternalStore } from "react"
 import {
   Select,
   SelectContent,
@@ -41,11 +41,11 @@ export function PromptTopBar({
 }: TopBarProps) {
   const { model, setModel } = useModel()
   const { theme, setTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  )
 
   return (
     <header className="sticky top-0 z-50 flex h-14 items-center gap-3 border-b bg-background px-4">
@@ -65,7 +65,7 @@ export function PromptTopBar({
           placeholder="搜索标签或名称..."
           value={filterQuery}
           onChange={(e) => onFilterChange(e.target.value)}
-          className="h-8 w-[200px] pl-7 pr-7 text-xs"
+          className="h-8 w-50 pl-7 pr-7 text-xs"
         />
         {filterQuery && (
           <Button
@@ -105,7 +105,7 @@ export function PromptTopBar({
       </div>
 
       <Select value={currentFileId} onValueChange={onFileChange}>
-        <SelectTrigger className="w-[180px] h-8 text-xs">
+        <SelectTrigger className="w-45 h-8 text-xs">
           <SelectValue placeholder="选择法典" />
         </SelectTrigger>
         <SelectContent>
@@ -121,7 +121,7 @@ export function PromptTopBar({
         value={model}
         onValueChange={(v) => setModel(v as "novelai" | "comfyui")}
       >
-        <SelectTrigger className="w-[120px] h-8 text-xs">
+        <SelectTrigger className="w-30 h-8 text-xs">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

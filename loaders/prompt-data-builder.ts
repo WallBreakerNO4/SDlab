@@ -158,9 +158,6 @@ function collectEntries(
   return entries
 }
 
-// NSFW 文件只有一个（不分上下），匹配时优先级：明确上下 > 泛匹配
-const NSFW_FILENAME = "所长色色NovalAI个人法典（2026.5.20版，一般所长整理）.yaml"
-
 function cleanFileId(filename: string): string {
   const base = filename
     .replace(/\.yaml$/i, "")

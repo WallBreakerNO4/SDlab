@@ -2,7 +2,6 @@
 
 import { cn } from "@/lib/utils"
 import { ChevronRight } from "lucide-react"
-import { useCallback } from "react"
 import type { TocNode } from "@/lib/prompt-types"
 
 const NODE_KEY_SEP = "\0"
@@ -44,12 +43,12 @@ function TocItem({
   const key = nodeKey(nodePath)
   const expanded = expandedNodes.has(key) || level < 1
 
-  const handleClick = useCallback(() => {
+  const handleClick = () => {
     onSectionClick(node.title)
     if (hasChildren) {
       onToggleExpand(key)
     }
-  }, [hasChildren, node.title, onSectionClick, onToggleExpand, key])
+  }
 
   return (
     <div>

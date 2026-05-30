@@ -61,7 +61,7 @@ export function ChoiceNodeComponent({ node, choiceId }: ChoiceNodeComponentProps
           }
         }}
       >
-        <SelectTrigger className="h-6 w-auto min-w-[80px] text-xs border-none bg-transparent shadow-none focus:ring-0 px-1">
+        <SelectTrigger className="h-6 w-auto min-w-20 text-xs border-none bg-transparent shadow-none focus:ring-0 px-1">
           <SelectValue placeholder={node.allow_empty ? "不选" : "选择..."} />
         </SelectTrigger>
         <SelectContent>

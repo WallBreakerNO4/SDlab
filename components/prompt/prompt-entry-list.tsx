@@ -54,6 +54,9 @@ export function PromptEntryList({
     return items
   }, [entries])
 
+  // TanStack Virtual 的 useVirtualizer 返回不可安全 memoize 的函数，
+  // React Compiler 无法优化此 hook — 这是库层面的限制
+  // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     count: flatItems.length,
     getScrollElement: () => parentRef.current,

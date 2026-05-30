@@ -24,7 +24,7 @@ export async function generateMetadata({
 }
 
 export default async function PromptsPage({ params }: PromptsPageProps) {
-  const { locale } = await params
+  await params // 消费 params 以满足 Next.js 约定，locale 由 i18n provider 处理
 
   return (
     <ModelProvider>
