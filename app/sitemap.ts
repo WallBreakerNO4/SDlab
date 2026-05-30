@@ -72,6 +72,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }),
   );
 
+  // Prompt 法典 — monthly, priority 0.7
+  entries.push(
+    ...makeLocaleEntries({
+      path: "/prompts",
+      changeFrequency: "monthly",
+      priority: 0.7,
+    }),
+  );
+
   // 模型详情页 — weekly, priority 0.8
   const seenModelRunDirs = new Set<string>();
   for (const model of models) {

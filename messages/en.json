@@ -125,5 +125,25 @@
     "expand": "Expand",
     "scrollLeft": "Scroll left",
     "scrollRight": "Scroll right"
+  },
+  "prompts": {
+    "title": "Prompt Codex — SD Style Lab",
+    "description": "Browse structured prompt tags, select and copy for image generation. Supports NovelAI and ComfyUI formats.",
+    "searchPlaceholder": "Search tags or names...",
+    "loading": "Loading...",
+    "noResults": "No results",
+    "noEntries": "No entries",
+    "copySuccess": "Prompt copied",
+    "modelLabel": "Target Model",
+    "fileLabel": "Select Codex",
+    "filterScopeAll": "All",
+    "filterScopeName": "Name",
+    "filterScopeTag": "Tag",
+    "filterExact": "Exact",
+    "filterFuzzy": "Fuzzy",
+    "characterBlock": "Character {id}",
+    "loginGateTitle": "Sign in to browse the Prompt Codex",
+    "loginGateDescription": "Sign in to browse structured prompt tags, select and copy for NovelAI and ComfyUI image generation.",
+    "loginGateButton": "Sign in / Register"
   }
 }

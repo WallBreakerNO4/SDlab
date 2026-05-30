@@ -94,6 +94,12 @@ export function SiteHeader() {
                 {t("beta")}
               </Badge>
             </Link>
+            <Link
+              href="/prompts"
+              className="ml-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Prompt 法典
+            </Link>
           </nav>
 
           {/* Right side */}
