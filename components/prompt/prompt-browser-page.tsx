@@ -77,6 +77,10 @@ export default function PromptBrowserPage() {
   const [filterMode, setFilterMode] = useState<FilterMode>("exact")
   const [debouncedQuery, setDebouncedQuery] = useState("")
 
+  // 匹配导航状态（类似浏览器 Ctrl+F）
+  const [activeMatchIndex, setActiveMatchIndex] = useState(-1)
+  const [highlightEntryId, setHighlightEntryId] = useState<string | null>(null)
+
   const loadedFileIdRef = useRef<string>("")
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const debouncedQueryRef = useRef("")
@@ -217,9 +221,10 @@ export default function PromptBrowserPage() {
 
       if (filterMode === "exact") {
         setDebouncedQuery(value)
+        setActiveMatchIndex(-1)
+        setHighlightEntryId(null)
         if (isNowFiltering && !wasFiltering) {
           setActiveSection(null)
-          setScrollTarget({ type: "section", value: "__top__" })
         }
         return
       }
@@ -229,13 +234,33 @@ export default function PromptBrowserPage() {
         const wasFiltering = debouncedQueryRef.current.trim().length > 0
         const isNowFiltering = value.trim().length > 0
         setDebouncedQuery(value)
+        setActiveMatchIndex(-1)
+        setHighlightEntryId(null)
         if (isNowFiltering && !wasFiltering) {
           setActiveSection(null)
-          setScrollTarget({ type: "section", value: "__top__" })
         }
       }, 200)
     },
     [filterMode]
+  )
+
+  // 切换搜索范围/模式时重置匹配索引
+  const handleFilterScopeChange = useCallback(
+    (scope: FilterScope) => {
+      setFilterScope(scope)
+      setActiveMatchIndex(-1)
+      setHighlightEntryId(null)
+    },
+    [],
+  )
+
+  const handleFilterModeChange = useCallback(
+    (mode: FilterMode) => {
+      setFilterMode(mode)
+      setActiveMatchIndex(-1)
+      setHighlightEntryId(null)
+    },
+    [],
   )
 
   const filterFuse = useMemo(() => {
@@ -264,6 +289,94 @@ export default function PromptBrowserPage() {
   }, [toc, filteredEntries, debouncedQuery])
 
   const isFiltering = debouncedQuery.trim().length > 0
+
+  // 匹配列表：过滤后所有条目的 ID（按顺序），用于 Ctrl+F 式导航
+  const searchMatches = useMemo(() => {
+    if (!debouncedQuery.trim()) return [] as string[]
+    return filteredEntries.map((e) => e.id)
+  }, [filteredEntries, debouncedQuery])
+
+  const goToMatch = useCallback(
+    (delta: number) => {
+      if (searchMatches.length === 0) return
+
+      const container = document.querySelector("[data-prompt-list]")
+      if (!container) return
+
+      const visibleEls =
+        container.querySelectorAll<HTMLElement>("[data-entry-id]")
+
+      // 计算新的匹配索引
+      let newIndex: number
+      if (activeMatchIndex < 0) {
+        if (delta > 0) {
+          const firstId = visibleEls[0]?.getAttribute("data-entry-id")
+          if (firstId) {
+            const idx = searchMatches.indexOf(firstId)
+            newIndex = idx >= 0 ? idx : 0
+          } else {
+            newIndex = 0
+          }
+        } else {
+          const lastId =
+            visibleEls[visibleEls.length - 1]?.getAttribute("data-entry-id")
+          if (lastId) {
+            const idx = searchMatches.indexOf(lastId)
+            newIndex = idx >= 0 ? idx : searchMatches.length - 1
+          } else {
+            newIndex = searchMatches.length - 1
+          }
+        }
+      } else {
+        newIndex =
+          (activeMatchIndex + delta + searchMatches.length) %
+          searchMatches.length
+      }
+
+      setActiveMatchIndex(newIndex)
+      const entryId = searchMatches[newIndex]
+      if (entryId) {
+        setHighlightEntryId(entryId)
+        setScrollTarget({ type: "entry", value: entryId })
+      }
+    },
+    [searchMatches, activeMatchIndex],
+  )
+
+  // 2 秒后清除条目高亮
+  useEffect(() => {
+    if (!highlightEntryId) return
+    const id = setTimeout(() => setHighlightEntryId(null), 2000)
+    return () => clearTimeout(id)
+  }, [highlightEntryId])
+
+  // Ctrl+F / / 快捷键聚焦搜索框，Enter 导航匹配
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const searchInput = document.querySelector<HTMLInputElement>(
+        "[data-prompt-search-input]",
+      )
+      const isSearchFocused =
+        searchInput && document.activeElement === searchInput
+
+      if (isSearchFocused && e.key === "Enter") {
+        e.preventDefault()
+        goToMatch(e.shiftKey ? -1 : 1)
+        return
+      }
+
+      if (e.key === "/" || (e.ctrlKey && e.key.toLowerCase() === "f")) {
+        const tag = (e.target as HTMLElement)?.tagName?.toLowerCase()
+        if (tag === "input" || tag === "textarea" || tag === "select") return
+        e.preventDefault()
+        searchInput?.focus()
+        searchInput?.select()
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [goToMatch])
 
   // 保持 ref 同步（在 effect 中写入，供事件处理器读取上一个值）
   useEffect(() => {
@@ -332,9 +445,13 @@ export default function PromptBrowserPage() {
         filterQuery={filterQuery}
         onFilterChange={handleFilterChange}
         filterScope={filterScope}
-        onFilterScopeChange={setFilterScope}
+        onFilterScopeChange={handleFilterScopeChange}
         filterMode={filterMode}
-        onFilterModeChange={setFilterMode}
+        onFilterModeChange={handleFilterModeChange}
+        matchCount={searchMatches.length}
+        activeMatchIndex={activeMatchIndex}
+        onNextMatch={() => goToMatch(1)}
+        onPrevMatch={() => goToMatch(-1)}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -367,6 +484,7 @@ export default function PromptBrowserPage() {
               scrollTarget={scrollTarget}
               onScrollComplete={() => setScrollTarget(null)}
               onTopEntryChange={handleTopEntryChange}
+              highlightEntryId={highlightEntryId}
             />
           )}
           {!loading && fileData && !isFiltering && filteredEntries.length === 0 && (

@@ -193,12 +193,38 @@ export function VirtualGrid({
       if (searchMatches.length === 0) return;
       setActiveMatchIndex((prev) => {
         if (prev < 0) {
-          return delta > 0 ? 0 : searchMatches.length - 1;
+          // 从当前视口位置出发，找最近的匹配项（类似浏览器 Ctrl+F）
+          const visibleItems = rowVirtualizer.getVirtualItems();
+          const firstVisibleRow = visibleItems[0]?.index ?? 0;
+          const lastVisibleRow =
+            visibleItems[visibleItems.length - 1]?.index ?? 0;
+
+          if (delta > 0) {
+            // 找 firstVisibleRow 之后（含）的第一个匹配
+            const target = searchMatches.find(
+              (m) => m.rowIndex >= firstVisibleRow,
+            );
+            if (target) {
+              return searchMatches.indexOf(target);
+            }
+            // 视口下方无匹配，回到第一个
+            return 0;
+          }
+
+          // 上一个：找 lastVisibleRow 之前（含）的第一个匹配（从后往前）
+          const target = searchMatches.findLast(
+            (m) => m.rowIndex <= lastVisibleRow,
+          );
+          if (target) {
+            return searchMatches.indexOf(target);
+          }
+          // 视口上方无匹配，跳到最后一个
+          return searchMatches.length - 1;
         }
         return (prev + delta + searchMatches.length) % searchMatches.length;
       });
     },
-    [searchMatches.length],
+    [searchMatches, rowVirtualizer],
   );
 
   useEffect(() => {
