@@ -5,6 +5,8 @@ import { listRunSummaries } from "@/lib/run-list";
 import { SITE_ORIGIN } from "@/lib/site-origin";
 import { routing } from "@/i18n/routing";
 
+export const dynamic = "force-static";
+
 function toLastModified(value: string): Date | undefined {
   const date = new Date(value);
   return Number.isNaN(date.valueOf()) ? undefined : date;
@@ -67,6 +69,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   entries.push(
     ...makeLocaleEntries({
       path: "/info",
+      lastModified: latestModelModified,
       changeFrequency: "monthly",
       priority: 0.6,
     }),
@@ -76,8 +79,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   entries.push(
     ...makeLocaleEntries({
       path: "/prompts",
+      lastModified: latestModelModified,
       changeFrequency: "monthly",
       priority: 0.7,
+    }),
+  );
+
+  // 隐私政策页 — monthly, priority 0.5
+  entries.push(
+    ...makeLocaleEntries({
+      path: "/privacy-policy",
+      lastModified: latestModelModified,
+      changeFrequency: "monthly",
+      priority: 0.5,
     }),
   );
 
