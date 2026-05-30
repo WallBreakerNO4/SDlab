@@ -141,6 +141,9 @@
     "filterScopeTag": "Tag",
     "filterExact": "Exact",
     "filterFuzzy": "Fuzzy",
-    "characterBlock": "Character {id}"
+    "characterBlock": "Character {id}",
+    "loginGateTitle": "Sign in to browse the Prompt Codex",
+    "loginGateDescription": "Sign in to browse structured prompt tags, select and copy for NovelAI and ComfyUI image generation.",
+    "loginGateButton": "Sign in / Register"
   }
 }

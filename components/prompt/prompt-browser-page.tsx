@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { PromptTopBar } from "./prompt-top-bar"
 import { TocSidebar } from "./prompt-toc-sidebar"
 import { PromptEntryList } from "./prompt-entry-list"
@@ -18,6 +19,9 @@ import {
   getAllTocKeys,
 } from "@/lib/prompt-filter"
 import type { FileIndex, FileData, FilterScope, FilterMode } from "@/lib/prompt-types"
+import { useAuth } from "@/components/auth-provider"
+import { AuthLoginDialog } from "@/components/auth-login-dialog"
+import { Button } from "@/components/ui/button"
 
 const EXPAND_STORAGE_KEY = "toc-expanded"
 
@@ -54,6 +58,9 @@ export default function PromptBrowserPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { model } = useModel()
+  const t = useTranslations("prompts")
+  const { user } = useAuth()
+  const [loginDialogOpen, setLoginDialogOpen] = useState(false)
 
   const [fileIndex, setFileIndex] = useState<FileIndex | null>(null)
   const [currentFileId, setCurrentFileId] = useState<string>("")
@@ -266,6 +273,32 @@ export default function PromptBrowserPage() {
     })
   }, [fileData?.toc, currentFileId, fileExpandedMap])
 
+  // 未登录时显示登录引导
+  if (!user) {
+    return (
+      <>
+        <div className="flex min-h-svh items-center justify-center">
+          <div className="flex flex-col items-center gap-4 text-center max-w-sm px-4">
+            <div className="text-4xl select-none" aria-hidden="true">
+              {"📜"}
+            </div>
+            <h2 className="text-lg font-semibold">{t("loginGateTitle")}</h2>
+            <p className="text-sm text-muted-foreground text-balance">
+              {t("loginGateDescription")}
+            </p>
+            <Button onClick={() => setLoginDialogOpen(true)}>
+              {t("loginGateButton")}
+            </Button>
+          </div>
+        </div>
+        <AuthLoginDialog
+          open={loginDialogOpen}
+          onOpenChange={setLoginDialogOpen}
+        />
+      </>
+    )
+  }
+
   if (error) {
     return (
       <div className="flex min-h-svh items-center justify-center">
@@ -277,7 +310,8 @@ export default function PromptBrowserPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden" style={{ height: "calc(100dvh - 2.5rem)" }}>
+    <>
+      <div className="flex flex-1 flex-col overflow-hidden" style={{ height: "calc(100dvh - 2.5rem)" }}>
       <PromptTopBar
         files={fileIndex?.files || []}
         currentFileId={currentFileId}
@@ -330,5 +364,10 @@ export default function PromptBrowserPage() {
         </main>
       </div>
     </div>
+    <AuthLoginDialog
+      open={loginDialogOpen}
+      onOpenChange={setLoginDialogOpen}
+    />
+    </>
   )
 }
