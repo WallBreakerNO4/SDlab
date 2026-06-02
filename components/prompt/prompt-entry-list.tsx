@@ -98,7 +98,7 @@ export function PromptEntryList({
 
     if (targetIndex >= 0) {
       isScrollingRef.current = true
-      virtualizer.scrollToIndex(targetIndex, { align: "center" })
+      virtualizer.scrollToIndex(targetIndex, { align: "start" })
     }
 
     // 延迟重置标记，等待滚动完成
