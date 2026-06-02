@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useModel } from "@/lib/prompt-model-context"
-import { Search, X, Moon, Sun } from "lucide-react"
+import { Search, X, Moon, Sun, ChevronUp, ChevronDown } from "lucide-react"
 import { useTheme } from "next-themes"
 import type { FileInfo, FilterScope, FilterMode } from "@/lib/prompt-types"
 
@@ -26,6 +26,10 @@ interface TopBarProps {
   onFilterScopeChange: (scope: FilterScope) => void
   filterMode: FilterMode
   onFilterModeChange: (mode: FilterMode) => void
+  matchCount?: number
+  activeMatchIndex?: number
+  onNextMatch?: () => void
+  onPrevMatch?: () => void
 }
 
 export function PromptTopBar({
@@ -38,6 +42,10 @@ export function PromptTopBar({
   onFilterScopeChange,
   filterMode,
   onFilterModeChange,
+  matchCount = 0,
+  activeMatchIndex = -1,
+  onNextMatch,
+  onPrevMatch,
 }: TopBarProps) {
   const { model, setModel } = useModel()
   const { theme, setTheme } = useTheme()
@@ -62,6 +70,7 @@ export function PromptTopBar({
       <div className="relative">
         <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
         <Input
+          data-prompt-search-input
           placeholder="搜索标签或名称..."
           value={filterQuery}
           onChange={(e) => onFilterChange(e.target.value)}
@@ -78,6 +87,42 @@ export function PromptTopBar({
           </Button>
         )}
       </div>
+
+      {/* 匹配导航按钮（类似浏览器 Ctrl+F） */}
+      {matchCount > 0 && (
+        <>
+          <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums min-w-[3em] text-center">
+            {activeMatchIndex < 0
+              ? matchCount
+              : `${activeMatchIndex + 1}/${matchCount}`}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 shrink-0"
+            disabled={matchCount === 0}
+            onClick={onPrevMatch}
+            title="上一个匹配"
+          >
+            <ChevronUp className="h-3 w-3" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 shrink-0"
+            disabled={matchCount === 0}
+            onClick={onNextMatch}
+            title="下一个匹配"
+          >
+            <ChevronDown className="h-3 w-3" />
+          </Button>
+        </>
+      )}
+      {filterQuery && matchCount === 0 && (
+        <span className="text-[10px] text-muted-foreground shrink-0">
+          无结果
+        </span>
+      )}
 
       {/* 匹配模式切换 */}
       <Badge

@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useMemo, useCallback, useEffect, useState } from "react"
+import { useRef, useMemo, useCallback, useEffect } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import type { Entry, TargetModel } from "@/lib/prompt-types"
 import { PromptEntryCard } from "./prompt-entry-card"
@@ -18,6 +18,7 @@ interface EntryListProps {
   scrollTarget?: ScrollTarget | null
   onScrollComplete?: () => void
   onTopEntryChange?: (entryId: string) => void
+  highlightEntryId?: string | null
 }
 
 export function PromptEntryList({
@@ -27,10 +28,10 @@ export function PromptEntryList({
   scrollTarget,
   onScrollComplete,
   onTopEntryChange,
+  highlightEntryId,
 }: EntryListProps) {
   const parentRef = useRef<HTMLDivElement>(null)
   const isScrollingRef = useRef(false)
-  const [highlightEntryId, setHighlightEntryId] = useState<string | null>(null)
 
   // 将 entries 按 path 分组，在每组前插入章节标题
   const flatItems = useMemo(() => {
@@ -98,9 +99,6 @@ export function PromptEntryList({
     if (targetIndex >= 0) {
       isScrollingRef.current = true
       virtualizer.scrollToIndex(targetIndex, { align: "center" })
-      if (scrollTarget.type === "entry") {
-        setHighlightEntryId(scrollTarget.value)
-      }
     }
 
     // 延迟重置标记，等待滚动完成
@@ -114,13 +112,6 @@ export function PromptEntryList({
       isScrollingRef.current = false
     }
   }, [scrollTarget, flatItems, virtualizer, onScrollComplete])
-
-  // 2 秒后清除高亮
-  useEffect(() => {
-    if (!highlightEntryId) return
-    const id = setTimeout(() => setHighlightEntryId(null), 2000)
-    return () => clearTimeout(id)
-  }, [highlightEntryId])
 
   // 监听用户滚动，追踪顶部可见条目
   useEffect(() => {
@@ -164,6 +155,7 @@ export function PromptEntryList({
   return (
     <div
       ref={parentRef}
+      data-prompt-list
       className="h-full overflow-y-auto"
       style={{ contain: "strict" }}
     >

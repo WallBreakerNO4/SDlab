@@ -41,6 +41,8 @@ export function buildSeoMetadata(params: BuildSeoMetadataParams): Metadata {
   }
 
   const metadata: Metadata = {
+    title,
+    description,
     openGraph: {
       title,
       description,
