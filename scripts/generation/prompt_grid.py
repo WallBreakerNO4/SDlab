@@ -287,11 +287,7 @@ def _render_y_weighted_tags(
 ) -> str:
     tokens: list[str] = []
     for tag, weight, tag_type in _validated_y_tags(tags):
-        rendered_weight = (
-            _transform_artist_weight(weight, profile=artist_weight_profile)
-            if tag_type == Y_TAG_TYPE_ARTISTS
-            else weight
-        )
+        rendered_weight = _transform_artist_weight(weight, profile=artist_weight_profile)
         rendered_tag = (
             f"{artist_prefix}{tag}"
             if artist_prefix and tag_type == Y_TAG_TYPE_ARTISTS

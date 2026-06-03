@@ -290,7 +290,7 @@ def test_read_y_rows_artist_prefix_applies_only_to_artist_tags(tmp_path: Path):
     assert rows[0][Y_STYLE_KEY] == "y:0"
 
 
-def test_read_y_rows_square_profile_applies_only_to_artist_weights(tmp_path: Path):
+def test_read_y_rows_square_profile_applies_to_all_weights(tmp_path: Path):
     y_path = tmp_path / "y.yaml"
     _write_y_yaml(
         y_path,
@@ -309,7 +309,7 @@ def test_read_y_rows_square_profile_applies_only_to_artist_weights(tmp_path: Pat
 
     rows = read_y_rows(y_path, artist_prefix="@", artist_weight_profile="square")
 
-    assert rows[0]["y"] == "(@wlop:1.21),(@piyodera mucha:0.656),(furry:1.1),"
+    assert rows[0]["y"] == "(@wlop:1.21), (@piyodera mucha:0.656), (furry:1.21), "
     assert rows[0][Y_STYLE_KEY] == "y:0"
 
 
