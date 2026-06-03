@@ -286,7 +286,7 @@ def test_read_y_rows_artist_prefix_applies_only_to_artist_tags(tmp_path: Path):
 
     rows = read_y_rows(y_path, artist_prefix="@")
 
-    assert rows[0]["y"] == "(@wlop:1.1),furry,"
+    assert rows[0]["y"] == "(@wlop:1.1), furry, "
     assert rows[0][Y_STYLE_KEY] == "y:0"
 
 
@@ -344,7 +344,7 @@ def test_read_y_rows_without_artist_prefix_keeps_artist_text(tmp_path: Path):
 
     rows = read_y_rows(y_path)
 
-    assert rows[0]["y"] == "(wlop:1.1),furry,"
+    assert rows[0]["y"] == "(wlop:1.1), furry, "
     assert rows[0][Y_STYLE_KEY] == "y:0"
 
 
@@ -399,14 +399,14 @@ def test_read_y_rows_for_novelai_weight_one_no_prefix():
     from scripts.generation.prompt_grid import _render_novelai_weighted_tags
 
     tags = [{"text": "rurudo", "weight": 1.0, "type": "artists"}]
-    assert _render_novelai_weighted_tags(tags) == "artist:rurudo,"
+    assert _render_novelai_weighted_tags(tags) == "artist:rurudo, "
 
 
 def test_read_y_rows_for_novelai_with_weight():
     from scripts.generation.prompt_grid import _render_novelai_weighted_tags
 
     tags = [{"text": "rurudo", "weight": 1.21, "type": "artists"}]
-    assert _render_novelai_weighted_tags(tags) == "1.21::artist:rurudo ::,"
+    assert _render_novelai_weighted_tags(tags) == "1.21::artist:rurudo ::, "
 
 
 def test_read_y_rows_for_novelai_multiple_tags():
@@ -417,7 +417,7 @@ def test_read_y_rows_for_novelai_multiple_tags():
         {"text": "furry", "weight": 1.0, "type": "general"},
     ]
     result = _render_novelai_weighted_tags(tags)
-    assert result == "1.21::artist:rurudo ::,furry,"
+    assert result == "1.21::artist:rurudo ::, furry, "
 
 
 def test_read_y_rows_for_novelai_empty():
