@@ -11,8 +11,14 @@ import {
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { useModel } from "@/lib/prompt-model-context"
-import { Search, X, Moon, Sun, ChevronUp, ChevronDown } from "lucide-react"
+import { Search, X, Moon, Sun, ChevronUp, ChevronDown, HelpCircle } from "lucide-react"
 import { useTheme } from "next-themes"
 import type { FileInfo, FilterScope, FilterMode } from "@/lib/prompt-types"
 
@@ -47,7 +53,7 @@ export function PromptTopBar({
   onNextMatch,
   onPrevMatch,
 }: TopBarProps) {
-  const { model, setModel } = useModel()
+  const { model, setModel, weightMode, setWeightMode } = useModel()
   const { theme, setTheme } = useTheme()
   const mounted = useSyncExternalStore(
     () => () => {},
@@ -178,6 +184,41 @@ export function PromptTopBar({
           </SelectItem>
         </SelectContent>
       </Select>
+
+      {model === "comfyui" && (
+        <div className="flex items-center gap-1">
+          <Select
+            value={weightMode}
+            onValueChange={(v) => setWeightMode(v as "default" | "anima")}
+          >
+            <SelectTrigger className="w-24 h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="default" className="text-xs">
+                默认
+              </SelectItem>
+              <SelectItem value="anima" className="text-xs">
+                Anima
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex items-center cursor-help text-muted-foreground hover:text-foreground transition-colors">
+                  <HelpCircle className="h-3.5 w-3.5" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-56">
+                <p className="text-xs">
+                  Anima 模式下复制和显示时会对所有权重进行平方计算（weight²），与 Anima 系列模型的生图行为一致。
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      )}
 
       <Button
         variant="ghost"

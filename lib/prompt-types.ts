@@ -55,6 +55,8 @@ export interface TocNode {
 
 export type TargetModel = "novelai" | "comfyui"
 
+export type WeightMode = "default" | "anima"
+
 export type FilterScope = "all" | "name" | "tag"
 export type FilterMode = "exact" | "fuzzy"
 

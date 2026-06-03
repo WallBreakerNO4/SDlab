@@ -1,6 +1,7 @@
 "use client"
 
 import type { TagNode } from "@/lib/prompt-types"
+import { useModel } from "@/lib/prompt-model-context"
 import { cn } from "@/lib/utils"
 import {
   Tooltip,
@@ -16,8 +17,15 @@ interface TagNodeComponentProps {
 
 export function TagNodeComponent({ node }: TagNodeComponentProps) {
   const { text, weight, comment, placeholder } = node
+  const { model, weightMode } = useModel()
 
-  const weightStr = weight !== 1.0 ? `×${weight.toFixed(2)}` : null
+  // Anima 模式下显示平方后的权重
+  const displayWeight =
+    weightMode === "anima" && model === "comfyui"
+      ? weight * weight
+      : weight
+
+  const weightStr = displayWeight !== 1.0 ? `×${displayWeight.toFixed(2)}` : null
 
   if (placeholder) {
     return (
@@ -68,7 +76,7 @@ export function TagNodeComponent({ node }: TagNodeComponentProps) {
         <TooltipContent side="top" className="max-w-xs space-y-1">
           {weightStr && (
             <p className="text-[10px] text-muted-foreground">
-              权重: {weight.toFixed(2)}
+              权重: {displayWeight.toFixed(2)}
             </p>
           )}
           {comment && (

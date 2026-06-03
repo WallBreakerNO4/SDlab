@@ -2,20 +2,31 @@
  * Prompt 格式化引擎
  * 将结构化 Prompt 转换为目标模型的文本格式
  */
-import type { TagNode, PromptNode, Prompt, TargetModel } from "@/lib/prompt-types"
+import type { TagNode, PromptNode, Prompt, TargetModel, WeightMode } from "@/lib/prompt-types"
 
-function formatTagNode(node: TagNode, model: TargetModel, effectiveWeight: number): string {
+function formatTagNode(
+  node: TagNode,
+  model: TargetModel,
+  effectiveWeight: number,
+  weightMode: WeightMode
+): string {
   const text = node.text.trim()
   if (!text) return ""
 
+  // Anima 模式：对权重取平方
+  const finalWeight =
+    weightMode === "anima" && model === "comfyui"
+      ? effectiveWeight * effectiveWeight
+      : effectiveWeight
+
   if (model === "comfyui") {
-    if (effectiveWeight === 1.0) return text
-    return `(${text}:${effectiveWeight.toFixed(2)})`
+    if (finalWeight === 1.0) return text
+    return `(${text}:${finalWeight.toFixed(2)})`
   }
 
   // novelai (default)
-  if (effectiveWeight === 1.0) return text
-  return `${effectiveWeight.toFixed(2)}::${text}::`
+  if (finalWeight === 1.0) return text
+  return `${finalWeight.toFixed(2)}::${text}::`
 }
 
 /**
@@ -26,7 +37,8 @@ function formatNodes(
   model: TargetModel,
   selections: Record<string, number>,
   choiceIdPrefix: string,
-  outerWeight: number
+  outerWeight: number,
+  weightMode: WeightMode
 ): string {
   const parts: string[] = []
 
@@ -36,7 +48,7 @@ function formatNodes(
 
     if (node.type === "tag") {
       const effectiveWeight = node.weight * outerWeight
-      const formatted = formatTagNode(node, model, effectiveWeight)
+      const formatted = formatTagNode(node, model, effectiveWeight, weightMode)
       if (formatted) parts.push(formatted)
     } else if (node.type === "choice") {
       const selectedIndex = selections[nodeId]
@@ -67,7 +79,8 @@ function formatNodes(
         model,
         selections,
         `${nodeId}-opt`,
-        choiceWeight
+        choiceWeight,
+        weightMode
       )
 
       if (inner) parts.push(inner)
@@ -81,9 +94,10 @@ export function formatPrompt(
   prompt: Prompt,
   model: TargetModel,
   selections: Record<string, number>,
-  prefix: string = "root"
+  prefix: string = "root",
+  weightMode: WeightMode = "default"
 ): string {
-  const basePart = formatNodes(prompt.base, model, selections, prefix, 1.0)
+  const basePart = formatNodes(prompt.base, model, selections, prefix, 1.0, weightMode)
 
   if (prompt.characters.length === 0) {
     return basePart
@@ -93,7 +107,7 @@ export function formatPrompt(
   const charParts: string[] = []
   for (let i = 0; i < prompt.characters.length; i++) {
     const char = prompt.characters[i]
-    const charText = formatNodes(char.tags, model, selections, `${prefix}-char-${i}`, 1.0)
+    const charText = formatNodes(char.tags, model, selections, `${prefix}-char-${i}`, 1.0, weightMode)
     if (charText) charParts.push(charText)
   }
 

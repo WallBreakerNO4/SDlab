@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react"
 import type { Prompt, TargetModel } from "@/lib/prompt-types"
 import { useChoices } from "@/lib/prompt-choice-context"
+import { useModel } from "@/lib/prompt-model-context"
 import { formatPrompt } from "@/lib/prompt-formatter"
 import { Button } from "@/components/ui/button"
 import { Copy, Check } from "lucide-react"
@@ -23,10 +24,11 @@ export function CopyButton({
   className,
 }: CopyButtonProps) {
   const { selections } = useChoices()
+  const { weightMode } = useModel()
   const [copied, setCopied] = useState(false)
 
   const handleCopy = useCallback(async () => {
-    const text = formatPrompt(prompt, model, selections, prefix)
+    const text = formatPrompt(prompt, model, selections, prefix, weightMode)
     try {
       await navigator.clipboard.writeText(text)
       setCopied(true)
@@ -42,7 +44,7 @@ export function CopyButton({
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     }
-  }, [prompt, model, selections, prefix])
+  }, [prompt, model, selections, prefix, weightMode])
 
   return (
     <Button
