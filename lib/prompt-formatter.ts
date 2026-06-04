@@ -115,8 +115,9 @@ export function formatPrompt(
     // NovelAI V4+ 管道语法: base | char1 | char2
     return [basePart, ...charParts].filter(Boolean).join(" | ")
   } else {
-    // ComfyUI 不支持原生多角色，直接拼接
-    return [basePart, ...charParts].filter(Boolean).join(", ")
+    // ComfyUI: 用换行 + Character N: 前缀分隔角色
+    const charLines = charParts.map((c, i) => `Character ${i + 1}: ${c}`)
+    return [basePart, ...charLines].filter(Boolean).join("\n")
   }
 }
 
