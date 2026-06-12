@@ -126,7 +126,8 @@ export async function loadRunSummariesUncached(): Promise<RunSummary[]> {
     .select(
       "run_id, run_dir, created_at, x_count, y_count, total_cells, model_name, model_description_zh, model_description_en, model_homepage, model_huggingface, model_civitai, cover, homepage_cards",
     )
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(50);
 
   if (error) {
     throw new Error(`Failed to load runs: ${error.message}`);

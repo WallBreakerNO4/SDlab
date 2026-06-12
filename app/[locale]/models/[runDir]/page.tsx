@@ -9,6 +9,9 @@ import { ModelDetailClientPage } from "@/app/models/[runDir]/model-detail-client
 import { getModelMetadata } from "@/lib/model-metadata";
 import { buildSeoMetadata } from "@/lib/metadata-utils";
 
+// ISR: 每 120 秒重新验证页面缓存（模型数据变化频率低于首页）
+export const revalidate = 120;
+
 function readRunDir(value: string | string[] | undefined): string {
   if (!value) {
     return "";

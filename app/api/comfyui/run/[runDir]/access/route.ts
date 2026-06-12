@@ -4,11 +4,14 @@ import {
   type ViewerVariant,
 } from "@/lib/run-media-grant";
 import { createSupabaseAuthClient } from "@/lib/supabase-auth";
+import { getPublicEnv } from "@/lib/env/public";
 import {
   DEFAULT_SHOW_NSFW,
   parseViewerShowNsfwCookieValue,
   VIEWER_SHOW_NSFW_COOKIE,
 } from "@/lib/viewer-nsfw-cookie";
+import { unstable_cache } from "next/cache";
+import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
 
@@ -39,6 +42,30 @@ function readViewerVariant(request: Request): ViewerVariant {
   return showNsfw ? "auth_nsfw" : "auth_sfw";
 }
 
+/**
+ * 缓存的 run_view_index 查询。
+ * release_id 和 media_access_version 对所有用户相同，因此使用匿名客户端，
+ * 独立于用户认证进行缓存（5 分钟 TTL）。
+ */
+const getRunViewIndex = unstable_cache(
+  async (runDir: string): Promise<RunViewIndexRow | null> => {
+    const { supabaseUrl, supabasePublishableKey } = getPublicEnv();
+    const supabase = createClient(supabaseUrl, supabasePublishableKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data, error } = await supabase
+      .from("run_view_index")
+      .select("release_id,media_access_version")
+      .eq("run_dir", runDir)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    return data as RunViewIndexRow;
+  },
+  ["run-view-index"],
+  { revalidate: 300, tags: ["run-view-index"] },
+);
+
 export async function GET(
   request: Request,
   context: RouteContext,
@@ -62,17 +89,8 @@ export async function GET(
       return jsonError(401, "Authentication required");
     }
 
-    const { data, error } = await supabase
-      .from("run_view_index")
-      .select("release_id,media_access_version")
-      .eq("run_dir", runDir)
-      .maybeSingle();
-
-    if (error) {
-      return jsonError(500, "Failed to load run access");
-    }
-
-    const row = data as RunViewIndexRow | null;
+    // 使用缓存的 run_view_index 查询（独立于用户认证）
+    const row = await getRunViewIndex(runDir);
     if (!row?.release_id || typeof row.media_access_version !== "number") {
       return jsonError(404, "Run not found");
     }

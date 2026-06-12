@@ -7,6 +7,9 @@ import { listRunSummaries } from "@/lib/run-list";
 import { buildSeoMetadata } from "@/lib/metadata-utils";
 import HomePageClient from "../home-page-client";
 
+// ISR: 每 60 秒重新验证页面缓存，大幅降低 SSR 的 CPU 消耗
+export const revalidate = 60;
+
 export async function generateMetadata({
   params,
 }: {

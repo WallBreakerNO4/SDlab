@@ -73,9 +73,12 @@ export async function GET(request: Request): Promise<Response> {
     const headers = new Headers();
     writeR2HttpMetadata(headers, object);
     const isJson = key.endsWith(".json");
+    // JSON: 5 分钟私有缓存；图片: 14 分钟缓存（grant token 15 分钟有效期留 1 分钟余量）
     headers.set(
       "Cache-Control",
-      isJson ? "private, max-age=300" : "private, max-age=0, no-cache",
+      isJson
+        ? "private, max-age=300"
+        : "private, max-age=840, stale-while-revalidate=60",
     );
     headers.set("Content-Length", String(object.size));
     headers.set("ETag", object.httpEtag);
