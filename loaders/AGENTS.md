@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-05-19 | Updated: 2026-05-19 -->
+<!-- Generated: 2026-05-19 | Updated: 2026-06-18 -->
 
 # loaders/ — 自定义 Webpack Loader
 
@@ -12,6 +12,7 @@
 | 文件 | 描述 |
 |------|------|
 | `markdown-source-loader.cjs` | 将 `.md` 文件内容导出为字符串，供 `react-markdown` 等组件在构建时内联使用 |
+| `prompt-data-builder.ts`     | Prompt 数据构建脚本:读取 `data/prompt-codex/*.yaml` → 生成 `public/data/prompts/*.json`;用 `pnpm tsx` 运行;类型与 `lib/prompt-types.ts` 共享 |
 
 ## 约定（本目录特有）
 

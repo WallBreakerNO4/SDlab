@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-06 | Updated: 2026-06-17 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-06-18 -->
 <!-- Commit: SEO | 分支: dev -->
 
 # Agent Guide (sd-style-lab/images-script)
@@ -191,4 +191,4 @@ pnpm dlx supabase migration new <name>
 - `i18n/AGENTS.md`、`messages/AGENTS.md`：国际化路由配置与翻译消息约定。
 - `lib/AGENTS.md`、`lib/env/AGENTS.md`：Supabase/R2/路径安全/共享类型边界与环境变量读取。
 - `scripts/AGENTS.md`、`scripts/generation/AGENTS.md`、`scripts/r2_upload/AGENTS.md`、`scripts/cli/AGENTS.md`、`scripts/other/AGENTS.md`：Python 主代码域与子系统边界。
-- `tests/AGENTS.md`、`e2e/AGENTS.md`、`supabase/AGENTS.md`、`data/AGENTS.md`、`hooks/AGENTS.md`、`types/AGENTS.md`：测试、迁移、资产、hooks、生成类型的局部规则。
+- `tests/AGENTS.md`、`e2e/AGENTS.md`、`supabase/AGENTS.md`、`data/AGENTS.md`、`hooks/AGENTS.md`、`types/AGENTS.md`、`public/AGENTS.md`：测试、迁移、资产、hooks、生成类型、静态资源的局部规则。

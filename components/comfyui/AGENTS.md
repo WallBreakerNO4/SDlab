@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-04-25 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-06-18 -->
 
 # components/comfyui/ — ComfyUI 业务组件
 
@@ -16,6 +16,12 @@
 | Blurhash 占位   | `blurhash-canvas.tsx`        | 从 blurhash 字符串渲染 canvas 占位图           |
 | 网格图片组件    | `grid-image.tsx`             | R2 图片 + blurhash 占位 + 加载/错误状态        |
 | 页面侧消费      | `app/[locale]/models/[runDir]/page.tsx` | Server Component → `ModelDetailClientPage` → 虚拟网格       |
+| 虚拟网格布局/行/滚动 hook | `use-virtual-grid-layout.ts`、`use-virtual-grid-rows.ts`、`use-virtual-grid-scroll.ts` | 计算可视行/列、构建行缓存、滚动位置管理与恢复 |
+| 列显隐 hook              | `use-column-visibility.ts`                                | 网格 X 列显示/隐藏,localStorage 持久化 |
+| 变体源选择 hook          | `use-renderable-variant-source.ts`                        | 按公开/私有选择图片源,走 `private-image-cache` 或 `publicObjectUrl()` |
+| 单元格预览弹窗           | `virtual-grid-cell-dialog.tsx`                            | 复制 prompt / 下载图片 / 翻页 |
+| 单元格/行标签组件        | `virtual-grid-preview-cell.tsx`、`virtual-grid-row-label.tsx` | 预览单元格(`GridImage` + `pickBestVariants`)/ Y 轴行标签 |
+| 网格类型与工具           | `virtual-grid-types.ts`、`virtual-grid-utils.ts`          | `ImageVariantSource` / `CachedRow` 等共享类型 + `pickBestVariants()` 等工具 |
 
 ## 约定（本目录特有）
 

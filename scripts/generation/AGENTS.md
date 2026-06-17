@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-04-25 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-06-18 -->
 
 # scripts/generation/ — 核心生图实现
 
@@ -30,6 +30,8 @@
 | 重试失败项筛选          | `retry_failed_selection.py`  | 从 metadata.jsonl 筛选 failed 项                      |
 | 重试执行                | `retry.py`                   | 重试入口与流程控制                                    |
 | 运行回放                | `run_replay.py`              | 从已有 metadata 重放运行                              |
+| NovelAI API 客户端      | `novelai_client.py`         | 基于 `novelai` SDK;认证/网络错误处理,服务 NovelAI 直接生图链路 |
+| NovelAI 生图入口        | `novelai_generate.py`       | 独立于 ComfyUI 的生图链路;argparse + metadata 落盘 |
 
 ## 模块拆分结构
 

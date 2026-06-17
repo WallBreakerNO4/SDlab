@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-04-25 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-06-18 -->
 
 # scripts/ — 核心实现（生图 + R2 上传）
 
@@ -24,6 +24,8 @@
 | R2 客户端                  | `scripts/r2_upload/r2_client.py`                           | boto3 S3 兼容 + 重试                          |
 | Supabase 批量写入          | `scripts/r2_upload/supabase_writer.py`                     | PostgREST upsert + 分批                       |
 | 对外导出                   | `scripts/__init__.py`                                      | `__all__` 统一导出                            |
+| run 配置路径枚举           | `scripts/run_config_path.py`                              | `DATA_MODELS_DIR` / `iter_run_config_files()`:枚举 `data/models/*/config.yaml`,被 menu/runner_config/upload 多处复用 |
+| run 命名与键校验           | `scripts/run_naming.py`                                   | `RUN_KEY_RE` / `validate_run_key()`:run key 形态校验(小写 kebab-case) |
 
 ## 子目录职责（避免串层）
 

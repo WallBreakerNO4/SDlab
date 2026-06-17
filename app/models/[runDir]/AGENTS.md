@@ -1,11 +1,11 @@
 <!-- Parent: ../../AGENTS.md -->
-<!-- Generated: 2026-04-25 | Updated: 2026-05-30 -->
+<!-- Generated: 2026-04-25 | Updated: 2026-06-18 -->
 
 # app/models/[runDir]/ — 模型详情页共享组件
 
 ## 概览
 
-- 模型详情页的客户端组件模块：并行拉取 run 详情 + 网格索引，渲染虚拟网格 + 模型描述 header + workflow 下载入口。支持 NSFW 切换、用户风格提示词收藏。
+- 模型详情页的客户端组件模块：并行拉取 run 详情 + 网格索引，渲染虚拟网格 + 模型描述 header + workflow 下载入口。支持 NSFW 视图切换（经 `useUserPreferences()`）。
 - 本目录组件由 `app/[locale]/models/[runDir]/page.tsx`（Server Component）消费，不是独立页面路由。
 
 ## 去哪儿看
@@ -18,7 +18,6 @@
 | 模型详情 Header        | `model-detail-header.tsx`      | 模型名、描述、外部链接（homepage/HuggingFace/Civitai）、workflow 下载入口   |
 | 类型守卫与响应类型     | `model-detail-types.ts`        | `ModelDetailResponse`、`RunViewAccess`、`CurrentRunView` 及相关 `is*` 守卫  |
 | skeleton 占位组件      | `model-detail-skeletons.tsx`   | `SummarySkeleton` + `GridSkeleton`                                          |
-| 风格提示词收藏 hook    | `use-style-prompt-favorites.ts` | 用户登录后的风格 prompt 收藏（增/删/标记使用），调 `/api/viewer/style-prompt-favorites` |
 | 虚拟网格渲染            | `components/comfyui/virtual-grid.tsx` | 主网格渲染组件                                                    |
 | Grid 图片               | `components/comfyui/grid-image.tsx`  | R2 图片 + blurhash 占位                                            |
 
@@ -30,7 +29,6 @@
 - bootstrap JSON 的 `yLabels`（camelCase）会被归一化为 `y_labels`（snake_case）以匹配网格组件预期。
 - 所有 fetch 通过 `AbortController` 管理，组件卸载时自动取消。
 - `model-detail-types.ts` 中包含多层 type guard（`isModelDetailResponse` / `isRunGridIndexData` / `isCurrentRunView` / `isRunViewAccess`），服务端返回数据必须经过校验才进入渲染态。
-- style prompt favorites 功能仅登录用户可用，通过 `useStylePromptFavorites` hook 管理。
 - 认证入口统一走 `AuthProvider` + `useAuth()`；workflow 下载需要登录态。
 
 ## 反模式

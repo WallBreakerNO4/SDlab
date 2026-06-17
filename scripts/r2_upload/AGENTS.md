@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-04-25 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-06-18 -->
 
 # scripts/r2_upload/ — R2 上传 + Supabase 写入
 
@@ -31,6 +31,7 @@
 | Supabase 环境             | `supabase_env.py`        | 环境变量读取（URL/key）                                                              |
 | Supabase 数据归一化       | `supabase_normalize.py`  | 行数据归一化为 PostgREST 格式                                                        |
 | 清空 bucket 工具          | `clear_bucket.py`        | 交互式清空 R2 bucket                                                                 |
+| 删除 run 数据            | `delete_run.py`             | 删除指定 run 的 Supabase 记录 + R2 对象;`--run-dir` / `--dry-run` / `--yes`;`python -m scripts.r2_upload.delete_run` |
 
 ## 核心流程
 

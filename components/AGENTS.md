@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-06-17 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-06-18 -->
 
 # components/ — 前端组件（业务 + 基础 UI）
 
@@ -28,6 +28,10 @@
 | JSON-LD 结构化数据    | `components/json-ld.tsx`                | `JsonLdWebsite` + `JsonLdBreadcrumbList`，客户端注入 schema.org 标签 |
 | shadcn 配置           | `components.json`                        | aliases、style、cssVariables 等                    |
 | Prompt 法典浏览器 UI  | `components/prompt/`                      | TOC + 虚拟滚动条目 + Tag/Choice/多角色渲染（见 `components/prompt/AGENTS.md`） |
+| 悬浮登录按钮            | `auth-floating-button.tsx`               | `"use client"`;未登录时悬浮按钮 → `AuthLoginDialog`;已登录显示头像下拉菜单 |
+| shadcn 示例布局          | `example.tsx`                            | `ExampleWrapper` 布局组件,用于组件展示页面 |
+| 用户偏好 Provider        | `user-preferences-provider.tsx`          | `"use client"`;用户偏好 Context（NSFW 等）,基于 `useAuth()` |
+| Web Vitals 上报          | `web-vitals.tsx`                         | `"use client"`;`useReportWebVitals` → `/api/telemetry/web-vitals` |
 
 ## 约定（本目录特有）
 

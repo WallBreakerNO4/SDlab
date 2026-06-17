@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-04-25 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-06-18 -->
 
 # tests/ — pytest 约定
 
@@ -37,6 +37,8 @@
 | 依赖烟雾                      | `test_smoke.py`                                                    | 最轻量集成信号                                      |
 | prompt 资产                   | `test_prompt_assets.py`                                            | data/ 下 YAML 资产有效性                            |
 | negative prompt               | `test_negative_prompt_append.py`                                   | 负面提示词拼接                                      |
+| 重试失败项幂等性        | `test_idempotent_retry_failed.py`                         | 验证重复重试不重复生成 |
+| NovelAI 生图入口        | `test_novelai_generate.py`                                | NovelAI 生图 argparse + 流程测试 |
 
 ## 约定（本目录特有）
 
