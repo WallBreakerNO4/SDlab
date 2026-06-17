@@ -15,7 +15,7 @@ const eslintConfig = defineConfig([
     // Additional ignores:
     ".open-next/**",
     "dist/**",
-    ".sisyphus/**",
+    "test-results/**",
     ".wrangler/**",
     "types/routes.d.ts",
     "types/validator.ts",

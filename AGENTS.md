@@ -145,7 +145,7 @@
 
 ## 反模式
 
-- 不改/不提交：真实环境文件（如 `.env` / `.env.local` / 其他私密配置）、`.venv/`、`node_modules/`、`.next/`、`.open-next/`、`comfyui_api_outputs/`、`.sisyphus/`。
+- 不改/不提交：真实环境文件（如 `.env` / `.env.local` / 其他私密配置）、`.venv/`、`node_modules/`、`.next/`、`.open-next/`、`comfyui_api_outputs/`。
 - 不要把运行输出写进 `data/`；`data/` 只放可复现输入资产。
 - 不要手改 `types/routes.d.ts`、`types/validator.ts` 等 Next 生成文件。
 - 不要在页面/组件/route 中绕过 `lib/comfyui-path.ts` 或 `lib/r2-url.ts` 直接拼路径。

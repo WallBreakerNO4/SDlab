@@ -10,7 +10,7 @@ const webServerCommand =
 
 export default defineConfig({
   testDir: "./e2e",
-  outputDir: ".sisyphus/evidence/playwright/",
+  outputDir: "test-results/",
   timeout: 30_000,
   expect: {
     timeout: 5_000,

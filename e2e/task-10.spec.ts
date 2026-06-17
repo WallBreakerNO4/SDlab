@@ -43,7 +43,7 @@ test("task 10: placeholder appears before image load", async ({ page }) => {
   await expect(image).toHaveClass(/opacity-0/)
   
   // Take a screenshot of the placeholder
-  await page.screenshot({ path: ".sisyphus/evidence/task-10-placeholder.png" })
+  await page.screenshot({ path: "test-results/task-10-placeholder.png" })
   
   // Wait for the image to load (opacity 100)
   await expect(image).toHaveClass(/opacity-100/, { timeout: 5000 })
