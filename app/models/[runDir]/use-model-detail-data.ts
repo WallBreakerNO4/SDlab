@@ -114,7 +114,8 @@ export function useModelDetailData({
         publicObjectUrl(`runs/${runDir}/view/current.json`),
         {
           signal: abortController.signal,
-          cache: "no-store",
+          // current.json 极少变化，force-cache 让浏览器复用缓存。
+          cache: "force-cache",
         },
       );
 
@@ -157,9 +158,8 @@ export function useModelDetailData({
           )
         : publicObjectUrl(currentRaw.bootstrap_sfw_key);
 
-      const bootstrapCache = wantsPrivateNsfw
-        ? ("no-store" as const)
-        : ("force-cache" as const);
+      // grant 共享化后私有 bootstrap URL 也跨用户一致，可走 force-cache。
+      const bootstrapCache = "force-cache" as const;
 
       const bootstrapResponse = await fetch(bootstrapUrl, {
         signal: abortController.signal,

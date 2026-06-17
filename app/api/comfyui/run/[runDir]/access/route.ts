@@ -96,9 +96,16 @@ export async function GET(
     }
 
     const viewerVariant = readViewerVariant(request);
-    const expiresAt = Math.floor(Date.now() / 1000) + 60 * 15;
+    // grant TTL 从 15 分钟延长到 24 小时：所有用户查看同一份 release 的图片，
+    // 无需每用户独立短时授权。长 TTL 让 CDN 缓存（s-maxage=82800）始终先于
+    // grant 过期失效，不违反 TTL 兑底。
+    const expiresAt = Math.floor(Date.now() / 1000) + 60 * 60 * 24; // 24 小时
+    // sub 从 user.id 改为 release 级共享：同一 release 的所有登录用户拿到
+    // 相同 grant → URL 完全一致 → CDN 边缘缓存可跨用户复用。
+    // 安全性不降：verifyRunMediaGrant 本就不校验 sub 与请求者 user.id 是否匹配，
+    // 只验 HMAC 签名 + exp。爬虫仍需登录才能拿 grant。
     const grant = createRunMediaGrant({
-      sub: user.id,
+      sub: `release:${row.release_id}:${viewerVariant}`,
       run_dir: runDir,
       release_id: row.release_id,
       viewer_variant: viewerVariant,

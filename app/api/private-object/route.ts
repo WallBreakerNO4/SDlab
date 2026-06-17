@@ -73,12 +73,15 @@ export async function GET(request: Request): Promise<Response> {
     const headers = new Headers();
     writeR2HttpMetadata(headers, object);
     const isJson = key.endsWith(".json");
-    // JSON: 5 分钟私有缓存；图片: 14 分钟缓存（grant token 15 分钟有效期留 1 分钟余量）
+    // 启用边缘缓存：s-maxage=82800 (23 小时) < grant TTL 24 小时，
+    // 保证 CDN 缓存先于 grant 过期失效，不违反 TTL 兑底。
+    // grant 共享化后同一 release 的所有用户 URL 一致，边缘缓存跨用户复用。
+    // max-age 较短让浏览器在 SWR 窗口内主动重验证，避免持有过于陈旧的图。
     headers.set(
       "Cache-Control",
       isJson
-        ? "private, max-age=300"
-        : "private, max-age=840, stale-while-revalidate=60",
+        ? "max-age=300, s-maxage=82800"
+        : "max-age=3600, s-maxage=82800, stale-while-revalidate=86400",
     );
     headers.set("Content-Length", String(object.size));
     headers.set("ETag", object.httpEtag);

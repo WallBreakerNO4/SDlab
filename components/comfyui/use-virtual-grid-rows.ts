@@ -117,7 +117,9 @@ export function useVirtualGridRows({
             }),
             {
               signal: controller.signal,
-              cache: access ? "no-store" : "force-cache",
+              // 服务端已设 s-maxage，前端统一用 force-cache 让浏览器 + 边缘复用缓存。
+              // 之前 no-store 会让每次都打 Worker，浪费边缘缓存。
+              cache: "force-cache",
             },
           );
 

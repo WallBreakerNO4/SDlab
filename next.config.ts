@@ -21,6 +21,8 @@ const markdownLoaderPath = path.join(
 const contentPageMarkdownPattern = /(^|[\\/])data[\\/].*-page(?:\.en)?\.md$/i;
 
 const nextConfig: NextConfig = {
+  // 显式关闭浏览器端 source map，避免源码泄露与扫描流量
+  productionBrowserSourceMaps: false,
   env: {
     NEXT_PUBLIC_R2_PUBLIC_BASE_URL: process.env.R2_PUBLIC_BASE_URL,
   },

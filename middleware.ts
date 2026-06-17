@@ -6,6 +6,42 @@ import { routing } from "./i18n/routing";
 
 const intlMiddleware = createMiddleware(routing);
 
+// 扫描器探测路径黑名单（WAF 为第一道防线，这里做应用层兑底）
+// 直接 404，不跑 i18n / Supabase session 刷新，省 Worker CPU
+const BLOCKED_PATH_PATTERNS: RegExp[] = [
+  /^\/\.env(?:\.|$|\/)/,
+  /^\/\.git(?:\/|$)/,
+  /^\/\.aws(?:\/|$)/,
+  /^\/\.azure(?:\/|$)/,
+  /^\/\.gcloud(?:\/|$)/,
+  /^\/\.docker(?:\/|$)/,
+  /^\/actuator(?:\/|$)/,
+  /^\/phpinfo/i,
+  /^\/_profiler/i,
+  /^\/profiler(?:\/|$)/,
+  /^\/wp-admin/i,
+  /^\/wp-login/i,
+  /^\/xmlrpc/i,
+  /^\/phpmyadmin/i,
+  /^\/docker-compose/i,
+  /^\/kubernetes\.ya?ml$/i,
+  /^\/k8s\.ya?ml$/i,
+  /^\/Dockerfile$/,
+  /^\/.*service-account.*\.json$/i,
+  /^\/.*credentials.*\.json$/i,
+  /^\/heapdump/,
+  /^\/threaddump/,
+  /^\/configprops/,
+  /^\/trace$/,
+  /^\/env$/,
+  /^\/dump$/,
+  /^\/logfile$/,
+];
+
+function isScannerProbe(pathname: string): boolean {
+  return BLOCKED_PATH_PATTERNS.some((re) => re.test(pathname));
+}
+
 // 已本地化的页面路径模式（不含 locale 前缀），用于白名单匹配
 const LOCALIZED_PATH_PATTERNS: RegExp[] = [
   /^\/$/,                    // 首页
@@ -67,7 +103,9 @@ async function refreshSupabaseSession(
     },
   });
 
-  await supabase.auth.getUser();
+  // 用 getSession() 替代 getUser()：只读本地 cookie 零网络往返，
+  // 避免每条请求都打 Supabase Auth API。权威校验留给具体 API route。
+  await supabase.auth.getSession();
   return response;
 }
 
@@ -79,6 +117,11 @@ async function refreshSupabaseSession(
  * Edge middleware. We create the client inline instead.
  */
 export async function middleware(request: NextRequest) {
+  // 扫描请求直接 404，不消耗后续 i18n / Supabase session 资源
+  if (isScannerProbe(request.nextUrl.pathname)) {
+    return new NextResponse("Not Found", { status: 404 });
+  }
+
   const runIntl = shouldRunIntlMiddleware(request.nextUrl.pathname);
   const createResponse = () =>
     runIntl ? intlMiddleware(request) : NextResponse.next({ request });

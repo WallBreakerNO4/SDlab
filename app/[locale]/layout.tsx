@@ -88,10 +88,12 @@ export default async function LocaleLayout({
   let initialUser = null;
   try {
     const supabase = await createSupabaseAuthClient();
+    // 用 getSession() 替代 getUser()：middleware 已刷新 session cookie，
+    // 本地校验即可，避免每条导航都打 Supabase Auth API。
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    initialUser = user ?? null;
+      data: { session },
+    } = await supabase.auth.getSession();
+    initialUser = session?.user ?? null;
   } catch {
     initialUser = null;
   }
