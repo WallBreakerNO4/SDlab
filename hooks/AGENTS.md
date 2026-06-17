@@ -1,17 +1,18 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-04-25 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-06-17 -->
 
 # hooks/ — 前端复用 hooks
 
 ## 概览
 
-- 本目录只放“跨组件可复用行为”，当前以 `use-mobile.ts` 为主。
+- 本目录只放“跨组件可复用行为”，当前以 `use-mobile.ts` 与 `use-prompts-scroll-restore.ts` 为主。
 
 ## 去哪儿看
 
 | 场景 | 位置 | 备注 |
 | --- | --- | --- |
 | 移动端断点判断 | `hooks/use-mobile.ts` | 基于 `matchMedia`，带事件订阅与清理 |
+| Prompt 法典滚动位置存取 | `hooks/use-prompts-scroll-restore.ts` | 按 fileId 持久化当前条目 id 到 localStorage，供 `components/prompt/prompt-browser-page.tsx` 恢复滚动 |
 
 ## 约定（本目录特有）
 

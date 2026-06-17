@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-05-30 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-06-17 -->
 
 # components/ — 前端组件（业务 + 基础 UI）
 
@@ -27,6 +27,7 @@
 | UI 组件使用示例       | `components/component-example.tsx`       | 用于展示/验证 UI primitives                        |
 | JSON-LD 结构化数据    | `components/json-ld.tsx`                | `JsonLdWebsite` + `JsonLdBreadcrumbList`，客户端注入 schema.org 标签 |
 | shadcn 配置           | `components.json`                        | aliases、style、cssVariables 等                    |
+| Prompt 法典浏览器 UI  | `components/prompt/`                      | TOC + 虚拟滚动条目 + Tag/Choice/多角色渲染（见 `components/prompt/AGENTS.md`） |
 
 ## 约定（本目录特有）
 

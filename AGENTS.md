@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-06 | Updated: 2026-05-30 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-06-17 -->
 <!-- Commit: SEO | 分支: dev -->
 
 # Agent Guide (sd-style-lab/images-script)
@@ -15,19 +15,23 @@
 - 认证链路走 Supabase SSR：浏览器端 `lib/supabase-browser.ts`，服务端 `lib/supabase-auth.ts`，会话刷新在 `middleware.ts`。
 - Web 部署目标是 OpenNext + Cloudflare：本地 `next dev` 会启 Miniflare，部分服务端能力通过 Workers bindings 读取。
 - 当前分层知识文件已经覆盖主要强边界目录；像 `app/api/comfyui/run/[runDir]/` 这类 leaf route 继续继承父级规则，不再单开 `AGENTS.md`。
+- Prompt 法典浏览器（路由 `/[locale]/prompts`）是新增的面向用户功能：客户端从 `public/data/prompts/*.json` 加载结构化 Prompt，渲染 Tag/Choice/多角色卡片并按目标模型格式化复制；源资产在 `data/prompt-codex/*.yaml`，运行时不直接读源 YAML。
 
 ## 结构
 
 ```text
 ./
 ├── app/                    # App Router 页面与 API route
-│   ├── [locale]/           # 区域化页面入口（layout + 首页 + info + privacy-policy + models）
+│   ├── [locale]/           # 区域化页面入口（layout + 首页 + info + privacy-policy + models + prompts）
 │   ├── api/comfyui/        # runs/access/workflow + 公开/私有对象代理
+│   ├── api/viewer/         # 浏览者偏好（NSFW 开关）
+│   ├── api/telemetry/      # web-vitals 上报端点
 │   ├── auth/               # Supabase PKCE callback
 │   └── models/[runDir]/    # 模型详情页共享组件（由 [locale]/models/[runDir] 消费）
 ├── components/             # 业务组件 + UI primitives + auth provider
 │   ├── comfyui/            # 虚拟网格/图片预览/blurhash
 │   ├── home/               # 首页模型卡片/封面图/预览弹窗
+│   ├── prompt/             # Prompt 法典浏览器 UI（见 components/prompt/AGENTS.md）
 │   └── ui/                 # shadcn/radix primitives
 ├── i18n/                   # next-intl 国际化配置（路由/请求/导航）
 ├── messages/               # 翻译消息 JSON（zh.json / en.json）
@@ -43,10 +47,11 @@
 ├── supabase/               # 本地配置与迁移
 ├── data/                   # 只读输入资产
 │   ├── models/             # 模型配置（config.yaml + api.json + workflow.json）
-│   └── prompts/            # X/Y prompt 资产（YAML + CSV）
+│   ├── prompts/            # X/Y prompt 资产（YAML + CSV）
+│   └── prompt-codex/       # Prompt 法典源 YAML（所长 NovelAI 个人法典）
 ├── hooks/                  # 共享前端行为
 ├── loaders/                # 自定义 Webpack loader（见 loaders/AGENTS.md）
-├── public/                 # 静态资源（favicon 等）
+├── public/                 # 静态资源（favicon + data/prompts 法典 JSON 产物）
 ├── types/                  # Next 生成类型（只读）
 ├── middleware.ts           # I18N 路由 + Supabase session refresh
 └── main.py                 # Python 顶层入口（委托到 scripts）
@@ -89,6 +94,11 @@
 | sitemap.xml           | `app/sitemap.ts`                                                                 | 多语言 sitemap + hreflang alternates，动态包含模型详情页                      |
 | 错误页                | `app/[locale]/error.tsx`                                                         | 客户端错误页 + i18n + 重试/回首页                                            |
 | 404 页                | `app/[locale]/not-found.tsx`                                                     | 客户端 404 页 + i18n + 回首页链接                                            |
+| Prompt 法典浏览器     | `app/[locale]/prompts/page.tsx` + `components/prompt/`                              | 登录门控 + ModelProvider/ChoiceProvider + 客户端加载 `public/data/prompts/*.json` |
+| Prompt 法典浏览器组件 | `components/prompt/AGENTS.md`                                                       | TOC + 虚拟滚动条目 + Tag/Choice/多角色渲染 + 格式化复制                    |
+| Prompt 法典数据产物   | `public/data/prompts/index.json`、`public/data/prompts/files/*.json`               | 构建期产物，由源 YAML `data/prompt-codex/*.yaml` 生成；运行时只消费 JSON    |
+| 浏览者 NSFW 偏好 API  | `app/api/viewer/preferences/nsfw/route.ts`                                        | GET 读 cookie / PATCH 写 Supabase `user_preferences` + cookie            |
+| Web Vitals 上报       | `app/api/telemetry/web-vitals/route.ts`                                           | 接收 `console.log` 记录，204 空响应，不落库                              |
 
 ## 代码图
 
@@ -109,6 +119,10 @@
 | `JsonLdWebsite`              | component | `components/json-ld.tsx`                     | WebSite schema     |
 | `JsonLdBreadcrumbList`       | component | `components/json-ld.tsx`                     | BreadcrumbList schema |
 | `SITE_ORIGIN`                | const    | `lib/site-origin.ts`                          | 站点根 URL          |
+| `formatPrompt`              | function | `lib/prompt-formatter.ts`                    | 结构化 Prompt → 目标模型文本（novelai / comfyui + anima 权重模式） |
+| `listRunSummaries`          | function | `lib/run-list.ts`                            | 首页 run 列表查询，`unstable_cache` 5min + tag `run-list` |
+| `requireViewerForPreferenceWrite` | function | `lib/server-user-preferences.ts`       | 浏览者偏好写入的前置鉴权 |
+| `PromptBrowserPage`         | component | `components/prompt/prompt-browser-page.tsx`   | 法典浏览器页面骨架 |
 
 ## 约定（项目特有）
 
@@ -122,6 +136,7 @@
 - 路径与 URL：API 入口的 `runDir` 先用 `lib/comfyui-types.ts:isValidRunDir()` 判形态；共享路径处理再走 `lib/comfyui-path.ts`；R2 URL 统一走 `lib/r2-url.ts`。
 - 前端：大网格必须虚拟化；图片优先消费 R2 display/thumb 变体并配合 blurhash 占位，这套变体统一称为“展示页缩略图”。
 - 前端首页：`/api/comfyui/runs` 当前会输出封面图/主页缩略图字段；不要把 run 详情页的展示页缩略图直接挪作首页卡片素材。
+- Prompt 法典浏览器：运行时只消费 `public/data/prompts/*.json` 构建产物；源 YAML `data/prompt-codex/*.yaml` 是只读输入资产，不要在 Web 侧直接读取。目标模型/权重模式/Choice 选择的状态边界分别在 `lib/prompt-model-context.tsx` 与 `lib/prompt-choice-context.tsx`，格式化文本统一走 `lib/prompt-formatter.ts:formatPrompt()`。
 - SEO：所有页面 `generateMetadata` 统一使用 `lib/metadata-utils.ts:buildSeoMetadata()` 构建 OG/Twitter Card/canonical/hreflang 标签，不要手写重复模板。模型详情页的 `og:image` 通过 `lib/model-metadata.ts:getModelMetadata()` 从 Supabase 查询封面图 URL。JSON-LD 结构化数据使用 `components/json-ld.tsx` 的客户端组件注入，不消耗 Worker CPU。
 - 工具链：Python 用 `uv` + `pytest`（>=3.13）；Web 用 `pnpm` + Next 16 + React 19；E2E 用 Playwright。
 - Supabase CLI：本仓库统一使用 `pnpm dlx supabase ...` 运行 Supabase 命令。
@@ -172,7 +187,7 @@ pnpm dlx supabase migration new <name>
 ## 分层文档
 
 - `app/AGENTS.md`、`app/api/AGENTS.md`、`app/api/comfyui/AGENTS.md`、`app/auth/AGENTS.md`、`app/[locale]/AGENTS.md`、`app/models/[runDir]/AGENTS.md`：页面/API/Auth/I18N 的分层规则与 PKCE 特例。
-- `components/AGENTS.md`、`components/ui/AGENTS.md`、`components/comfyui/AGENTS.md`、`components/home/AGENTS.md`：业务组件、UI primitives、虚拟网格/图片渲染约定。
+- `components/AGENTS.md`、`components/ui/AGENTS.md`、`components/comfyui/AGENTS.md`、`components/home/AGENTS.md`、`components/prompt/AGENTS.md`：业务组件、UI primitives、虚拟网格/图片渲染约定、Prompt 法典浏览器 UI。
 - `i18n/AGENTS.md`、`messages/AGENTS.md`：国际化路由配置与翻译消息约定。
 - `lib/AGENTS.md`、`lib/env/AGENTS.md`：Supabase/R2/路径安全/共享类型边界与环境变量读取。
 - `scripts/AGENTS.md`、`scripts/generation/AGENTS.md`、`scripts/r2_upload/AGENTS.md`、`scripts/cli/AGENTS.md`、`scripts/other/AGENTS.md`：Python 主代码域与子系统边界。

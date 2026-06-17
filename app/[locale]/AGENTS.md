@@ -1,5 +1,5 @@
 <!-- Parent: ../../AGENTS.md -->
-<!-- Generated: 2026-05-30 | Updated: 2026-05-30 -->
+<!-- Generated: 2026-05-30 | Updated: 2026-06-17 -->
 
 # app/[locale]/ — 区域化页面层
 
@@ -18,6 +18,7 @@
 | `info/page.tsx` | 关于页面：`force-static` + `react-markdown`，根据 locale 选择 `info-page.md` 或 `info-page.en.md` |
 | `privacy-policy/page.tsx` | 隐私政策页：`force-static` + `react-markdown`，根据 locale 选择 `privacy-policy-page.md` 或 `privacy-policy-page.en.md` |
 | `models/[runDir]/page.tsx` | 模型详情页（Server Component）：验证 locale + `isValidRunDir()` → 渲染 `ModelDetailClientPage(runDir)` |
+| `prompts/page.tsx` | Prompt 法典浏览器页（Server Component）：验证 locale → `buildSeoMetadata()` → 用 `ModelProvider` + `ChoiceProvider` 包裹 `PromptBrowserPage`；未登录时由客户端组件渲染登录门控 |
 
 ## For AI Agents
 
@@ -55,6 +56,7 @@
 | `info/` | 关于页面（静态 Markdown） |
 | `privacy-policy/` | 隐私政策页面（静态 Markdown） |
 | `models/[runDir]/` | 模型详情页（委托 `app/models/[runDir]/` 的组件） |
+| `prompts/` | Prompt 法典浏览器（委托 `components/prompt/`，见 `components/prompt/AGENTS.md`） |
 
 ## Dependencies
 
@@ -62,6 +64,8 @@
 - `app/models/[runDir]/` - 模型详情页的客户端组件（`ModelDetailClientPage`）
 - `app/home-page-client.tsx` - 首页客户端组件
 - `components/` - 全站组件（header、footer、auth provider 等）
+- `components/prompt/` - Prompt 法典浏览器 UI（`PromptBrowserPage` + 子组件）
+- `lib/prompt-model-context.tsx` / `lib/prompt-choice-context.tsx` - 法典页面的两个 Context Provider
 - `i18n/routing.ts` - locale 白名单
 - `i18n/navigation.ts` - 国际化 Link/useRouter
 - `messages/` - 翻译 JSON

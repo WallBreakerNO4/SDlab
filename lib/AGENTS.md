@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-05-30 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-06-17 -->
 
 # lib/ — Node 侧共享边界（Supabase + R2 + 路径安全 + 类型）
 
@@ -21,6 +21,15 @@
 | SEO metadata 构建          | `metadata-utils.ts`   | `buildSeoMetadata()`：统一生成 OG/Twitter Card/canonical/hreflang |
 | 模型 SEO 元数据查询        | `model-metadata.ts`   | `getModelMetadata()`：从 Supabase 查 name/description/cover，1h cache |
 | 站点根 URL 常量            | `site-origin.ts`      | `SITE_ORIGIN`：`https://sdlab.wall-breaker-no4.xyz` |
+| 首页 run 列表查询          | `run-list.ts`         | `listRunSummaries()`：`unstable_cache` 5min + tag `run-list`，查 `run_list_items` 视图并拼装 `assets.cover` / `assets.homepage_cards` |
+| 浏览者偏好鉴权与写入       | `server-user-preferences.ts` | `server-only`；`requireViewerForPreferenceWrite()` + `setViewerShowNsfwPreference()` |
+| NSFW cookie 工具           | `viewer-nsfw-cookie.ts` | `VIEWER_SHOW_NSFW_COOKIE` / `DEFAULT_SHOW_NSFW` / `setViewerShowNsfwCookie()` |
+| Prompt 法典共享类型        | `prompt-types.ts`     | `TagNode` / `ChoiceNode` / `Prompt` / `Entry` / `TocNode` / `TargetModel` / `WeightMode` / `FileIndex` / `FileData` |
+| Prompt 格式化引擎          | `prompt-formatter.ts` | `formatPrompt()`：结构化 Prompt → novelai / comfyui 文本；anima 权重模式对 comfyui 权重取平方；`hasPlaceholders()` / `countPlaceholders()` |
+| Prompt 过滤                | `prompt-filter.ts`    | `filterEntriesExact` / `filterEntriesFuzzy`（Fuse.js）/ `filterToc` / `getAllTocKeys` |
+| Prompt 数据加载            | `prompt-data-loader.ts` | `loadIndex()` / `loadFileData()`：从 `/data/prompts/*.json` fetch 并缓存 |
+| Prompt 模型/权重 Context   | `prompt-model-context.tsx` | `ModelProvider` / `useModel()`，持久化到 localStorage |
+| Prompt Choice Context     | `prompt-choice-context.tsx` | `ChoiceProvider` / `useChoices()`，持有用户在 Choice 节点上的选择 |
 
 ## 约定（本目录特有）
 
@@ -33,6 +42,9 @@
 - SEO metadata 统一走 `metadata-utils.ts:buildSeoMetadata()`；各页面 `generateMetadata` 调用本函数即可一致产出 OG / Twitter Card / canonical / hreflang 标签。
 - 模型详情页的 `og:image` 走 `model-metadata.ts:getModelMetadata()`；该函数带 1h 缓存，仅查询轻量字段。
 - `site-origin.ts` 是 `SITE_ORIGIN` 的唯一定义点；sitemap / robots / metadata 均引用它，不要在各个文件中硬编码域名。
+- Prompt 法典相关 lib 文件只服务 `/[locale]/prompts` 页面：`prompt-types.ts` 是与 PromptCodex schema 对齐的共享类型；`prompt-formatter.ts` 是唯一的目标模型文本格式化入口；`prompt-data-loader.ts` 只 fetch `public/data/prompts/*.json`（不读源 YAML）；`prompt-model-context.tsx` / `prompt-choice-context.tsx` 是两个客户端 Context，不要在服务端组件里使用。
+- `run-list.ts` 用 `unstable_cache` 包裹首页 run 列表查询，缓存 5 分钟并以 `run-list` tag 标记；刷新 run 数据时通过 `revalidateTag("run-list")` 失效，不要在页面层自己加缓存。
+- `server-user-preferences.ts` 是 `server-only`，仅供 `app/api/viewer/**` 等 route 使用；浏览器端读取 NSFW 偏好只走 cookie（`viewer-nsfw-cookie.ts`），不要在客户端 import 本文件。
 
 ## 反模式
 
@@ -42,3 +54,4 @@
 - 不要把包含路径、bucket、环境变量的信息原样透传给 API 响应。
 - 不要在各页面中手写 OG/Twitter Card metadata 模板；统一使用 `buildSeoMetadata()`。
 - 不要在代码中硬编码域名；始终引用 `SITE_ORIGIN` 常量。
+- 不要在客户端组件 import `prompt-formatter.ts` 以外的格式化逻辑，也不要在服务端组件 import `prompt-model-context.tsx` / `prompt-choice-context.tsx`（它们是客户端 Context）。

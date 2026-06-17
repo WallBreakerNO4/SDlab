@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-05-30 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-06-17 -->
 
 # data/ — 输入资产（只读）
 
@@ -26,10 +26,14 @@
   - 静态页面 Markdown 源文件，由 `app/[locale]/info/page.tsx` 根据 locale 选择渲染
 - `data/privacy-policy-page.md` / `data/privacy-policy-page.en.md`
   - 静态页面 Markdown 源文件，由 `app/[locale]/privacy-policy/page.tsx` 根据 locale 选择渲染
+- `data/prompt-codex/`
+  - Prompt 法典源 YAML（所长 NovelAI 个人法典 2026.5.20 版），文件体量巨大（数十 MB）；属于「源材料」而非主链路直接消费资产。
+  - 运行时（`components/prompt/`）只消费由其派生的 `public/data/prompts/*.json` 构建产物，不直接读取本目录 YAML。
 
 ## 约定
 
 - `data/models/*/config.yaml`、`data/prompts/**/*.yaml` 都是当前主链路会直接消费的资产；改 schema 前先检查 `runner_config.py`、`prompt_grid.py` 和测试契约。
+- `data/prompt-codex/*.yaml` 是 Prompt 法典浏览器的源资产，但 Web 侧运行时不直接读取；改 schema 需要同步更新 `lib/prompt-types.ts` 与生成 `public/data/prompts/*.json` 的离线流程。
 - CSV 更像"源材料"，YAML 更像"已编译资产"；默认优先更新转换脚本，再决定是否重生成 YAML。
 
 ## 反模式
