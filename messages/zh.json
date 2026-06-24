@@ -102,7 +102,10 @@
     "columnLabel": "列 {index}",
     "copiedPrompt": "已复制画师串",
     "copyFailed": "复制失败",
-    "rowRangeError": "行号必须在 1 到 {max} 之间"
+    "rowRangeError": "行号必须在 1 到 {max} 之间",
+    "searchShortcut": "按 / 搜索",
+    "searchActiveLabel": "搜索进行中",
+    "hiddenColumnsLabel": "已隐藏列"
   },
   "cellDialog": {
     "title": "单元格预览",

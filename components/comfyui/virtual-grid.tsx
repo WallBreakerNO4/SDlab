@@ -478,10 +478,14 @@ export function VirtualGrid({
         <button
           type="button"
           onClick={() => toggleGridTools(true)}
-          className="hover:bg-muted/50 relative flex flex-1 flex-col items-center justify-center gap-1 py-3 transition-colors"
+          className="hover:bg-muted/50 group relative flex flex-1 flex-col items-center justify-center gap-1 py-3 transition-colors"
           title={t("openTools")}
           aria-label={t("openTools")}
         >
+          <span
+            aria-hidden="true"
+            className="absolute left-0 top-1/2 h-8 w-0.5 -translate-y-1/2 rounded-full bg-primary/0 transition-colors group-hover:bg-primary/60"
+          />
           <HugeiconsIcon
             icon={Settings02Icon}
             strokeWidth={2}
@@ -493,20 +497,27 @@ export function VirtualGrid({
           >
             {t("toolsLabel")}
           </span>
-          {searchQuery.trim() || hasHiddenColumns ? (
+          {searchQuery.trim() ? (
             <span
               aria-hidden="true"
-              className={cn(
-                "absolute top-2 right-1 size-1.5 rounded-full",
-                searchQuery.trim() ? "bg-amber-400" : "bg-sky-400",
-              )}
-            />
+              title={t("searchActiveLabel")}
+              className="absolute top-1.5 right-1 flex min-w-4 h-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-semibold leading-none text-white"
+            >
+              {searchMatches.length > 99 ? "99+" : searchMatches.length}
+            </span>
           ) : null}
         </button>
       ) : (
         <>
           <div className="flex items-center justify-between border-b border-border/40 px-3 py-2.5">
-            <span className="text-sm font-medium">{t("gridTools")}</span>
+            <span className="flex items-center gap-1.5 text-sm font-medium">
+              <HugeiconsIcon
+                icon={Settings02Icon}
+                strokeWidth={2}
+                className="size-3.5 text-muted-foreground"
+              />
+              {t("gridTools")}
+            </span>
             <Button
               type="button"
               size="icon-xs"
@@ -534,13 +545,16 @@ export function VirtualGrid({
                   />
                   {t("searchPrompt")}
                 </span>
-                <HugeiconsIcon
-                  icon={ArrowDown01Icon}
-                  strokeWidth={2}
-                  className="size-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
-                />
+                <span className="flex items-center gap-1.5">
+                  <kbd className="rounded border border-border/40 bg-muted/30 px-1 py-0.5 text-[9px] font-medium text-muted-foreground/60">/</kbd>
+                  <HugeiconsIcon
+                    icon={ArrowDown01Icon}
+                    strokeWidth={2}
+                    className="size-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
+                  />
+                </span>
               </CollapsibleTrigger>
-              <CollapsibleContent className="border-b border-border/40">
+              <CollapsibleContent className="border-b border-border/40 bg-amber-500/[0.03]">
                 <form
                   className="p-2.5"
                   onSubmit={(e) => {
@@ -557,15 +571,36 @@ export function VirtualGrid({
                     <Input
                       ref={searchInputRef}
                       type="text"
-                      className="h-7 w-full rounded-none border-border/50 py-0 pl-7 pr-28 text-xs shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-1 focus-visible:ring-ring/30"
+                      className="h-7 w-full rounded-none border-border/50 py-0 pl-7 pr-7 text-xs shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-1 focus-visible:ring-ring/30"
                       placeholder={t("searchPlaceholder")}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
-                    <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
-                      {searchQuery.trim() ? (
-                        <span className="mr-0.5 text-[10px] tabular-nums text-muted-foreground/60">
-                          {searchMatches.length > 0
+                    {searchQuery ? (
+                      <Button
+                        type="button"
+                        size="icon-xs"
+                        variant="ghost"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 size-5"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setSearchQuery("");
+                          setActiveMatchIndex(-1);
+                        }}
+                        title={t("clearSearch")}
+                      >
+                        <HugeiconsIcon
+                          icon={Cancel01Icon}
+                          strokeWidth={2}
+                          className="size-3"
+                        />
+                      </Button>
+                    ) : null}
+                  </div>
+                  <div className="mt-1.5 flex items-center justify-between">
+                    <span className="text-[10px] tabular-nums text-muted-foreground/70">
+                      {searchQuery.trim()
+                        ? (searchMatches.length > 0
                             ? t("matchCount", {
                                 current:
                                   activeMatchIndex >= 0
@@ -573,29 +608,10 @@ export function VirtualGrid({
                                     : 0,
                                 total: searchMatches.length,
                               })
-                            : t("noResults")}
-                        </span>
-                      ) : null}
-                      {searchQuery ? (
-                        <Button
-                          type="button"
-                          size="icon-xs"
-                          variant="ghost"
-                          className="size-5"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => {
-                            setSearchQuery("");
-                            setActiveMatchIndex(-1);
-                          }}
-                          title={t("clearSearch")}
-                        >
-                          <HugeiconsIcon
-                            icon={Cancel01Icon}
-                            strokeWidth={2}
-                            className="size-3"
-                          />
-                        </Button>
-                      ) : null}
+                            : t("noResults"))
+                        : t("searchShortcut")}
+                    </span>
+                    <div className="flex items-center gap-0.5">
                       <Button
                         type="button"
                         size="icon-xs"
