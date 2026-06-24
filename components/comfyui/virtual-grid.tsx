@@ -40,6 +40,7 @@ import {
   getNonEmptyString,
   resolveScrollOffsetFromAnchor,
 } from "./virtual-grid-utils";
+import { clearPrivateObjectUrlCache } from "./use-renderable-variant-source";
 import { useColumnVisibility } from "./use-column-visibility";
 import type { RunViewAccess } from "@/app/models/[runDir]/model-detail-types";
 import type {
@@ -105,6 +106,13 @@ export function VirtualGrid({
     }
   }, [gridToolsOpen]);
 
+  // VirtualGrid 卸载时清理所有缓存的私有图片 objectURL，防止内存泄漏
+  useEffect(() => {
+    return () => {
+      clearPrivateObjectUrlCache();
+    };
+  }, []);
+
   const pendingRestoreRef = useRef<SavedScrollAnchor | null>(null);
   const suppressScrollAnchorPersistRef = useRef(false);
 
@@ -122,7 +130,7 @@ export function VirtualGrid({
     onRefreshViewAccess,
   });
 
-  const { hiddenColumns, hasHiddenColumns, toggleColumn, showAll, hideAll } =
+  const { hiddenColumns, toggleColumn, showAll, hideAll } =
     useColumnVisibility({ runDir, totalColumns: grid.x_columns.length });
 
   const visibleXColumns = useMemo(() => {
@@ -151,8 +159,13 @@ export function VirtualGrid({
       label: col.label,
     })),
   });
-  const { rowHeight, gridTemplateColumns, gridMinWidth, scrollViewportWidth } =
-    layout;
+  const {
+    rowHeight,
+    gridTemplateColumns,
+    gridMinWidth,
+    scrollViewportWidth,
+    setScrollViewportWidthImmediate,
+  } = layout;
 
   // eslint-disable-next-line react-hooks/incompatible-library
   const rowVirtualizer = useVirtualizer({
@@ -256,6 +269,10 @@ export function VirtualGrid({
   const virtualRows = rowVirtualizer.getVirtualItems();
   const isDevEnv = process.env.NODE_ENV !== "production";
 
+  // 工具栏展开/收起的目标宽度，对应 toolsPanel 的 w-96 / w-10。
+  const TOOLS_WIDTH_OPEN = 384;
+  const TOOLS_WIDTH_CLOSED = 40;
+
   const toggleGridTools = useCallback(
     (nextOpen: boolean) => {
       const scrollElement = scrollElementRef.current;
@@ -265,10 +282,29 @@ export function VirtualGrid({
           grid.y_indexes,
           rowHeight,
         );
+
+        // 预计算目标滚动宽度并在过渡起点立即提交，避免 debounce 到期后
+        // 列宽突变引发的闪烁。同步 lastWidthRef 阻断过渡期间二次提交。
+        const currentToolsWidth = gridToolsOpen
+          ? TOOLS_WIDTH_OPEN
+          : TOOLS_WIDTH_CLOSED;
+        const targetToolsWidth = nextOpen
+          ? TOOLS_WIDTH_OPEN
+          : TOOLS_WIDTH_CLOSED;
+        const targetScrollWidth =
+          scrollElement.clientWidth +
+          currentToolsWidth -
+          targetToolsWidth;
+        setScrollViewportWidthImmediate(targetScrollWidth);
       }
       setGridToolsOpen(nextOpen);
     },
-    [grid.y_indexes, rowHeight],
+    [
+      grid.y_indexes,
+      rowHeight,
+      gridToolsOpen,
+      setScrollViewportWidthImmediate,
+    ],
   );
 
   const openGridToolsForSearch = useCallback(() => {

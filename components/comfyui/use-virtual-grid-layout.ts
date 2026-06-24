@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 
 import type {
   BlurhashCell,
@@ -42,6 +49,10 @@ export function useVirtualGridLayout({
     null,
   );
 
+  // 跟踪 ResizeObserver 已知的最新宽度，供 setScrollViewportWidthImmediate
+  // 同步更新，避免工具栏过渡期间 debounce 到期后二次提交导致列宽突变。
+  const lastWidthRef = useRef(0);
+
   useEffect(() => {
     const element = scrollElementRef.current;
     if (!element) {
@@ -49,7 +60,7 @@ export function useVirtualGridLayout({
     }
 
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastWidth = element.clientWidth;
+    lastWidthRef.current = element.clientWidth;
 
     const commitWidth = (width: number) => {
       setScrollViewportWidth((previousWidth) =>
@@ -57,12 +68,12 @@ export function useVirtualGridLayout({
       );
     };
 
-    commitWidth(lastWidth);
+    commitWidth(lastWidthRef.current);
 
     const update = () => {
       const nextWidth = element.clientWidth;
-      if (nextWidth === lastWidth) return;
-      lastWidth = nextWidth;
+      if (nextWidth === lastWidthRef.current) return;
+      lastWidthRef.current = nextWidth;
 
       if (debounceTimer) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
@@ -81,6 +92,15 @@ export function useVirtualGridLayout({
       if (debounceTimer) clearTimeout(debounceTimer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- scrollElementRef is a stable ref
+  }, []);
+
+  // 绕过 debounce 立即提交目标宽度，供工具栏展开/收起时预计算使用。
+  // 同步 lastWidthRef 防止过渡期间 ResizeObserver 的 update 误触发二次提交。
+  const setScrollViewportWidthImmediate = useCallback((width: number) => {
+    lastWidthRef.current = width;
+    setScrollViewportWidth((previousWidth) =>
+      previousWidth === width ? previousWidth : width,
+    );
   }, []);
 
   const xHeaders = useMemo(() => {
@@ -155,6 +175,7 @@ export function useVirtualGridLayout({
 
   return {
     scrollViewportWidth,
+    setScrollViewportWidthImmediate,
     xHeaders,
     cellWidth,
     previewHeight,
