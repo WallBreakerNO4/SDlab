@@ -40,7 +40,7 @@
   },
   // 配置日志和指标的采样率，启用后可以在 Cloudflare 仪表盘的 Workers Observability 中查看相关数据
   "observability": {
-    "enabled": false,
+    "enabled": true,
     "head_sampling_rate": 1,
     "logs": {
       "enabled": true,
