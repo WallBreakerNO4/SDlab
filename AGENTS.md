@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-06 | Updated: 2026-06-18 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-06-24 -->
 <!-- Commit: SEO | 分支: dev -->
 
 # Agent Guide (sd-style-lab/images-script)
@@ -142,6 +142,35 @@
 - Supabase CLI：本仓库统一使用 `pnpm dlx supabase ...` 运行 Supabase 命令。
 - CI 现状：当前仓库没有 `.github/workflows/`；变更后的验证依赖本地 `uv` / `pnpm` 命令串联完成。
 - 协作文档与 git commit message 默认使用中文；涉及环境变量示例时优先更新 `.env.example`，不要直接读取/修改真实 `.env`。
+
+## 分支与合并策略
+
+- 分支模型：`dev` 为日常开发分支，`main` 为稳定发布分支。所有功能与修复先合入 `dev`，再由 `dev` 合并到 `main`。
+- **合并时机由用户决定**：agent 不得在开发完成后自行触发 `dev` → `main` 合并。是否合并、何时合并、本次合并涵盖哪些内容，一律由用户明确指示后才能执行。
+- `dev` → `main` 合并必须使用 `--no-ff` 选项，以保留一条明确的合并提交记录，便于追溯每一次发布窗口的内容与时间：
+  ```bash
+  git checkout main
+  git merge --no-ff dev -m "merge: 合并 dev 到 main（<本次发布主题简述>）"
+  ```
+- 合并完成后，必须把该 `--no-ff` 合并提交同步回 `dev` 分支，使 `dev` 与 `main` 在合并点之后保持一致，避免后续再次合并时产生重复或冲突：
+  ```bash
+  git checkout dev
+  git merge --ff-only main
+  # 若 main 上除合并提交外无其他直推提交，等价于：git merge --ff-only main
+  ```
+- 禁止对 `main` 直接推送非合并提交；`main` 上的所有内容都应来自 `dev` 的 `--no-ff` 合并。
+- 禁止用 fast-forward 合并 `dev` 到 `main`，否则会丢失合并节点，无法回溯发布边界。
+- 禁止 agent 未经用户指示自行执行 `dev` → `main` 合并或同步回 `dev` 的操作；上述流程仅作为用户发起合并时的执行规范。
+
+### 当前 `dev` 分支开发进展
+
+以下为 `dev` 分支近期承载的主要开发主线（截至 2026-06-24，`dev` 与 `main` 基本同步，下一批功能开发将在 `dev` 上继续进行）：
+
+- **Prompt 法典浏览器**：新增 `/[locale]/prompts` 浏览功能，含登录门禁、搜索匹配导航（从当前浏览位置跳转）、权重模式支持（Anima 模式，对所有标签统一平方处理）、ComfyUI 多角色提示词格式化（换行 + `Character N:` 前缀分隔角色）、Prompt 条目列表滚动对齐修复。
+- **SEO 优化**：多语言 sitemap + hreflang alternates、隐私政策页上线、`buildSeoMetadata()` 统一 OG/Twitter Card/canonical、模型详情页 `og:image` 从 Supabase 查询封面图、JSON-LD 结构化数据（WebSite / BreadcrumbList）、构建元数据缺失标题与描述修复。
+- **性能优化**：优化 Worker CPU 与边缘缓存复用以消除 503、优化缓存策略以减少 SSR 负载与响应延迟。
+- **i18n hotfix**：将 I18N 中间件路由匹配从黑名单改为白名单机制。
+- **基础设施维护**：依赖版本多次升级、`wrangler.jsonc` 配置修正、Supabase 远端 migration 同步并移除空 `seed.sql`、E2E 测试产物目录迁移到 `test-results/`、skills 更新、分层 `AGENTS.md` 文档校验与补全。
 
 ## 反模式
 

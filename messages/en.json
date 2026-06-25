@@ -102,7 +102,10 @@
     "columnLabel": "Column {index}",
     "copiedPrompt": "Artist tags copied",
     "copyFailed": "Copy failed",
-    "rowRangeError": "Row number must be between 1 and {max}"
+    "rowRangeError": "Row number must be between 1 and {max}",
+    "searchShortcut": "Press / to search",
+    "searchActiveLabel": "Search active",
+    "hiddenColumnsLabel": "Hidden columns"
   },
   "cellDialog": {
     "title": "Cell Preview",

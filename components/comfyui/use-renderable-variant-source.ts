@@ -13,6 +13,17 @@ import { getPreferredVariantSource } from "./virtual-grid-utils";
 import type { VariantSources } from "./virtual-grid-types";
 import type { RunViewAccess } from "@/app/models/[runDir]/model-detail-types";
 
+// 模块级 objectURL 缓存：cacheKey → objectURL。
+// 跨组件挂载/卸载周期持久化，让组件重挂载时能同步拿到 src，
+// 避免 blurhash 闪现。由 VirtualGrid 卸载时统一清理。
+const objectUrlCache = new Map<string, string>();
+
+/** 清理所有缓存的 objectURL 并清空缓存。在 VirtualGrid 卸载时调用。 */
+export function clearPrivateObjectUrlCache() {
+  objectUrlCache.forEach((url) => URL.revokeObjectURL(url));
+  objectUrlCache.clear();
+}
+
 type UseRenderableVariantSourceOptions = {
   variants: VariantSources | null;
   currentUserId: string | null;
@@ -34,7 +45,16 @@ export function useRenderableVariantSource({
     cacheKey: string;
     src: string | null;
     loading: boolean;
-  } | null>(null);
+  } | null>(() => {
+    // 组件重挂载时同步查模块级缓存，命中则直接拿到 src，不显示 blurhash
+    if (cacheKey) {
+      const cachedUrl = objectUrlCache.get(cacheKey);
+      if (cachedUrl) {
+        return { cacheKey, src: cachedUrl, loading: false };
+      }
+    }
+    return null;
+  });
   const isPrivateVariant = preferredVariant?.bucket === "private";
   const src =
     preferredVariant?.bucket === "public"
@@ -66,12 +86,32 @@ export function useRenderableVariantSource({
     const userId = currentUserId;
     const variant = preferredVariant;
     let active = true;
-    let objectUrlToRevoke: string | null = null;
     const controller = new AbortController();
     const variantCacheKey = variant.cache_key;
     const accessGrant = grant;
 
+    /** 将 objectURL 存入模块级缓存，revoke 被替换的旧值。 */
+    function storeObjectUrl(key: string, url: string | null) {
+      if (!url) return;
+      const prev = objectUrlCache.get(key);
+      if (prev && prev !== url) {
+        URL.revokeObjectURL(prev);
+      }
+      objectUrlCache.set(key, url);
+    }
+
     async function load() {
+      // 模块级缓存命中：同步使用，跳过异步加载，避免 blurhash 闪现
+      const cachedUrl = objectUrlCache.get(variantCacheKey);
+      if (cachedUrl) {
+        setPrivateState({
+          cacheKey: variantCacheKey,
+          src: cachedUrl,
+          loading: false,
+        });
+        return;
+      }
+
       setPrivateState({
         cacheKey: variantCacheKey,
         src: null,
@@ -91,13 +131,12 @@ export function useRenderableVariantSource({
             : null;
 
         if (!active) {
-          if (objectUrl) {
-            URL.revokeObjectURL(objectUrl);
-          }
+          // 组件已卸载，但把结果存入缓存供下次重挂载使用
+          storeObjectUrl(variantCacheKey, objectUrl);
           return;
         }
 
-        objectUrlToRevoke = objectUrl;
+        storeObjectUrl(variantCacheKey, objectUrl);
         setPrivateState({
           cacheKey: variantCacheKey,
           src: objectUrl,
@@ -121,11 +160,11 @@ export function useRenderableVariantSource({
               });
 
               if (!active) {
-                URL.revokeObjectURL(objectUrl);
+                storeObjectUrl(variantCacheKey, objectUrl);
                 return;
               }
 
-              objectUrlToRevoke = objectUrl;
+              storeObjectUrl(variantCacheKey, objectUrl);
               setPrivateState({
                 cacheKey: variantCacheKey,
                 src: objectUrl,
@@ -154,9 +193,8 @@ export function useRenderableVariantSource({
     return () => {
       active = false;
       controller.abort();
-      if (objectUrlToRevoke) {
-        URL.revokeObjectURL(objectUrlToRevoke);
-      }
+      // 不 revoke objectURL，保留在模块级缓存中供组件重挂载时同步复用。
+      // 缓存在 VirtualGrid 卸载时统一清理。
     };
   }, [
     cacheKey,
