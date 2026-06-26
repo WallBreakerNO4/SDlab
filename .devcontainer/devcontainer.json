@@ -1,0 +1,12 @@
+{
+  "name": "SDlab Tailscale Codespace",
+  "image": "mcr.microsoft.com/devcontainers/universal:2-linux",
+  "runArgs": [
+    "--device=/dev/net/tun"
+  ],
+  "features": {
+    "ghcr.io/tailscale/codespace/tailscale": {
+      "version": "latest"
+    }
+  }
+}
