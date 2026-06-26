@@ -6,6 +6,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import sys
 import uuid
 from collections.abc import Callable
@@ -328,6 +329,7 @@ def run(args: argparse.Namespace) -> int:
 
     model_obj = getattr(args, "config_model", None)
     model_family = getattr(model_obj, "family", "")
+    args.model_family = model_family
     if model_family == "newbie":
         x_rows = read_x_rows_newbie(args.x_json)
     else:
@@ -510,6 +512,7 @@ def run_retry(args: argparse.Namespace) -> int:
             profile_obj = model_obj.get("artist_weight_profile")
             if isinstance(profile_obj, str) and profile_obj:
                 artist_weight_profile = profile_obj
+    args.model_family = model_family
     if model_family == "newbie":
         x_rows = read_x_rows_newbie(args.x_json)
     else:
@@ -750,6 +753,55 @@ def _append_negative_prompt(base: str | None, append: str | None) -> str:
     return base_stripped + delimiter + append_cleaned
 
 
+def _append_negative_prompt_newbie(base: str | None, append: str | None) -> str:
+    """Newbie XML 感知拼接：将 append 标签注入 <danbooru_tags> 内部，保持 XML 结构完整。
+
+    当 base 是 Newbie 官方推荐的 XML 负面提示词（含 <e621_tags> / <danbooru_tags> /
+    <resolution> 标签）时，追加内容会被注入到 <danbooru_tags> 文本末尾，而不是粗暴地
+    拼在 XML 末尾破坏结构。当 base 不含 <danbooru_tags> 标签时，回退到普通字符串拼接。
+    """
+    if base is None:
+        base = ""
+    if append is None:
+        append = ""
+
+    base_stripped = base.strip()
+    append_stripped = append.strip()
+
+    if not append_stripped:
+        return base_stripped
+
+    append_cleaned = append_stripped.lstrip(", ").lstrip(",")
+    if not append_cleaned:
+        return base_stripped
+
+    if not base_stripped:
+        return append_cleaned
+
+    # 匹配 <danbooru_tags>...</danbooru_tags> 标签
+    match = re.search(
+        r"(<danbooru_tags>)(.*?)(</danbooru_tags>)", base_stripped, re.DOTALL
+    )
+    if not match:
+        # base 不是 XML 格式，回退到普通拼接
+        if base_stripped.endswith(","):
+            return base_stripped + " " + append_cleaned
+        return base_stripped + ", " + append_cleaned
+
+    open_tag, content, close_tag = match.group(1), match.group(2), match.group(3)
+    content_stripped = content.strip()
+    if content_stripped:
+        if content_stripped.endswith(","):
+            new_content = content_stripped + " " + append_cleaned
+        else:
+            new_content = content_stripped + ", " + append_cleaned
+    else:
+        new_content = append_cleaned
+
+    new_danbooru = f"{open_tag}{new_content}{close_tag}"
+    return base_stripped[: match.start()] + new_danbooru + base_stripped[match.end() :]
+
+
 _load_workflow_context = _workflow_load_workflow_context
 _resolve_ksampler_id = _workflow_resolve_ksampler_id
 _format_node_title = _workflow_format_node_title
@@ -841,11 +893,17 @@ def _final_negative_prompt_for_x_row(
     workflow_context: WorkflowContext | None,
     x_row: dict[str, str],
 ) -> str | None:
+    model_family = getattr(args, "model_family", "")
+    append_fn = (
+        _append_negative_prompt_newbie
+        if model_family == "newbie"
+        else _append_negative_prompt
+    )
     return _records_final_negative_prompt_for_x_row(
         args,
         workflow_context,
         x_row,
-        append_negative_prompt=_append_negative_prompt,
+        append_negative_prompt=append_fn,
     )
 
 

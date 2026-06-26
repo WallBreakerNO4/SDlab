@@ -87,7 +87,7 @@ def test_read_x_rows_newbie_maps_structure(tmp_path: Path) -> None:
 
     assert len(rows) == 1
     row = rows[0]
-    assert set(row.keys()) == {"characters", "general", X_INFO_TYPE_KEY}
+    assert set(row.keys()) == {"characters", "general", X_INFO_TYPE_KEY, "caption"}
 
     characters = row["characters"]
     assert isinstance(characters, list)
@@ -472,3 +472,129 @@ def test_compute_prompt_hash_differs_for_different_xml() -> None:
 
     assert xml_a != xml_b
     assert compute_prompt_hash(xml_a) != compute_prompt_hash(xml_b)
+
+
+# --------------------------------------------------------------------------- #
+# read_x_rows_newbie caption 字段
+# --------------------------------------------------------------------------- #
+
+
+_NEWBIE_YAML_WITH_CAPTION = """
+items:
+  - characters:
+      - n: amiya
+        gender: 1girl
+    general:
+      count: 1girl
+    info:
+      type: normal
+    caption:
+      zh: "明日方舟的阿米娅，面部特写。"
+      en: "A close-up portrait of Amiya from Arknights."
+"""
+
+
+def test_read_x_rows_newbie_reads_caption_en(tmp_path: Path) -> None:
+    ypath = tmp_path / "caption.yaml"
+    _write_newbie_yaml(ypath, _NEWBIE_YAML_WITH_CAPTION)
+
+    rows = read_x_rows_newbie(ypath)
+
+    assert rows[0]["caption"] == "A close-up portrait of Amiya from Arknights."
+
+
+_NEWBIE_YAML_CAPTION_ZH_ONLY = """
+items:
+  - characters:
+      - n: amiya
+    general:
+      count: 1girl
+    info:
+      type: normal
+    caption:
+      zh: "明日方舟的阿米娅。"
+"""
+
+
+def test_read_x_rows_newbie_caption_falls_back_to_zh(tmp_path: Path) -> None:
+    ypath = tmp_path / "caption-zh.yaml"
+    _write_newbie_yaml(ypath, _NEWBIE_YAML_CAPTION_ZH_ONLY)
+
+    rows = read_x_rows_newbie(ypath)
+
+    assert rows[0]["caption"] == "明日方舟的阿米娅。"
+
+
+def test_read_x_rows_newbie_caption_optional_defaults_empty(tmp_path: Path) -> None:
+    ypath = tmp_path / "no-caption.yaml"
+    _write_newbie_yaml(ypath, _MINI_NEWBIE_YAML)
+
+    rows = read_x_rows_newbie(ypath)
+
+    assert rows[0]["caption"] == ""
+
+
+_NEWBIE_YAML_CAPTION_BARE_STRING = """
+items:
+  - characters:
+      - n: amiya
+    general:
+      count: 1girl
+    info:
+      type: normal
+    caption: a bare string caption
+"""
+
+
+def test_read_x_rows_newbie_caption_accepts_bare_string(tmp_path: Path) -> None:
+    ypath = tmp_path / "caption-bare.yaml"
+    _write_newbie_yaml(ypath, _NEWBIE_YAML_CAPTION_BARE_STRING)
+
+    rows = read_x_rows_newbie(ypath)
+
+    assert rows[0]["caption"] == "a bare string caption"
+
+
+_NEWBIE_YAML_CAPTION_BAD_TYPE = """
+items:
+  - characters:
+      - n: amiya
+    general:
+      count: 1girl
+    info:
+      type: normal
+    caption:
+      - 1
+      - 2
+      - 3
+"""
+
+
+def test_read_x_rows_newbie_caption_rejects_invalid_type(tmp_path: Path) -> None:
+    ypath = tmp_path / "caption-bad.yaml"
+    _write_newbie_yaml(ypath, _NEWBIE_YAML_CAPTION_BAD_TYPE)
+
+    with pytest.raises(ValueError, match="caption"):
+        read_x_rows_newbie(ypath)
+
+
+def test_render_positive_prompt_xml_ignores_caption() -> None:
+    """caption 不参与 XML 渲染，不影响 prompt_hash 基础。"""
+    row_with_caption = {
+        "characters": [{"n": "roxy", "gender": "1girl"}],
+        "general": {"count": "1girl"},
+        X_INFO_TYPE_KEY: "normal",
+        "caption": "a natural language caption",
+    }
+    row_without_caption = {
+        "characters": [{"n": "roxy", "gender": "1girl"}],
+        "general": {"count": "1girl"},
+        X_INFO_TYPE_KEY: "normal",
+        "caption": "",
+    }
+
+    xml_a = render_positive_prompt_xml(row_with_caption, y_value="wlop")
+    xml_b = render_positive_prompt_xml(row_without_caption, y_value="wlop")
+
+    assert xml_a == xml_b
+    assert "caption" not in xml_a.lower()

@@ -214,14 +214,44 @@ def read_x_rows_newbie(path: str | Path) -> list[dict[str, object]]:
         else:
             info_type = ""
 
+        caption_text = _read_newbie_caption(item)
+
         rows.append(
             {
                 "characters": characters,
                 "general": mapped_general,
                 X_INFO_TYPE_KEY: info_type,
+                "caption": caption_text,
             }
         )
     return rows
+
+
+def _read_newbie_caption(item: dict[str, object]) -> str:
+    """从 NewBie X 资产 item 读取 caption 自然语言描述。
+
+    caption 为选填字段，支持两种写法：
+    - dict 形式（含 zh/en）：默认取 en（英文模型对齐更佳），缺失则回退 zh；
+    - 裸字符串简写：直接使用。
+    缺失或为空时返回空串（不注入，回退到 workflow 原值）。
+    """
+    caption_obj = item.get("caption")
+    if caption_obj is None:
+        return ""
+    if isinstance(caption_obj, dict):
+        caption_map = cast(dict[str, object], caption_obj)
+        cap_en = caption_map.get("en")
+        if isinstance(cap_en, str) and cap_en.strip():
+            return cap_en.strip()
+        cap_zh = caption_map.get("zh")
+        if isinstance(cap_zh, str) and cap_zh.strip():
+            return cap_zh.strip()
+        return ""
+    if isinstance(caption_obj, str):
+        return caption_obj.strip()
+    raise ValueError(
+        f"NewBie X caption 必须为 zh/en 对象或字符串，收到 {type(caption_obj).__name__}"
+    )
 
 
 def read_x_descriptions(path: str | Path) -> list[dict[str, str]]:

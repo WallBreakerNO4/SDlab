@@ -65,6 +65,9 @@ items:
     description:
       zh: 面部特写
       en: Facial close-up
+    caption:
+      zh: "明日方舟的阿米娅，少女面部特写肖像，正面看向镜头，简洁背景。"
+      en: "A facial close-up portrait of Amiya from Arknights, a young girl looking directly at the viewer, simple background."
 
   - characters:
       - n:
@@ -110,6 +113,9 @@ items:
     description:
       zh: 半身像
       en: Half-body shot
+    caption:
+      zh: "明日方舟的能天使，半身像，街头，手持饮料杯含吸管饮用，头顶光环，正面构图。"
+      en: "A half-body shot of Exusiai from Arknights on a pedestrian street, holding a drink cup with a straw in her mouth, a halo above her head, facing the viewer."
 
   - characters:
       - n:
@@ -162,6 +168,9 @@ items:
     description:
       zh: 全身像
       en: Full-body shot
+    caption:
+      zh: "明日方舟的缪尔赛思，全身像，雨夜城市街头撑伞行走，湿润地面倒映城市灯光。"
+      en: "A full-body shot of Muelsyse from Arknights walking with an umbrella on a rainy night city street, wet pavement reflecting city lights."
 
   - characters:
       - n:
@@ -193,6 +202,9 @@ items:
     description:
       zh: 《明日方舟》角色妮芙，2024年7月9日上线，danbooru 上 400 张图 | 观察模型能否正确绘制角色特征，训练数据集是否包含这名角色
       en: Arknights character Nymph,released on July 9,2024,with 400 images on danbooru | Observing whether the model can accurately depict character features and if the training dataset includes this character
+    caption:
+      zh: "明日方舟的妮芙，半身像，简洁纯色背景，正面构图，安静氛围。"
+      en: "A half-body shot of Nymph from Arknights against a simple solid-color background, facing the viewer, calm atmosphere."
 
   - characters:
       - n:
@@ -224,6 +236,9 @@ items:
     description:
       zh: 《明日方舟》角色娜仁图亚，2024年8月1日上线，danbooru 上 180 张图（训练图片量少） | 观察模型能否正确绘制角色特征，训练数据集是否包含这名角色
       en: Arknights character Narantuya,released on August 1,2024,with 180 images on danbooru (few training images) | Observing whether the model can accurately depict character features and if the training dataset includes this character
+    caption:
+      zh: "明日方舟的娜仁图亚，半身像，简洁纯色背景，正面构图，安静氛围。"
+      en: "A half-body shot of Narantuya from Arknights against a simple solid-color background, facing the viewer, calm atmosphere."
 
   - characters:
       - n:
@@ -255,6 +270,9 @@ items:
     description:
       zh: 《明日方舟》角色电弧，2025年8月2日上线，danbooru 上 690 张图（角色较新） | 观察模型能否正确绘制角色特征，训练数据集是否包含这名角色
       en: Arknights character Raidian,released on August 2,2025,with 690 images on danbooru (new character) | Observing whether the model can accurately depict character features and if the training dataset includes this character
+    caption:
+      zh: "明日方舟的电弧，半身像，简洁纯色背景，正面构图，安静氛围。"
+      en: "A half-body shot of Raidian from Arknights against a simple solid-color background, facing the viewer, calm atmosphere."
 
   - characters:
       - n:
@@ -297,6 +315,9 @@ items:
     description:
       zh: 双人图 | 观察双人结构，以及人物特征是否正确
       en: Dual character diagram | Observe the dual structure,and whether the character features are correct
+    caption:
+      zh: "明日方舟的德克萨斯与拉普兰德，双人半身像，商场室内牵手，正面构图。"
+      en: "A half-body shot of Texas and Lappland from Arknights holding hands inside a shopping mall, two girls, facing the viewer."
 
   - characters:
       - n:
@@ -375,6 +396,9 @@ items:
     description:
       zh: NSFW 图片
       en: NSFW image
+    caption:
+      zh: "明日方舟的霍尔的雅卡，雨暮城市街头站姿半身像，敞开风衣，比耶，伸舌，路面湿润。"
+      en: "A half-body shot of Ho'olheyak from Arknights standing on a rainy dusk city street, open trench coat, v-sign gesture, tongue out, wet ground."
 
   - characters:
       - n:
@@ -445,6 +469,9 @@ items:
     description:
       zh: NSFW 图片
       en: NSFW image
+    caption:
+      zh: "明日方舟的羽毛笔与一名男性，教室课桌场景，第一人称俯视构图，掀衣。"
+      en: "La Pluma from Arknights lying on a classroom desk with a male, POV from above, lifting shirt."
 
   - characters:
       - n:
@@ -513,3 +540,6 @@ items:
     description:
       zh: NSFW 图片
       en: NSFW image
+    caption:
+      zh: "明日方舟的幽灵鲨，跪趴背对姿态，从背后视角，高潮迷离表情，使用玩具。"
+      en: "Specter from Arknights on all fours viewed from behind, ahegao expression, using a toy."

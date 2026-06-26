@@ -10,7 +10,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from scripts.generation.workflow_patch import (
+    _CAPTION_SENTINEL,
     _LATENT_CLASS_TYPES,
+    _resolve_optional_sentinel_target,
     _resolve_positive_prompt_target,
     WorkflowDict,
     WorkflowOverrides,
@@ -241,3 +243,112 @@ def test_extract_workflow_defaults_returns_newbie_default_params():
     assert defaults["batch_size"] == 1
     assert defaults["steps"] == 20
     assert defaults["cfg"] == 5.5
+
+
+# --------------------------------------------------------------------------- #
+# 9. caption 注入：caption_prompt 覆盖节点 44，不影响节点 48
+# --------------------------------------------------------------------------- #
+def test_patch_workflow_newbie_caption_injects_on_node_44() -> None:
+    workflow = load_workflow(NEWBIE_WORKFLOW)
+
+    patched = patch_workflow(
+        workflow,
+        positive_prompt=XML_PROMPT,
+        negative_prompt="neg",
+        caption_prompt="A close-up portrait of Amiya from Arknights.",
+    )
+
+    # caption 写入节点 44 (PrimitiveStringMultiline "Caption")
+    assert _inputs(patched["44"]).get("value") == (
+        "A close-up portrait of Amiya from Arknights."
+    )
+    # 正向 XML 仍正常注入节点 48
+    assert _inputs(patched["48"]).get("value") == XML_PROMPT
+    # 引用链完整
+    assert _inputs(patched["41:53"]).get("text") == ["46", 0]
+
+
+def test_patch_workflow_newbie_caption_none_does_not_touch_node_44() -> None:
+    workflow = load_workflow(NEWBIE_WORKFLOW)
+    original_caption = _inputs(workflow["44"]).get("value")
+
+    patched = patch_workflow(
+        workflow,
+        positive_prompt=XML_PROMPT,
+        negative_prompt="neg",
+    )
+
+    assert _inputs(patched["44"]).get("value") == original_caption
+
+
+def test_patch_workflow_newbie_caption_empty_string_skips_injection() -> None:
+    workflow = load_workflow(NEWBIE_WORKFLOW)
+    original_caption = _inputs(workflow["44"]).get("value")
+
+    patched = patch_workflow(
+        workflow,
+        positive_prompt=XML_PROMPT,
+        negative_prompt="neg",
+        caption_prompt="",
+    )
+
+    assert _inputs(patched["44"]).get("value") == original_caption
+
+
+def test_patch_workflow_newbie_caption_whitespace_only_skips_injection() -> None:
+    workflow = load_workflow(NEWBIE_WORKFLOW)
+    original_caption = _inputs(workflow["44"]).get("value")
+
+    patched = patch_workflow(
+        workflow,
+        positive_prompt=XML_PROMPT,
+        negative_prompt="neg",
+        caption_prompt="   ",
+    )
+
+    assert _inputs(patched["44"]).get("value") == original_caption
+
+
+# --------------------------------------------------------------------------- #
+# 10. 两种 sentinel 互不干扰：caption 命中外层，user_prompt 命中内层
+# --------------------------------------------------------------------------- #
+def test_trace_sentinel_target_finds_caption_and_user_prompt_independently() -> None:
+    workflow: WorkflowDict = {
+        "pos": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {"text": ["sr_outer", 0]},
+        },
+        "sr_outer": _string_replace_node(["sr_inner", 0], "{caption}", ["cap", 0]),
+        "sr_inner": _string_replace_node(
+            ["tpl", 0], "{user_prompt}", ["up", 0]
+        ),
+        "cap": _primitive_multiline("caption text"),
+        "tpl": _primitive_multiline("template text"),
+        "up": _primitive_multiline("user prompt original"),
+    }
+
+    # caption sentinel 命中外层（sr_outer, find={caption}）
+    caption_target = _resolve_optional_sentinel_target(
+        workflow, workflow["pos"], _CAPTION_SENTINEL
+    )
+    assert caption_target == ("cap", "value")
+
+    # user_prompt sentinel 命中内层（sr_inner, find={user_prompt}）
+    user_target = _resolve_positive_prompt_target(workflow, workflow["pos"])
+    assert user_target == ("up", "value")
+
+
+def test_resolve_optional_sentinel_target_returns_none_for_str_text() -> None:
+    """common family 正向 text 为字符串时，宽松入口返回 None。"""
+    workflow: WorkflowDict = {
+        "pos": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {"text": "plain positive string"},
+        },
+    }
+
+    result = _resolve_optional_sentinel_target(
+        workflow, workflow["pos"], _CAPTION_SENTINEL
+    )
+
+    assert result is None

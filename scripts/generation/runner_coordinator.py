@@ -38,6 +38,7 @@ class _CellPlan:
     workflow_hash: str
     save_image_prefix: str
     x_description: dict[str, str]
+    caption_prompt: str = ""
     attempt: int = 1
     y_prompt_ref: dict[str, object] | None = None
 
@@ -209,6 +210,7 @@ class GenerationCoordinator:
             y_prompt_ref = _extract_y_prompt_ref(y_item)
 
             positive_prompt = self.render_prompt(self.args.template, x_row, y_value)
+            caption_prompt = str(x_row.get("caption") or "")
             prompt_hash = self.compute_prompt_hash(positive_prompt)
             seed = self.derive_seed(self.args.base_seed, x_index, y_index)
 
@@ -309,6 +311,7 @@ class GenerationCoordinator:
                 workflow_hash=self.workflow_hash,
                 save_image_prefix=save_image_prefix,
                 x_description=self._get_x_description(x_index),
+                caption_prompt=caption_prompt,
                 attempt=self.next_attempt(resume_record, True),
             )
 
@@ -482,6 +485,7 @@ def _worker_submit_and_wait(
             overrides=workflow_overrides,
             ksampler_node_id=workflow_context.selected_ksampler_id,
             save_image_prefix=plan.save_image_prefix,
+            caption_prompt=plan.caption_prompt,
         )
 
         client_id = f"{args.client_id}-{uuid.uuid4().hex[:8]}"

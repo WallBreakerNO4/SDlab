@@ -227,3 +227,21 @@ def test_patch_workflow_can_select_specific_ksampler_when_multiple_exist():
     assert _inputs(patched["1"]).get("text") == "old-pos-a"
     assert _inputs(patched["2"]).get("text") == "old-neg-a"
     assert _inputs(patched["5"]).get("batch_size") == 1
+
+
+# --------------------------------------------------------------------------- #
+# caption 向后兼容：common workflow 无 {caption} 链路，传 caption_prompt 不报错
+# --------------------------------------------------------------------------- #
+def test_patch_workflow_ignores_caption_when_no_caption_chain() -> None:
+    """common family 的 workflow 正向 text 为字符串，传 caption_prompt 不应报错或误改。"""
+    workflow = load_workflow(RF_WORKFLOW)
+
+    patched = patch_workflow(
+        workflow,
+        positive_prompt="pos prompt",
+        negative_prompt="neg prompt",
+        caption_prompt="some caption text",
+    )
+
+    # 正向 prompt 正常注入，不受 caption 影响
+    assert _inputs(patched["12"]).get("text") == "pos prompt"

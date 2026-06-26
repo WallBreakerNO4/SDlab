@@ -71,6 +71,9 @@ class _RunnerModule(Protocol):
     _CellPlan: _CellPlanFactory
 
     def _append_negative_prompt(self, base: str | None, append: str | None) -> str: ...
+    def _append_negative_prompt_newbie(
+        self, base: str | None, append: str | None
+    ) -> str: ...
     def _worker_submit_and_wait(
         self,
         args: argparse.Namespace,
@@ -365,3 +368,123 @@ def test_final_negative_prompt_for_x_row_append_only_non_normal_returns_none() -
         {X_INFO_TYPE_KEY: "lora"},
     )
     assert lora_prompt is None
+
+
+# ---- Newbie XML 感知拼接测试 ----
+
+NEWBIE_XML_NEGATIVE = (
+    "<e621_tags>furry</e621_tags>\n"
+    "<danbooru_tags>furry,english text, chinese text, lowres, light_particles</danbooru_tags>\n"
+    "<resolution>low_resolution</resolution>"
+)
+
+
+def test_append_negative_prompt_newbie_injects_into_danbooru_tags() -> None:
+    runner = _import_runner_module()
+    result = runner._append_negative_prompt_newbie(
+        NEWBIE_XML_NEGATIVE, "nsfw, nipples, pussy, nude"
+    )
+    assert "<e621_tags>furry</e621_tags>" in result
+    assert "<resolution>low_resolution</resolution>" in result
+    assert (
+        "<danbooru_tags>furry,english text, chinese text, lowres, light_particles, nsfw, nipples, pussy, nude</danbooru_tags>"
+        in result
+    )
+
+
+def test_append_negative_prompt_newbie_append_empty_returns_base() -> None:
+    runner = _import_runner_module()
+    result = runner._append_negative_prompt_newbie(NEWBIE_XML_NEGATIVE, "")
+    assert result == NEWBIE_XML_NEGATIVE.strip()
+
+
+def test_append_negative_prompt_newbie_append_none_returns_base() -> None:
+    runner = _import_runner_module()
+    result = runner._append_negative_prompt_newbie(NEWBIE_XML_NEGATIVE, None)
+    assert result == NEWBIE_XML_NEGATIVE.strip()
+
+
+def test_append_negative_prompt_newbie_base_without_danbooru_tags_falls_back() -> None:
+    runner = _import_runner_module()
+    result = runner._append_negative_prompt_newbie(
+        "lowres, bad anatomy,", "nsfw, nipples,"
+    )
+    assert result == "lowres, bad anatomy, nsfw, nipples,"
+
+
+def test_append_negative_prompt_newbie_base_none_returns_append() -> None:
+    runner = _import_runner_module()
+    result = runner._append_negative_prompt_newbie(None, "nsfw, nipples,")
+    assert result == "nsfw, nipples,"
+
+
+def test_append_negative_prompt_newbie_both_empty_returns_empty() -> None:
+    runner = _import_runner_module()
+    assert runner._append_negative_prompt_newbie("", "") == ""
+
+
+def test_append_negative_prompt_newbie_preserves_e621_and_resolution() -> None:
+    """确保 <e621_tags> 和 <resolution> 标签不被破坏。"""
+    runner = _import_runner_module()
+    result = runner._append_negative_prompt_newbie(NEWBIE_XML_NEGATIVE, "nsfw,")
+    assert result.count("<e621_tags>") == 1
+    assert result.count("</e621_tags>") == 1
+    assert result.count("<resolution>") == 1
+    assert result.count("</resolution>") == 1
+    assert result.count("<danbooru_tags>") == 1
+    assert result.count("</danbooru_tags>") == 1
+
+
+def test_append_negative_prompt_newbie_append_with_leading_commas() -> None:
+    runner = _import_runner_module()
+    result = runner._append_negative_prompt_newbie(
+        NEWBIE_XML_NEGATIVE, ", , nsfw, nipples,"
+    )
+    assert (
+        "<danbooru_tags>furry,english text, chinese text, lowres, light_particles, nsfw, nipples,</danbooru_tags>"
+        in result
+    )
+
+
+def test_final_negative_prompt_for_x_row_newbie_uses_xml_append() -> None:
+    """newbie family 下，_final_negative_prompt_for_x_row 使用 XML 感知拼接。"""
+    runner = _import_runner_module()
+    args = _build_worker_args(
+        negative_prompt=NEWBIE_XML_NEGATIVE,
+        append_negative_prompt="nsfw, nipples, pussy, nude",
+    )
+    args.model_family = "newbie"
+    workflow_context = _build_worker_context(runner, default_negative_prompt=None)
+
+    normal_prompt = runner._final_negative_prompt_for_x_row(
+        args,
+        workflow_context,
+        {X_INFO_TYPE_KEY: "normal"},
+    )
+    assert normal_prompt is not None
+    assert "<e621_tags>furry</e621_tags>" in normal_prompt
+    assert "<resolution>low_resolution</resolution>" in normal_prompt
+    assert "<danbooru_tags>" in normal_prompt
+    assert "nsfw, nipples, pussy, nude" in normal_prompt
+    # 确保追加内容在 <danbooru_tags> 内部，而不是 XML 末尾
+    assert normal_prompt.rstrip().endswith("<resolution>low_resolution</resolution>")
+
+
+def test_final_negative_prompt_for_x_row_non_newbie_uses_plain_append() -> None:
+    """非 newbie family 下，_final_negative_prompt_for_x_row 使用普通拼接。"""
+    runner = _import_runner_module()
+    args = _build_worker_args(
+        negative_prompt=NEWBIE_XML_NEGATIVE,
+        append_negative_prompt="nsfw, nipples,",
+    )
+    args.model_family = ""
+    workflow_context = _build_worker_context(runner, default_negative_prompt=None)
+
+    normal_prompt = runner._final_negative_prompt_for_x_row(
+        args,
+        workflow_context,
+        {X_INFO_TYPE_KEY: "normal"},
+    )
+    # 非 newbie 下，append 被拼在 XML 末尾（普通拼接行为）
+    assert normal_prompt is not None
+    assert normal_prompt.rstrip().endswith("nsfw, nipples,")

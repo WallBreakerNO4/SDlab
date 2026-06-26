@@ -26,7 +26,7 @@ prompts:
   # reader 走 read_x_rows_newbie()，渲染器走 render_positive_prompt_xml()。
   x_path: data/prompts/X/newbie_prompts.yaml
   # Y 轴复用现有 artist 风格表；read_y_rows 输出的逗号串由 XML 渲染器注入 <artists> 子标签。
-  y_path: data/prompts/Y/300_NAI_Styles_Table.yaml
+  y_path: data/prompts/Y/300_NAI_Styles_Table-test.yaml
 
 # ComfyUI workflow 模板配置。
 # api.json 已含 ModelSamplingAuraFlow(shift=6)、DualCLIPLoader(newbie)、EmptySD3LatentImage、
@@ -45,21 +45,25 @@ generation:
   quality_prompt: "masterpiece, best quality, very awa, newest, highres, absurdres,"
   # 基础种子；每个网格单元会基于 base_seed + x/y 索引派生稳定 seed。
   base_seed: 114514
-  # 基础负面提示词；设为 null 时优先使用 workflow 中自带的 negative prompt
-  # （NewBie workflow 41:54 是角色反转句 "You are an assistant designed to generate low-quality images..."）。
-  negative_prompt: null
-  # 追加到基础负面提示词后面的内容；NewBie 负向保持 workflow 默认，置 null。
-  append_negative_prompt: null
+  # 基础负面提示词；NewBie 官方推荐 XML 结构（e621_tags / danbooru_tags / resolution），
+  # 替换 workflow 41:54 原有的角色反转句。
+  negative_prompt: |
+    <e621_tags>furry</e621_tags>
+    <danbooru_tags>furry,english text, chinese text, korean text, speech bubble, dated, logo, signature, watermark, web address, artist name, character name, copyright name, twitter username, low score rate, worst quality, low quality, bad quality, lowres, low res, pixelated, blurry, blurred, compression artifacts, jpeg artifacts, bad anatomy, worst hands, deformed hands, deformed fingers, deformed feet, deformed toes, extra limbs, extra arms, extra legs, extra fingers, extra digits, extra digit, fused fingers, missing limbs, missing arms, missing fingers, missing toes, wrong hands, ugly hands, ugly fingers, twisted hands, abstract, sequence, lineup, 2koma, 4koma, microsoft paint (medium), artifacts, adversarial noise, has bad revision, resized, image sample, low aesthetic,light_particles</danbooru_tags>
+    <resolution>low_resolution</resolution>
+  # 追加到基础负面提示词后面的内容；NewBie family 由 _append_negative_prompt_newbie()
+  # 将追加标签注入 <danbooru_tags> 内部，保持 XML 结构完整。
+  append_negative_prompt: "nsfw, nipples, pussy, nude"
   # 输出宽度；覆盖 workflow 的 EmptySD3LatentImage width。
-  width: 1024
+  width: 823
   # 输出高度；覆盖 workflow 的 EmptySD3LatentImage height。
-  height: 1536
+  height: 1216
   # 单次生成张数；覆盖 workflow 的 batch_size。
   batch_size: 1
   # 采样步数；覆盖 KSampler.steps（来自 api.json 默认）。
-  steps: 20
+  steps: 28
   # CFG / guidance scale；覆盖 KSampler.cfg。
-  cfg: 5.5
+  cfg: 5
   # 去噪强度；覆盖 KSampler.denoise。
   denoise: 1.0
   # 采样器名称；覆盖 KSampler.sampler_name（NewBie 推荐流匹配采样器）。
