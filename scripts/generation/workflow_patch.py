@@ -9,8 +9,6 @@ WorkflowNode = dict[str, object]
 WorkflowDict = dict[str, WorkflowNode]
 
 _LATENT_CLASS_TYPES = frozenset({"EmptyLatentImage", "EmptySD3LatentImage"})
-_USER_PROMPT_SENTINEL = "{user_prompt}"
-_CAPTION_SENTINEL = "{caption}"
 
 
 @dataclass(slots=True)
@@ -53,7 +51,6 @@ def patch_workflow(
     overrides: WorkflowOverrides | None = None,
     ksampler_node_id: str | None = None,
     save_image_prefix: str | None = None,
-    caption_prompt: str | None = None,
 ) -> WorkflowDict:
     patched = copy.deepcopy(workflow)
     active_overrides = overrides or WorkflowOverrides()
@@ -81,20 +78,8 @@ def patch_workflow(
     negative_inputs = _ensure_inputs(negative_node)
     negative_inputs["text"] = negative_prompt
 
-    target_node_id, target_field = _resolve_positive_prompt_target(
-        patched, positive_node
-    )
-    positive_target_inputs = _ensure_inputs(patched[target_node_id])
-    positive_target_inputs[target_field] = positive_prompt
-
-    if caption_prompt and caption_prompt.strip():
-        caption_target = _resolve_optional_sentinel_target(
-            patched, positive_node, _CAPTION_SENTINEL
-        )
-        if caption_target is not None:
-            cap_node_id, cap_field = caption_target
-            cap_inputs = _ensure_inputs(patched[cap_node_id])
-            cap_inputs[cap_field] = caption_prompt
+    positive_inputs = _ensure_inputs(positive_node)
+    positive_inputs["text"] = positive_prompt
 
     _apply_if_provided(
         ksampler_node,
@@ -206,111 +191,6 @@ def _require_class_type(
             f"node {node_id} expected class_type={expected_class_type}, got {actual}"
         )
     return node
-
-
-def _resolve_positive_prompt_target(
-    workflow: WorkflowDict, positive_node: WorkflowNode
-) -> tuple[str, str]:
-    inputs = _ensure_inputs(positive_node)
-    text_value = cast(object, inputs.get("text"))
-
-    if isinstance(text_value, str):
-        positive_node_id = _node_id_of(positive_node, workflow)
-        return (positive_node_id, "text")
-
-    if not isinstance(text_value, list) or not text_value:
-        positive_node_id = _node_id_of(positive_node, workflow)
-        raise ValueError(
-            f"positive node {positive_node_id} inputs.text must be str or node reference, "
-            f"got {type(text_value).__name__}"
-        )
-
-    target = _trace_sentinel_target(workflow, text_value, _USER_PROMPT_SENTINEL)
-    if target is None:
-        positive_node_id = _node_id_of(positive_node, workflow)
-        raise ValueError(
-            f"未能从 positive 节点 {positive_node_id} 回溯到 PrimitiveStringMultiline "
-            f"且 find={_USER_PROMPT_SENTINEL!r} 的 replace 目标（深度上限已耗尽或链路断裂）"
-        )
-    return target
-
-
-def _resolve_optional_sentinel_target(
-    workflow: WorkflowDict,
-    positive_node: WorkflowNode,
-    sentinel: str,
-) -> tuple[str, str] | None:
-    """宽松语义回溯：沿正向 CLIPTextEncode 的 text 引用链查找指定 sentinel。
-
-    与 _resolve_positive_prompt_target 的严格语义不同，找不到链路（text 为字符串、
-    无引用、或链路中无匹配 sentinel）时返回 None 而非抛错，供 caption 等可选注入
-    使用，以保持对不含该占位符链路的 workflow（如 common family）的向后兼容。
-    """
-    inputs = _ensure_inputs(positive_node)
-    text_value = cast(object, inputs.get("text"))
-    if not isinstance(text_value, list) or not text_value:
-        return None
-    return _trace_sentinel_target(workflow, text_value, sentinel)
-
-
-def _node_id_of(node: WorkflowNode, workflow: WorkflowDict) -> str:
-    for node_id, candidate in workflow.items():
-        if candidate is node:
-            return node_id
-    raise ValueError("无法定位 positive 节点 ID")
-
-
-def _trace_sentinel_target(
-    workflow: WorkflowDict, start_ref: list[object], sentinel: str
-) -> tuple[str, str] | None:
-    visited: set[str] = set()
-
-    def dfs(ref: list[object], depth: int) -> tuple[str, str] | None:
-        if depth > 8:
-            return None
-        if not ref or not isinstance(ref[0], str):
-            return None
-        node_id = ref[0]
-        if node_id in visited:
-            return None
-        visited.add(node_id)
-
-        node = workflow.get(node_id)
-        if not isinstance(node, dict):
-            return None
-        class_type = node.get("class_type")
-        if class_type != "StringReplace":
-            return None
-
-        node_inputs_obj = node.get("inputs")
-        if not isinstance(node_inputs_obj, dict):
-            return None
-        node_inputs = cast(dict[str, object], node_inputs_obj)
-
-        find_value = cast(object, node_inputs.get("find"))
-        if isinstance(find_value, str) and find_value == sentinel:
-            replace_value = cast(object, node_inputs.get("replace"))
-            if not isinstance(replace_value, list) or not replace_value:
-                return None
-            target_node_id_obj = replace_value[0]
-            if not isinstance(target_node_id_obj, str):
-                return None
-            target_node = workflow.get(target_node_id_obj)
-            if not isinstance(target_node, dict):
-                return None
-            if target_node.get("class_type") != "PrimitiveStringMultiline":
-                return None
-            return (target_node_id_obj, "value")
-
-        for field_name in ("string", "replace"):
-            value = cast(object, node_inputs.get(field_name))
-            if isinstance(value, list) and value:
-                found = dfs(value, depth + 1)
-                if found is not None:
-                    return found
-        return None
-
-    return dfs(start_ref, 0)
 
 
 def _ensure_inputs(node: WorkflowNode) -> dict[str, object]:

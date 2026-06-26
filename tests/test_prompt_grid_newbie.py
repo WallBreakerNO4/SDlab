@@ -14,6 +14,7 @@ from scripts.generation.prompt_grid import (
     NEWBIE_X_SCHEMA,
     X_INFO_TYPE_KEY,
     _render_subtag,
+    assemble_newbie_prompt,
     compute_prompt_hash,
     read_x_rows_newbie,
     render_positive_prompt_xml,
@@ -598,3 +599,26 @@ def test_render_positive_prompt_xml_ignores_caption() -> None:
 
     assert xml_a == xml_b
     assert "caption" not in xml_a.lower()
+
+
+# --------------------------------------------------------------------------- #
+# assemble_newbie_prompt
+# --------------------------------------------------------------------------- #
+
+
+def test_assemble_newbie_prompt_wraps_xml_with_image_and_caption():
+    # 构造一个最小 newbie x_row
+    x_row = {
+        "characters": [
+            {"n": "amiya \\(arknights\\)", "gender": "1girl"},
+        ],
+        "general": {"count": "1girl, solo"},
+        "caption": "A portrait of Amiya.",
+    }
+    result = assemble_newbie_prompt(x_row, "artist_name", quality_prompt="best quality")
+    assert "<image>" in result
+    assert "</image>" in result
+    assert "<caption>A portrait of Amiya.</caption>" in result
+    assert "<character_1>" in result
+    assert "best quality" in result
+    assert "xml format textual prompts" in result

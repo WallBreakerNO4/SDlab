@@ -28,13 +28,13 @@ from scripts.generation.comfyui_client import (  # noqa: E402
     comfy_wait_prompt_done_with_fallback,
 )
 from scripts.generation.prompt_grid import (  # noqa: E402
+    assemble_newbie_prompt,
     compute_prompt_hash,
     derive_seed,
     read_x_descriptions,
     read_x_rows,
     read_x_rows_newbie,
     read_y_rows,
-    render_positive_prompt_xml,
 )
 from scripts.generation.retry_failed_selection import (  # noqa: E402
     select_failed_and_incomplete_cells,
@@ -390,7 +390,7 @@ def run(args: argparse.Namespace) -> int:
             y_selected,
             quality_prompt=getattr(args, "quality_prompt", None),
             render_prompt_by_template=lambda current_template, x_row, y_value: (
-                render_positive_prompt_xml(
+                assemble_newbie_prompt(
                     x_row, y_value,
                     quality_prompt=getattr(args, "quality_prompt", None),
                 )
@@ -420,7 +420,7 @@ def run(args: argparse.Namespace) -> int:
 
     if model_family == "newbie":
         def _render_fn(template, x_row, y_value):
-            return render_positive_prompt_xml(
+            return assemble_newbie_prompt(
                 x_row, y_value, quality_prompt=getattr(args, "quality_prompt", None)
             )
     else:
@@ -567,7 +567,7 @@ def run_retry(args: argparse.Namespace) -> int:
     y_values_by_index = {item.index: item.value.get("y", "") for item in y_selected}
     if model_family == "newbie":
         def _render_fn(template, x_row, y_value):
-            return render_positive_prompt_xml(
+            return assemble_newbie_prompt(
                 x_row, y_value, quality_prompt=getattr(args, "quality_prompt", None)
             )
     else:

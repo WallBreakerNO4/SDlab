@@ -533,6 +533,36 @@ def _emit_xml_subtag(name: str, text: str) -> str:
     return f"<{name}>{stripped}</{name}>"
 
 
+_NEWBIE_SYSTEM_PROMPT = (
+    "You are an assistant designed to generate high-quality anime images "
+    "with the highest degree of image-text alignment based on xml format "
+    "textual prompts. <Prompt Start>"
+)
+
+
+def assemble_newbie_prompt(
+    x_row: Mapping[str, object],
+    y_value: str,
+    quality_prompt: str | None = None,
+) -> str:
+    """拼装 NewBie 完整正向 prompt：system prompt + <image> 外壳 + caption + XML tags。
+
+    与 render_positive_prompt_xml 不同，此函数产出可直接写入 CLIPTextEncode.text
+    的完整字符串，无需依赖 ComfyUI 的 StringReplace 节点链路做运行时替换。
+    """
+    xml_tags = render_positive_prompt_xml(
+        x_row, y_value, quality_prompt=quality_prompt
+    )
+    caption = str(x_row.get("caption") or "")
+    return (
+        f"{_NEWBIE_SYSTEM_PROMPT}\n"
+        "<image>\n"
+        f"<caption>{caption}</caption>\n"
+        f"{xml_tags}\n"
+        "</image>"
+    )
+
+
 def render_positive_prompt_xml(
     x_row: Mapping[str, object],
     y_value: str,
