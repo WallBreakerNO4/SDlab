@@ -8,6 +8,7 @@ import logging
 import os
 import sys
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 
 from tqdm import tqdm
@@ -30,7 +31,9 @@ from scripts.generation.prompt_grid import (  # noqa: E402
     derive_seed,
     read_x_descriptions,
     read_x_rows,
+    read_x_rows_newbie,
     read_y_rows,
+    render_positive_prompt_xml,
 )
 from scripts.generation.retry_failed_selection import (  # noqa: E402
     select_failed_and_incomplete_cells,
@@ -323,9 +326,12 @@ def run(args: argparse.Namespace) -> int:
     _validate_args(args)
     _configure_logging()
 
-    x_rows = read_x_rows(args.x_json)
     model_obj = getattr(args, "config_model", None)
     model_family = getattr(model_obj, "family", "")
+    if model_family == "newbie":
+        x_rows = read_x_rows_newbie(args.x_json)
+    else:
+        x_rows = read_x_rows(args.x_json)
     y_rows = read_y_rows(
         args.y_json,
         artist_prefix="@" if model_family == "anima" else "",
@@ -375,12 +381,26 @@ def run(args: argparse.Namespace) -> int:
     )
 
     total_cells = len(x_selected) * len(y_selected)
-    example_prompt = _build_example_prompt(
-        args.template,
-        x_selected,
-        y_selected,
-        quality_prompt=getattr(args, "quality_prompt", None),
-    )
+    if model_family == "newbie":
+        example_prompt = _build_example_prompt(
+            args.template,
+            x_selected,
+            y_selected,
+            quality_prompt=getattr(args, "quality_prompt", None),
+            render_prompt_by_template=lambda current_template, x_row, y_value: (
+                render_positive_prompt_xml(
+                    x_row, y_value,
+                    quality_prompt=getattr(args, "quality_prompt", None),
+                )
+            ),
+        )
+    else:
+        example_prompt = _build_example_prompt(
+            args.template,
+            x_selected,
+            y_selected,
+            quality_prompt=getattr(args, "quality_prompt", None),
+        )
     if args.dry_run:
         print(f"组合总数: {total_cells}")
         print(f"示例正向提示词: {example_prompt}")
@@ -395,6 +415,20 @@ def run(args: argparse.Namespace) -> int:
         args.dry_run,
         run_artifacts.run_dir,
     )
+
+    if model_family == "newbie":
+        def _render_fn(template, x_row, y_value):
+            return render_positive_prompt_xml(
+                x_row, y_value, quality_prompt=getattr(args, "quality_prompt", None)
+            )
+    else:
+        def _render_fn(template, x_row, y_value):
+            return _render_prompt_by_template(
+                template,
+                x_row,
+                y_value,
+                quality_prompt=getattr(args, "quality_prompt", None),
+            )
 
     with logging_redirect_tqdm():
         with tqdm(
@@ -417,14 +451,7 @@ def run(args: argparse.Namespace) -> int:
                     stats=stats,
                     pbar=pbar,
                     writer=writer,
-                    render_prompt=lambda template, x_row, y_value: (
-                        _render_prompt_by_template(
-                            template,
-                            x_row,
-                            y_value,
-                            quality_prompt=getattr(args, "quality_prompt", None),
-                        )
-                    ),
+                    render_prompt=_render_fn,
                     compute_prompt_hash=compute_prompt_hash,
                     derive_seed=derive_seed,
                     effective_generation_params=_effective_generation_params,
@@ -472,7 +499,6 @@ def run_retry(args: argparse.Namespace) -> int:
     replay = load_run_replay_config(run_artifacts.run_dir, strict_sha256=True)
     _apply_replay_config_to_args(args, replay)
 
-    x_rows = read_x_rows(args.x_json)
     model_family = ""
     artist_weight_profile = "identity"
     run_json_path = run_artifacts.run_dir / "run.json"
@@ -484,6 +510,10 @@ def run_retry(args: argparse.Namespace) -> int:
             profile_obj = model_obj.get("artist_weight_profile")
             if isinstance(profile_obj, str) and profile_obj:
                 artist_weight_profile = profile_obj
+    if model_family == "newbie":
+        x_rows = read_x_rows_newbie(args.x_json)
+    else:
+        x_rows = read_x_rows(args.x_json)
     y_rows = read_y_rows(
         args.y_json,
         artist_prefix="@" if model_family == "anima" else "",
@@ -532,6 +562,19 @@ def run_retry(args: argparse.Namespace) -> int:
 
     x_rows_by_index = {item.index: item.value for item in x_selected}
     y_values_by_index = {item.index: item.value.get("y", "") for item in y_selected}
+    if model_family == "newbie":
+        def _render_fn(template, x_row, y_value):
+            return render_positive_prompt_xml(
+                x_row, y_value, quality_prompt=getattr(args, "quality_prompt", None)
+            )
+    else:
+        def _render_fn(template, x_row, y_value):
+            return _render_prompt_by_template(
+                template,
+                x_row,
+                y_value,
+                quality_prompt=getattr(args, "quality_prompt", None),
+            )
     _validate_retry_failed_cells_consistency(
         target_cells=target_cells,
         latest_records=latest_records,
@@ -540,12 +583,7 @@ def run_retry(args: argparse.Namespace) -> int:
         template=args.template,
         base_seed=args.base_seed,
         workflow_hash=workflow_hash,
-        render_prompt=lambda template, x_row, y_value: _render_prompt_by_template(
-            template,
-            x_row,
-            y_value,
-            quality_prompt=getattr(args, "quality_prompt", None),
-        ),
+        render_prompt=_render_fn,
         compute_prompt_hash=compute_prompt_hash,
         derive_seed=derive_seed,
         coerce_int_or_none=_coerce_int_or_none,
@@ -589,14 +627,7 @@ def run_retry(args: argparse.Namespace) -> int:
                     stats=stats,
                     pbar=pbar,
                     writer=writer,
-                    render_prompt=lambda template, x_row, y_value: (
-                        _render_prompt_by_template(
-                            template,
-                            x_row,
-                            y_value,
-                            quality_prompt=getattr(args, "quality_prompt", None),
-                        )
-                    ),
+                    render_prompt=_render_fn,
                     compute_prompt_hash=compute_prompt_hash,
                     derive_seed=derive_seed,
                     effective_generation_params=_effective_generation_params,
@@ -749,19 +780,22 @@ def _build_example_prompt(
     y_selected: list[SelectedRow],
     *,
     quality_prompt: str | None,
+    render_prompt_by_template: Callable[[str, dict[str, str], str], str] | None = None,
 ) -> str:
-    return _prompt_build_example_prompt(
-        template,
-        x_selected,
-        y_selected,
-        render_prompt_by_template=lambda current_template, x_row, y_value: (
+    if render_prompt_by_template is None:
+        render_prompt_by_template = lambda current_template, x_row, y_value: (
             _render_prompt_by_template(
                 current_template,
                 x_row,
                 y_value,
                 quality_prompt=quality_prompt,
             )
-        ),
+        )
+    return _prompt_build_example_prompt(
+        template,
+        x_selected,
+        y_selected,
+        render_prompt_by_template=render_prompt_by_template,
     )
 
 
