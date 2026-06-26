@@ -1,0 +1,79 @@
+# Runner 配置 schema 版本；当前实现只接受 image-run-config/v1。
+schema_version: image-run-config/v1
+
+# 模型元信息：主要用于记录这次 run 绑定的模型身份与说明，便于后续展示/追踪。
+model:
+  # 机器可读的稳定 key；建议保持短且唯一，用于 run_dir 命名。
+  key: newbie-image-exp01
+  # 给人看的展示名。
+  name: NewBie-image Exp0.1
+  # 模型家族/大类。newbie 是独立 family，runner 据此切换 XML 渲染器与 newbie X 资产 reader。
+  family: newbie
+  # 可选外链；没有就填 null。
+  links:
+    homepage: https://github.com/NewBieAI-Lab/NewBie-image-Exp0.1
+    huggingface: https://huggingface.co/NewBie-AI/NewBie-image-Exp0.1
+    civitai: null
+  # 多语言描述；当前 schema 要求同时提供 zh / en。
+  description:
+    zh: NewBie-image Exp0.1 是基于 AuraFlow 体系的实验性动漫模型，采用 Gemma3-4B + Jina CLIP v2 双文本编码器，配合 XML 子标签结构化提示词 + JSON bbox 外壳，采样走 ModelSamplingAuraFlow shift=6 + res_multistep / linear_quadratic。
+    en: NewBie-image Exp0.1 is an experimental anime model built on the AuraFlow family, using Gemma3-4B + Jina CLIP v2 dual text encoders, paired with XML sub-tag structured prompts wrapped in a JSON bbox template, sampled via ModelSamplingAuraFlow shift=6 with res_multistep / linear_quadratic.
+
+# Prompt 资产路径：X 轴通常是角色等结构化 prompt 表，Y 轴通常是风格/artist 等单列 prompt 表。
+# 这里的路径必须是仓库相对路径，且文件必须实际存在；支持 .yaml/.yml/.json。
+prompts:
+  # X 轴使用 NewBie 专用 XML 子标签资产（独立 schema，不与 common_prompts.yaml 共用）。
+  # reader 走 read_x_rows_newbie()，渲染器走 render_positive_prompt_xml()。
+  x_path: data/prompts/X/newbie_prompts.yaml
+  # Y 轴复用现有 artist 风格表；read_y_rows 输出的逗号串由 XML 渲染器注入 <artists> 子标签。
+  y_path: data/prompts/Y/300_NAI_Styles_Table.yaml
+
+# ComfyUI workflow 模板配置。
+# api.json 已含 ModelSamplingAuraFlow(shift=6)、DualCLIPLoader(newbie)、EmptySD3LatentImage、
+# StringReplace→PrimitiveStringMultiline 的正向 prompt 链路等；runner 仅做参数覆盖与
+# 正向 prompt 回溯注入（自动定位 find={user_prompt} 的 StringReplace，写入其 replace 节点的 value）。
+workflow:
+  # 仅一个 KSampler(41:3)，留空自动推导。
+  ksampler_node_id:
+
+# 生成参数。NewBie 的正向 prompt 由 XML 渲染器决定，template 字段不参与拼装，
+# 此处仅填合法占位串以满足 schema 必填校验。
+generation:
+  # 正向 prompt 拼装模板（仅合法占位符，newbie family 不消费此字段）。
+  template: "{quality}{y}{general}"
+  # quality_prompt 会被合并进 <general_tags><quality> 子标签。
+  quality_prompt: "masterpiece, best quality, very awa, newest, highres, absurdres,"
+  # 基础种子；每个网格单元会基于 base_seed + x/y 索引派生稳定 seed。
+  base_seed: 114514
+  # 基础负面提示词；设为 null 时优先使用 workflow 中自带的 negative prompt
+  # （NewBie workflow 41:54 是角色反转句 "You are an assistant designed to generate low-quality images..."）。
+  negative_prompt: null
+  # 追加到基础负面提示词后面的内容；NewBie 负向保持 workflow 默认，置 null。
+  append_negative_prompt: null
+  # 输出宽度；覆盖 workflow 的 EmptySD3LatentImage width。
+  width: 1024
+  # 输出高度；覆盖 workflow 的 EmptySD3LatentImage height。
+  height: 1536
+  # 单次生成张数；覆盖 workflow 的 batch_size。
+  batch_size: 1
+  # 采样步数；覆盖 KSampler.steps（来自 api.json 默认）。
+  steps: 20
+  # CFG / guidance scale；覆盖 KSampler.cfg。
+  cfg: 5.5
+  # 去噪强度；覆盖 KSampler.denoise。
+  denoise: 1.0
+  # 采样器名称；覆盖 KSampler.sampler_name（NewBie 推荐流匹配采样器）。
+  sampler_name: res_multistep
+  # 调度器名称；覆盖 KSampler.scheduler（NewBie 用 linear_quadratic；shift=6 已在 api.json 节点焊死）。
+  scheduler: linear_quadratic
+
+# 选择要跑的网格子集；都为 null 时表示跑完整个 X × Y 网格。
+selection:
+  # 只取前 N 个 X 行；null 表示不限制。
+  x_limit: null
+  # 只取前 N 个 Y 行；null 表示不限制。
+  y_limit: null
+  # 显式指定要跑的 X 索引列表（从 0 开始）；null 表示不指定。
+  x_indexes: null
+  # 显式指定要跑的 Y 索引列表（从 0 开始）；null 表示不指定。
+  y_indexes: null

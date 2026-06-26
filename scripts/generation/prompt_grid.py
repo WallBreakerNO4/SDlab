@@ -22,6 +22,32 @@ ARTIST_WEIGHT_PROFILES = {
     ARTIST_WEIGHT_PROFILE_SQUARE,
 }
 
+NEWBIE_X_SCHEMA = "newbie-x-table/v1"
+NEWBIE_CHAR_SUBTAGS = (
+    "n",
+    "gender",
+    "appearance",
+    "clothing",
+    "body_type",
+    "expression",
+    "action",
+    "interaction",
+    "position",
+)
+NEWBIE_GENERAL_SUBTAGS = (
+    "count",
+    "artists",
+    "style",
+    "background",
+    "environment",
+    "perspective",
+    "atmosphere",
+    "lighting",
+    "quality",
+    "objects",
+    "other",
+)
+
 PROMPT_TEMPLATE_ORDER = (
     "quality",
     "gender",
@@ -115,6 +141,86 @@ def read_x_rows(path: str | Path) -> list[dict[str, str]]:
             mapped_row[X_INFO_TYPE_KEY] = ""
 
         rows.append(mapped_row)
+    return rows
+
+
+def _render_subtag(value: object) -> str:
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, list):
+        return _render_weighted_tags(value).rstrip(", ")
+    raise ValueError(f"NewBie X 子标签值只支持 str 或 list，收到 {type(value).__name__}")
+
+
+def read_x_rows_newbie(path: str | Path) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+
+    payload_obj = cast(object, yaml.safe_load(Path(path).read_text(encoding="utf-8")))
+    if not isinstance(payload_obj, dict):
+        return rows
+
+    payload = cast(dict[str, object], payload_obj)
+    schema_obj = payload.get("schema")
+    if schema_obj != NEWBIE_X_SCHEMA:
+        raise ValueError(f"NewBie X prompt 资产 schema 必须为 {NEWBIE_X_SCHEMA}")
+
+    items = payload.get("items")
+    if not isinstance(items, list):
+        raise ValueError("NewBie X prompt 资产 items 必须为列表")
+
+    char_keys = set(NEWBIE_CHAR_SUBTAGS)
+    general_keys = set(NEWBIE_GENERAL_SUBTAGS)
+
+    items_list = cast(list[object], items)
+    for item_obj in items_list:
+        if not isinstance(item_obj, dict):
+            continue
+        item = cast(dict[str, object], item_obj)
+
+        characters_obj = item.get("characters")
+        if not isinstance(characters_obj, list):
+            raise ValueError("NewBie X prompt 资产 characters 必须为列表")
+        characters: list[dict[str, str]] = []
+        for char_index, char_obj in enumerate(cast(list[object], characters_obj)):
+            if not isinstance(char_obj, dict):
+                raise ValueError(
+                    f"NewBie X prompt 资产 characters[{char_index}] 必须为对象"
+                )
+            char = cast(dict[str, object], char_obj)
+            mapped_char: dict[str, str] = {}
+            for key, val in char.items():
+                if key not in char_keys:
+                    raise ValueError(
+                        f"NewBie X prompt 资产 characters[{char_index}] 含未知子标签 {key!r}"
+                    )
+                mapped_char[key] = _render_subtag(val)
+            characters.append(mapped_char)
+
+        general_obj = item.get("general")
+        if not isinstance(general_obj, dict):
+            raise ValueError("NewBie X prompt 资产 general 必须为对象")
+        general = cast(dict[str, object], general_obj)
+        mapped_general: dict[str, str] = {}
+        for key, val in general.items():
+            if key not in general_keys:
+                raise ValueError(f"NewBie X prompt 资产 general 含未知子标签 {key!r}")
+            mapped_general[key] = _render_subtag(val)
+
+        info_obj = item.get("info")
+        info = cast(dict[str, object], info_obj) if isinstance(info_obj, dict) else {}
+        info_type_obj = info.get("type")
+        if isinstance(info_type_obj, str):
+            info_type = info_type_obj.strip()
+        else:
+            info_type = ""
+
+        rows.append(
+            {
+                "characters": characters,
+                "general": mapped_general,
+                X_INFO_TYPE_KEY: info_type,
+            }
+        )
     return rows
 
 
@@ -388,6 +494,70 @@ def render_positive_prompt(
         segment = segment.rstrip(", ").rstrip() + ", "
         rendered.append(segment)
     return "".join(rendered)
+
+
+def _emit_xml_subtag(name: str, text: str) -> str:
+    stripped = text.strip()
+    if not stripped:
+        return ""
+    return f"<{name}>{stripped}</{name}>"
+
+
+def render_positive_prompt_xml(
+    x_row: Mapping[str, object],
+    y_value: str,
+    quality_prompt: str | None = None,
+) -> str:
+    characters = x_row.get("characters", [])
+    if not isinstance(characters, list):
+        characters = []
+    general = x_row.get("general", {})
+    if not isinstance(general, Mapping):
+        general = {}
+
+    artists_text = ""
+    if y_value.strip():
+        artists_text = y_value.rstrip(", ").rstrip()
+    elif general.get("artists", ""):
+        artists_text = str(general.get("artists", "")).rstrip(", ").rstrip()
+
+    quality_parts: list[str] = []
+    if quality_prompt and quality_prompt.strip():
+        quality_parts.append(quality_prompt.strip().rstrip(", ").rstrip())
+    general_quality = general.get("quality", "")
+    if general_quality and str(general_quality).strip():
+        quality_parts.append(str(general_quality).strip().rstrip(", ").rstrip())
+    quality_text = ", ".join(quality_parts).rstrip(", ").rstrip()
+
+    blocks: list[str] = []
+    for index, char in enumerate(cast(list[object], characters), start=1):
+        if not isinstance(char, Mapping):
+            continue
+        lines: list[str] = []
+        for subtag in NEWBIE_CHAR_SUBTAGS:
+            lines.append(_emit_xml_subtag(subtag, str(char.get(subtag, ""))))
+        char_body = "\n".join(line for line in lines if line)
+        if char_body:
+            blocks.append(f"<character_{index}>\n{char_body}\n</character_{index}>")
+
+    general_lines: list[str] = []
+    for subtag in NEWBIE_GENERAL_SUBTAGS:
+        if subtag == "artists":
+            general_lines.append(_emit_xml_subtag(subtag, artists_text))
+        elif subtag == "quality":
+            general_lines.append(_emit_xml_subtag(subtag, quality_text))
+        else:
+            general_lines.append(
+                _emit_xml_subtag(subtag, str(general.get(subtag, "")))
+            )
+    general_body = "\n".join(line for line in general_lines if line)
+    blocks.append(
+        f"<general_tags>\n{general_body}\n</general_tags>"
+        if general_body
+        else "<general_tags>\n</general_tags>"
+    )
+
+    return "\n\n".join(blocks)
 
 
 def normalize_prompt(prompt: str) -> str:

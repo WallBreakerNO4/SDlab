@@ -8,6 +8,9 @@ from typing import cast
 WorkflowNode = dict[str, object]
 WorkflowDict = dict[str, WorkflowNode]
 
+_LATENT_CLASS_TYPES = frozenset({"EmptyLatentImage", "EmptySD3LatentImage"})
+_USER_PROMPT_SENTINEL = "{user_prompt}"
+
 
 @dataclass(slots=True)
 class WorkflowOverrides:
@@ -67,14 +70,20 @@ def patch_workflow(
         patched, negative_node_id, expected_class_type="CLIPTextEncode"
     )
     latent_node = _require_class_type(
-        patched, latent_node_id, expected_class_type="EmptyLatentImage"
+        patched,
+        latent_node_id,
+        expected_class_type="EmptyLatentImage",
+        allowed_types=_LATENT_CLASS_TYPES,
     )
 
-    positive_inputs = _ensure_inputs(positive_node)
     negative_inputs = _ensure_inputs(negative_node)
-
-    positive_inputs["text"] = positive_prompt
     negative_inputs["text"] = negative_prompt
+
+    target_node_id, target_field = _resolve_positive_prompt_target(
+        patched, positive_node
+    )
+    positive_target_inputs = _ensure_inputs(patched[target_node_id])
+    positive_target_inputs[target_field] = positive_prompt
 
     _apply_if_provided(
         ksampler_node,
@@ -167,17 +176,112 @@ def _extract_ref_node_id(node: WorkflowNode, input_name: str) -> str:
 
 
 def _require_class_type(
-    workflow: WorkflowDict, node_id: str, expected_class_type: str
+    workflow: WorkflowDict,
+    node_id: str,
+    expected_class_type: str,
+    allowed_types: frozenset[str] | None = None,
 ) -> WorkflowNode:
     if node_id not in workflow:
         raise ValueError(f"referenced node not found: {node_id}")
     node = workflow[node_id]
     actual = node.get("class_type")
-    if actual != expected_class_type:
+    if allowed_types is not None:
+        if actual not in allowed_types:
+            raise ValueError(
+                f"node {node_id} expected class_type in {{{', '.join(sorted(allowed_types))}}}, got {actual}"
+            )
+    elif actual != expected_class_type:
         raise ValueError(
             f"node {node_id} expected class_type={expected_class_type}, got {actual}"
         )
     return node
+
+
+def _resolve_positive_prompt_target(
+    workflow: WorkflowDict, positive_node: WorkflowNode
+) -> tuple[str, str]:
+    inputs = _ensure_inputs(positive_node)
+    text_value = cast(object, inputs.get("text"))
+
+    if isinstance(text_value, str):
+        positive_node_id = _node_id_of(positive_node, workflow)
+        return (positive_node_id, "text")
+
+    if not isinstance(text_value, list) or not text_value:
+        positive_node_id = _node_id_of(positive_node, workflow)
+        raise ValueError(
+            f"positive node {positive_node_id} inputs.text must be str or node reference, "
+            f"got {type(text_value).__name__}"
+        )
+
+    target = _trace_user_prompt_target(workflow, text_value)
+    if target is None:
+        positive_node_id = _node_id_of(positive_node, workflow)
+        raise ValueError(
+            f"未能从 positive 节点 {positive_node_id} 回溯到 PrimitiveStringMultiline "
+            f"且 find={_USER_PROMPT_SENTINEL!r} 的 replace 目标（深度上限已耗尽或链路断裂）"
+        )
+    return target
+
+
+def _node_id_of(node: WorkflowNode, workflow: WorkflowDict) -> str:
+    for node_id, candidate in workflow.items():
+        if candidate is node:
+            return node_id
+    raise ValueError("无法定位 positive 节点 ID")
+
+
+def _trace_user_prompt_target(
+    workflow: WorkflowDict, start_ref: list[object]
+) -> tuple[str, str] | None:
+    visited: set[str] = set()
+
+    def dfs(ref: list[object], depth: int) -> tuple[str, str] | None:
+        if depth > 8:
+            return None
+        if not ref or not isinstance(ref[0], str):
+            return None
+        node_id = ref[0]
+        if node_id in visited:
+            return None
+        visited.add(node_id)
+
+        node = workflow.get(node_id)
+        if not isinstance(node, dict):
+            return None
+        class_type = node.get("class_type")
+        if class_type != "StringReplace":
+            return None
+
+        node_inputs_obj = node.get("inputs")
+        if not isinstance(node_inputs_obj, dict):
+            return None
+        node_inputs = cast(dict[str, object], node_inputs_obj)
+
+        find_value = cast(object, node_inputs.get("find"))
+        if isinstance(find_value, str) and find_value == _USER_PROMPT_SENTINEL:
+            replace_value = cast(object, node_inputs.get("replace"))
+            if not isinstance(replace_value, list) or not replace_value:
+                return None
+            target_node_id_obj = replace_value[0]
+            if not isinstance(target_node_id_obj, str):
+                return None
+            target_node = workflow.get(target_node_id_obj)
+            if not isinstance(target_node, dict):
+                return None
+            if target_node.get("class_type") != "PrimitiveStringMultiline":
+                return None
+            return (target_node_id_obj, "value")
+
+        for field_name in ("string", "replace"):
+            value = cast(object, node_inputs.get(field_name))
+            if isinstance(value, list) and value:
+                found = dfs(value, depth + 1)
+                if found is not None:
+                    return found
+        return None
+
+    return dfs(start_ref, 0)
 
 
 def _ensure_inputs(node: WorkflowNode) -> dict[str, object]:

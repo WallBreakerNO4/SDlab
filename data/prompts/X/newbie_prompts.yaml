@@ -1,0 +1,515 @@
+schema: newbie-x-table/v1
+# NewBie-image Exp0.1 专用 X 轴 prompt 资产。
+# 与 data/prompts/X/common_prompts.yaml 的 10 个测试场景一一对应（同角色、同构图、同观察目标），
+# 只是把扁平 gender/characters/series/rating/general 字段按语义重新分类到 NewBie XML 子标签结构。
+#
+# 子标签固定顺序（渲染器按此顺序输出，非空的填、空标签省略）：
+#   角色块：n, gender, appearance, clothing, body_type, expression, action, interaction, position
+#   全局块：count, artists, style, background, environment, perspective, atmosphere, lighting,
+#           quality, objects, other
+#
+# 字段映射约定：
+# - gender        → 角色 <gender> + 全局 <count>（1girl/2girls 等数量描述）
+# - characters    → 每个角色独立一个 <character_X> 块，名字进 <n>
+# - series        → NewBie XML 无对应子标签，放全局 <other>（必须保留此词条）
+# - rating        → 同上，放 <other>
+# - general 中的 tag → 按 danbooru 语义人工分类到对应子标签：
+#     solo / 多人计数 → <count>
+#     cowboy shot / full shot / portrait / face focus / front view / from above / from behind / pov / facing viewer / looking back → <perspective>
+#     street / pedestrian street / shopping mall / indoor / classroom / chalkboard / school / city street / simple background / wet pavement → <background>
+#     rain / night / dusk / wet ground / reflections / city lights → <environment> 或 <atmosphere>
+#     streetlamp / flickering light → <lighting> 或 <objects>
+#     umbrella / crystal / crystal petals 等物体 → <objects>
+#     halo / large breasts / 肤色体型 → <appearance> 或 <body_type>
+#     clothing / open clothes / white thighhighs / trench coat → <clothing>
+#     tongue out / smile / blush / ahegao / orgasm → <expression>
+#     looking at viewer / walking / holding 大多数 → <action>
+#     holding hands / grabbing breasts 等两人互动 → <interaction>
+#     nipples / pussy / penis / anal 等 NSFW 身体部位和行为 → <other>（保留语义但 NewBie XML 无专属标签）
+#
+# - <artists> 由 Y 轴 read_y_rows 注入（主源），本资产内的 <artists> 仅作兜底
+# - <quality> 合并注入 config.yaml 的 quality_prompt 与本资产的 general.quality
+# - info.type（normal / advance / nsfw）保留用于 append_negative_prompt 的 normal 判定
+# - description（zh / en）原样保留，与 common_prompts.yaml 字字对齐
+
+items:
+  - characters:
+      - n:
+          - text: amiya \(arknights\)
+            weight: 1.0
+        gender:
+          - text: 1girl
+            weight: 1.0
+        action:
+          - text: looking at viewer
+            weight: 1.0
+    general:
+      count:
+        - text: 1girl
+          weight: 1.0
+        - text: solo
+          weight: 1.0
+      perspective:
+        - text: portrait
+          weight: 1.0
+        - text: face focus
+          weight: 1.0
+      other:
+        - text: arknights
+          weight: 1.0
+        - text: safe
+          weight: 1.0
+    info:
+      index: 0
+      type: normal
+    description:
+      zh: 面部特写
+      en: Facial close-up
+
+  - characters:
+      - n:
+          - text: exusiai \(arknights\)
+            weight: 1.0
+        gender:
+          - text: 1girl
+            weight: 1.0
+        appearance:
+          - text: halo
+            weight: 1.0
+        action:
+          - text: holding cup
+            weight: 1.0
+          - text: drinking
+            weight: 1.0
+          - text: drinking straw in mouth
+            weight: 1.0
+    general:
+      count:
+        - text: 1girl
+          weight: 1.0
+        - text: solo
+          weight: 1.0
+      perspective:
+        - text: cowboy shot
+          weight: 1.0
+        - text: front view
+          weight: 1.0
+      background:
+        - text: street
+          weight: 1.0
+        - text: pedestrian street
+          weight: 1.0
+      other:
+        - text: arknights
+          weight: 1.0
+        - text: safe
+          weight: 1.0
+    info:
+      index: 1
+      type: normal
+    description:
+      zh: 半身像
+      en: Half-body shot
+
+  - characters:
+      - n:
+          - text: muelsyse \(arknights\)
+            weight: 1.0
+        gender:
+          - text: 1girl
+            weight: 1.0
+        action:
+          - text: holding umbrella
+            weight: 1.0
+          - text: walking
+            weight: 1.0
+    general:
+      count:
+        - text: 1girl
+          weight: 1.0
+        - text: solo
+          weight: 1.0
+      perspective:
+        - text: front view
+          weight: 1.0
+        - text: full shot
+          weight: 1.0
+      background:
+        - text: street
+          weight: 1.0
+        - text: wet pavement
+          weight: 1.0
+      environment:
+        - text: night
+          weight: 1.0
+        - text: rain
+          weight: 1.0
+        - text: reflections
+          weight: 1.0
+        - text: city lights
+          weight: 1.0
+      objects:
+        - text: umbrella
+          weight: 1.0
+      other:
+        - text: arknights
+          weight: 1.0
+        - text: safe
+          weight: 1.0
+    info:
+      index: 2
+      type: advance
+    description:
+      zh: 全身像
+      en: Full-body shot
+
+  - characters:
+      - n:
+          - text: nymph \(arknights\)
+            weight: 1.0
+        gender:
+          - text: 1girl
+            weight: 1.0
+    general:
+      count:
+        - text: 1girl
+          weight: 1.0
+        - text: solo
+          weight: 1.0
+      perspective:
+        - text: cowboy shot
+          weight: 1.0
+      background:
+        - text: simple background
+          weight: 1.0
+      other:
+        - text: arknights
+          weight: 1.0
+        - text: safe
+          weight: 1.0
+    info:
+      index: 3
+      type: advance
+    description:
+      zh: 《明日方舟》角色妮芙，2024年7月9日上线，danbooru 上 400 张图 | 观察模型能否正确绘制角色特征，训练数据集是否包含这名角色
+      en: Arknights character Nymph,released on July 9,2024,with 400 images on danbooru | Observing whether the model can accurately depict character features and if the training dataset includes this character
+
+  - characters:
+      - n:
+          - text: narantuya \(arknights\)
+            weight: 1.0
+        gender:
+          - text: 1girl
+            weight: 1.0
+    general:
+      count:
+        - text: 1girl
+          weight: 1.0
+        - text: solo
+          weight: 1.0
+      perspective:
+        - text: cowboy shot
+          weight: 1.0
+      background:
+        - text: simple background
+          weight: 1.0
+      other:
+        - text: arknights
+          weight: 1.0
+        - text: safe
+          weight: 1.0
+    info:
+      index: 4
+      type: advance
+    description:
+      zh: 《明日方舟》角色娜仁图亚，2024年8月1日上线，danbooru 上 180 张图（训练图片量少） | 观察模型能否正确绘制角色特征，训练数据集是否包含这名角色
+      en: Arknights character Narantuya,released on August 1,2024,with 180 images on danbooru (few training images) | Observing whether the model can accurately depict character features and if the training dataset includes this character
+
+  - characters:
+      - n:
+          - text: raidian \(arknights\)
+            weight: 1.0
+        gender:
+          - text: 1girl
+            weight: 1.0
+    general:
+      count:
+        - text: 1girl
+          weight: 1.0
+        - text: solo
+          weight: 1.0
+      perspective:
+        - text: cowboy shot
+          weight: 1.0
+      background:
+        - text: simple background
+          weight: 1.0
+      other:
+        - text: arknights
+          weight: 1.0
+        - text: safe
+          weight: 1.0
+    info:
+      index: 5
+      type: advance
+    description:
+      zh: 《明日方舟》角色电弧，2025年8月2日上线，danbooru 上 690 张图（角色较新） | 观察模型能否正确绘制角色特征，训练数据集是否包含这名角色
+      en: Arknights character Raidian,released on August 2,2025,with 690 images on danbooru (new character) | Observing whether the model can accurately depict character features and if the training dataset includes this character
+
+  - characters:
+      - n:
+          - text: texas \(arknights\)
+            weight: 1.0
+        gender:
+          - text: 1girl
+            weight: 1.0
+      - n:
+          - text: lappland \(arknights\)
+            weight: 1.0
+        gender:
+          - text: 1girl
+            weight: 1.0
+        interaction:
+          - text: holding hands
+            weight: 1.0
+    general:
+      count:
+        - text: 2girls
+          weight: 1.0
+      perspective:
+        - text: cowboy shot
+          weight: 1.0
+        - text: front view
+          weight: 1.0
+      background:
+        - text: shopping mall
+          weight: 1.0
+        - text: indoor
+          weight: 1.0
+      other:
+        - text: arknights
+          weight: 1.0
+        - text: safe
+          weight: 1.0
+    info:
+      index: 6
+      type: advance
+    description:
+      zh: 双人图 | 观察双人结构，以及人物特征是否正确
+      en: Dual character diagram | Observe the dual structure,and whether the character features are correct
+
+  - characters:
+      - n:
+          - text: ho'olheyak \(arknights\)
+            weight: 1.0
+        gender:
+          - text: 1girl
+            weight: 1.0
+        appearance:
+          - text: large breasts
+            weight: 1.0
+        clothing:
+          - text: white thighhighs
+            weight: 1.0
+          - text: open clothes
+            weight: 1.0
+          - text: trench coat
+            weight: 1.0
+          - text: upturned collar
+            weight: 1.0
+        expression:
+          - text: tongue out
+            weight: 1.0
+        action:
+          - text: one hand in pocket
+            weight: 1.0
+          - text: v sign
+            weight: 1.0
+          - text: hand pocket
+            weight: 1.0
+          - text: standing
+            weight: 1.0
+          - text: looking at viewer
+            weight: 1.0
+          - text: dynamic pose
+            weight: 1.0
+    general:
+      count:
+        - text: 1girl
+          weight: 1.0
+        - text: solo
+          weight: 1.0
+        - text: people
+          weight: 1.0
+      perspective:
+        - text: cowboy shot
+          weight: 1.0
+      background:
+        - text: city street
+          weight: 1.0
+      environment:
+        - text: rain
+          weight: 1.0
+        - text: wet ground
+          weight: 1.0
+      atmosphere:
+        - text: dusk
+          weight: 1.0
+      lighting:
+        - text: streetlamp
+          weight: 1.0
+        - text: flickering light
+          weight: 1.0
+      other:
+        - text: arknights
+          weight: 1.0
+        - text: nsfw
+          weight: 1.0
+        - text: nipples
+          weight: 1.0
+        - text: pussy
+          weight: 1.0
+    info:
+      index: 7
+      type: nsfw
+    description:
+      zh: NSFW 图片
+      en: NSFW image
+
+  - characters:
+      - n:
+          - text: la pluma \(arknights\)
+            weight: 1.0
+        gender:
+          - text: 1girl
+            weight: 1.0
+        expression:
+          - text: smile
+            weight: 1.0
+        action:
+          - text: grabbing
+            weight: 1.0
+          - text: lying on the desk
+            weight: 1.0
+          - text: grabbing breasts
+            weight: 1.0
+          - text: looking at viewer
+            weight: 1.0
+          - text: spread legs
+            weight: 1.0
+          - text: lifted shirt
+            weight: 1.0
+      - n:
+          - text: ''
+            weight: 1.0
+        gender:
+          - text: 1boy
+            weight: 1.0
+    general:
+      count:
+        - text: 1girl
+          weight: 1.0
+        - text: 1boy
+          weight: 1.0
+      perspective:
+        - text: pov
+          weight: 1.0
+        - text: from above
+          weight: 1.0
+        - text: facing viewer
+          weight: 1.0
+      background:
+        - text: classroom
+          weight: 1.0
+        - text: school
+          weight: 1.0
+        - text: chalkboard
+          weight: 1.0
+      objects:
+        - text: penis
+          weight: 1.0
+      other:
+        - text: arknights
+          weight: 1.0
+        - text: nsfw
+          weight: 1.0
+        - text: nipples
+          weight: 1.0
+        - text: vaginal
+          weight: 1.0
+        - text: pussy
+          weight: 1.0
+    info:
+      index: 8
+      type: nsfw
+    description:
+      zh: NSFW 图片
+      en: NSFW image
+
+  - characters:
+      - n:
+          - text: specter \(arknights\)
+            weight: 1.0
+        gender:
+          - text: 1girl
+            weight: 1.0
+        clothing:
+          - text: no pants
+            weight: 1.0
+          - text: no panties
+            weight: 1.0
+        expression:
+          - text: orgasm
+            weight: 1.0
+          - text: blush
+            weight: 1.0
+          - text: ahegao
+            weight: 1.0
+        action:
+          - text: looking back
+            weight: 1.0
+          - text: all fours
+            weight: 1.0
+          - text: anal object insertion
+            weight: 1.0
+          - text: anal
+            weight: 1.0
+          - text: sex toy pull
+            weight: 1.0
+    general:
+      count:
+        - text: 1girl
+          weight: 1.0
+      perspective:
+        - text: from behind
+          weight: 1.0
+        - text: ass focus
+          weight: 1.0
+        - text: pov hands
+          weight: 1.0
+      objects:
+        - text: anal beads
+          weight: 1.0
+        - text: large beads
+          weight: 1.0
+      other:
+        - text: arknights
+          weight: 1.0
+        - text: nsfw
+          weight: 1.0
+        - text: ass
+          weight: 1.0
+        - text: pussy
+          weight: 1.0
+        - text: anus
+          weight: 1.0
+        - text: anal fluid
+          weight: 1.0
+        - text: pussy juice
+          weight: 1.0
+    info:
+      index: 9
+      type: nsfw
+    description:
+      zh: NSFW 图片
+      en: NSFW image

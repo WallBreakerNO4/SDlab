@@ -6,6 +6,7 @@ from pathlib import Path
 
 from scripts.generation.runner_payload import _sha256_file
 from scripts.generation.workflow_patch import (
+    _LATENT_CLASS_TYPES,
     WorkflowDict,
     WorkflowOverrides,
     load_workflow,
@@ -135,9 +136,11 @@ def _extract_workflow_defaults(
     )
 
     latent_node = _as_dict(workflow.get(latent_node_id))
-    if latent_node.get("class_type") != "EmptyLatentImage":
+    if latent_node.get("class_type") not in _LATENT_CLASS_TYPES:
         class_type = latent_node.get("class_type")
-        raise ValueError(f"latent 节点必须是 EmptyLatentImage，当前为: {class_type}")
+        raise ValueError(
+            f"latent 节点必须是 EmptyLatentImage / EmptySD3LatentImage，当前为: {class_type}"
+        )
     latent_inputs = _as_dict(latent_node.get("inputs"))
 
     return {
