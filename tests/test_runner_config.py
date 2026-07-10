@@ -74,6 +74,7 @@ class _ModelConfig(Protocol):
 
 class _RunnerConfig(Protocol):
     schema_version: str
+    backend: str
     config_path: str
     config_sha256: str
     prompts: _PromptsConfig
@@ -132,6 +133,35 @@ def _import_runner_module() -> _RunnerModule:
 
 def _sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_load_real_newbie_config_preserves_local_asset_contract() -> None:
+    module = _import_runner_config_module()
+    config_path = ROOT / "data/models/newbie-image-exp0.1/config.yaml"
+
+    config = module.load_runner_config(
+        config_path.relative_to(ROOT).as_posix(),
+        repo_root=ROOT,
+    )
+
+    assert config.backend == "comfyui"
+    assert config.model.family == "newbie"
+    assert config.prompts.x.repo_relative_path == "data/prompts/X/newbie_prompts.yaml"
+    assert (
+        config.prompts.y.repo_relative_path
+        == "data/prompts/Y/300_NAI_Styles_Table-test.yaml"
+    )
+    assert (
+        config.workflow.repo_relative_path
+        == "data/models/newbie-image-exp0.1/api.json"
+    )
+    assert config.workflow.download is None
+    assert config.workflow.ksampler_node_id is None
+
+    assert config.config_sha256 == _sha256_file(config_path)
+    assert config.prompts.x.sha256 == _sha256_file(Path(config.prompts.x.path))
+    assert config.prompts.y.sha256 == _sha256_file(Path(config.prompts.y.path))
+    assert config.workflow.sha256 == _sha256_file(Path(config.workflow.path))
 
 
 def _write_image(path: Path, *, image_format: str = "PNG") -> None:

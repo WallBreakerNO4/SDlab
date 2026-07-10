@@ -13,8 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts.generation.prompt_grid import X_INFO_TYPE_KEY, _NEWBIE_SYSTEM_PROMPT
 from scripts.generation.runner_env import _resolve_append_negative_prompt
-from scripts.generation.prompt_grid import X_INFO_TYPE_KEY
 
 DEFAULT_APPEND = "nsfw, nipples, pussy, nude,"
 
@@ -447,11 +447,11 @@ def test_append_negative_prompt_newbie_append_with_leading_commas() -> None:
 
 
 def test_final_negative_prompt_for_x_row_newbie_uses_xml_append() -> None:
-    """newbie family 下，_final_negative_prompt_for_x_row 使用 XML 感知拼接。"""
     runner = _import_runner_module()
+    append_prompt = "nsfw, nipples, pussy, nude"
     args = _build_worker_args(
         negative_prompt=NEWBIE_XML_NEGATIVE,
-        append_negative_prompt="nsfw, nipples, pussy, nude",
+        append_negative_prompt=append_prompt,
     )
     args.model_family = "newbie"
     workflow_context = _build_worker_context(runner, default_negative_prompt=None)
@@ -461,13 +461,49 @@ def test_final_negative_prompt_for_x_row_newbie_uses_xml_append() -> None:
         workflow_context,
         {X_INFO_TYPE_KEY: "normal"},
     )
-    assert normal_prompt is not None
-    assert "<e621_tags>furry</e621_tags>" in normal_prompt
-    assert "<resolution>low_resolution</resolution>" in normal_prompt
-    assert "<danbooru_tags>" in normal_prompt
-    assert "nsfw, nipples, pussy, nude" in normal_prompt
-    # 确保追加内容在 <danbooru_tags> 内部，而不是 XML 末尾
+    expected_xml = runner._append_negative_prompt_newbie(
+        NEWBIE_XML_NEGATIVE,
+        append_prompt,
+    )
+
+    assert normal_prompt == _NEWBIE_SYSTEM_PROMPT + expected_xml
+    assert normal_prompt.count("<e621_tags>") == 1
+    assert normal_prompt.count("</e621_tags>") == 1
+    assert normal_prompt.count("<danbooru_tags>") == 1
+    assert normal_prompt.count("</danbooru_tags>") == 1
+    assert normal_prompt.count("<resolution>") == 1
+    assert normal_prompt.count("</resolution>") == 1
     assert normal_prompt.rstrip().endswith("<resolution>low_resolution</resolution>")
+
+
+@pytest.mark.parametrize(
+    ("base_prompt", "append_prompt", "expected"),
+    [
+        (None, None, None),
+        ("", "", ""),
+    ],
+)
+def test_final_negative_prompt_for_x_row_newbie_empty_inputs_do_not_leave_system_prompt(
+    base_prompt: str | None,
+    append_prompt: str | None,
+    expected: str | None,
+) -> None:
+    runner = _import_runner_module()
+    args = _build_worker_args(
+        negative_prompt=base_prompt,
+        append_negative_prompt=append_prompt,
+    )
+    args.model_family = "newbie"
+    workflow_context = _build_worker_context(runner, default_negative_prompt=None)
+
+    result = runner._final_negative_prompt_for_x_row(
+        args,
+        workflow_context,
+        {X_INFO_TYPE_KEY: "normal"},
+    )
+
+    assert result == expected
+    assert result != _NEWBIE_SYSTEM_PROMPT
 
 
 def test_final_negative_prompt_for_x_row_non_newbie_uses_plain_append() -> None:

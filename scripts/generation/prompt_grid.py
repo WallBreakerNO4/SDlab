@@ -535,8 +535,7 @@ def _emit_xml_subtag(name: str, text: str) -> str:
 
 _NEWBIE_SYSTEM_PROMPT = (
     "You are an assistant designed to generate high-quality anime images "
-    "with the highest degree of image-text alignment based on xml format "
-    "textual prompts. <Prompt Start>"
+    "based on xml format prompts. <Prompt Start> "
 )
 
 

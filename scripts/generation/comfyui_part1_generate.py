@@ -28,6 +28,7 @@ from scripts.generation.comfyui_client import (  # noqa: E402
     comfy_wait_prompt_done_with_fallback,
 )
 from scripts.generation.prompt_grid import (  # noqa: E402
+    _NEWBIE_SYSTEM_PROMPT,
     assemble_newbie_prompt,
     compute_prompt_hash,
     derive_seed,
@@ -899,12 +900,15 @@ def _final_negative_prompt_for_x_row(
         if model_family == "newbie"
         else _append_negative_prompt
     )
-    return _records_final_negative_prompt_for_x_row(
+    result = _records_final_negative_prompt_for_x_row(
         args,
         workflow_context,
         x_row,
         append_negative_prompt=append_fn,
     )
+    if model_family == "newbie" and result:
+        result = _NEWBIE_SYSTEM_PROMPT + result
+    return result
 
 
 def _effective_generation_params(

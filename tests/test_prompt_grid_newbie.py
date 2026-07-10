@@ -13,6 +13,7 @@ from scripts.generation.prompt_grid import (
     NEWBIE_GENERAL_SUBTAGS,
     NEWBIE_X_SCHEMA,
     X_INFO_TYPE_KEY,
+    _NEWBIE_SYSTEM_PROMPT,
     _render_subtag,
     assemble_newbie_prompt,
     compute_prompt_hash,
@@ -606,8 +607,15 @@ def test_render_positive_prompt_xml_ignores_caption() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_assemble_newbie_prompt_wraps_xml_with_image_and_caption():
-    # 构造一个最小 newbie x_row
+def test_newbie_system_prompt_matches_official_prefix_with_trailing_space() -> None:
+    assert _NEWBIE_SYSTEM_PROMPT == (
+        "You are an assistant designed to generate high-quality anime images "
+        "based on xml format prompts. <Prompt Start> "
+    )
+    assert _NEWBIE_SYSTEM_PROMPT.endswith(" ")
+
+
+def test_assemble_newbie_prompt_wraps_xml_with_image_and_caption() -> None:
     x_row = {
         "characters": [
             {"n": "amiya \\(arknights\\)", "gender": "1girl"},
@@ -616,9 +624,11 @@ def test_assemble_newbie_prompt_wraps_xml_with_image_and_caption():
         "caption": "A portrait of Amiya.",
     }
     result = assemble_newbie_prompt(x_row, "artist_name", quality_prompt="best quality")
-    assert "<image>" in result
-    assert "</image>" in result
+
+    assert result.startswith(f"{_NEWBIE_SYSTEM_PROMPT}\n<image>\n")
+    assert result.endswith("</image>")
     assert "<caption>A portrait of Amiya.</caption>" in result
     assert "<character_1>" in result
-    assert "best quality" in result
-    assert "xml format textual prompts" in result
+    assert "<n>amiya \\(arknights\\)</n>" in result
+    assert "<artists>artist_name</artists>" in result
+    assert "<quality>best quality</quality>" in result

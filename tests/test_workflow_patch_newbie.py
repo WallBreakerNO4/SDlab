@@ -93,6 +93,7 @@ def test_patch_workflow_newbie_overrides_ksampler_fields():
             seed=42,
             steps=30,
             cfg=4.5,
+            denoise=0.75,
             sampler_name="euler",
             scheduler="normal",
         ),
@@ -102,6 +103,7 @@ def test_patch_workflow_newbie_overrides_ksampler_fields():
     assert ksampler_inputs.get("seed") == 42
     assert ksampler_inputs.get("steps") == 30
     assert ksampler_inputs.get("cfg") == 4.5
+    assert ksampler_inputs.get("denoise") == 0.75
     assert ksampler_inputs.get("sampler_name") == "euler"
     assert ksampler_inputs.get("scheduler") == "normal"
 
@@ -146,3 +148,4 @@ def test_extract_workflow_defaults_returns_newbie_default_params():
     assert defaults["batch_size"] == 1
     assert defaults["steps"] == 20
     assert defaults["cfg"] == 5.5
+    assert defaults["denoise"] == 1.0

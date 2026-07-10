@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 from typing import Any, Callable
 
+from scripts.generation.prompt_grid import X_INFO_TYPE_KEY
 from scripts.generation.runner_selection import _extract_x_info_type
 from scripts.generation.runner_workflow_context import _record_workflow_hash
 
@@ -13,7 +14,7 @@ def _build_base_metadata_record(
     status: str,
     x_index: int,
     y_index: int,
-    x_row: dict[str, str],
+    x_row: dict[str, object],
     y_value: str,
     positive_prompt: str,
     prompt_hash: str,
@@ -27,11 +28,7 @@ def _build_base_metadata_record(
         "x_index": x_index,
         "y_index": y_index,
         "x_fields": {
-            "gender": x_row.get("gender", ""),
-            "characters": x_row.get("characters", ""),
-            "series": x_row.get("series", ""),
-            "rating": x_row.get("rating", ""),
-            "general": x_row.get("general", ""),
+            key: value for key, value in x_row.items() if key != X_INFO_TYPE_KEY
         },
         "x_info_type": _extract_x_info_type(x_row),
         "y_value": y_value,
