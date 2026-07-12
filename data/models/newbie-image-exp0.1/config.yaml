@@ -55,7 +55,7 @@ generation:
   # 将追加标签注入 <danbooru_tags> 内部，保持 XML 结构完整。
   append_negative_prompt: "nsfw, nipples, pussy, nude"
   # 输出宽度；覆盖 workflow 的 EmptySD3LatentImage width。
-  width: 823
+  width: 832
   # 输出高度；覆盖 workflow 的 EmptySD3LatentImage height。
   height: 1216
   # 单次生成张数；覆盖 workflow 的 batch_size。
