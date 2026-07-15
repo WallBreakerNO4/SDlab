@@ -21,11 +21,11 @@ model:
     zh: |
       Anima 是由 CircleStone Labs 与 Comfy Org 联合开发的20亿参数文本转图像模型。该模型主要专注于动漫概念、角色和风格，同时也能生成多种其他非写实内容。它专为制作插画和艺术图像而设计，不擅长处理写实图像。
       该模型基于数百万张动漫图像和约80万张非动漫艺术图像进行训练，训练过程中未使用任何合成数据。动漫训练数据的知识截止日期为2025年9月。
-      这个分支使用了 [Anima-Artist-Mixer](https://github.com/An1X3R/Anima-Artist-Mixer) 这个插件来进行画师权重混合。
+      这个表格使用了 [Anima-Artist-Mixer](https://github.com/An1X3R/Anima-Artist-Mixer) 这个插件来进行画师权重混合。
     en: |
       Anima is a 2 billion parameter text-to-image model created via a collaboration between CircleStone Labs and Comfy Org. It is focused mainly on anime concepts, characters, and styles, but is also capable of generating a wide variety of other non-photorealistic content. The model is designed for making illustrations and artistic images, and will not work well at realism.
       It is trained on several million anime images and about 800k non-anime artistic images. No synthetic data was used for training. The knowledge cut-off date for the anime training data is September 2025.
-      This branch uses the [Anima-Artist-Mixer](https://github.com/An1X3R/Anima-Artist-Mixer) plugin for artist weight mixing.
+      This table uses the [Anima-Artist-Mixer](https://github.com/An1X3R/Anima-Artist-Mixer) plugin for artist weight mixing.
 # Prompt 资产路径：X 轴通常是角色等结构化 prompt 表，Y 轴通常是风格/artist 等单列 prompt 表。
 # 这里的路径必须是仓库相对路径，且文件必须实际存在；支持 .yaml/.yml/.json。
 prompts:
@@ -50,9 +50,9 @@ generation:
   # 基础种子；每个网格单元会基于 base_seed + x/y 索引派生稳定 seed。
   base_seed: 123
   # 基础负面提示词；设为 null 时优先使用 workflow 中自带的 negative prompt。
-  negative_prompt: worst quality, low quality, score_1, score_2, score_3, blurry, jpeg artifacts, sepia,
+  negative_prompt: worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, chromatic aberration,
   # 追加到基础负面提示词后面的内容；常用于统一补一段安全/质量相关负面词。
-  append_negative_prompt: "nsfw,nipples,pussy,nude,"
+  append_negative_prompt: "nsfw, nipples, pussy, nude,"
   # 输出宽度；覆盖 workflow 的 latent width。
   width: 832
   # 输出高度；覆盖 workflow 的 latent height。
@@ -60,7 +60,7 @@ generation:
   # 单次生成张数；覆盖 workflow 的 batch_size。
   batch_size: 1
   # 采样步数；覆盖 KSampler.steps。
-  steps: 28
+  steps: 30
   # CFG / guidance scale；覆盖 KSampler.cfg。
   cfg: 4
   # 去噪强度；覆盖 KSampler.denoise。
