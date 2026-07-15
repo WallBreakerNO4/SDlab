@@ -283,6 +283,11 @@ def _apply_fresh_run_config(args: argparse.Namespace) -> None:
         config.workflow.download.path if config.workflow.download is not None else None
     )
     args.ksampler_node_id = config.workflow.ksampler_node_id
+    args.anima_artist_mixer = getattr(
+        config.workflow,
+        "anima_artist_mixer",
+        False,
+    )
 
     args.negative_prompt = config.generation.negative_prompt
     args.append_negative_prompt = config.generation.append_negative_prompt
@@ -330,6 +335,7 @@ def run(args: argparse.Namespace) -> int:
         args.y_json,
         artist_prefix="@" if model_family == "anima" else "",
         artist_weight_profile=_artist_weight_profile_from_model(model_obj),
+        anima_artist_mixer=getattr(args, "anima_artist_mixer", False),
     )
     x_descriptions = read_x_descriptions(args.x_json)
 
@@ -488,6 +494,7 @@ def run_retry(args: argparse.Namespace) -> int:
         args.y_json,
         artist_prefix="@" if model_family == "anima" else "",
         artist_weight_profile=artist_weight_profile,
+        anima_artist_mixer=getattr(args, "anima_artist_mixer", False),
     )
     x_descriptions = read_x_descriptions(args.x_json)
 
@@ -531,12 +538,12 @@ def run_retry(args: argparse.Namespace) -> int:
     )
 
     x_rows_by_index = {item.index: item.value for item in x_selected}
-    y_values_by_index = {item.index: item.value.get("y", "") for item in y_selected}
+    y_rows_by_index = {item.index: item.value for item in y_selected}
     _validate_retry_failed_cells_consistency(
         target_cells=target_cells,
         latest_records=latest_records,
         x_rows_by_index=x_rows_by_index,
-        y_values_by_index=y_values_by_index,
+        y_rows_by_index=y_rows_by_index,
         template=args.template,
         base_seed=args.base_seed,
         workflow_hash=workflow_hash,

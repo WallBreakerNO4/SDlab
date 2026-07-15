@@ -166,6 +166,11 @@ def _build_config_snapshot(args: argparse.Namespace) -> dict[str, object] | None
                 workflow.download.sha256 if workflow.download is not None else None
             ),
             "ksampler_node_id": workflow.ksampler_node_id,
+            "anima_artist_mixer": getattr(
+                workflow,
+                "anima_artist_mixer",
+                False,
+            ),
         },
         "generation": {
             "template": generation.template,

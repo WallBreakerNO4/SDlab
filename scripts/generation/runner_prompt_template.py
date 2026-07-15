@@ -4,7 +4,7 @@ import re
 from collections.abc import Callable
 from typing import Any
 
-from scripts.generation.prompt_grid import render_positive_prompt
+from scripts.generation.prompt_grid import Y_POSITIVE_VALUE, render_positive_prompt
 
 
 ALLOWED_TEMPLATE_KEYS = {
@@ -32,7 +32,8 @@ def _build_example_prompt(
     first_x_obj = x_selected[0]
     first_y_obj = y_selected[0]
     first_x = getattr(first_x_obj, "value")
-    first_y = getattr(first_y_obj, "value").get("y", "")
+    first_y_value = getattr(first_y_obj, "value")
+    first_y = first_y_value.get(Y_POSITIVE_VALUE, first_y_value.get("y", ""))
     return render_prompt_by_template(template, first_x, first_y)
 
 

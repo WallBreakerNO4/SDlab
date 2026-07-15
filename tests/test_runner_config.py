@@ -33,6 +33,7 @@ class _WorkflowConfig(Protocol):
     sha256: str
     download: _PromptRef | None
     ksampler_node_id: str | None
+    anima_artist_mixer: bool
 
 
 class _GenerationConfig(Protocol):
@@ -289,6 +290,7 @@ def test_load_runner_config_happy_path_resolves_repo_relative_paths_and_hashes(
     )
     assert config.workflow.download.sha256 == _sha256_file(workflow_download_path)
     assert config.workflow.ksampler_node_id == "3"
+    assert config.workflow.anima_artist_mixer is False
     assert config.assets.cover_image is not None
     assert Path(config.assets.cover_image.path) == cover_image_path
     assert config.assets.cover_image.repo_relative_path == "data/models/example/image.jpg"
@@ -620,6 +622,103 @@ def test_load_runner_config_rejects_invalid_artist_weight_profile(
 
     with pytest.raises(ValueError, match="artist_weight_profile"):
         module.load_runner_config(str(config_path), repo_root=tmp_path)
+
+
+def test_load_runner_config_accepts_anima_artist_mixer_for_anima_comfyui(
+    tmp_path: Path,
+) -> None:
+    module = _import_runner_config_module()
+    _ = _write_assets(tmp_path)
+    config_path = tmp_path / "data/models/example/config.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        _valid_config_text()
+        .replace("  family: novelai", "  family: anima")
+        .replace(
+            "  ksampler_node_id: '3'",
+            "  ksampler_node_id: '3'\n  anima_artist_mixer: true",
+        ),
+        encoding="utf-8",
+    )
+
+    config = module.load_runner_config(str(config_path), repo_root=tmp_path)
+
+    assert config.workflow.anima_artist_mixer is True
+
+
+def test_load_runner_config_rejects_non_boolean_anima_artist_mixer(
+    tmp_path: Path,
+) -> None:
+    module = _import_runner_config_module()
+    _ = _write_assets(tmp_path)
+    config_path = tmp_path / "data/models/example/config.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        _valid_config_text().replace(
+            "  ksampler_node_id: '3'",
+            "  ksampler_node_id: '3'\n  anima_artist_mixer: yes-please",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="必须是布尔值"):
+        module.load_runner_config(str(config_path), repo_root=tmp_path)
+
+
+def test_load_runner_config_rejects_anima_artist_mixer_for_non_anima_model(
+    tmp_path: Path,
+) -> None:
+    module = _import_runner_config_module()
+    _ = _write_assets(tmp_path)
+    config_path = tmp_path / "data/models/example/config.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        _valid_config_text().replace(
+            "  ksampler_node_id: '3'",
+            "  ksampler_node_id: '3'\n  anima_artist_mixer: true",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="model.family=anima"):
+        module.load_runner_config(str(config_path), repo_root=tmp_path)
+
+
+def test_load_runner_config_rejects_anima_artist_mixer_for_novelai_backend(
+    tmp_path: Path,
+) -> None:
+    module = _import_runner_config_module()
+    _ = _write_assets(tmp_path)
+    config_path = tmp_path / "data/models/example/config.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        _valid_config_text(schema_version="image-run-config/v2")
+        .replace(
+            "schema_version: image-run-config/v2",
+            "schema_version: image-run-config/v2\nbackend: novelai",
+        )
+        .replace("  family: novelai", "  family: anima")
+        .replace(
+            "  ksampler_node_id: '3'",
+            "  ksampler_node_id: '3'\n  anima_artist_mixer: true",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="仅支持 comfyui backend"):
+        module.load_runner_config(str(config_path), repo_root=tmp_path)
+
+
+def test_target_anima_artist_mixer_config_enables_workflow_mode() -> None:
+    module = _import_runner_config_module()
+
+    config = module.load_runner_config(
+        "data/models/Anima-base-1.0-Artist-Mixer/config.yaml",
+        repo_root=ROOT,
+    )
+
+    assert config.model.family == "anima"
+    assert config.workflow.anima_artist_mixer is True
 
 
 def test_fresh_run_rejects_deprecated_business_env_before_loading_config(

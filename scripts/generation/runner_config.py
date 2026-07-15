@@ -50,7 +50,7 @@ _MODEL_REQUIRED_KEYS = {"key", "name", "family", "links", "description"}
 _MODEL_LINK_KEYS = {"homepage", "huggingface", "civitai"}
 _MODEL_DESCRIPTION_KEYS = {"zh", "en"}
 _PROMPTS_KEYS = {"x_path", "y_path"}
-_WORKFLOW_KEYS = {"ksampler_node_id"}
+_WORKFLOW_KEYS = {"ksampler_node_id", "anima_artist_mixer"}
 _WORKFLOW_REQUIRED_KEYS = {"ksampler_node_id"}
 _GENERATION_KEYS = {
     "template",
@@ -105,6 +105,7 @@ class WorkflowConfig:
     sha256: str
     download: AssetRef | None
     ksampler_node_id: str | None
+    anima_artist_mixer: bool
 
 
 @dataclass(frozen=True)
@@ -215,6 +216,19 @@ def _optional_str(value: object, field_name: str) -> str | None:
     if value is None:
         return None
     return _require_str(value, field_name)
+
+
+def _optional_bool(
+    value: object,
+    field_name: str,
+    *,
+    default: bool,
+) -> bool:
+    if value is None:
+        return default
+    if not isinstance(value, bool):
+        raise ValueError(f"字段 {field_name} 必须是布尔值")
+    return value
 
 
 def _optional_int_list(value: object, field_name: str) -> list[int] | None:
@@ -437,6 +451,7 @@ def _load_workflow(
     repo_root: Path,
     config_dir: Path,
     backend: str,
+    model_family: str,
 ) -> WorkflowConfig:
     mapping = _require_mapping(payload, "workflow")
     _validate_keys(
@@ -445,6 +460,19 @@ def _load_workflow(
         allowed=_WORKFLOW_KEYS,
         required=_WORKFLOW_REQUIRED_KEYS,
     )
+    anima_artist_mixer = _optional_bool(
+        mapping.get("anima_artist_mixer"),
+        "workflow.anima_artist_mixer",
+        default=False,
+    )
+    if anima_artist_mixer and backend != BACKEND_COMFYUI:
+        raise ValueError(
+            "字段 workflow.anima_artist_mixer 仅支持 comfyui backend"
+        )
+    if anima_artist_mixer and model_family != "anima":
+        raise ValueError(
+            "字段 workflow.anima_artist_mixer 仅支持 model.family=anima"
+        )
 
     api_asset = _resolve_workflow_asset_from_config_dir(
         config_dir=config_dir,
@@ -461,6 +489,7 @@ def _load_workflow(
             sha256="",
             download=None,
             ksampler_node_id=None,
+            anima_artist_mixer=False,
         )
 
     if api_asset is None:
@@ -480,6 +509,7 @@ def _load_workflow(
         ksampler_node_id=_optional_str(
             mapping["ksampler_node_id"], "workflow.ksampler_node_id"
         ),
+        anima_artist_mixer=anima_artist_mixer,
     )
 
 
@@ -571,19 +601,24 @@ def load_runner_config(config_path: str, *, repo_root: Path) -> RunnerConfig:
             required=_V2_ROOT_KEYS,
         )
 
+    model = _load_model(mapping["model"])
+    prompts = _load_prompts(mapping["prompts"], repo_root=repo_root)
+    workflow = _load_workflow(
+        mapping["workflow"],
+        repo_root=repo_root,
+        config_dir=config_file.parent,
+        backend=backend,
+        model_family=model.family,
+    )
+
     return RunnerConfig(
         schema_version=schema_version,
         backend=backend,
         config_path=config_file.relative_to(repo_root).as_posix(),
         config_sha256=_sha256_file(config_file),
-        model=_load_model(mapping["model"]),
-        prompts=_load_prompts(mapping["prompts"], repo_root=repo_root),
-        workflow=_load_workflow(
-            mapping["workflow"],
-            repo_root=repo_root,
-            config_dir=config_file.parent,
-            backend=backend,
-        ),
+        model=model,
+        prompts=prompts,
+        workflow=workflow,
         generation=_load_generation(mapping["generation"]),
         selection=_load_selection(mapping["selection"]),
         assets=_load_assets(run_dir=config_file.parent, repo_root=repo_root),

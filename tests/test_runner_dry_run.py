@@ -122,6 +122,7 @@ def _fake_runner_config(
     x_path: Path,
     y_path: Path,
     append_negative_prompt: str | None,
+    anima_artist_mixer: bool = False,
 ) -> SimpleNamespace:
     workflow_path = config_path.parent / "api.json"
     workflow_download_path = config_path.parent / "workflow.json"
@@ -135,8 +136,8 @@ def _fake_runner_config(
         model=SimpleNamespace(
             key="nai-4-full",
             name="NAI 4 Full",
-            family="novelai",
-            artist_weight_profile="identity",
+            family="anima" if anima_artist_mixer else "novelai",
+            artist_weight_profile="square" if anima_artist_mixer else "identity",
             links={
                 "homepage": "https://example.com/model",
                 "huggingface": None,
@@ -166,6 +167,7 @@ def _fake_runner_config(
                 repo_relative_path="data/models/example/workflow.json",
             ),
             ksampler_node_id="3",
+            anima_artist_mixer=anima_artist_mixer,
         ),
         generation=SimpleNamespace(
             template="{quality}{rating}{y}{gender}{characters}{series}{general}",
@@ -310,6 +312,7 @@ def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
                 "download_sha256"
             ],
             "ksampler_node_id": "3",
+            "anima_artist_mixer": False,
         },
         "generation": {
             "template": "{quality}{rating}{y}{gender}{characters}{series}{general}",
@@ -346,6 +349,47 @@ def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
     metadata_records = _read_valid_jsonl(run_dir / "metadata.jsonl")
     assert len(metadata_records) == 1
     assert metadata_records[0]["status"] == "skipped"
+    assert metadata_records[0]["artist_chain"] is None
+
+
+def test_dry_run_anima_artist_mixer_records_split_prompts_and_hash(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = _import_runner_module()
+    _clear_deprecated_business_env(monkeypatch)
+    x_path, y_path = _write_json_inputs(tmp_path)
+    config_path = tmp_path / "example.yaml"
+    config_path.write_text("schema_version: image-run-config/v1\n", encoding="utf-8")
+    run_dir = tmp_path / "run-mixer-dry"
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        runner,
+        "load_runner_config",
+        lambda path, repo_root: _fake_runner_config(
+            config_path=config_path,
+            x_path=x_path,
+            y_path=y_path,
+            append_negative_prompt=None,
+            anima_artist_mixer=True,
+        ),
+    )
+
+    exit_code = runner.main(
+        ["--dry-run", "--config", str(config_path), "--run-dir", str(run_dir)]
+    )
+
+    assert exit_code == 0
+    run_payload = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert run_payload["config_snapshot"]["workflow"]["anima_artist_mixer"] is True
+    record = _read_valid_jsonl(run_dir / "metadata.jsonl")[0]
+    assert record["artist_chain"] == "@artist-a"
+    assert "artist-a" not in record["positive_prompt"]
+    assert record["y_value"] == "@artist-a, "
+    assert record["prompt_hash"] == runner.compute_prompt_hash(
+        record["positive_prompt"],
+        "@artist-a",
+    )
 
 
 def test_dry_run_without_run_dir_uses_model_key_as_default_output_dir(

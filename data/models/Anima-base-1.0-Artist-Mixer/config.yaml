@@ -38,6 +38,8 @@ prompts:
 workflow:
   # 要注入参数的 KSampler 节点 ID；如果 workflow 里有多个 KSampler，通常需要显式指定。
   ksampler_node_id: null
+  # 将 artists 标签注入 Anima Artist Pack，正向提示词仅保留 general 标签。
+  anima_artist_mixer: true
 
 # 生成参数：template/base_seed 为必填；其余项用于覆盖 workflow 内默认值。
 # 如果某个字段填 null，就尽量回退到 workflow 里的默认参数。

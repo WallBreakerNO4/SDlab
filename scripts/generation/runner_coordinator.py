@@ -11,7 +11,13 @@ from time import monotonic, sleep
 from typing import Any, Callable, cast
 import uuid
 
-from scripts.generation.prompt_grid import Y_COLLECTION_ID, Y_ITEM_INDEX, Y_STYLE_KEY
+from scripts.generation.prompt_grid import (
+    Y_ARTIST_CHAIN,
+    Y_COLLECTION_ID,
+    Y_ITEM_INDEX,
+    Y_POSITIVE_VALUE,
+    Y_STYLE_KEY,
+)
 
 
 LOG = logging.getLogger(__name__)
@@ -38,6 +44,7 @@ class _CellPlan:
     workflow_hash: str
     save_image_prefix: str
     x_description: dict[str, str]
+    artist_chain: str | None = None
     attempt: int = 1
     y_prompt_ref: dict[str, object] | None = None
 
@@ -73,7 +80,7 @@ class GenerationCoordinator:
         pbar: Any,
         writer: Any,
         render_prompt: Callable[[str, dict[str, str], str], str],
-        compute_prompt_hash: Callable[[str], str],
+        compute_prompt_hash: Callable[[str, str | None], str],
         derive_seed: Callable[[int, int, int], int],
         effective_generation_params: Callable[
             [argparse.Namespace, Any, dict[str, str], int],
@@ -206,10 +213,19 @@ class GenerationCoordinator:
             y_index = y_item.index
             x_row = x_item.value
             y_value = y_item.value.get("y", "")
+            positive_y_value = y_item.value.get(Y_POSITIVE_VALUE, y_value)
+            artist_chain_obj = y_item.value.get(Y_ARTIST_CHAIN)
+            artist_chain = (
+                artist_chain_obj if isinstance(artist_chain_obj, str) else None
+            )
             y_prompt_ref = _extract_y_prompt_ref(y_item)
 
-            positive_prompt = self.render_prompt(self.args.template, x_row, y_value)
-            prompt_hash = self.compute_prompt_hash(positive_prompt)
+            positive_prompt = self.render_prompt(
+                self.args.template,
+                x_row,
+                positive_y_value,
+            )
+            prompt_hash = self.compute_prompt_hash(positive_prompt, artist_chain)
             seed = self.derive_seed(self.args.base_seed, x_index, y_index)
 
             resume_record = self.latest_records.get((x_index, y_index))
@@ -239,6 +255,7 @@ class GenerationCoordinator:
                     attempt=skip_attempt,
                 )
                 record["skip_reason"] = "resume_hit"
+                _apply_artist_chain(record, artist_chain)
                 _apply_y_prompt_ref(record, y_prompt_ref)
                 record["x_description"] = self._get_x_description(x_index)
                 record["local_image_path"] = self.extract_local_image_path(
@@ -274,6 +291,7 @@ class GenerationCoordinator:
                     attempt=skip_attempt,
                 )
                 record["skip_reason"] = "dry_run"
+                _apply_artist_chain(record, artist_chain)
                 _apply_y_prompt_ref(record, y_prompt_ref)
                 record["x_description"] = self._get_x_description(x_index)
                 self._write_record(record)
@@ -309,6 +327,7 @@ class GenerationCoordinator:
                 workflow_hash=self.workflow_hash,
                 save_image_prefix=save_image_prefix,
                 x_description=self._get_x_description(x_index),
+                artist_chain=artist_chain,
                 attempt=self.next_attempt(resume_record, True),
             )
 
@@ -377,7 +396,7 @@ def run_generation(
     pbar: Any,
     writer: Any,
     render_prompt: Callable[[str, dict[str, str], str], str],
-    compute_prompt_hash: Callable[[str], str],
+    compute_prompt_hash: Callable[[str, str | None], str],
     derive_seed: Callable[[int, int, int], int],
     effective_generation_params: Callable[
         [argparse.Namespace, Any, dict[str, str], int],
@@ -482,6 +501,7 @@ def _worker_submit_and_wait(
             overrides=workflow_overrides,
             ksampler_node_id=workflow_context.selected_ksampler_id,
             save_image_prefix=plan.save_image_prefix,
+            artist_chain=plan.artist_chain,
         )
 
         client_id = f"{args.client_id}-{uuid.uuid4().hex[:8]}"
@@ -526,6 +546,7 @@ def _worker_submit_and_wait(
             attempt=plan.attempt,
         )
         record["x_description"] = plan.x_description
+        _apply_artist_chain(record, plan.artist_chain)
         _apply_y_prompt_ref(record, plan.y_prompt_ref)
         record["comfyui_prompt_id"] = prompt_id
         record["started_at"] = started_at
@@ -589,6 +610,7 @@ def _worker_fetch_and_download(
             attempt=plan.attempt,
         )
         record["x_description"] = plan.x_description
+        _apply_artist_chain(record, plan.artist_chain)
         _apply_y_prompt_ref(record, plan.y_prompt_ref)
         record["comfyui_prompt_id"] = prompt_id
         record["remote_images"] = remote_images
@@ -616,6 +638,7 @@ def _worker_fetch_and_download(
             attempt=plan.attempt,
         )
         record["x_description"] = plan.x_description
+        _apply_artist_chain(record, plan.artist_chain)
         _apply_y_prompt_ref(record, plan.y_prompt_ref)
         record["comfyui_prompt_id"] = prompt_id
         record["remote_images"] = remote_images
@@ -689,6 +712,13 @@ def _apply_y_prompt_ref(
     record["y_style_key"] = y_prompt_ref["style_key"]
     record["y_collection_id"] = y_prompt_ref["collection_id"]
     record["y_item_index"] = y_prompt_ref["item_index"]
+
+
+def _apply_artist_chain(
+    record: dict[str, object],
+    artist_chain: str | None,
+) -> None:
+    record["artist_chain"] = artist_chain
 
 
 def _build_local_image_paths(
