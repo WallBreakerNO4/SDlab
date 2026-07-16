@@ -75,8 +75,10 @@ def _build_run_payload(
         ),
         "comfyui_base_url": args.base_url,
         "request_timeout_s": args.request_timeout_s,
+        "download_read_timeout_s": getattr(args, "download_read_timeout_s", None),
         "job_timeout_s": args.job_timeout_s,
         "concurrency": args.concurrency,
+        "download_concurrency": getattr(args, "download_concurrency", None),
         "client_id": args.client_id,
         "selection": {
             "x_indexes": [item.index for item in x_selected],

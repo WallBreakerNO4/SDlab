@@ -210,8 +210,10 @@ def test_cli_help_exposes_config_runtime_flags_only() -> None:
         "--retry-error-code",
         "--base-url",
         "--request-timeout-s",
+        "--download-read-timeout-s",
         "--job-timeout-s",
         "--concurrency",
+        "--download-concurrency",
         "--client-id",
     ]:
         assert flag in help_text
@@ -234,10 +236,14 @@ def test_build_parser_defaults_match_env_example(
 ) -> None:
     runner = _import_runner_module()
     monkeypatch.delenv("COMFYUI_CONCURRENCY", raising=False)
+    monkeypatch.delenv("COMFYUI_DOWNLOAD_CONCURRENCY", raising=False)
+    monkeypatch.delenv("COMFYUI_DOWNLOAD_READ_TIMEOUT_S", raising=False)
 
     args = runner.build_parser().parse_args([])
 
     assert args.concurrency == 8
+    assert args.download_concurrency == 4
+    assert args.download_read_timeout_s == 60.0
 
 
 def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
@@ -278,6 +284,8 @@ def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
     assert run_payload["quality_prompt"] == "masterpiece, best quality,"
     assert run_payload["base_seed"] == 123
     assert run_payload["run_id"] == "run-dry"
+    assert run_payload["download_read_timeout_s"] == 60.0
+    assert run_payload["download_concurrency"] == 4
     assert run_payload["run_key"] == "run-dry"
     assert run_payload["run_dir"] == "run-dry"
     assert run_payload["generation_overrides"]["negative_prompt"] == "neg,"

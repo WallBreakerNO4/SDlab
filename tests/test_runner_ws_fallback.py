@@ -155,6 +155,7 @@ def test_worker_submit_and_wait_serializes_execution_error_as_failed_record(
     assert outcome.download is None
     assert outcome.record is not None
     assert outcome.record["status"] == "failed"
+    assert outcome.record["failure_stage"] == "generation"
     assert outcome.record["comfyui_prompt_id"] == "pid-err"
     assert outcome.record["error"] == {
         "code": "execution_error",

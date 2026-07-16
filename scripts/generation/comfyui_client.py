@@ -7,6 +7,8 @@ import tempfile
 import time
 import uuid
 from collections.abc import Callable, Iterator
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Protocol, cast
 from urllib.parse import ParseResult, quote, urlparse, urlunparse
@@ -21,11 +23,16 @@ LOG = logging.getLogger(__name__)
 
 
 HISTORY_GET_RETRY_MAX_ATTEMPTS = 5
-HISTORY_GET_RETRY_STOP_AFTER_DELAY_S = 10.0
-_HISTORY_GET_RETRYABLE_STATUSES = frozenset({429, 502, 503, 504})
+HISTORY_GET_RETRY_STOP_AFTER_DELAY_S = 60.0
+HISTORY_GET_READ_TIMEOUT_CAP_S = 10.0
 VIEW_GET_RETRY_MAX_ATTEMPTS = 5
-VIEW_GET_RETRY_STOP_AFTER_DELAY_S = 15.0
-_VIEW_GET_RETRYABLE_STATUSES = frozenset({429, 502, 503, 504})
+VIEW_GET_RETRY_STOP_AFTER_DELAY_S: float | None = None
+VIEW_GET_RETRY_BASE_DELAY_S = 0.5
+VIEW_GET_RETRY_MAX_DELAY_PER_SLEEP_S = 8.0
+VIEW_GET_READ_TIMEOUT_S = 60.0
+HTTP_CONNECT_TIMEOUT_CAP_S = 5.0
+RETRY_AFTER_MAX_S = 30.0
+_VIEW_GET_RETRYABLE_STATUSES = frozenset({408, 429, 500, 502, 503, 504})
 HISTORY_FALLBACK_POLL_INTERVAL_S = 0.25
 
 
@@ -276,6 +283,7 @@ def comfy_get_history_item(
         stop_after_delay_s=HISTORY_GET_RETRY_STOP_AFTER_DELAY_S,
         on_retry=on_retry,
         on_giveup=on_giveup,
+        retry_wait_override=_retry_wait_override,
     )
     body = _response_json_dict(response, endpoint="/history/{prompt_id}")
 
@@ -323,7 +331,7 @@ def comfy_download_image_to_path(
     base_url: str,
     image: dict[str, object],
     output_path: str | Path,
-    request_timeout_s: float = 30.0,
+    request_timeout_s: float = VIEW_GET_READ_TIMEOUT_S,
 ) -> Path:
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -340,8 +348,11 @@ def comfy_download_image_to_path(
         retry_exceptions=(ComfyUITransientRequestError,),
         max_attempts=VIEW_GET_RETRY_MAX_ATTEMPTS,
         stop_after_delay_s=VIEW_GET_RETRY_STOP_AFTER_DELAY_S,
+        base_delay_s=VIEW_GET_RETRY_BASE_DELAY_S,
+        max_delay_per_sleep_s=VIEW_GET_RETRY_MAX_DELAY_PER_SLEEP_S,
         on_retry=on_retry,
         on_giveup=on_giveup,
+        retry_wait_override=_retry_wait_override,
     )
 
 
@@ -355,13 +366,18 @@ def _build_get_retry_callbacks(
             default_method="GET",
             default_url=default_url,
         )
+        error_code, failure_kind, bytes_received = _extract_request_error_fields(exc)
         LOG.warning(
-            "ComfyUI request retry: attempts=%d wait_s=%.3f method=%s url=%s status_code=%s",
+            "ComfyUI request retry: attempts=%d wait_s=%.3f method=%s url=%s "
+            "status_code=%s error_code=%s failure_kind=%s bytes_received=%s",
             attempts,
             wait_s,
             method,
             url,
             status_code,
+            error_code,
+            failure_kind,
+            bytes_received,
         )
 
     def on_giveup(attempts: int, exc: Exception) -> None:
@@ -370,12 +386,19 @@ def _build_get_retry_callbacks(
             default_method="GET",
             default_url=default_url,
         )
+        if isinstance(exc, ComfyUIClientError):
+            exc.context["attempts"] = attempts
+        error_code, failure_kind, bytes_received = _extract_request_error_fields(exc)
         LOG.warning(
-            "ComfyUI request give up: attempts=%d method=%s url=%s status_code=%s",
+            "ComfyUI request give up: attempts=%d method=%s url=%s status_code=%s "
+            "error_code=%s failure_kind=%s bytes_received=%s",
             attempts,
             method,
             url,
             status_code,
+            error_code,
+            failure_kind,
+            bytes_received,
         )
 
     return on_retry, on_giveup
@@ -405,6 +428,29 @@ def _extract_request_log_fields(
             status_code = status_code_obj
 
     return method, url, status_code
+
+
+def _extract_request_error_fields(
+    exc: Exception,
+) -> tuple[str | None, str | None, int | None]:
+    if not isinstance(exc, ComfyUIClientError):
+        return None, None, None
+    failure_kind_obj = exc.context.get("failure_kind")
+    bytes_received_obj = exc.context.get("bytes_received")
+    return (
+        exc.code,
+        failure_kind_obj if isinstance(failure_kind_obj, str) else None,
+        bytes_received_obj if isinstance(bytes_received_obj, int) else None,
+    )
+
+
+def _retry_wait_override(exc: Exception) -> float | None:
+    if not isinstance(exc, ComfyUIClientError):
+        return None
+    value = exc.context.get("retry_after_s")
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0:
+        return min(float(value), RETRY_AFTER_MAX_S)
+    return None
 
 
 def _parse_base_url(base_url: str) -> ParseResult:
@@ -458,7 +504,14 @@ def _request_history_item_with_transient_mapping(
 ) -> requests.Response:
     method = "GET"
     try:
-        response = requests.get(url, timeout=request_timeout_s, params=None)
+        response = requests.get(
+            url,
+            timeout=_http_timeout(
+                request_timeout_s,
+                read_timeout_cap_s=HISTORY_GET_READ_TIMEOUT_CAP_S,
+            ),
+            params=None,
+        )
         response.raise_for_status()
         return response
     except requests.HTTPError as exc:
@@ -466,6 +519,7 @@ def _request_history_item_with_transient_mapping(
         context = _build_http_error_context(
             method=method, url=url, status_code=status_code
         )
+        _apply_http_response_context(context, exc.response)
         if _is_transient_http_status_code(status_code):
             raise ComfyUITransientRequestError(
                 "http request failed",
@@ -478,10 +532,12 @@ def _request_history_item_with_transient_mapping(
             context=context,
         ) from exc
     except (requests.ConnectionError, requests.Timeout) as exc:
+        context = {"method": method, "url": url}
+        context["failure_kind"] = _request_failure_kind(exc)
         raise ComfyUITransientRequestError(
             "http request failed",
             code="http_request_failed",
-            context={"method": method, "url": url},
+            context=context,
         ) from exc
     except requests.RequestException as exc:
         status_code = _extract_status_code(exc)
@@ -506,7 +562,7 @@ def _request_view_with_transient_mapping(
     try:
         response = requests.get(
             url,
-            timeout=request_timeout_s,
+            timeout=_http_timeout(request_timeout_s),
             params=params,
             stream=stream,
         )
@@ -519,6 +575,7 @@ def _request_view_with_transient_mapping(
             url=url,
             status_code=status_code,
         )
+        _apply_http_response_context(context, exc.response)
         if _is_transient_view_status_code(status_code):
             raise ComfyUITransientRequestError(
                 "http request failed",
@@ -531,10 +588,12 @@ def _request_view_with_transient_mapping(
             context=context,
         ) from exc
     except (requests.ConnectionError, requests.Timeout) as exc:
+        context = {"method": method, "url": url}
+        context["failure_kind"] = _request_failure_kind(exc)
         raise ComfyUITransientRequestError(
             "http request failed",
             code="http_request_failed",
-            context={"method": method, "url": url},
+            context=context,
         ) from exc
     except requests.RequestException as exc:
         status_code = _extract_status_code(exc)
@@ -565,6 +624,7 @@ def _download_view_image_once(
     )
     temp_path: Path | None = None
     replaced = False
+    bytes_received = 0
     try:
         with tempfile.NamedTemporaryFile(
             mode="wb",
@@ -575,6 +635,7 @@ def _download_view_image_once(
             for chunk in cast(Iterator[bytes], response.iter_content(chunk_size=8192)):
                 if chunk:
                     _ = temp_file.write(chunk)
+                    bytes_received += len(chunk)
             temp_file.flush()
             os.fsync(temp_file.fileno())
 
@@ -587,6 +648,8 @@ def _download_view_image_once(
             url=url,
             status_code=getattr(response, "status_code", None),
         )
+        context["bytes_received"] = bytes_received
+        context["failure_kind"] = _request_failure_kind(exc)
         if isinstance(
             exc,
             (
@@ -636,10 +699,80 @@ def _build_http_error_context(
     return context
 
 
+def _http_timeout(
+    read_timeout_s: float,
+    *,
+    read_timeout_cap_s: float | None = None,
+) -> tuple[float, float]:
+    effective_read_timeout_s = read_timeout_s
+    if read_timeout_cap_s is not None:
+        effective_read_timeout_s = min(effective_read_timeout_s, read_timeout_cap_s)
+    connect_timeout_s = min(HTTP_CONNECT_TIMEOUT_CAP_S, effective_read_timeout_s)
+    return connect_timeout_s, effective_read_timeout_s
+
+
+def _request_failure_kind(exc: requests.RequestException) -> str:
+    if isinstance(exc, requests.exceptions.ChunkedEncodingError):
+        return "stream_interrupted"
+    if isinstance(exc, requests.ReadTimeout):
+        return "read_timeout"
+    if isinstance(exc, requests.ConnectTimeout):
+        return "connect_timeout"
+    if isinstance(exc, requests.Timeout):
+        return "timeout"
+
+    current: BaseException | None = exc
+    visited: set[int] = set()
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+        if "ReadTimeout" in current.__class__.__name__:
+            return "read_timeout"
+        current = current.__cause__ or current.__context__
+
+    if isinstance(exc, requests.ConnectionError):
+        if "Read timed out" in str(exc):
+            return "read_timeout"
+        return "connection_error"
+    return "request_error"
+
+
+def _apply_http_response_context(
+    context: dict[str, object],
+    response: requests.Response | None,
+) -> None:
+    context["failure_kind"] = "http_status"
+    retry_after_s = _extract_retry_after_s(response)
+    if retry_after_s is not None:
+        context["retry_after_s"] = retry_after_s
+
+
+def _extract_retry_after_s(response: requests.Response | None) -> float | None:
+    if response is None:
+        return None
+    headers_obj = getattr(response, "headers", None)
+    if headers_obj is None:
+        return None
+    raw = headers_obj.get("Retry-After")
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    value = raw.strip()
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        pass
+    try:
+        retry_at = parsedate_to_datetime(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if retry_at.tzinfo is None:
+        retry_at = retry_at.replace(tzinfo=timezone.utc)
+    return max(0.0, (retry_at - datetime.now(timezone.utc)).total_seconds())
+
+
 def _is_transient_http_status_code(status_code: int | None) -> bool:
     if status_code is None:
         return False
-    if status_code in _HISTORY_GET_RETRYABLE_STATUSES:
+    if status_code in {408, 429}:
         return True
     return 500 <= status_code <= 599
 
@@ -647,8 +780,6 @@ def _is_transient_http_status_code(status_code: int | None) -> bool:
 def _is_transient_view_status_code(status_code: int | None) -> bool:
     if status_code is None:
         return False
-    if status_code == 404:
-        return True
     return status_code in _VIEW_GET_RETRYABLE_STATUSES
 
 

@@ -55,6 +55,8 @@ class _DownloadRequest:
     prompt_id: str
     started_at: str
     started_mono: float
+    remote_images: list[dict[str, str]] | None = None
+    recovery_mode: str | None = None
 
 
 @dataclass(slots=True)
@@ -151,10 +153,16 @@ class GenerationCoordinator:
         self.has_failed = False
 
     def run(self) -> bool:
+        download_concurrency = _resolve_download_concurrency(self.args)
+        max_pending_futures = self.args.concurrency + download_concurrency
         with ThreadPoolExecutor(max_workers=self.args.concurrency) as gen_pool:
-            with ThreadPoolExecutor(max_workers=self.args.concurrency) as dl_pool:
+            with ThreadPoolExecutor(max_workers=download_concurrency) as dl_pool:
                 while True:
-                    self._schedule_until_full(gen_pool)
+                    self._schedule_until_full(
+                        gen_pool,
+                        dl_pool,
+                        max_pending_futures=max_pending_futures,
+                    )
 
                     if self.exhausted and not self.gen_futures and not self.dl_futures:
                         break
@@ -201,8 +209,18 @@ class GenerationCoordinator:
 
         return self.has_failed
 
-    def _schedule_until_full(self, gen_pool: ThreadPoolExecutor) -> None:
-        while not self.exhausted and len(self.gen_futures) < self.args.concurrency:
+    def _schedule_until_full(
+        self,
+        gen_pool: ThreadPoolExecutor,
+        dl_pool: ThreadPoolExecutor,
+        *,
+        max_pending_futures: int,
+    ) -> None:
+        while (
+            not self.exhausted
+            and len(self.gen_futures) < self.args.concurrency
+            and len(self.gen_futures) + len(self.dl_futures) < max_pending_futures
+        ):
             try:
                 x_item, y_item = next(self.cell_iter)
             except StopIteration:
@@ -330,6 +348,25 @@ class GenerationCoordinator:
                 artist_chain=artist_chain,
                 attempt=self.next_attempt(resume_record, True),
             )
+
+            recovery_request = _build_download_recovery_request(
+                resume_record,
+                plan=plan,
+                now_iso=self.now_iso,
+            )
+            if recovery_request is not None:
+                future = dl_pool.submit(
+                    _worker_fetch_and_download,
+                    self.args,
+                    self.run_dir,
+                    recovery_request,
+                    self.get_history_item,
+                    self.download_image_to_path,
+                    self.build_base_metadata_record,
+                    self.now_iso,
+                )
+                self.dl_futures.add(cast(Future[Any], future))
+                continue
 
             future = gen_pool.submit(
                 self.worker_fn,
@@ -552,6 +589,7 @@ def _worker_submit_and_wait(
         record["started_at"] = started_at
         record["finished_at"] = finished_at
         record["elapsed_ms"] = elapsed_ms
+        record["failure_stage"] = "generation"
         record["error"] = _serialize_error(exc)
         return _GenOutcome(record=record, download=None)
 
@@ -567,17 +605,18 @@ def _worker_fetch_and_download(
 ) -> dict[str, object]:
     plan = req.plan
     prompt_id = req.prompt_id
-    remote_images: list[dict[str, str]] | None = None
+    remote_images = req.remote_images
     local_image_paths: list[str] | None = None
 
     try:
-        remote_images = _fetch_remote_images_with_retry(
-            base_url=args.base_url,
-            prompt_id=prompt_id,
-            request_timeout_s=args.request_timeout_s,
-            job_timeout_s=args.job_timeout_s,
-            get_history_item=get_history_item,
-        )
+        if remote_images is None:
+            remote_images = _fetch_remote_images_with_retry(
+                base_url=args.base_url,
+                prompt_id=prompt_id,
+                request_timeout_s=args.request_timeout_s,
+                job_timeout_s=args.job_timeout_s,
+                get_history_item=get_history_item,
+            )
         if not remote_images:
             raise ValueError("history 未返回可下载图像")
 
@@ -587,11 +626,14 @@ def _worker_fetch_and_download(
             remote_images=remote_images,
         )
         for image, local_path in zip(remote_images, local_image_paths, strict=True):
+            output_path = run_dir / local_path
+            if req.recovery_mode == "download_only" and output_path.is_file():
+                continue
             _ = download_image_to_path(
                 base_url=args.base_url,
                 image=cast(dict[str, object], image),
-                output_path=run_dir / local_path,
-                request_timeout_s=args.request_timeout_s,
+                output_path=output_path,
+                request_timeout_s=_resolve_download_read_timeout_s(args),
             )
 
         finished_at = now_iso()
@@ -619,6 +661,8 @@ def _worker_fetch_and_download(
         record["started_at"] = req.started_at
         record["finished_at"] = finished_at
         record["elapsed_ms"] = elapsed_ms
+        if req.recovery_mode is not None:
+            record["recovery_mode"] = req.recovery_mode
         return record
     except Exception as exc:
         LOG.exception("下载失败: x=%s y=%s", plan.x_index, plan.y_index)
@@ -647,8 +691,95 @@ def _worker_fetch_and_download(
         record["started_at"] = req.started_at
         record["finished_at"] = finished_at
         record["elapsed_ms"] = elapsed_ms
+        record["failure_stage"] = "download"
+        if req.recovery_mode is not None:
+            record["recovery_mode"] = req.recovery_mode
         record["error"] = _serialize_error(exc)
         return record
+
+
+def _resolve_download_concurrency(args: argparse.Namespace) -> int:
+    value = getattr(args, "download_concurrency", None)
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    return min(args.concurrency, 4)
+
+
+def _resolve_download_read_timeout_s(args: argparse.Namespace) -> float:
+    value = getattr(args, "download_read_timeout_s", None)
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
+        return float(value)
+    return float(args.request_timeout_s)
+
+
+def _build_download_recovery_request(
+    record: dict[str, object] | None,
+    *,
+    plan: _CellPlan,
+    now_iso: Callable[[], str],
+) -> _DownloadRequest | None:
+    if record is None or record.get("status") not in {"failed", "success", "skipped"}:
+        return None
+
+    prompt_id_obj = record.get("comfyui_prompt_id")
+    if not isinstance(prompt_id_obj, str) or not prompt_id_obj.strip():
+        return None
+
+    if (
+        record.get("recovery_mode") == "download_only"
+        and _record_error_status_code(record) == 404
+    ):
+        return None
+
+    raw_remote_images = record.get("remote_images")
+    remote_images = _coerce_persistent_remote_images(raw_remote_images)
+    if remote_images is None:
+        if raw_remote_images is not None or record.get("failure_stage") != "download":
+            return None
+
+    return _DownloadRequest(
+        plan=plan,
+        prompt_id=prompt_id_obj.strip(),
+        started_at=now_iso(),
+        started_mono=monotonic(),
+        remote_images=remote_images,
+        recovery_mode="download_only",
+    )
+
+
+def _coerce_persistent_remote_images(value: object) -> list[dict[str, str]] | None:
+    if not isinstance(value, list) or not value:
+        return None
+
+    images: list[dict[str, str]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            return None
+        filename_obj = item.get("filename")
+        if not isinstance(filename_obj, str) or not filename_obj:
+            return None
+        image_type_obj = item.get("type", "output")
+        if image_type_obj != "output":
+            return None
+        image: dict[str, str] = {"filename": filename_obj, "type": "output"}
+        subfolder_obj = item.get("subfolder")
+        if isinstance(subfolder_obj, str) and subfolder_obj:
+            image["subfolder"] = subfolder_obj
+        images.append(image)
+    return images
+
+
+def _record_error_status_code(record: dict[str, object]) -> int | None:
+    error_obj = record.get("error")
+    if not isinstance(error_obj, dict):
+        return None
+    context_obj = error_obj.get("context")
+    if not isinstance(context_obj, dict):
+        return None
+    status_code_obj = context_obj.get("status_code")
+    if isinstance(status_code_obj, int) and not isinstance(status_code_obj, bool):
+        return status_code_obj
+    return None
 
 
 def _fetch_remote_images_with_retry(

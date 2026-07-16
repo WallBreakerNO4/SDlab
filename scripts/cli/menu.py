@@ -522,6 +522,13 @@ def _prompt_generate_advanced_args(backend: QuestionaryMenuBackend) -> list[str]
     if request_timeout:
         argv.extend(["--request-timeout-s", request_timeout])
 
+    download_read_timeout = backend.text(
+        "覆盖 --download-read-timeout-s"
+        f"（留空使用默认值 {defaults['download_read_timeout_s']}）"
+    )
+    if download_read_timeout:
+        argv.extend(["--download-read-timeout-s", download_read_timeout])
+
     job_timeout = backend.text(
         f"覆盖 --job-timeout-s（留空使用默认值 {defaults['job_timeout_s']}）"
     )
@@ -533,6 +540,13 @@ def _prompt_generate_advanced_args(backend: QuestionaryMenuBackend) -> list[str]
     )
     if concurrency:
         argv.extend(["--concurrency", concurrency])
+
+    download_concurrency = backend.text(
+        "覆盖 --download-concurrency"
+        f"（留空使用默认值 {defaults['download_concurrency']}）"
+    )
+    if download_concurrency:
+        argv.extend(["--download-concurrency", download_concurrency])
 
     client_id = backend.text("覆盖 --client-id（留空自动生成）")
     if client_id:
