@@ -32,7 +32,7 @@ prompts:
   # X 轴 prompt 表路径。
   x_path: data/prompts/X/common_prompts.yaml
   # Y 轴 prompt 表路径。
-  y_path: data/prompts/Y/300_NAI_Styles_Table-test.yaml
+  y_path: data/prompts/Y/300_NAI_Styles_Table.yaml
 
 # ComfyUI workflow 模板配置。
 workflow:
