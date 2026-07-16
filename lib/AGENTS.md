@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-06-18 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-07-16 -->
 
 # lib/ - Node 侧共享边界(Supabase + R2 + 路径安全 + 类型)
 
@@ -14,7 +14,7 @@
 | 服务端 Supabase 客户端     | `supabase-auth.ts`    | `server-only` + cookie session + publishable key |
 | 浏览器端 Supabase 客户端   | `supabase-browser.ts` | `AuthProvider` 使用                              |
 | Supabase 相关类型          | `supabase-types.ts`   | run/image/variant 与 JSON 类型                   |
-| R2 URL 构建                | `r2-url.ts`           | `publicObjectUrl()` / `privateObjectUrl()`       |
+| R2 URL 构建                | `r2-url.ts`           | `publicObjectUrl()` / `privateObjectProxyUrl()`  |
 | runDir 共享工具 / 路径校验 | `comfyui-path.ts`     | allowlist、相对路径、防逃逸                      |
 | Web 领域类型               | `comfyui-types.ts`    | `RunSummary` / `RunDir` / type guard             |
 | className 合并             | `utils.ts`            | `cn()`                                           |
@@ -41,8 +41,8 @@
 - ComfyUI API route 统一使用 `createSupabaseAuthClient()`;它依赖 `server-only` 与 `next/headers`。
 - 浏览器端认证统一使用 `createSupabaseBrowserClient()`;不要在客户端自己拼 Supabase SSR 初始化。
 - `middleware.ts` 是例外:因为运行在 Edge,不能 import `lib/supabase-auth.ts`,只能内联建 client。
-- `publicObjectUrl()` 和 `privateObjectUrl()` 是 Web 侧统一的 R2 URL 构建入口:既服务 run 详情页的展示页缩略图,也服务首页封面图/主页缩略图对应的变体 URL;不要在 route/组件里手拼对象 URL。
-- `privateObjectUrl()` 负责生成私有对象的短期签名 URL;签名的前置鉴权发生在 ComfyUI API 返回图片元数据时。
+- `publicObjectUrl()` 和 `privateObjectProxyUrl()` 是 Web 侧统一的 R2 URL 构建入口；两者都先验证 `runs/` key，不要在 route/组件里手拼对象 URL。
+- `privateObjectProxyUrl(r2Key, grant)` 构建 `/api/private-object?key=...&grant=...`；grant 由 run media access 链路签发和校验，客户端不持有 R2 凭证，也不生成私有对象签名 URL。
 - API 侧 `runDir` 形态判断当前主要走 `comfyui-types.ts:isValidRunDir()`;`comfyui-path.ts` 更偏共享路径安全与 allowlist 工具。
 - SEO metadata 统一走 `metadata-utils.ts:buildSeoMetadata()`;各页面 `generateMetadata` 调用本函数即可一致产出 OG / Twitter Card / canonical / hreflang 标签。
 - 模型详情页的 `og:image` 走 `model-metadata.ts:getModelMetadata()`;该函数带 1h 缓存,仅查询轻量字段。

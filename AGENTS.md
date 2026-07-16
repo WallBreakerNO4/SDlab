@@ -1,5 +1,5 @@
-<!-- Generated: 2026-04-06 | Updated: 2026-06-24 -->
-<!-- Commit: SEO | 分支: dev -->
+<!-- Generated: 2026-04-06 | Updated: 2026-07-16 -->
+<!-- Commit: Anima Artist Mixer | 分支: dev -->
 
 # Agent Guide (sd-style-lab/images-script)
 
@@ -16,6 +16,7 @@
 - Web 部署目标是 OpenNext + Cloudflare：本地 `next dev` 会启 Miniflare，部分服务端能力通过 Workers bindings 读取。
 - 当前分层知识文件已经覆盖主要强边界目录；像 `app/api/comfyui/run/[runDir]/` 这类 leaf route 继续继承父级规则，不再单开 `AGENTS.md`。
 - Prompt 法典浏览器（路由 `/[locale]/prompts`）是新增的面向用户功能：客户端从 `public/data/prompts/*.json` 加载结构化 Prompt，渲染 Tag/Choice/多角色卡片并按目标模型格式化复制；源资产在 `data/prompt-codex/*.yaml`，运行时不直接读源 YAML。
+- ComfyUI 生图链路已支持 Anima Artist Mixer：`workflow.anima_artist_mixer` 会把 Y 轴 general 标签留在正向 prompt，artists 标签单独写入 `artist_chain`；hash、回放与 strict retry 都把两者视为同一份生图输入。
 
 ## 结构
 
@@ -64,6 +65,8 @@
 | Python 顶层入口       | `main.py`                                                                        | 菜单/主 runner 的统一入口                                                      |
 | 生图主入口            | `scripts/generation/comfyui_part1_generate.py`                                   | dry-run / retry / 落盘合约                                                     |
 | 生图配置加载          | `scripts/generation/runner_config.py`                                            | `--config` YAML schema + repo-relative 资产校验；也识别封面图/主页缩略图源资产 |
+| Prompt 网格/画师链      | `scripts/generation/prompt_grid.py`                                              | Y 轴 general/artists 拆分、权重 profile、prompt + artist chain hash                  |
+| Workflow 参数注入         | `scripts/generation/workflow_patch.py`                                           | 标准 CLIPTextEncode 与 AnimaArtistPack 两种注入拓扑                             |
 | 并发 runner           | `scripts/generation/runner_coordinator.py`                                       | ThreadPoolExecutor 双池                                                        |
 | ComfyUI 通信          | `scripts/generation/comfyui_client.py`                                           | HTTP / WS / 错误码                                                             |
 | R2 上传入口           | `scripts/r2_upload/upload_images_to_r2.py`                                       | 编码、上传、写 Supabase                                                        |
@@ -111,7 +114,7 @@
 | `GET`                         | function | `app/api/comfyui/run/[runDir]/access/route.ts` | 媒体授权 API           |
 | `GET`                         | function | `app/api/comfyui/run/[runDir]/workflow/route.ts` | workflow 下载 API    |
 | `publicObjectUrl`             | function | `lib/r2-url.ts`                                | 公开变体 URL        |
-| `privateObjectUrl`            | function | `lib/r2-url.ts`                                | 私有图签名 URL      |
+| `privateObjectProxyUrl`       | function | `lib/r2-url.ts`                                | 使用媒体 grant 构建私有对象代理 URL |
 | `isValidRunDir`               | function | `lib/comfyui-types.ts`                         | runDir 形态校验     |
 | `assertSafeRelativeImagePath` | function | `lib/comfyui-path.ts`                          | 相对图片路径校验    |
 | `buildSeoMetadata`           | function | `lib/metadata-utils.ts`                       | SEO metadata 构建   |
@@ -123,12 +126,14 @@
 | `listRunSummaries`          | function | `lib/run-list.ts`                            | 首页 run 列表查询，`unstable_cache` 5min + tag `run-list` |
 | `requireViewerForPreferenceWrite` | function | `lib/server-user-preferences.ts`       | 浏览者偏好写入的前置鉴权 |
 | `PromptBrowserPage`         | component | `components/prompt/prompt-browser-page.tsx`   | 法典浏览器页面骨架 |
+| `patch_workflow`            | function | `scripts/generation/workflow_patch.py`        | 注入标准 prompt 或 Anima Artist Mixer 参数 |
 
 ## 约定（项目特有）
 
 - 语言边界：Node/Next 不直接调用 Python；网站只消费 Supabase + R2，不读取 Python 内部实现。
 - Python：I/O 统一 `pathlib.Path`；生图产物固定为 `run.json` + `metadata.jsonl` + `images/`；写盘后保持 flush/fsync 语义。
 - Python 运行资产：`scripts/generation/runner_config.py` 会把 run 目录下的 `image.*` 识别为封面图、`images/*` 识别为主页缩略图源资产；上传链路会继续把这些 run 级资产写入 R2 + Supabase。
+- Anima Artist Mixer：`workflow.anima_artist_mixer: true` 仅允许 `backend=comfyui` 且 `model.family=anima`；workflow 必须是 KSampler 的 model/positive 同时连到启用的 `AnimaArtistCrossAttn`，再由 `AnimaArtistPack` 接收 `base_prompt` 与 `artist_chain`。
 - API：`app/api/**/route.ts` 保持 `runtime = "nodejs"`；错误响应返回固定短文案，不透出绝对路径、stack、凭证。
 - Supabase：ComfyUI API 统一用 `createSupabaseAuthClient()`；浏览器端认证统一用 `createSupabaseBrowserClient()`；`app/auth/callback/route.ts` 为 PKCE 交换 session 的例外。
 - Middleware 例外：`middleware.ts` 不能 import `lib/supabase-auth.ts`，因为后者依赖 `server-only` + `next/headers`。
@@ -164,8 +169,10 @@
 
 ### 当前 `dev` 分支开发进展
 
-以下为 `dev` 分支近期承载的主要开发主线（截至 2026-06-24，`dev` 与 `main` 基本同步，下一批功能开发将在 `dev` 上继续进行）：
+以下为 `dev` 分支近期承载的主要开发主线（截至 2026-07-16，`dev` 已包含尚未发布到 `main` 的生图链路变更）：
 
+- **Anima Artist Mixer**：新增 `data/models/Anima-base-1.0-Artist-Mixer/` 可执行配置；生图 runner 支持 general/artists 双通道注入，并将 `artist_chain` 纳入 metadata、prompt hash、run 回放和 strict retry 校验。
+- **虚拟网格稳定性**：工具栏展开/收起时立即提交目标 viewport 宽度；私有图片 object URL 在 cell 重挂载间复用，由 `VirtualGrid` 卸载时统一释放。
 - **Prompt 法典浏览器**：新增 `/[locale]/prompts` 浏览功能，含登录门禁、搜索匹配导航（从当前浏览位置跳转）、权重模式支持（Anima 模式，对所有标签统一平方处理）、ComfyUI 多角色提示词格式化（换行 + `Character N:` 前缀分隔角色）、Prompt 条目列表滚动对齐修复。
 - **SEO 优化**：多语言 sitemap + hreflang alternates、隐私政策页上线、`buildSeoMetadata()` 统一 OG/Twitter Card/canonical、模型详情页 `og:image` 从 Supabase 查询封面图、JSON-LD 结构化数据（WebSite / BreadcrumbList）、构建元数据缺失标题与描述修复。
 - **性能优化**：优化 Worker CPU 与边缘缓存复用以消除 503、优化缓存策略以减少 SSR 负载与响应延迟。
@@ -174,14 +181,14 @@
 
 ## 反模式
 
-- 不改/不提交：真实环境文件（如 `.env` / `.env.local` / 其他私密配置）、`.venv/`、`node_modules/`、`.next/`、`.open-next/`、`comfyui_api_outputs/`。
+- 不改/不提交：真实环境文件（如 `.env` / `.env.local` / 其他私密配置）、`.venv/`、`node_modules/`、`.next/`、`.open-next/`、`outputs/`、遗留的 `comfyui_api_outputs/`。
 - 不要把运行输出写进 `data/`；`data/` 只放可复现输入资产。
 - 不要手改 `types/routes.d.ts`、`types/validator.ts` 等 Next 生成文件。
 - 不要在页面/组件/route 中绕过 `lib/comfyui-path.ts` 或 `lib/r2-url.ts` 直接拼路径。
 - 不要把 ComfyUI 整段响应、R2 key 细节、Supabase 凭证写进错误消息或日志。
 - 修 bug 不要顺手大重构；测试失败不要删测或放宽断言来过。
 - 未经用户明确要求，不修改 `package.json` / `pyproject.toml` 增加依赖。
-- 不要把 `comfyui_api_outputs/`、`.next/`、`.open-next/`、`dist/`、`build/`、`.pytest_cache/`、`.ruff_cache/`、`.wrangler/`、`supabase/.temp/` 之类生成/缓存目录当源码或层级打分依据。
+- 不要把 `outputs/`、遗留的 `comfyui_api_outputs/`、`.next/`、`.open-next/`、`dist/`、`build/`、`.pytest_cache/`、`.ruff_cache/`、`.wrangler/`、`supabase/.temp/` 之类生成/缓存目录当源码或层级打分依据。
 
 ## 常用命令
 
@@ -192,12 +199,13 @@ uv sync --no-dev
 uv run python main.py --help
 uv run python main.py --config data/models/example/config.yaml
 uv run python main.py --config data/models/example/config.yaml --dry-run
+uv run python main.py --config data/models/Anima-base-1.0-Artist-Mixer/config.yaml --dry-run
 uv run pytest -q
 uv run pytest -q tests/test_prompt_grid.py
 
 # R2 上传
 uv run python -m scripts.r2_upload.upload_images_to_r2 --help
-uv run python -m scripts.r2_upload.upload_images_to_r2 --dry-run --run-dir comfyui_api_outputs/run-xxx
+uv run python -m scripts.r2_upload.upload_images_to_r2 --dry-run --run-dir outputs/run-xxx
 
 # Web
 pnpm dev

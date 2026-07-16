@@ -1,11 +1,11 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-05-30 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-07-16 -->
 
 # app/ — Next.js 展示网站（App Router）
 
 ## 概览
 
-- 页面层负责首页模型目录 / 模型详情 / about / privacy / auth callback 展示与全站 layout 装配；数据从 Supabase API 读取，图片从 R2 公开 URL 或私有签名 URL 读取。
+- 页面层负责首页模型目录 / 模型详情 / about / privacy / auth callback 展示与全站 layout 装配；数据从 Supabase API 与 R2 view JSON 读取，公开图片直连 R2，私有对象经 grant 代理读取。
 - I18N 改造后：所有面向用户的页面迁入 `app/[locale]/` 动态路由段；`app/layout.tsx` 变为纯透传壳；`app/models/[runDir]/` 保留为纯组件模块，由 `app/[locale]/models/[runDir]/page.tsx` 消费。
 - 术语约定：run 详情页网格里消费的 `display_*` / `thumb_*` 变体叫“展示页缩略图”；run 级 `image.*` 属于封面图，同级 `images/*` 属于主页缩略图集合。当前网页首页已经通过 `/api/comfyui/runs` 消费封面图与主页缩略图字段。
 
@@ -50,7 +50,7 @@
 - 首页当前使用独立的封面图/主页缩略图字段；不要把 run 详情页的展示页缩略图语义直接挪作首页卡片素材。
 - SEO：`sitemap.ts` 为每个页面生成两个 locale 的条目并添加 hreflang alternates；`robots.ts` 允许所有爬虫爬取页面但禁止 `/api/` 和 `/auth/`。二者均引用 `lib/site-origin.ts` 的 `SITE_ORIGIN`。
 - 页面 fetch 后先做 type guard，再进入渲染状态机；错误态与 not-found 分开处理。
-- 图片路径/对象 key 不在页面层手拼；公开变体走 `publicObjectUrl()`，私有对象走 `privateObjectUrl()` 返回的短期签名 URL。
+- 图片路径/对象 key 不在页面层手拼；公开变体走 `publicObjectUrl()`，私有对象走 `privateObjectProxyUrl(key, grant)` 构建的 `/api/private-object` URL。
 - 本目录当前不维护本地文件流降级 route；Web 侧以 Supabase + R2 为准。
 
 ## 反模式

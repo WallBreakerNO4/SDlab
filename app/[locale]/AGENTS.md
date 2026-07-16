@@ -1,5 +1,5 @@
-<!-- Parent: ../../AGENTS.md -->
-<!-- Generated: 2026-05-30 | Updated: 2026-06-17 -->
+<!-- Parent: ../AGENTS.md -->
+<!-- Generated: 2026-05-30 | Updated: 2026-07-16 -->
 
 # app/[locale]/ — 区域化页面层
 

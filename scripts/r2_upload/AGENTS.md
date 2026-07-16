@@ -1,11 +1,11 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-06-18 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-07-16 -->
 
 # scripts/r2_upload/ — R2 上传 + Supabase 写入
 
 ## 概览
 
-- 完整的图片上传管线：从本地 run 产物读取 → 多变体编码（webp/avif）→ R2 上传 → Supabase 索引写入。19 个 Python 文件。
+- 完整的图片上传管线：从本地 run 产物读取 → 多变体编码（webp/avif）→ R2 上传 → Supabase 索引写入；同目录也提供 run 数据删除工具。
 - 术语约定：本目录生成的 `display_*` / `thumb_*` 变体统一称为“展示页缩略图”；run 级 `image.*` 属于封面图，`images/*` 属于主页缩略图集合。两类首页图片资产会随 run 级静态资源一起上传，Web 侧首页当前通过 `/api/comfyui/runs` 返回的 `assets.cover` / `assets.homepage_cards` 消费它们。
 
 ## 去哪儿改
@@ -71,5 +71,5 @@ supabase_writer.py → 批量 upsert 到 Supabase（runs + snapshots + projectio
 
 - 不要把真实凭证文件或密钥内容提交到仓库（包含 `.env*` 与任何私有配置）
 - 不要把 bucket/key/endpoint 等敏感细节写入异常 message 或日志
-- 不要把上传结果写回 `data/`；运行产物仍归 `comfyui_api_outputs/`
+- 不要把上传结果写回 `data/`；默认运行产物归 `outputs/`，或由 `--run-dir` 指向的显式目录
 - 不要把 ComfyUI 的整段响应对象塞进错误 context

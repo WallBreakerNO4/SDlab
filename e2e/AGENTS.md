@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-04-25 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-07-16 -->
 
 # e2e/ — Playwright 端到端测试
 
@@ -41,4 +41,4 @@ E2E_SERVER=start E2E_PORT=3001 pnpm test:e2e
 ## 反模式
 
 - 不要把 `test-results/` 当源码目录；它是测试产物
-- 不要假设本地 `comfyui_api_outputs/` 存在数据；E2E 应基于 Supabase + R2 数据源
+- 不要依赖本地 `outputs/` 或任何生图运行目录；E2E 应基于 Supabase + R2 数据源
