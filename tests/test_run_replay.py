@@ -188,6 +188,45 @@ def test_retry_strict_rejects_changed_anima_artist_chain() -> None:
         )
 
 
+def test_retry_strict_rejects_changed_anima_common_prompt() -> None:
+    x_row = {
+        "gender": "1girl, ",
+        "characters": "",
+        "series": "",
+        "rating": "safe, ",
+        "general": "solo, ",
+    }
+    y_row = {
+        "y": "@wlop, year 2025, ",
+        Y_POSITIVE_VALUE: "year 2025, ",
+        Y_ARTIST_CHAIN: "@wlop",
+    }
+    positive_prompt = "safe, 1girl, year 2025, solo, "
+    record = {
+        "status": "failed",
+        "artist_chain": "@wlop",
+        "y_common_prompt": "year 2024, ",
+        "prompt_hash": compute_prompt_hash(positive_prompt, "@wlop"),
+        "seed": derive_seed(123, 0, 0),
+        "workflow_api_sha256": "workflow-hash",
+    }
+
+    with pytest.raises(ValueError, match="y_common_prompt"):
+        _validate_retry_failed_cells_consistency(
+            target_cells=[(0, 0)],
+            latest_records={(0, 0): record},
+            x_rows_by_index={0: x_row},
+            y_rows_by_index={0: y_row},
+            template="{rating}{gender}{y}{general}",
+            base_seed=123,
+            workflow_hash="workflow-hash",
+            render_prompt=lambda template, x_value, y_value: positive_prompt,
+            compute_prompt_hash=compute_prompt_hash,
+            derive_seed=derive_seed,
+            coerce_int_or_none=lambda value: value if isinstance(value, int) else None,
+        )
+
+
 def test_load_run_replay_config_allows_missing_append_negative_prompt(
     tmp_path: Path,
 ) -> None:

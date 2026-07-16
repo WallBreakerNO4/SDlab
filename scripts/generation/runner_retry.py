@@ -140,6 +140,14 @@ def _validate_retry_failed_cells_consistency(
                 f"retry strict 校验失败(artist_chain): x={x_index} y={y_index}"
             )
 
+        if (
+            "y_common_prompt" in record
+            and record.get("y_common_prompt") != positive_y_value
+        ):
+            raise ValueError(
+                f"retry strict 校验失败(y_common_prompt): x={x_index} y={y_index}"
+            )
+
         actual_prompt_hash = record.get("prompt_hash")
         if actual_prompt_hash != expected_prompt_hash:
             raise ValueError(

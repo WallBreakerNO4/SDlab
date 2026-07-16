@@ -1,6 +1,7 @@
 import type {
   RunGridIndexData,
   RunGridXColumn,
+  RunGridYPromptParts,
 } from "@/components/comfyui/virtual-grid";
 
 export type ModelDetailSummary = {
@@ -32,6 +33,7 @@ export type ModelDetailResponse = {
   run: ModelDetailSummary;
   xLabels: string[];
   yLabels: string[];
+  yPromptParts?: RunGridYPromptParts[];
   x_columns: RunGridXColumn[];
   y_indexes: number[];
 };
@@ -61,7 +63,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
+}
+
+function isRunGridYPromptPartsArray(
+  value: unknown,
+): value is RunGridYPromptParts[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item) =>
+        isRecord(item) &&
+        typeof item.yIndex === "number" &&
+        Number.isFinite(item.yIndex) &&
+        item.yIndex >= 0 &&
+        (typeof item.artist === "string" || item.artist === null) &&
+        (typeof item.commonPrompt === "string" || item.commonPrompt === null),
+    )
+  );
 }
 
 export function isModelDetailResponse(
@@ -72,6 +93,12 @@ export function isModelDetailResponse(
   }
 
   if (!isStringArray(value.xLabels) || !isStringArray(value.yLabels)) {
+    return false;
+  }
+  if (
+    value.yPromptParts !== undefined &&
+    !isRunGridYPromptPartsArray(value.yPromptParts)
+  ) {
     return false;
   }
 
@@ -124,6 +151,9 @@ export function isRunGridIndexData(value: unknown): value is RunGridIndexData {
   );
   const yLabelsOk =
     value.y_labels === undefined || isStringArray(value.y_labels);
+  const yPromptPartsOk =
+    value.y_prompt_parts === undefined ||
+    isRunGridYPromptPartsArray(value.y_prompt_parts);
   const promptsOk = (value.prompts as unknown[]).every((prompt) => {
     return (
       isRecord(prompt) &&
@@ -133,7 +163,7 @@ export function isRunGridIndexData(value: unknown): value is RunGridIndexData {
     );
   });
 
-  return xColumnsOk && yIndexesOk && yLabelsOk && promptsOk;
+  return xColumnsOk && yIndexesOk && yLabelsOk && yPromptPartsOk && promptsOk;
 }
 
 export function isCurrentRunView(value: unknown): value is CurrentRunView {
@@ -155,6 +185,7 @@ export function isRunViewAccess(value: unknown): value is RunViewAccess {
     typeof value.grant === "string" &&
     typeof value.expires_at === "number" &&
     Number.isFinite(value.expires_at) &&
-    (value.viewer_variant === "auth_sfw" || value.viewer_variant === "auth_nsfw")
+    (value.viewer_variant === "auth_sfw" ||
+      value.viewer_variant === "auth_nsfw")
   );
 }

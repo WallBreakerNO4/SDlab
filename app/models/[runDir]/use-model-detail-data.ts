@@ -2,10 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import {
-  publicObjectUrl,
-  privateObjectProxyUrl,
-} from "@/lib/r2-url";
+import { publicObjectUrl, privateObjectProxyUrl } from "@/lib/r2-url";
 
 import type { RunGridIndexData } from "@/components/comfyui/virtual-grid";
 
@@ -66,6 +63,33 @@ async function fetchRunViewAccess(
   return raw;
 }
 
+async function fetchCurrentRunView(
+  runDir: string,
+  signal: AbortSignal,
+  expectedReleaseId?: string,
+): Promise<CurrentRunView> {
+  const baseUrl = publicObjectUrl(`runs/${runDir}/view/current.json`);
+  const url = expectedReleaseId
+    ? `${baseUrl}?release=${encodeURIComponent(expectedReleaseId)}`
+    : baseUrl;
+  const response = await fetch(url, {
+    signal,
+    cache: expectedReleaseId ? "no-store" : "force-cache",
+  });
+  if (response.status === 404) {
+    throw new Error("not-found");
+  }
+  if (!response.ok) {
+    throw new Error("error");
+  }
+
+  const raw: unknown = await response.json();
+  if (!isCurrentRunView(raw)) {
+    throw new Error("error");
+  }
+  return raw;
+}
+
 export function useModelDetailData({
   runDir,
   showNsfw,
@@ -73,7 +97,9 @@ export function useModelDetailData({
 }: UseModelDetailDataOptions) {
   const [detailLoadState, setDetailLoadState] = useState<LoadState>("loading");
   const [gridLoadState, setGridLoadState] = useState<LoadState>("loading");
-  const [detailData, setDetailData] = useState<ModelDetailResponse | null>(null);
+  const [detailData, setDetailData] = useState<ModelDetailResponse | null>(
+    null,
+  );
   const [gridData, setGridData] = useState<RunGridIndexData | null>(null);
   const [currentView, setCurrentView] = useState<CurrentRunView | null>(null);
   const [viewAccess, setViewAccess] = useState<RunViewAccess | null>(null);
@@ -110,13 +136,9 @@ export function useModelDetailData({
       setGridLoadState("loading");
       setViewAccess(null);
 
-      const currentPromise = fetch(
-        publicObjectUrl(`runs/${runDir}/view/current.json`),
-        {
-          signal: abortController.signal,
-          // current.json 极少变化，force-cache 让浏览器复用缓存。
-          cache: "force-cache",
-        },
+      const currentPromise = fetchCurrentRunView(
+        runDir,
+        abortController.signal,
       );
 
       const accessPromise = currentUserId
@@ -126,37 +148,36 @@ export function useModelDetailData({
       // 防止 cleanup 时 abort 导致的 rejection 成为 unhandled rejection
       if (accessPromise) void accessPromise.catch(() => {});
 
-      const currentResponse = await currentPromise;
-
-      if (currentResponse.status === 404) {
-        throw new Error("not-found");
-      }
-      if (!currentResponse.ok) {
-        throw new Error("error");
-      }
-
-      const currentRaw: unknown = await currentResponse.json();
-      if (!isCurrentRunView(currentRaw)) {
-        throw new Error("error");
-      }
-      if (abortController.signal.aborted) return;
-      setCurrentView(currentRaw);
+      let current = await currentPromise;
 
       let access: RunViewAccess | null = null;
       if (accessPromise) {
         access = await accessPromise;
+        if (access.release_id !== current.release_id) {
+          current = await fetchCurrentRunView(
+            runDir,
+            abortController.signal,
+            access.release_id,
+          );
+          if (access.release_id !== current.release_id) {
+            throw new Error("error");
+          }
+        }
         if (!abortController.signal.aborted) {
           setViewAccess(access);
         }
       }
+      if (abortController.signal.aborted) return;
+      setCurrentView(current);
 
-      const wantsPrivateNsfw = showNsfw && access?.viewer_variant === "auth_nsfw";
+      const wantsPrivateNsfw =
+        showNsfw && access?.viewer_variant === "auth_nsfw";
       const bootstrapUrl = wantsPrivateNsfw
         ? privateObjectProxyUrl(
-            `runs/${runDir}/view/v2/${currentRaw.release_id}/bootstrap.nsfw.json`,
+            `runs/${runDir}/view/v2/${current.release_id}/bootstrap.nsfw.json`,
             access!.grant,
           )
-        : publicObjectUrl(currentRaw.bootstrap_sfw_key);
+        : publicObjectUrl(current.bootstrap_sfw_key);
 
       // grant 共享化后私有 bootstrap URL 也跨用户一致，可走 force-cache。
       const bootstrapCache = "force-cache" as const;
@@ -187,6 +208,17 @@ export function useModelDetailData({
         (bootstrapRaw as { y_labels?: string[] }).y_labels = (
           bootstrapRaw as Record<string, unknown>
         ).yLabels as string[];
+      }
+      if (
+        typeof bootstrapRaw === "object" &&
+        bootstrapRaw !== null &&
+        !Array.isArray(bootstrapRaw) &&
+        !("y_prompt_parts" in bootstrapRaw) &&
+        Array.isArray((bootstrapRaw as Record<string, unknown>).yPromptParts)
+      ) {
+        (bootstrapRaw as { y_prompt_parts?: unknown[] }).y_prompt_parts = (
+          bootstrapRaw as Record<string, unknown>
+        ).yPromptParts as unknown[];
       }
       if (
         !isModelDetailResponse(bootstrapRaw) ||
@@ -226,7 +258,10 @@ export function useModelDetailData({
     const delayMs = getAccessRefreshDelayMs(viewAccess.expires_at);
     const timeoutId = window.setTimeout(() => {
       void refreshViewAccess().catch((error: unknown) => {
-        console.error("[model-detail] Failed to refresh run view access", error);
+        console.error(
+          "[model-detail] Failed to refresh run view access",
+          error,
+        );
       });
     }, delayMs);
 

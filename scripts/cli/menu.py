@@ -254,6 +254,19 @@ def _handle_upload(backend: QuestionaryMenuBackend) -> None:
         return
 
     argv = ["--run-dir", selected]
+    upload_mode = backend.select(
+        "选择上传方式",
+        [
+            MenuChoice("normal", "普通上传"),
+            MenuChoice("force", "强制重新发布现有 Run"),
+        ],
+        allow_back=True,
+    )
+    if upload_mode == "__back__":
+        return
+    if upload_mode == "force":
+        argv.append("-F")
+
     if backend.confirm("是否开启高级参数？", default=False):
         argv.extend(_prompt_upload_advanced_args(backend))
 

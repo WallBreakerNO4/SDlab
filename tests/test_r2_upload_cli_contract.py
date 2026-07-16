@@ -26,6 +26,12 @@ def test_build_parser_uses_comfyui_out_dir_as_run_root_default(
     assert args.run_root == "custom-run-root"
 
 
+def test_build_parser_accepts_force_publish_short_flag() -> None:
+    args = build_parser().parse_args(["-F", "--run-dir", "run-a"])
+
+    assert args.force_publish is True
+
+
 def test_dry_run_prints_structured_summary_placeholder(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

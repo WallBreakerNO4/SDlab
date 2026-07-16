@@ -138,6 +138,11 @@ def _require_bucket_names() -> dict[BucketScope, str]:
 
 
 def _validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    if bool(getattr(args, "force_publish", False)) and bool(
+        getattr(args, "all_runs", False)
+    ):
+        parser.error("--force-publish 仅可与单个 --run-dir 一起使用")
+
     concurrency = getattr(args, "concurrency", None)
     if concurrency is not None and int(concurrency) < 1:
         parser.error("--concurrency 必须 >= 1")

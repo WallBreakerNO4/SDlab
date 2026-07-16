@@ -12,7 +12,7 @@
 
 | 任务                      | 位置                     | 备注                                                                                 |
 | ------------------------- | ------------------------ | ------------------------------------------------------------------------------------ |
-| 上传主入口与 CLI          | `upload_images_to_r2.py` | `build_parser()`；编排编码/上传/写入；4 条 tqdm 进度条                               |
+| 上传主入口与 CLI          | `upload_images_to_r2.py` | `build_parser()`；`-F/--force-publish`；编排编码/上传/写入；4 条 tqdm 进度条          |
 | R2 存储客户端             | `r2_client.py`           | boto3 S3 兼容；`R2Client` + 重试 + 结构化错误（`R2ClientError` 含 retryable 标志）   |
 | Supabase 批量写入         | `supabase_writer.py`     | `SupabaseWriter.upsert_upload_index()`；分批 upsert + 并发写入                       |
 | 上传规划与变体            | `upload_planner.py`      | `_build_run_plan()`；多变体规划 + ThreadPoolExecutor 并发编码                        |
@@ -65,6 +65,10 @@ supabase_writer.py → 批量 upsert 到 Supabase（runs + snapshots + projectio
 - `run/image.*` 与同级 `images/*` 这类 run 级静态资源现在已进入上传与 Supabase 写入链路；但它们在 Web 侧仍应作为独立的封面图/主页缩略图字段建模，不要与展示页缩略图混用。
 - bucket 分配：normal category → public bucket；advance/nsfw → private bucket
 - 上传支持可配置并发（`--upload-workers`）和 dry-run 模式
+- 普通上传允许首次发布与相同 `release_id` 的幂等恢复；不同 release 必须显式使用 `-F/--force-publish`，且仅支持单个 `--run-dir`
+- 发布顺序固定为不可变资源 → Supabase 数据/`run_view_index` → 可变 `view/current.json`；强制发布不重复上传已存在的内容寻址图片
+- 旧 Mixer metadata 缺少 `y_common_prompt` 时，上传规划会校验 run 快照中的 Y YAML SHA256，并按 Y prompt 身份在内存中严格回填；不会改写本地 `metadata.jsonl`
+- Mixer bootstrap 以可选 `yPromptParts` 暴露 Artist/Common Prompt；继续保留 `yLabels` 兼容旧前端，view schema 保持 v2
 - I/O 统一用 `pathlib.Path`；中间编码产物写入 `_r2_upload_intermediate/`
 
 ## 反模式

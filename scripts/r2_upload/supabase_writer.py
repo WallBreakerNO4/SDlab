@@ -290,7 +290,6 @@ class SupabaseWriter:
         write_operations: list[tuple[Callable[[], None], int]] = [
             (lambda row=run_snapshot_row: self._upsert_run_snapshot(row), 1),
             (lambda row=run_list_item_row: self._upsert_run_list_item(row), 1),
-            (lambda row=run_view_index_row: self._upsert_run_view_index(row), 1),
         ]
         write_operations.extend(
             self._build_chunked_upsert_operations(
@@ -328,6 +327,8 @@ class SupabaseWriter:
             write_operations,
             progress_callback=progress_callback,
         )
+        self._upsert_run_view_index(run_view_index_row)
+        _tick_progress()
 
     def _build_run_row(
         self,

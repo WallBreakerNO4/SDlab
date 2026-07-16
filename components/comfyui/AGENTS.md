@@ -29,6 +29,7 @@
 - 图片源：公开对象统一走 `publicObjectUrl()`；私有对象用 `privateObjectProxyUrl(key, grant)` 访问 `/api/private-object`，不存在客户端签名 URL 链路。
 - Blurhash：图片未加载时展示 blurhash canvas 占位；加载完成后平滑切换到真实图片。
 - 数据流：`use-virtual-grid-rows.ts` 按可见行直接拉取 `view/v2/{release_id}/rows/{viewer_variant}/{y}.json`；row item 携带 `thumb` / `display` variants，弹窗再通过 `useRenderableVariantSource()` 按需解析 display 图片。
+- Mixer bootstrap 的可选 `y_prompt_parts` 按 `yIndex` 提供 Artist/Common Prompt；首列对存在的部分分别渲染与复制，两者都存在时上下分区，搜索同一行只计一次匹配。
 - 私有图缓存：`use-renderable-variant-source.ts` 的模块级 object URL cache 用于跨 cell 重挂载复用，hook cleanup 不单独 revoke；所有权在 `VirtualGrid`，由其卸载时调用 `clearPrivateObjectUrlCache()` 统一释放。
 - 工具栏布局：展开/收起前要保存滚动锚点，并用 `setScrollViewportWidthImmediate()` 提交目标宽度；不要只等 200ms `ResizeObserver` debounce，否则会造成列宽二次跳变。
 - 状态：组件层核心是 row cache 的 `ready/error` 与图片加载中的占位态；缺失 cell 也要能渲染 blurhash 或空态。

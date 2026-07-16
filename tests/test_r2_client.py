@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import sys
 from pathlib import Path
 from typing import cast
@@ -10,6 +11,7 @@ import boto3
 import pytest
 from botocore.config import Config
 from botocore.exceptions import ClientError, EndpointConnectionError
+from botocore.response import StreamingBody
 from botocore.stub import Stubber
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -137,6 +139,59 @@ def test_head_exists_false_when_remote_object_not_found() -> None:
                 "sdslab-public", "runs/missing.webp", bucket_scope="public"
             )
             is False
+        )
+
+
+def test_read_bytes_if_exists_returns_object_body() -> None:
+    s3_client = _make_s3_client()
+    stubber = Stubber(s3_client)
+    payload = b'{"release_id":"abc123"}'
+    stubber.add_response(
+        "get_object",
+        service_response={
+            "Body": StreamingBody(io.BytesIO(payload), len(payload)),
+            "ContentLength": len(payload),
+        },
+        expected_params={
+            "Bucket": "sdslab-public",
+            "Key": "runs/run-a/view/current.json",
+        },
+    )
+
+    with stubber:
+        client = R2Client(s3_client=s3_client, dry_run=False, max_retries=0)
+        assert (
+            client.read_bytes_if_exists(
+                "sdslab-public",
+                "runs/run-a/view/current.json",
+                bucket_scope="public",
+            )
+            == payload
+        )
+
+
+def test_read_bytes_if_exists_returns_none_when_missing() -> None:
+    s3_client = _make_s3_client()
+    stubber = Stubber(s3_client)
+    stubber.add_client_error(
+        "get_object",
+        service_error_code="404",
+        http_status_code=404,
+        expected_params={
+            "Bucket": "sdslab-public",
+            "Key": "runs/run-a/view/current.json",
+        },
+    )
+
+    with stubber:
+        client = R2Client(s3_client=s3_client, dry_run=False, max_retries=0)
+        assert (
+            client.read_bytes_if_exists(
+                "sdslab-public",
+                "runs/run-a/view/current.json",
+                bucket_scope="public",
+            )
+            is None
         )
 
 

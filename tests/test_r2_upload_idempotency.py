@@ -69,6 +69,7 @@ def _write_run_fixture(
 class _FakeR2Client:
     def __init__(self) -> None:
         self._objects: set[tuple[str, str]] = set()
+        self._object_bodies: dict[tuple[str, str], bytes] = {}
         self.upload_calls: int = 0
         self.uploaded_keys: list[tuple[str, str]] = []
 
@@ -76,12 +77,22 @@ class _FakeR2Client:
         _ = bucket_scope
         return (bucket_name, key) in self._objects
 
+    def read_bytes_if_exists(
+        self, bucket_name: str, key: str, *, bucket_scope: str
+    ) -> bytes | None:
+        _ = bucket_scope
+        return self._object_bodies.get((bucket_name, key))
+
     def upload(self, plan: object) -> None:
         bucket_name = str(getattr(plan, "bucket_name"))
         key = str(getattr(plan, "key"))
         self.upload_calls += 1
         self.uploaded_keys.append((bucket_name, key))
         self._objects.add((bucket_name, key))
+        body_bytes = getattr(plan, "body_bytes", None)
+        self._object_bodies[(bucket_name, key)] = (
+            body_bytes if isinstance(body_bytes, bytes) else b""
+        )
 
 
 class _FakeSupabaseError(RuntimeError):
@@ -143,6 +154,29 @@ class _NoopSupabaseWriter:
 
         for _ in range(total):
             progress_callback()
+
+
+class _CurrentOrderingSupabaseWriter(_NoopSupabaseWriter):
+    def __init__(self, *, fake_r2: _FakeR2Client, public_bucket: str) -> None:
+        self.fake_r2 = fake_r2
+        self.public_bucket = public_bucket
+
+    def upsert_upload_index(
+        self,
+        payload: dict[str, object],
+        *,
+        progress_callback: Callable[[], None] | None = None,
+    ) -> None:
+        run_dir = str(payload["run_dir"])
+        current_ref = (
+            self.public_bucket,
+            f"runs/{run_dir}/view/current.json",
+        )
+        assert current_ref not in self.fake_r2._objects
+        super().upsert_upload_index(
+            payload,
+            progress_callback=progress_callback,
+        )
 
 
 class _ArtifactAwareSupabaseWriter:
@@ -217,7 +251,7 @@ def _read_stdout_json(capsys: pytest.CaptureFixture[str]) -> dict[str, object]:
     return parsed
 
 
-def test_rerun_recovers_db_after_partial_failure_without_reupload(
+def test_rerun_recovers_db_after_partial_failure_and_publishes_current(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -256,7 +290,7 @@ def test_rerun_recovers_db_after_partial_failure_without_reupload(
     assert second_exit == 0
     assert second_payload.get("mode") == "execute"
     assert fake_writer.calls == 2
-    assert fake_r2.upload_calls == uploaded_after_first
+    assert fake_r2.upload_calls == uploaded_after_first + 1
 
     key_counts: dict[tuple[str, str], int] = {}
     for object_ref in fake_r2.uploaded_keys:
@@ -296,6 +330,79 @@ def test_execute_uses_r2_upload_concurrency_from_env(
     assert exit_code == 0
     assert payload.get("mode") == "execute"
     assert 4 in _CapturingExecutor.seen_max_workers
+
+
+def test_changed_release_requires_force_publish(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_dir = _write_run_fixture(tmp_path, run_name="force-publish-run")
+    monkeypatch.setenv("R2_PUBLIC_BUCKET", "dummy-public")
+    monkeypatch.setenv("R2_PRIVATE_BUCKET", "dummy-private")
+    fake_r2 = _FakeR2Client()
+
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.R2Client.from_env",
+        classmethod(lambda cls, dry_run, **kwargs: fake_r2),
+    )
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.SupabaseWriter.from_env",
+        classmethod(lambda cls, dry_run, **kwargs: _NoopSupabaseWriter()),
+    )
+
+    assert main(["--run-dir", str(run_dir)]) == 0
+    first_payload = _read_stdout_json(capsys)
+    assert first_payload["force_publish"] is False
+    uploads_after_first = fake_r2.upload_calls
+
+    metadata_path = run_dir / "metadata.jsonl"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["positive_prompt"] = "changed prompt"
+    metadata["prompt_hash"] = "changed-hash"
+    metadata_path.write_text(json.dumps(metadata) + "\n", encoding="utf-8")
+
+    assert main(["--run-dir", str(run_dir)]) == 2
+    rejected_payload = _read_stdout_json(capsys)
+    assert rejected_payload["category"] == "argument"
+    assert fake_r2.upload_calls == uploads_after_first
+
+    assert main(["-F", "--run-dir", str(run_dir)]) == 0
+    force_payload = _read_stdout_json(capsys)
+    assert force_payload["force_publish"] is True
+    assert fake_r2.upload_calls > uploads_after_first
+
+
+def test_current_manifest_is_published_after_supabase_write(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_dir = _write_run_fixture(tmp_path, run_name="current-last-run")
+    monkeypatch.setenv("R2_PUBLIC_BUCKET", "dummy-public")
+    monkeypatch.setenv("R2_PRIVATE_BUCKET", "dummy-private")
+    fake_r2 = _FakeR2Client()
+    writer = _CurrentOrderingSupabaseWriter(
+        fake_r2=fake_r2,
+        public_bucket="dummy-public",
+    )
+
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.R2Client.from_env",
+        classmethod(lambda cls, dry_run, **kwargs: fake_r2),
+    )
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.SupabaseWriter.from_env",
+        classmethod(lambda cls, dry_run, **kwargs: writer),
+    )
+
+    assert main(["--run-dir", str(run_dir)]) == 0
+    _ = _read_stdout_json(capsys)
+
+    assert fake_r2.uploaded_keys[-1] == (
+        "dummy-public",
+        "runs/current-last-run/view/current.json",
+    )
 
 
 def test_execute_uploads_workflow_artifact_before_db_upsert(

@@ -45,6 +45,7 @@ class _CellPlan:
     save_image_prefix: str
     x_description: dict[str, str]
     artist_chain: str | None = None
+    y_common_prompt: str | None = None
     attempt: int = 1
     y_prompt_ref: dict[str, object] | None = None
 
@@ -236,6 +237,12 @@ class GenerationCoordinator:
             artist_chain = (
                 artist_chain_obj if isinstance(artist_chain_obj, str) else None
             )
+            y_common_prompt = (
+                positive_y_value
+                if Y_POSITIVE_VALUE in y_item.value
+                and isinstance(positive_y_value, str)
+                else None
+            )
             y_prompt_ref = _extract_y_prompt_ref(y_item)
 
             positive_prompt = self.render_prompt(
@@ -273,7 +280,11 @@ class GenerationCoordinator:
                     attempt=skip_attempt,
                 )
                 record["skip_reason"] = "resume_hit"
-                _apply_artist_chain(record, artist_chain)
+                _apply_mixer_prompt_parts(
+                    record,
+                    artist_chain=artist_chain,
+                    y_common_prompt=y_common_prompt,
+                )
                 _apply_y_prompt_ref(record, y_prompt_ref)
                 record["x_description"] = self._get_x_description(x_index)
                 record["local_image_path"] = self.extract_local_image_path(
@@ -309,7 +320,11 @@ class GenerationCoordinator:
                     attempt=skip_attempt,
                 )
                 record["skip_reason"] = "dry_run"
-                _apply_artist_chain(record, artist_chain)
+                _apply_mixer_prompt_parts(
+                    record,
+                    artist_chain=artist_chain,
+                    y_common_prompt=y_common_prompt,
+                )
                 _apply_y_prompt_ref(record, y_prompt_ref)
                 record["x_description"] = self._get_x_description(x_index)
                 self._write_record(record)
@@ -346,6 +361,7 @@ class GenerationCoordinator:
                 save_image_prefix=save_image_prefix,
                 x_description=self._get_x_description(x_index),
                 artist_chain=artist_chain,
+                y_common_prompt=y_common_prompt,
                 attempt=self.next_attempt(resume_record, True),
             )
 
@@ -583,7 +599,11 @@ def _worker_submit_and_wait(
             attempt=plan.attempt,
         )
         record["x_description"] = plan.x_description
-        _apply_artist_chain(record, plan.artist_chain)
+        _apply_mixer_prompt_parts(
+            record,
+            artist_chain=plan.artist_chain,
+            y_common_prompt=plan.y_common_prompt,
+        )
         _apply_y_prompt_ref(record, plan.y_prompt_ref)
         record["comfyui_prompt_id"] = prompt_id
         record["started_at"] = started_at
@@ -652,7 +672,11 @@ def _worker_fetch_and_download(
             attempt=plan.attempt,
         )
         record["x_description"] = plan.x_description
-        _apply_artist_chain(record, plan.artist_chain)
+        _apply_mixer_prompt_parts(
+            record,
+            artist_chain=plan.artist_chain,
+            y_common_prompt=plan.y_common_prompt,
+        )
         _apply_y_prompt_ref(record, plan.y_prompt_ref)
         record["comfyui_prompt_id"] = prompt_id
         record["remote_images"] = remote_images
@@ -682,7 +706,11 @@ def _worker_fetch_and_download(
             attempt=plan.attempt,
         )
         record["x_description"] = plan.x_description
-        _apply_artist_chain(record, plan.artist_chain)
+        _apply_mixer_prompt_parts(
+            record,
+            artist_chain=plan.artist_chain,
+            y_common_prompt=plan.y_common_prompt,
+        )
         _apply_y_prompt_ref(record, plan.y_prompt_ref)
         record["comfyui_prompt_id"] = prompt_id
         record["remote_images"] = remote_images
@@ -845,11 +873,15 @@ def _apply_y_prompt_ref(
     record["y_item_index"] = y_prompt_ref["item_index"]
 
 
-def _apply_artist_chain(
+def _apply_mixer_prompt_parts(
     record: dict[str, object],
+    *,
     artist_chain: str | None,
+    y_common_prompt: str | None,
 ) -> None:
     record["artist_chain"] = artist_chain
+    if artist_chain is not None or y_common_prompt is not None:
+        record["y_common_prompt"] = y_common_prompt
 
 
 def _build_local_image_paths(

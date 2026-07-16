@@ -52,6 +52,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Preview actions without network or database writes.",
     )
     _ = parser.add_argument(
+        "-F",
+        "--force-publish",
+        action="store_true",
+        help="Republish an existing run and replace its current view pointer.",
+    )
+    _ = parser.add_argument(
         "--category",
         choices=["normal", "advance", "nsfw"],
         help="Optional category override.",
@@ -83,7 +89,9 @@ def _build_plans_from_args(args: argparse.Namespace) -> list[RunPlan]:
     )
 
 
-def _execute_plans(plans: list[RunPlan]) -> dict[str, object]:
+def _execute_plans(
+    plans: list[RunPlan], *, force_publish: bool
+) -> dict[str, object]:
     bucket_names = _require_bucket_names()
     upload_concurrency = _resolve_upload_concurrency()
     return _execute(
@@ -93,6 +101,7 @@ def _execute_plans(plans: list[RunPlan]) -> dict[str, object]:
         r2_client_factory=lambda: R2Client.from_env(dry_run=False),
         supabase_writer_factory=lambda: SupabaseWriter.from_env(dry_run=False),
         thread_pool_cls=ThreadPoolExecutor,
+        force_publish=force_publish,
     )
 
 
@@ -113,10 +122,16 @@ def main(argv: list[str] | None = None) -> int:
 
         if dry_run:
             LOG.info("dry-run mode: no network/database writes")
-            print(_to_json_line(_dry_run_summary(plans)))
+            summary = _dry_run_summary(plans)
+            summary["force_publish"] = bool(args.force_publish)
+            print(_to_json_line(summary))
             return 0
 
-        print(_to_json_line(_execute_plans(plans)))
+        print(
+            _to_json_line(
+                _execute_plans(plans, force_publish=bool(args.force_publish))
+            )
+        )
         return 0
     except Exception as exc:
         category = getattr(exc, "category", None)

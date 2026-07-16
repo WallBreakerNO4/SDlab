@@ -27,7 +27,8 @@
 - `use-model-detail-data.ts` 是本页面核心数据 hook：先拉 `view/current.json`（公开）→ 认证用户再拉 `/api/comfyui/run/{runDir}/access` → 最后拉 bootstrap JSON。
 - bootstrap 只包含 detail + grid 索引/占位数据；实际 row manifest 由 `components/comfyui/use-virtual-grid-rows.ts` 根据可见行按需加载。
 - SFW 场景 bootstrap 通过 `publicObjectUrl()`；NSFW 场景通过 `privateObjectProxyUrl()` + grant token。
-- bootstrap JSON 的 `yLabels`（camelCase）会被归一化为 `y_labels`（snake_case）以匹配网格组件预期。
+- bootstrap JSON 的 `yLabels` / `yPromptParts`（camelCase）会被归一化为 `y_labels` / `y_prompt_parts`（snake_case）以匹配网格组件预期。
+- current 缓存与登录态 access grant 的 `release_id` 不一致时，数据 hook 会带 release cache-buster 绕过缓存重拉一次 current，避免发布窗口内的私有 bootstrap 403。
 - 所有 fetch 通过 `AbortController` 管理，组件卸载时自动取消。
 - `model-detail-types.ts` 中包含多层 type guard（`isModelDetailResponse` / `isRunGridIndexData` / `isCurrentRunView` / `isRunViewAccess`），服务端返回数据必须经过校验才进入渲染态。
 - 认证入口统一走 `AuthProvider` + `useAuth()`；workflow 下载需要登录态。

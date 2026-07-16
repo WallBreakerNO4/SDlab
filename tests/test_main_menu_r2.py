@@ -75,7 +75,7 @@ def test_upload_basic_flow_uses_selected_run_dir(
 
     monkeypatch.setattr("scripts.r2_upload.upload_images_to_r2.main", _fake_upload_main)
     fake_questionary = _FakeQuestionary(
-        selects=["upload", "run-a", "__exit__"],
+        selects=["upload", "run-a", "normal", "__exit__"],
         texts=[],
         confirms=[False, True],
     )
@@ -93,6 +93,32 @@ def test_upload_basic_flow_uses_selected_run_dir(
     )
 
 
+def test_upload_force_publish_mode_adds_short_flag(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "outputs" / "run-force").mkdir(parents=True)
+    calls: list[list[str] | None] = []
+
+    def _fake_upload_main(argv: list[str] | None = None) -> int:
+        calls.append(argv)
+        return 0
+
+    monkeypatch.setattr("scripts.r2_upload.upload_images_to_r2.main", _fake_upload_main)
+    fake_questionary = _FakeQuestionary(
+        selects=["upload", "run-force", "force", "__exit__"],
+        texts=[],
+        confirms=[False, True],
+    )
+    monkeypatch.setattr("scripts.cli.menu._load_questionary", lambda: fake_questionary)
+
+    exit_code = run_menu(MenuIO(print_func=lambda value: None))
+
+    assert exit_code == 0
+    assert calls == [["--run-dir", "run-force", "-F"]]
+
+
 def test_upload_advanced_flow_collects_optional_args(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -107,7 +133,7 @@ def test_upload_advanced_flow_collects_optional_args(
 
     monkeypatch.setattr("scripts.r2_upload.upload_images_to_r2.main", _fake_upload_main)
     fake_questionary = _FakeQuestionary(
-        selects=["upload", "run-b", "advance", "__exit__"],
+        selects=["upload", "run-b", "normal", "advance", "__exit__"],
         texts=["custom-root", "4", "12"],
         confirms=[True, True, True],
     )
@@ -151,7 +177,7 @@ def test_upload_menu_uses_comfyui_out_dir_for_run_discovery(
 
     monkeypatch.setattr("scripts.r2_upload.upload_images_to_r2.main", _fake_upload_main)
     fake_questionary = _FakeQuestionary(
-        selects=["upload", "run-env", "__exit__"],
+        selects=["upload", "run-env", "normal", "__exit__"],
         texts=[],
         confirms=[False, True],
     )

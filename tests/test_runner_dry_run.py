@@ -358,6 +358,7 @@ def test_dry_run_with_config_writes_run_json_snapshot_and_metadata(
     assert len(metadata_records) == 1
     assert metadata_records[0]["status"] == "skipped"
     assert metadata_records[0]["artist_chain"] is None
+    assert "y_common_prompt" not in metadata_records[0]
 
 
 def test_dry_run_anima_artist_mixer_records_split_prompts_and_hash(
@@ -392,6 +393,7 @@ def test_dry_run_anima_artist_mixer_records_split_prompts_and_hash(
     assert run_payload["config_snapshot"]["workflow"]["anima_artist_mixer"] is True
     record = _read_valid_jsonl(run_dir / "metadata.jsonl")[0]
     assert record["artist_chain"] == "@artist-a"
+    assert record["y_common_prompt"] == ""
     assert "artist-a" not in record["positive_prompt"]
     assert record["y_value"] == "@artist-a, "
     assert record["prompt_hash"] == runner.compute_prompt_hash(
