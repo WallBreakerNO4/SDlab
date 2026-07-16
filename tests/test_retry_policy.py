@@ -73,6 +73,30 @@ def test_retry_call_stops_after_max_attempts_including_first() -> None:
     assert waits == [0.2, 0.4]
 
 
+def test_retry_call_honors_larger_server_wait_override() -> None:
+    attempts = 0
+    waits: list[float] = []
+
+    def fail_once() -> str:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise TimeoutError("retry later")
+        return "ok"
+
+    result = retry.retry_call(
+        fail_once,
+        max_attempts=2,
+        base_delay_s=0.25,
+        sleep=waits.append,
+        random_fn=lambda: 0.0,
+        retry_wait_override=lambda exc: 3.0,
+    )
+
+    assert result == "ok"
+    assert waits == [3.0]
+
+
 def test_retry_call_stops_after_total_budget_and_raises_last_error() -> None:
     attempts = 0
     waits: list[float] = []

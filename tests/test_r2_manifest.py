@@ -443,6 +443,42 @@ def test_bootstrap_includes_y_labels() -> None:
         assert y_labels[0] == "cfg_7.0"
 
 
+def test_bootstrap_includes_mixer_prompt_parts() -> None:
+    payload = _sample_payload()
+    images = cast(list[dict[str, object]], payload["images"])
+    for image in images:
+        image["artist_chain"] = "1.1::@artist-a"
+        image["y_common_prompt"] = "no lineart,"
+
+    release = build_view_release(payload)
+
+    for key in ("bootstrap_sfw", "bootstrap_nsfw"):
+        assert release[key]["yPromptParts"] == [
+            {
+                "yIndex": 0,
+                "artist": "1.1::@artist-a",
+                "commonPrompt": "no lineart,",
+            }
+        ]
+
+
+def test_bootstrap_omits_mixer_prompt_parts_for_legacy_run() -> None:
+    release = build_view_release(_sample_payload())
+
+    assert "yPromptParts" not in release["bootstrap_sfw"]
+    assert "yPromptParts" not in release["bootstrap_nsfw"]
+
+
+def test_mixer_prompt_parts_reject_inconsistent_y_row() -> None:
+    payload = _sample_payload()
+    images = cast(list[dict[str, object]], payload["images"])
+    images[0]["artist_chain"] = "@artist-a"
+    images[1]["artist_chain"] = "@artist-b"
+
+    with pytest.raises(ValueError, match="Mixer prompt 拆分不一致"):
+        build_view_release(payload)
+
+
 # ---- x_columns remap ----
 
 def test_nsfw_column_remapped_in_sfw() -> None:

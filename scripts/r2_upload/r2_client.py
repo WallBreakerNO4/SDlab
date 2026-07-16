@@ -51,6 +51,8 @@ BucketScope = Literal["public", "private"]
 class S3ClientLike(Protocol):
     def head_object(self, *, Bucket: str, Key: str) -> dict[str, object]: ...
 
+    def get_object(self, *, Bucket: str, Key: str) -> dict[str, object]: ...
+
     def put_object(
         self,
         *,
@@ -318,6 +320,51 @@ class R2Client:
             return True
         except _ObjectMissing:
             return False
+
+    def read_bytes_if_exists(
+        self,
+        bucket_name: str,
+        key: str,
+        *,
+        bucket_scope: BucketScope = "private",
+    ) -> bytes | None:
+        _validate_bucket_scope(bucket_scope)
+        _validate_bucket_name_and_key(bucket_name, key)
+        if self.dry_run:
+            return None
+
+        client = self._require_client()
+        object_ref = _safe_object_ref(bucket_scope, key)
+
+        def _invoke() -> dict[str, object]:
+            try:
+                return client.get_object(Bucket=bucket_name, Key=key)
+            except ClientError as exc:
+                if _is_not_found(exc):
+                    raise _ObjectMissing() from exc
+                raise
+
+        try:
+            response = self._run_with_retry("get_object", object_ref, _invoke)
+        except _ObjectMissing:
+            return None
+
+        body = response.get("Body")
+        read = getattr(body, "read", None)
+        if not callable(read):
+            raise R2RemoteError(
+                "r2 object response body is invalid",
+                code="invalid_object_body",
+                context={"operation": "get_object", **object_ref},
+            )
+        payload = read()
+        if not isinstance(payload, bytes):
+            raise R2RemoteError(
+                "r2 object response body is invalid",
+                code="invalid_object_body",
+                context={"operation": "get_object", **object_ref},
+            )
+        return payload
 
     def put_bytes(self, plan: UploadPlan) -> None:
         _validate_bucket_scope(plan.bucket_scope)

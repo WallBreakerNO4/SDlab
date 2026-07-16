@@ -52,13 +52,17 @@ from .upload_io import (
 )
 from .variants import inspect_image_metadata, plan_image_variants
 from scripts.generation.prompt_grid import (
+    ARTIST_WEIGHT_PROFILE_IDENTITY,
+    Y_ARTIST_CHAIN,
     Y_COLLECTION_ID,
     Y_ITEM_INDEX,
+    Y_POSITIVE_VALUE,
     Y_STYLE_KEY,
     read_y_rows,
 )
 
 LOG = logging.getLogger(__name__)
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 _RUN_ASSET_DEFAULT_CATEGORY: Category = "normal"
 _PUBLISHABLE_METADATA_STATUSES = {"success", "skipped"}
 
@@ -106,11 +110,141 @@ def _int_list(value: object) -> list[int]:
         item for item in value if isinstance(item, int) and not isinstance(item, bool)
     ]
 
+
 def _is_publishable_metadata_record(metadata_record: dict[str, object]) -> bool:
     status = _non_empty_str(metadata_record.get("status"))
     if status is None:
         return True
     return status in _PUBLISHABLE_METADATA_STATUSES
+
+
+def _is_anima_artist_mixer_run(run_json: dict[str, object]) -> bool:
+    config_snapshot = _json_object(run_json.get("config_snapshot"))
+    workflow = (
+        _json_object(config_snapshot.get("workflow"))
+        if config_snapshot is not None
+        else None
+    )
+    return workflow is not None and workflow.get("anima_artist_mixer") is True
+
+
+def _resolve_legacy_mixer_y_source(
+    run_json: dict[str, object],
+) -> tuple[Path, str]:
+    config_snapshot = _json_object(run_json.get("config_snapshot"))
+    prompts = (
+        _json_object(config_snapshot.get("prompts"))
+        if config_snapshot is not None
+        else None
+    )
+    path_value = _non_empty_str(prompts.get("y_path") if prompts else None)
+    expected_sha256 = _non_empty_str(
+        prompts.get("y_sha256") if prompts else None
+    )
+    if path_value is None:
+        path_value = _non_empty_str(run_json.get("y_json_path"))
+    if expected_sha256 is None:
+        expected_sha256 = _non_empty_str(run_json.get("y_json_sha256"))
+    if path_value is None or expected_sha256 is None:
+        raise ValueError("旧 Mixer run 缺少 Y prompt 路径或 SHA256，无法回填")
+
+    candidate = Path(path_value)
+    if not candidate.is_absolute():
+        candidate = _REPO_ROOT / candidate
+    if not candidate.is_file():
+        raise ValueError("旧 Mixer run 的 Y prompt 资产不存在，无法回填")
+    if _sha256_file(candidate) != expected_sha256:
+        raise ValueError("旧 Mixer run 的 Y prompt SHA256 不一致，拒绝回填")
+    return candidate, expected_sha256
+
+
+def _mixer_prompt_row_for_metadata(
+    metadata_record: dict[str, object],
+    *,
+    rows_by_style_key: dict[str, dict[str, str]],
+    rows_by_identity: dict[tuple[str, str], dict[str, str]],
+) -> dict[str, str]:
+    style_key = _non_empty_str(metadata_record.get("y_style_key"))
+    if style_key is not None:
+        row = rows_by_style_key.get(style_key)
+        if row is not None:
+            return row
+
+    collection_id = _non_empty_str(metadata_record.get("y_collection_id"))
+    item_index = metadata_record.get("y_item_index")
+    if collection_id is not None and isinstance(item_index, int):
+        row = rows_by_identity.get((collection_id, str(item_index)))
+        if row is not None:
+            return row
+
+    raise ValueError("旧 Mixer metadata 缺少可匹配的 Y prompt 身份，无法回填")
+
+
+def _enrich_legacy_mixer_prompt_parts(
+    *,
+    run_json: dict[str, object],
+    metadata_records: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    if not _is_anima_artist_mixer_run(run_json):
+        return metadata_records
+
+    needs_backfill = any(
+        _is_publishable_metadata_record(record)
+        and "y_common_prompt" not in record
+        for record in metadata_records
+    )
+    if not needs_backfill:
+        return metadata_records
+
+    y_source, _ = _resolve_legacy_mixer_y_source(run_json)
+    model = _json_object(run_json.get("model"))
+    artist_weight_profile = (
+        _non_empty_str(model.get("artist_weight_profile") if model else None)
+        or ARTIST_WEIGHT_PROFILE_IDENTITY
+    )
+    y_rows = read_y_rows(
+        y_source,
+        artist_prefix="@",
+        artist_weight_profile=artist_weight_profile,
+        anima_artist_mixer=True,
+    )
+    rows_by_style_key = {
+        row[Y_STYLE_KEY]: row for row in y_rows if Y_STYLE_KEY in row
+    }
+    rows_by_identity = {
+        (row[Y_COLLECTION_ID], row[Y_ITEM_INDEX]): row
+        for row in y_rows
+        if Y_COLLECTION_ID in row and Y_ITEM_INDEX in row
+    }
+
+    enriched: list[dict[str, object]] = []
+    for record in metadata_records:
+        if not _is_publishable_metadata_record(record) or "y_common_prompt" in record:
+            enriched.append(record)
+            continue
+
+        y_row = _mixer_prompt_row_for_metadata(
+            record,
+            rows_by_style_key=rows_by_style_key,
+            rows_by_identity=rows_by_identity,
+        )
+        y_common_prompt = y_row.get(Y_POSITIVE_VALUE)
+        artist_chain = y_row.get(Y_ARTIST_CHAIN)
+        if not isinstance(y_common_prompt, str) or not isinstance(artist_chain, str):
+            raise ValueError("旧 Mixer Y prompt 无法生成拆分字段")
+
+        existing_artist_chain = record.get("artist_chain")
+        if (
+            isinstance(existing_artist_chain, str)
+            and existing_artist_chain != artist_chain
+        ):
+            raise ValueError("旧 Mixer metadata 的 artist_chain 与 Y prompt 不一致")
+
+        next_record = dict(record)
+        next_record["artist_chain"] = artist_chain
+        next_record["y_common_prompt"] = y_common_prompt
+        enriched.append(next_record)
+    return enriched
 
 
 def _metadata_cell_key(metadata_record: dict[str, object]) -> tuple[int, int]:
@@ -313,6 +447,14 @@ def _build_image_db_fields(metadata_record: dict[str, object]) -> dict[str, obje
     y_value = _non_empty_str(metadata_record.get("y_value"))
     if y_value is not None:
         fields["y_value"] = y_value
+
+    artist_chain = _non_empty_str(metadata_record.get("artist_chain"))
+    if artist_chain is not None:
+        fields["artist_chain"] = artist_chain
+
+    y_common_prompt = _non_empty_str(metadata_record.get("y_common_prompt"))
+    if y_common_prompt is not None:
+        fields["y_common_prompt"] = y_common_prompt
 
     y_style_key = _non_empty_str(metadata_record.get("y_style_key"))
     if y_style_key is not None:
@@ -1488,6 +1630,10 @@ def _build_run_plan(
     run_json = _load_run_json(normalized_run_dir)
     run_dir_name = _resolve_run_dir_name(normalized_run_dir, run_json)
     metadata_records = _load_metadata_records(normalized_run_dir)
+    metadata_records = _enrich_legacy_mixer_prompt_parts(
+        run_json=run_json,
+        metadata_records=metadata_records,
+    )
     metadata_records_for_upload = _fold_metadata_records_for_upload(
         run_dir=normalized_run_dir,
         metadata_records=metadata_records,

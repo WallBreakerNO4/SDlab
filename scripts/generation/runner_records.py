@@ -45,6 +45,7 @@ def _build_base_metadata_record(
         "remote_images": None,
         "local_image_path": None,
         "local_image_paths": None,
+        "failure_stage": None,
         "error": None,
     }
 

@@ -23,8 +23,10 @@ COMFY_ENV_KEYS = [
     "COMFYUI_OUT_DIR",
     "COMFYUI_CLIENT_ID",
     "COMFYUI_REQUEST_TIMEOUT_S",
+    "COMFYUI_DOWNLOAD_READ_TIMEOUT_S",
     "COMFYUI_JOB_TIMEOUT_S",
     "COMFYUI_CONCURRENCY",
+    "COMFYUI_DOWNLOAD_CONCURRENCY",
     "COMFYUI_NEGATIVE_PROMPT",
     "COMFYUI_APPEND_NEGATIVE_PROMPT",
     "COMFYUI_WIDTH",
@@ -285,3 +287,78 @@ def test_retry_failed_is_idempotent_after_success(
 
     records_after_second = _read_jsonl(run_dir / "metadata.jsonl")
     assert len(records_after_second) == 2
+
+
+def test_retry_failed_recovers_persistent_output_without_resubmitting_prompt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _clear_comfy_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+
+    x_json, y_json = _write_single_cell_inputs(tmp_path)
+    run_dir = tmp_path / "run-retry-download-only"
+    (run_dir / "images").mkdir(parents=True, exist_ok=True)
+    _write_minimal_run_json(run_dir, x_json, y_json)
+
+    workflow_hash = "wf-hash"
+    x_row = {
+        "gender": "1girl,",
+        "characters": "amiya,",
+        "series": "arknights,",
+        "rating": "safe,",
+        "general": "solo,",
+    }
+    prompt_hash = runner.compute_prompt_hash(
+        render_positive_prompt(
+            x_row,
+            "artist-a,",
+            "masterpiece, best quality,",
+        )
+    )
+    initial_failed = {
+        "status": "failed",
+        "x_index": 0,
+        "y_index": 0,
+        "prompt_hash": prompt_hash,
+        "seed": derive_seed(100, 0, 0),
+        "workflow_api_sha256": workflow_hash,
+        "attempt": 1,
+        "failure_stage": "download",
+        "comfyui_prompt_id": "existing-prompt-id",
+        "remote_images": [
+            {
+                "filename": "existing.png",
+                "subfolder": "run-retry-download-only",
+                "type": "output",
+            }
+        ],
+        "error": {"code": "http_request_failed"},
+    }
+    (run_dir / "metadata.jsonl").write_text(
+        json.dumps(initial_failed, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+    submit_counter = {"count": 0}
+    seen_args: dict[str, object] = {}
+    _stub_generation(monkeypatch, submit_counter, workflow_hash, seen_args)
+
+    exit_code = runner.main(["--retry-failed", "--run-dir", str(run_dir)])
+    output = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "参数错误" not in output.err
+    assert "运行失败" not in output.err
+    assert submit_counter["count"] == 0
+
+    records = _read_jsonl(run_dir / "metadata.jsonl")
+    assert len(records) == 2
+    recovered = records[-1]
+    assert recovered["status"] == "success"
+    assert recovered["attempt"] == 2
+    assert recovered["recovery_mode"] == "download_only"
+    assert recovered["comfyui_prompt_id"] == "existing-prompt-id"
+    assert recovered["local_image_path"] == "images/x0-y0.png"
+    assert (run_dir / "images" / "x0-y0.png").exists()

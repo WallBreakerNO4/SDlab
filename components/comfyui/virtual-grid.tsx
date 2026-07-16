@@ -54,6 +54,7 @@ import type {
 export type {
   BlurhashCell,
   RunGridIndexData,
+  RunGridYPromptParts,
   RunGridXColumn,
   VariantSources,
 } from "./virtual-grid-types";
@@ -130,8 +131,9 @@ export function VirtualGrid({
     onRefreshViewAccess,
   });
 
-  const { hiddenColumns, toggleColumn, showAll, hideAll } =
-    useColumnVisibility({ runDir, totalColumns: grid.x_columns.length });
+  const { hiddenColumns, toggleColumn, showAll, hideAll } = useColumnVisibility(
+    { runDir, totalColumns: grid.x_columns.length },
+  );
 
   const visibleXColumns = useMemo(() => {
     return grid.x_columns
@@ -186,20 +188,44 @@ export function VirtualGrid({
       suppressPersistRef: suppressScrollAnchorPersistRef,
     });
 
+  const yPromptPartsByIndex = useMemo(() => {
+    const result = new Map<
+      number,
+      NonNullable<RunGridIndexData["y_prompt_parts"]>[number]
+    >();
+    for (const promptParts of grid.y_prompt_parts ?? []) {
+      result.set(promptParts.yIndex, promptParts);
+    }
+    return result;
+  }, [grid.y_prompt_parts]);
+
   const searchMatches = useMemo(() => {
     const query = searchQuery.trim();
     if (!query) return [];
     const term = query.toLowerCase();
     const matches: { rowIndex: number; yIndex: number; label: string }[] = [];
     const yLabels = grid.y_labels ?? [];
-    for (let i = 0; i < yLabels.length; i++) {
-      const label = yLabels[i];
-      if (typeof label === "string" && label.toLowerCase().includes(term)) {
-        matches.push({ rowIndex: i, yIndex: grid.y_indexes[i] ?? i, label });
+    for (let i = 0; i < grid.y_indexes.length; i++) {
+      const yIndex = grid.y_indexes[i] ?? i;
+      const promptParts = yPromptPartsByIndex.get(yIndex);
+      const searchableValues = promptParts
+        ? [promptParts.artist, promptParts.commonPrompt]
+        : [yLabels[i]];
+      if (
+        searchableValues.some(
+          (value) =>
+            typeof value === "string" && value.toLowerCase().includes(term),
+        )
+      ) {
+        matches.push({
+          rowIndex: i,
+          yIndex,
+          label: searchableValues.filter(Boolean).join(" "),
+        });
       }
     }
     return matches;
-  }, [searchQuery, grid.y_labels, grid.y_indexes]);
+  }, [searchQuery, grid.y_labels, grid.y_indexes, yPromptPartsByIndex]);
 
   const goToMatch = useCallback(
     (delta: number) => {
@@ -292,19 +318,12 @@ export function VirtualGrid({
           ? TOOLS_WIDTH_OPEN
           : TOOLS_WIDTH_CLOSED;
         const targetScrollWidth =
-          scrollElement.clientWidth +
-          currentToolsWidth -
-          targetToolsWidth;
+          scrollElement.clientWidth + currentToolsWidth - targetToolsWidth;
         setScrollViewportWidthImmediate(targetScrollWidth);
       }
       setGridToolsOpen(nextOpen);
     },
-    [
-      grid.y_indexes,
-      rowHeight,
-      gridToolsOpen,
-      setScrollViewportWidthImmediate,
-    ],
+    [grid.y_indexes, rowHeight, gridToolsOpen, setScrollViewportWidthImmediate],
   );
 
   const openGridToolsForSearch = useCallback(() => {
@@ -483,10 +502,7 @@ export function VirtualGrid({
         yLabel,
         seed,
         promptHash,
-        positivePrompt:
-          positivePrompt ??
-          representative?.positive_prompt ??
-          "",
+        positivePrompt: positivePrompt ?? representative?.positive_prompt ?? "",
         items,
       });
       setDialogOpen(true);
@@ -494,14 +510,31 @@ export function VirtualGrid({
     [grid.prompts],
   );
 
-  const copyRowLabel = useCallback(async (value: string) => {
-    try {
-      await navigator.clipboard.writeText(value);
-      toast.success(t("copiedPrompt"));
-    } catch {
-      toast.error(t("copyFailed"));
-    }
-  }, [t]);
+  const copyRowLabel = useCallback(
+    async (value: string) => {
+      try {
+        await navigator.clipboard.writeText(value);
+        toast.success(t("copiedPrompt"));
+      } catch {
+        toast.error(t("copyFailed"));
+      }
+    },
+    [t],
+  );
+
+  const copyPromptPart = useCallback(
+    async (value: string, kind: "artist" | "common") => {
+      try {
+        await navigator.clipboard.writeText(value);
+        toast.success(
+          kind === "artist" ? t("copiedArtist") : t("copiedCommonPrompt"),
+        );
+      } catch {
+        toast.error(t("copyFailed"));
+      }
+    },
+    [t],
+  );
 
   const toolsPanel = (
     <div
@@ -582,7 +615,9 @@ export function VirtualGrid({
                   {t("searchPrompt")}
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <kbd className="rounded border border-border/40 bg-muted/30 px-1 py-0.5 text-[9px] font-medium text-muted-foreground/60">/</kbd>
+                  <kbd className="rounded border border-border/40 bg-muted/30 px-1 py-0.5 text-[9px] font-medium text-muted-foreground/60">
+                    /
+                  </kbd>
                   <HugeiconsIcon
                     icon={ArrowDown01Icon}
                     strokeWidth={2}
@@ -636,15 +671,15 @@ export function VirtualGrid({
                   <div className="mt-1.5 flex items-center justify-between">
                     <span className="text-[10px] tabular-nums text-muted-foreground/70">
                       {searchQuery.trim()
-                        ? (searchMatches.length > 0
-                            ? t("matchCount", {
-                                current:
-                                  activeMatchIndex >= 0
-                                    ? activeMatchIndex + 1
-                                    : 0,
-                                total: searchMatches.length,
-                              })
-                            : t("noResults"))
+                        ? searchMatches.length > 0
+                          ? t("matchCount", {
+                              current:
+                                activeMatchIndex >= 0
+                                  ? activeMatchIndex + 1
+                                  : 0,
+                              total: searchMatches.length,
+                            })
+                          : t("noResults")
                         : t("searchShortcut")}
                     </span>
                     <div className="flex items-center gap-0.5">
@@ -656,6 +691,7 @@ export function VirtualGrid({
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => goToMatch(-1)}
                         title={t("prevMatch")}
+                        aria-label={t("prevMatch")}
                         disabled={searchMatches.length === 0}
                       >
                         <HugeiconsIcon
@@ -672,6 +708,7 @@ export function VirtualGrid({
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => goToMatch(1)}
                         title={t("nextMatch")}
+                        aria-label={t("nextMatch")}
                         disabled={searchMatches.length === 0}
                       >
                         <HugeiconsIcon
@@ -782,7 +819,9 @@ export function VirtualGrid({
                   </div>
                   <div className="flex max-h-48 flex-col gap-1 overflow-auto">
                     {grid.x_columns.map((col, originalIndex) => {
-                      const label = getXLabel(col) || t("columnLabel", { index: originalIndex + 1 });
+                      const label =
+                        getXLabel(col) ||
+                        t("columnLabel", { index: originalIndex + 1 });
                       const isHidden = hiddenColumns.has(originalIndex);
                       return (
                         <label
@@ -865,6 +904,7 @@ export function VirtualGrid({
                   grid.y_indexes[virtualRow.index] ?? virtualRow.index;
                 const cachedRow = rowCacheRef.current.get(yIndex);
                 const preloadedYLabel = grid.y_labels?.[virtualRow.index] ?? "";
+                const promptParts = yPromptPartsByIndex.get(yIndex);
                 const yLabel =
                   cachedRow && cachedRow.status === "ready"
                     ? (cachedRow.yValue ?? preloadedYLabel)
@@ -887,9 +927,11 @@ export function VirtualGrid({
                       <VirtualGridRowLabel
                         cachedRow={cachedRow}
                         preloadedYLabel={preloadedYLabel}
+                        promptParts={promptParts}
                         yLabel={yLabel}
                         virtualRowIndex={virtualRow.index}
                         onCopyRowLabel={copyRowLabel}
+                        onCopyPromptPart={copyPromptPart}
                         highlightTerm={searchQuery.trim() || undefined}
                       />
 

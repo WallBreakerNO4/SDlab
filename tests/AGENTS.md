@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-06-18 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-07-16 -->
 
 # tests/ — pytest 约定
 
@@ -12,16 +12,16 @@
 | 场景                          | 位置                                                               | 备注                                                |
 | ----------------------------- | ------------------------------------------------------------------ | --------------------------------------------------- |
 | 顶层入口行为                  | `test_main_entrypoint.py`                                          | help/exit code/dry-run 落盘                         |
-| runner 配置加载               | `test_runner_config.py`                                            | `data/runs/*.yaml` schema、repo-relative 路径、hash |
-| runner dry-run / env / resume | `test_runner_dry_run.py`                                           | 临时目录 + 断言 run.json/metadata.jsonl             |
+| runner 配置加载               | `test_runner_config.py`                                            | `data/models/*/config.yaml` schema、repo-relative 路径、Mixer 限制 |
+| runner dry-run / env / resume | `test_runner_dry_run.py`                                           | run.json/metadata.jsonl + Mixer 快照/`artist_chain` 合约     |
 | runner WS 降级                | `test_runner_ws_fallback.py`                                       | WS 连接失败时的降级行为                             |
-| prompt 纯函数                 | `test_prompt_grid.py`                                              | normalize/hash/seed/render                          |
-| workflow patch                | `test_workflow_patch.py`                                           | 引用追溯/overrides/异常                             |
+| prompt 纯函数                 | `test_prompt_grid.py`                                              | normalize/hash/seed/render + general/artists 拆分 |
+| workflow patch                | `test_workflow_patch.py`                                           | CLIPTextEncode/Anima Artist Mixer 引用追溯与异常拓扑 |
 | ComfyUI client                | `test_comfyui_client.py`                                           | HTTP/WS + 错误码；含 parametrize                    |
 | 重试策略                      | `test_retry_attempt.py`/`test_retry_policy.py`                     | 重试决策与次数控制                                  |
 | 重试失败项筛选                | `test_retry_failed_selection.py`/`test_retry_failed_errors.py`     | failed 项筛选逻辑                                   |
 | 重试不完整集成                | `test_retry_incomplete_integration.py`                             | 端到端重试流程                                      |
-| 运行回放                      | `test_run_replay.py`                                               | metadata 重放                                       |
+| 运行回放                      | `test_run_replay.py`                                               | workflow 快照兼容、Mixer 回放、strict artist chain 校验 |
 | R2 客户端                     | `test_r2_client.py`                                                | boto3 mock + 重试                                   |
 | R2 变体/编码                  | `test_r2_variants.py`/`test_r2_encoding_params.py`                 | 变体规划 + 编码参数                                 |
 | R2 keys/路径安全              | `test_r2_keys.py`/`test_r2_path_safety.py`                         | key 生成 + 路径校验                                 |
@@ -50,3 +50,4 @@
 ## 运行
 
 - 命令清单在根 `AGENTS.md`（`uv run pytest -q` / 单文件 / `::` / `-k`）
+- Artist Mixer 定向回归：`uv run pytest -q tests/test_prompt_grid.py tests/test_run_replay.py tests/test_runner_config.py tests/test_runner_dry_run.py tests/test_workflow_patch.py`

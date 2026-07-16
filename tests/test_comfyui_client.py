@@ -19,6 +19,7 @@ import scripts.generation.comfyui_client as comfy
 class MockResponse:
     _json_data: object | None
     content: bytes
+    headers: dict[str, str]
     status_code: int
 
     def __init__(
@@ -26,10 +27,12 @@ class MockResponse:
         *,
         json_data: object | None = None,
         content: bytes = b"",
+        headers: dict[str, str] | None = None,
         status_code: int = 200,
     ) -> None:
         self._json_data = json_data
         self.content = content
+        self.headers = dict(headers or {})
         self.status_code = status_code
 
     def json(self) -> object:
@@ -547,7 +550,7 @@ def test_comfy_get_history_item_supports_response_compatibility(
 
     assert item == {"outputs": {"10": {"images": [{"filename": "a.png"}]}}}
     assert captured["url"] == "http://127.0.0.1:8188/history/p-1"
-    assert captured["timeout"] == 8.0
+    assert captured["timeout"] == (5.0, 8.0)
     assert captured["params"] is None
 
 
@@ -577,6 +580,36 @@ def test_comfy_get_history_item_retries_transient_http_status_and_succeeds(
 
     assert attempts == 3
     assert item == {"outputs": {}}
+
+
+def test_comfy_get_history_item_honors_bounded_retry_after_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = 0
+    waits: list[float] = []
+
+    def fake_get(
+        url: str, timeout: float, params: object | None = None
+    ) -> MockResponse:
+        nonlocal attempts
+        attempts += 1
+        _ = (url, timeout, params)
+        if attempts == 1:
+            return MockResponse(status_code=429, headers={"Retry-After": "120"})
+        return MockResponse(json_data={"p-1": {"outputs": {}}})
+
+    monkeypatch.setattr("scripts.generation.comfyui_client.requests.get", fake_get)
+    monkeypatch.setattr("scripts.generation.retry.time.sleep", waits.append)
+    monkeypatch.setattr("scripts.generation.retry.random.random", lambda: 0.0)
+
+    item = comfy.comfy_get_history_item(
+        base_url="http://127.0.0.1:8188",
+        prompt_id="p-1",
+        request_timeout_s=1.0,
+    )
+
+    assert item == {"outputs": {}}
+    assert waits == [30.0]
 
 
 def test_comfy_get_history_item_retries_connection_error_and_succeeds(
@@ -736,7 +769,7 @@ def test_comfy_download_image_to_path_saves_downloaded_bytes(
     assert output_path.read_bytes() == b"image-bytes"
 
 
-def test_view_download_retries_404_and_then_succeeds(
+def test_view_download_does_not_retry_404(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     attempts = 0
@@ -750,24 +783,86 @@ def test_view_download_retries_404_and_then_succeeds(
         nonlocal attempts
         attempts += 1
         _ = (url, timeout, params, stream)
-        if attempts == 1:
-            return MockResponse(status_code=404)
-        return MockStreamResponse(chunks=[b"hello", b"-", b"world"])
+        return MockResponse(status_code=404)
 
     monkeypatch.setattr("scripts.generation.comfyui_client.requests.get", fake_get)
     monkeypatch.setattr("scripts.generation.retry.random.random", lambda: 0.0)
 
-    output_path = tmp_path / "view-404-retry.png"
-    saved_path = comfy.comfy_download_image_to_path(
+    with pytest.raises(comfy.ComfyUIRequestError) as exc:
+        _ = comfy.comfy_download_image_to_path(
+            base_url="http://127.0.0.1:8188",
+            image={"filename": "x.png"},
+            output_path=tmp_path / "view-404.png",
+            request_timeout_s=1.0,
+        )
+
+    assert attempts == 1
+    assert exc.value.context["status_code"] == 404
+
+
+def test_view_download_long_timeouts_still_use_all_attempts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    attempts = 0
+    clock = MutableClock(now=0.0)
+
+    def fake_get(
+        url: str,
+        timeout: tuple[float, float],
+        params: dict[str, str],
+        stream: bool = False,
+    ) -> MockResponse:
+        nonlocal attempts
+        attempts += 1
+        _ = (url, timeout, params, stream)
+        clock.sleep(30.0)
+        raise requests.Timeout("read timeout")
+
+    monkeypatch.setattr("scripts.generation.comfyui_client.requests.get", fake_get)
+    monkeypatch.setattr(comfy, "VIEW_GET_RETRY_MAX_ATTEMPTS", 3)
+    monkeypatch.setattr("scripts.generation.retry.time.monotonic", clock.monotonic)
+    monkeypatch.setattr("scripts.generation.retry.time.sleep", clock.sleep)
+    monkeypatch.setattr("scripts.generation.retry.random.random", lambda: 0.0)
+
+    with pytest.raises(comfy.ComfyUITransientRequestError) as exc:
+        _ = comfy.comfy_download_image_to_path(
+            base_url="http://127.0.0.1:8188",
+            image={"filename": "x.png"},
+            output_path=tmp_path / "timeout.png",
+            request_timeout_s=60.0,
+        )
+
+    assert attempts == 3
+    assert clock.now == 90.0
+    assert exc.value.context["attempts"] == 3
+    assert exc.value.context["failure_kind"] == "timeout"
+
+
+def test_view_download_uses_split_connect_and_read_timeout(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_get(
+        url: str,
+        timeout: tuple[float, float],
+        params: dict[str, str],
+        stream: bool = False,
+    ) -> MockResponse:
+        _ = (url, params, stream)
+        captured["timeout"] = timeout
+        return MockStreamResponse(chunks=[b"image"])
+
+    monkeypatch.setattr("scripts.generation.comfyui_client.requests.get", fake_get)
+
+    _ = comfy.comfy_download_image_to_path(
         base_url="http://127.0.0.1:8188",
         image={"filename": "x.png"},
-        output_path=output_path,
-        request_timeout_s=1.0,
+        output_path=tmp_path / "split-timeout.png",
+        request_timeout_s=60.0,
     )
 
-    assert attempts == 2
-    assert saved_path == output_path
-    assert output_path.read_bytes() == b"hello-world"
+    assert captured["timeout"] == (5.0, 60.0)
 
 
 def test_view_download_stream_interrupted_cleans_temp_and_target(
@@ -801,6 +896,8 @@ def test_view_download_stream_interrupted_cleans_temp_and_target(
         )
 
     assert exc.value.code == "http_request_failed"
+    assert exc.value.context["bytes_received"] == 4
+    assert exc.value.context["failure_kind"] == "stream_interrupted"
     assert not output_path.exists()
     assert output_dir.exists()
     assert list(output_dir.iterdir()) == []

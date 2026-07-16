@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-06-18 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-07-16 -->
 
 # components/ — 前端组件（业务 + 基础 UI）
 
@@ -19,7 +19,7 @@
 | 首页预览弹窗          | `components/home/preview-dialog.tsx`     | 全屏大图预览弹窗                                   |
 | 首页组件约定          | `components/home/AGENTS.md`              | 封面图/主页缩略图消费约定                          |
 | 站点头部              | `components/site-header.tsx`             | 品牌、ThemeToggle、登录弹窗入口、用户菜单；`useTranslations("header")` 驱动多语言 |
-| 站点头部组件约定       | `components/site-footer.tsx`              | 版权、关于/隐私政策链接；`useTranslations("footer")` + `@/i18n/navigation` Link |
+| 站点页脚              | `components/site-footer.tsx`              | 版权、关于/隐私政策链接；`useTranslations("footer")` + `@/i18n/navigation` Link |
 | 浏览器端认证 Provider | `components/auth-provider.tsx`           | `createSupabaseBrowserClient()` + session 监听     |
 | 登录弹窗              | `components/auth-login-dialog.tsx`       | GitHub / Google / Microsoft OAuth 入口             |
 | 主题切换              | `components/theme-toggle.tsx`            | `next-themes` + mounted guard，避免 hydration 闪烁 |
@@ -37,7 +37,7 @@
 
 - 业务组件优先复用 `components/ui/*` primitives（Button/Dialog/Card/Table/Skeleton 等）
 - 认证入口统一经 `AuthProvider` + `useAuth()`；客户端组件只消费浏览器端会话，不直接导入 `server-only` 的 Supabase 实现
-- 图片源：优先使用 R2 公开 URL（`lib/r2-url.ts`）；私有图片使用 `privateObjectUrl()` 生成的短期签名 URL
+- 图片源：公开对象使用 `publicObjectUrl()`；私有对象使用 `privateObjectProxyUrl(key, grant)` 访问代理 route，不在组件中生成签名 URL
 - 性能：大网格依赖虚拟化（`@tanstack/react-virtual`），避免一次性渲染全部 cell
 - Blurhash：图片加载前展示 blurhash 占位（`blurhash-canvas.tsx`），提升感知加载速度
 - JSON-LD：结构化数据组件（`json-ld.tsx`）是客户端组件，通过 `dangerouslySetInnerHTML` 注入 `<script type="application/ld+json">`；这样做避免在 Cloudflare Worker 侧执行 React 渲染，不消耗 Worker CPU

@@ -43,6 +43,7 @@ class RunReplayConfig:
     x_json_sha256: str
     y_json_sha256: str
     ksampler_node_id: str | None
+    anima_artist_mixer: bool
 
 
 def load_run_replay_config(
@@ -63,6 +64,7 @@ def load_run_replay_config(
     x_json_sha256 = _require_str(payload, "x_json_sha256")
     y_json_sha256 = _require_str(payload, "y_json_sha256")
     ksampler_node_id = _parse_optional_ksampler_node_id(payload)
+    anima_artist_mixer = _parse_anima_artist_mixer(payload)
 
     generation_overrides = _parse_generation_overrides(
         _require_dict(payload, "generation_overrides")
@@ -97,6 +99,7 @@ def load_run_replay_config(
         x_json_sha256=x_json_sha256,
         y_json_sha256=y_json_sha256,
         ksampler_node_id=ksampler_node_id,
+        anima_artist_mixer=anima_artist_mixer,
     )
 
 
@@ -182,6 +185,27 @@ def _parse_generation_overrides(
 
 
 def _parse_optional_ksampler_node_id(payload: dict[str, object]) -> str | None:
+    workflow = _parse_workflow_snapshot(payload)
+    return _optional_typed(
+        workflow,
+        "ksampler_node_id",
+        str,
+        field_prefix="config_snapshot.workflow",
+    )
+
+
+def _parse_anima_artist_mixer(payload: dict[str, object]) -> bool:
+    workflow = _parse_workflow_snapshot(payload)
+    value = _optional_typed(
+        workflow,
+        "anima_artist_mixer",
+        bool,
+        field_prefix="config_snapshot.workflow",
+    )
+    return value if value is not None else False
+
+
+def _parse_workflow_snapshot(payload: dict[str, object]) -> dict[str, object]:
     config_snapshot_obj = payload.get("config_snapshot")
     if config_snapshot_obj is None:
         raise ValueError("run.json 缺少字段: config_snapshot")
@@ -200,12 +224,7 @@ def _parse_optional_ksampler_node_id(payload: dict[str, object]) -> str | None:
         field_name="config_snapshot.workflow",
     )
 
-    return _optional_typed(
-        workflow,
-        "ksampler_node_id",
-        str,
-        field_prefix="config_snapshot.workflow",
-    )
+    return workflow
 
 
 def _parse_selection(payload: dict[str, object]) -> ReplaySelection:

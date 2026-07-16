@@ -1,4 +1,5 @@
 import hashlib
+import json
 import yaml
 import re
 from collections.abc import Mapping
@@ -15,6 +16,8 @@ Y_TAG_TYPES = {Y_TAG_TYPE_GENERAL, Y_TAG_TYPE_ARTISTS}
 Y_STYLE_KEY = "_y_style_key"
 Y_COLLECTION_ID = "_y_collection_id"
 Y_ITEM_INDEX = "_y_item_index"
+Y_POSITIVE_VALUE = "_y_positive_value"
+Y_ARTIST_CHAIN = "_y_artist_chain"
 ARTIST_WEIGHT_PROFILE_IDENTITY = "identity"
 ARTIST_WEIGHT_PROFILE_SQUARE = "square"
 ARTIST_WEIGHT_PROFILES = {
@@ -300,6 +303,33 @@ def _render_y_weighted_tags(
     return ", ".join(tokens) + ", "
 
 
+def _render_anima_mixer_y_tags(
+    tags: object,
+    *,
+    artist_weight_profile: str,
+) -> tuple[str, str]:
+    general_tokens: list[str] = []
+    artist_tokens: list[str] = []
+    for tag, weight, tag_type in _validated_y_tags(tags):
+        rendered_weight = _transform_artist_weight(
+            weight,
+            profile=artist_weight_profile,
+        )
+        if tag_type == Y_TAG_TYPE_ARTISTS:
+            artist = f"@{tag}"
+            if abs(rendered_weight - 1.0) < 1e-9:
+                artist_tokens.append(artist)
+            else:
+                artist_tokens.append(f"{_format_weight(rendered_weight)}::{artist}")
+            continue
+        general_tokens.append(_render_weighted_tag(tag, rendered_weight))
+
+    positive_y = ", ".join(general_tokens)
+    if positive_y:
+        positive_y += ", "
+    return positive_y, ", ".join(artist_tokens)
+
+
 def _render_novelai_weighted_tags(tags: object) -> str:
     """Render YAML tags directly as NovelAI native format."""
     tokens: list[str] = []
@@ -343,6 +373,7 @@ def read_y_rows(
     *,
     artist_prefix: str = "",
     artist_weight_profile: str = ARTIST_WEIGHT_PROFILE_IDENTITY,
+    anima_artist_mixer: bool = False,
 ) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
 
@@ -355,13 +386,26 @@ def read_y_rows(
     collection_id = _y_collection_id(path, payload)
 
     for item in _load_y_items(path):
+        tags = item.get("tags", [])
+        y_value = _render_y_weighted_tags(
+            tags,
+            artist_prefix=artist_prefix,
+            artist_weight_profile=artist_weight_profile,
+        )
+        mixer_fields: dict[str, str] = {}
+        if anima_artist_mixer:
+            positive_y, artist_chain = _render_anima_mixer_y_tags(
+                tags,
+                artist_weight_profile=artist_weight_profile,
+            )
+            mixer_fields = {
+                Y_POSITIVE_VALUE: positive_y,
+                Y_ARTIST_CHAIN: artist_chain,
+            }
         rows.append(
             {
-                "y": _render_y_weighted_tags(
-                    item.get("tags", []),
-                    artist_prefix=artist_prefix,
-                    artist_weight_profile=artist_weight_profile,
-                ),
+                "y": y_value,
+                **mixer_fields,
                 **_y_identity_fields(collection_id=collection_id, item=item),
             }
         )
@@ -397,9 +441,21 @@ def normalize_prompt(prompt: str) -> str:
     return normalized
 
 
-def compute_prompt_hash(prompt: str) -> str:
+def compute_prompt_hash(prompt: str, artist_chain: str | None = None) -> str:
     normalized = normalize_prompt(prompt)
-    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    if artist_chain is None:
+        hash_input = normalized
+    else:
+        hash_input = json.dumps(
+            {
+                "artist_chain": normalize_prompt(artist_chain),
+                "positive_prompt": normalized,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    return hashlib.sha256(hash_input.encode("utf-8")).hexdigest()
 
 
 def derive_seed(base_seed: int, x_index: int, y_index: int) -> int:
