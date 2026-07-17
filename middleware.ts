@@ -48,6 +48,7 @@ const LOCALIZED_PATH_PATTERNS: RegExp[] = [
   /^\/info/,                 // 信息页
   /^\/privacy-policy/,       // 隐私政策
   /^\/prompts/,              // Prompt 法典
+  /^\/favorites/,            // 收藏页
   /^\/models\//,             // 模型详情页
 ];
 

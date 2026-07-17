@@ -56,6 +56,7 @@ function LanguageSwitcher() {
 
 export function SiteHeader() {
   const t = useTranslations("header");
+  const tFavorites = useTranslations("styleFavorites");
   const { user, signOut } = useAuth();
   const { showNsfw, setShowNsfw } = useUserPreferences();
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
@@ -100,6 +101,15 @@ export function SiteHeader() {
             >
               Prompt 法典
             </Link>
+            {/* 收藏页入口：仅登录后渲染，未登录不出现 */}
+            {user ? (
+              <Link
+                href="/favorites"
+                className="ml-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {tFavorites("navEntry")}
+              </Link>
+            ) : null}
           </nav>
 
           {/* Right side */}

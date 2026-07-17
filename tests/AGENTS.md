@@ -39,6 +39,7 @@
 | negative prompt               | `test_negative_prompt_append.py`                                   | 负面提示词拼接                                      |
 | 重试失败项幂等性        | `test_idempotent_retry_failed.py`                         | 验证重复重试不重复生成 |
 | NovelAI 生图入口        | `test_novelai_generate.py`                                | NovelAI 生图 argparse + 流程测试 |
+| 历史 run 回填           | `test_backfill_run_style_items.py`                        | Y 资产 sha256 重放/git stub、集合校验、幂等 upsert、dry-run |
 
 ## 约定（本目录特有）
 

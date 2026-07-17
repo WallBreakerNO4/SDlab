@@ -157,5 +157,23 @@
     "loginGateTitle": "登录以浏览提示词法典",
     "loginGateDescription": "登录后可浏览结构化提示词标签，选择并复制用于 NovelAI 和 ComfyUI 图像生成。",
     "loginGateButton": "登录 / 注册"
+  },
+  "styleFavorites": {
+    "navEntry": "收藏",
+    "toggleFailed": "收藏操作失败，请稍后重试。",
+    "add": "收藏该画师串",
+    "remove": "取消收藏",
+    "panelTitle": "收藏的画师串",
+    "panelEmpty": "暂无收藏。点击行标签上的星标即可收藏画师串。",
+    "title": "画师串收藏 — SD Style Lab",
+    "description": "查看你收藏的画师提示词串，并跳转到各模型中的对应行。",
+    "loginGateTitle": "登录以查看收藏",
+    "loginGateDescription": "登录后可查看你收藏的画师串，并快速跳转到各模型中的对应行。",
+    "loginGateButton": "登录 / 注册",
+    "loading": "加载中...",
+    "empty": "暂无收藏。在模型详情页点击行标签上的星标即可收藏画师串。",
+    "favoritedAt": "收藏于 {time}",
+    "availableModels": "可用模型",
+    "noAvailableModels": "暂无可用模型"
   }
 }
