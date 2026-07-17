@@ -343,7 +343,6 @@ export function ModelCard({
   modelSummary,
   onPreviewImage,
 }: ModelCardProps) {
-  const t = useTranslations("modelCard");
   const modelName = modelSummary.model?.name || modelSummary.run_dir;
   const locale = useLocale();
   const description = modelSummary.model?.description;
@@ -373,15 +372,8 @@ export function ModelCard({
         <div className="absolute top-0 left-0 w-full h-0.5 bg-linear-to-r from-transparent via-primary/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-10" />
 
         <div
-          className="relative w-full overflow-hidden bg-muted/40 border-b border-border/40 cursor-zoom-in will-change-transform"
+          className="relative w-full overflow-hidden bg-muted/40 border-b border-border/40 will-change-transform"
           style={{ aspectRatio: coverRatio }}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const url = getFullResUrl(coverAsset);
-            if (url) onPreviewImage(url);
-          }}
-          title={t("viewLarge")}
         >
           <CardImage
             src={coverSource?.imgSrc}
