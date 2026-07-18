@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-07-16 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-07-19 -->
 
 # tests/ — pytest 约定
 
@@ -30,8 +30,10 @@
 | R2 幂等性                     | `test_r2_upload_idempotency.py`                                    | 重复上传幂等                                        |
 | R2 本地 Supabase 集成         | `test_r2_upload_integration_local_supabase.py`                     | 需本地 Supabase                                     |
 | Supabase writer               | `test_supabase_writer.py`/`test_supabase_writer_postgrest_http.py` | upsert + HTTP mock                                  |
+| Mixer prompt parts 上传       | `test_r2_upload_mixer_prompt_parts.py`                             | 上传链路 Mixer prompt parts enrich/legacy 兼容      |
 | CLI 菜单                      | `test_main_menu_*.py`（6 个）                                      | 菜单触发/循环/边界                                  |
-| CSV→YAML 转换                 | `test_convert_x_csv_to_json.py`                                    | X prompt 资产转换与描述字段                         |
+| CSV→YAML 转换                 | `test_convert_x_csv_to_json.py`/`test_convert_y_csv_to_json.py`   | X/Y prompt 资产转换与描述字段                       |
+| Y 标签类型标注                | `test_annotate_y_tag_types_from_danbooru.py`                       | Danbooru 标注脚本测试                               |
 | 清桶入口                      | `test_r2_clear_bucket.py`                                          | clear bucket 菜单/环境变量分支                      |
 | 导出合约                      | `test_public_exports_contract.py`                                  | `__all__` 检查                                      |
 | 依赖烟雾                      | `test_smoke.py`                                                    | 最轻量集成信号                                      |

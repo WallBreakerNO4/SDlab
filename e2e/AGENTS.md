@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-07-16 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-07-19 -->
 
 # e2e/ — Playwright 端到端测试
 
@@ -19,6 +19,7 @@
 | 弹窗按需加载 | `task-13-dialog-on-demand.spec.ts` | 弹窗 display 图片按需加载 |
 | hash 跳转 | `task-13-hash-jump.spec.ts` | URL hash 定位到特定 cell |
 | 滚动恢复 | `task-13-scroll-restore.spec.ts` | 弹窗关闭后恢复滚动位置 |
+| Mixer prompt parts 渲染 | `task-13-mixer-prompt-parts.spec.ts` | Mixer 的 y_prompt_parts（Artist/Common Prompt）前端分栏渲染 |
 | 画师串收藏 | `task-14-style-favorites.spec.ts` | 未登录弹登录框/收藏页门控 + 已登录 toggle/面板跳转/收藏页 |
 | 已登录态机制 | `global-setup.ts` / `global-teardown.ts` / `e2e-auth-state.ts` | service role admin 链路建 session 写 storageState；teardown 清空测试用户收藏 |
 

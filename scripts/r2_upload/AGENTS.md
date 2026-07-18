@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-07-16 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-07-19 -->
 
 # scripts/r2_upload/ — R2 上传 + Supabase 写入
 
@@ -14,8 +14,8 @@
 | ------------------------- | ------------------------ | ------------------------------------------------------------------------------------ |
 | 上传主入口与 CLI          | `upload_images_to_r2.py` | `build_parser()`；`-F/--force-publish`；编排编码/上传/写入；4 条 tqdm 进度条          |
 | R2 存储客户端             | `r2_client.py`           | boto3 S3 兼容；`R2Client` + 重试 + 结构化错误（`R2ClientError` 含 retryable 标志）   |
-| Supabase 批量写入         | `supabase_writer.py`     | `SupabaseWriter.upsert_upload_index()`；分批 upsert + 并发写入                       |
-| 上传规划与变体            | `upload_planner.py`      | `_build_run_plan()`；多变体规划 + ThreadPoolExecutor 并发编码                        |
+| Supabase 批量写入         | `supabase_writer.py`     | `SupabaseWriter.upsert_upload_index()`；分批 upsert + 并发写入；含 `_build_run_style_item_rows()` 从 image payload 的 `y_style_key` upsert `run_style_items`（on_conflict=`run_id,style_key`） |
+| 上传规划与变体            | `upload_planner.py`      | `_build_run_plan()`；多变体规划 + ThreadPoolExecutor 并发编码；把 `y_style_key` 写入 grid_items 字段并规划 `run_style_items` 行；含旧 Mixer run 的 Y prompt 拆分回填 |
 | R2 key 生成与 bucket 映射 | `r2_keys.py`             | key 格式：`runs/{run_dir}/{variant}_{filename}`；normal→public, advance/nsfw→private |
 | 图片编码参数              | `encoding_params.py`     | webp/avif 质量/尺寸参数；展示页缩略图中的 thumb 尺寸为 display 一半（向下取整，≥1）  |
 | 变体图片处理              | `variants.py`            | PIL 缩放 + 编码；生成展示页缩略图所需的 display/thumb webp/avif                      |
@@ -69,6 +69,7 @@ supabase_writer.py → 批量 upsert 到 Supabase（runs + snapshots + projectio
 - 发布顺序固定为不可变资源 → Supabase 数据/`run_view_index` → 可变 `view/current.json`；强制发布不重复上传已存在的内容寻址图片
 - 旧 Mixer metadata 缺少 `y_common_prompt` 时，上传规划会校验 run 快照中的 Y YAML SHA256，并按 Y prompt 身份在内存中严格回填；不会改写本地 `metadata.jsonl`
 - Mixer bootstrap 以可选 `yPromptParts` 暴露 Artist/Common Prompt；继续保留 `yLabels` 兼容旧前端，view schema 保持 v2
+- Style Favorites 上传链路：新 run 上传时从 image payload 的 `y_style_key` 提取并 upsert `run_style_items`（`run_id,style_key,y_index,label`）；老 run 缺该字段时静默跳过，不阻断上传，历史映射由 `scripts/other/backfill_run_style_items.py` 回填
 - I/O 统一用 `pathlib.Path`；中间编码产物写入 `_r2_upload_intermediate/`
 
 ## 反模式
