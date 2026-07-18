@@ -1,6 +1,6 @@
 # Spec: 画师提示词收藏（Style Favorites）
 
-> 状态：已评审（2026-07-17 用户确认） | 日期：2026-07-17 | 分支：dev
+> 状态：已实现（2026-07-17） | 日期：2026-07-17 | 分支：dev
 
 ## 背景与教训
 
@@ -178,3 +178,11 @@ export async function PUT(request: NextRequest) {
 
 1. 收藏页可用模型列表是否需要封面缩略图？（默认：纯文本 run 名称列表，保持轻量；如要封面则复用首页卡片资源约定。）
 2. 行标签星标在 Mixer 形态（已有 Artist/Common 两个复制按钮）中的摆放位置，实施时以不挤压现有交互为准，必要时先做 Legacy 形态。
+
+## 实施记录（2026-07-17）
+
+- **CP1（migration 验证）**：本地无 Supabase 栈（全部在远端），改用一次性 Postgres 容器按序应用全部 migrations 干净通过：两表 + policies + grants 齐备、迁移链无冲突、重复执行幂等。
+- **CP3（API curl 闭环）**：dev server 下用 service-role admin 链路（generate_link + 手工截 fragment token + `@supabase/ssr` cookie 编码注入）完成 curl 验证：未登录 401、坏 body 400、PUT→GET→DELETE 闭环正确，重复 PUT 的 ON CONFLICT DO UPDATE 分支亦覆盖。
+- **生产回填已执行**：`scripts/other/backfill_run_style_items.py` 对 6 个 run 各回填 432 行（6×432），幂等复跑结果一致。
+- **CP5（终验口径）**：`pnpm lint`、`pnpm typecheck`、`uv run pytest -q` 全绿；e2e task-14 8/8 绿（`E2E_SERVER=start` + 默认 3000 端口）；全量 e2e 套件另有 7 个失败均为陈旧 spec（首页链接选择器未含 locale 前缀、mock 旧 `/api/comfyui/image` 代理/旧 run API 路径、环境敏感用例），与本功能无关、base 上即失败；用户已决定（2026-07-17）陈旧 spec 修复另立 hygiene 任务，不在本分支处理。
+- **`playwright.config.ts` baseURL 改 `localhost`**：R2 CORS 只放行 `http://localhost:3000` 与生产域名，`127.0.0.1` 会被 CORS 拒且 dev 模式下不 hydrate；start 模式 e2e 因此必须用默认 3000 端口。

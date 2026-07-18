@@ -18,7 +18,7 @@
 | 首页模型卡片          | `components/home/model-card.tsx`         | 封面图 + 描述展开 + 主页缩略图水平卷轴             |
 | 首页预览弹窗          | `components/home/preview-dialog.tsx`     | 全屏大图预览弹窗                                   |
 | 首页组件约定          | `components/home/AGENTS.md`              | 封面图/主页缩略图消费约定                          |
-| 站点头部              | `components/site-header.tsx`             | 品牌、ThemeToggle、登录弹窗入口、用户菜单；`useTranslations("header")` 驱动多语言 |
+| 站点头部              | `components/site-header.tsx`             | 品牌、ThemeToggle、登录弹窗入口、收藏页入口（登录后）、用户菜单；`useTranslations("header")` 驱动多语言 |
 | 站点页脚              | `components/site-footer.tsx`              | 版权、关于/隐私政策链接；`useTranslations("footer")` + `@/i18n/navigation` Link |
 | 浏览器端认证 Provider | `components/auth-provider.tsx`           | `createSupabaseBrowserClient()` + session 监听     |
 | 登录弹窗              | `components/auth-login-dialog.tsx`       | GitHub / Google / Microsoft OAuth 入口             |
@@ -28,6 +28,7 @@
 | JSON-LD 结构化数据    | `components/json-ld.tsx`                | `JsonLdWebsite` + `JsonLdBreadcrumbList`，客户端注入 schema.org 标签 |
 | shadcn 配置           | `components.json`                        | aliases、style、cssVariables 等                    |
 | Prompt 法典浏览器 UI  | `components/prompt/`                      | TOC + 虚拟滚动条目 + Tag/Choice/多角色渲染（见 `components/prompt/AGENTS.md`） |
+| 收藏页客户端 UI       | `components/favorites/favorites-page.tsx` | 登录门控 + 收藏列表（快照 label）+ 跨模型跳转 + 取消收藏 |
 | 悬浮登录按钮            | `auth-floating-button.tsx`               | `"use client"`;未登录时悬浮按钮 → `AuthLoginDialog`;已登录显示头像下拉菜单 |
 | shadcn 示例布局          | `example.tsx`                            | `ExampleWrapper` 布局组件,用于组件展示页面 |
 | 用户偏好 Provider        | `user-preferences-provider.tsx`          | `"use client"`;用户偏好 Context（NSFW 等）,基于 `useAuth()` |

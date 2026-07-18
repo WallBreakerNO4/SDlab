@@ -19,6 +19,7 @@
 | `privacy-policy/page.tsx` | 隐私政策页：`force-static` + `react-markdown`，根据 locale 选择 `privacy-policy-page.md` 或 `privacy-policy-page.en.md` |
 | `models/[runDir]/page.tsx` | 模型详情页（Server Component）：验证 locale + `isValidRunDir()` → 渲染 `ModelDetailClientPage(runDir)` |
 | `prompts/page.tsx` | Prompt 法典浏览器页（Server Component）：验证 locale → `buildSeoMetadata()` → 用 `ModelProvider` + `ChoiceProvider` 包裹 `PromptBrowserPage`；未登录时由客户端组件渲染登录门控 |
+| `favorites/page.tsx` | 画师串收藏页（Server Component）：验证 locale → `buildSeoMetadata()` + `robots: { index: false }` → 渲染 `components/favorites/favorites-page.tsx`；未登录由客户端渲染登录引导 |
 
 ## For AI Agents
 
@@ -57,6 +58,7 @@
 | `privacy-policy/` | 隐私政策页面（静态 Markdown） |
 | `models/[runDir]/` | 模型详情页（委托 `app/models/[runDir]/` 的组件） |
 | `prompts/` | Prompt 法典浏览器（委托 `components/prompt/`，见 `components/prompt/AGENTS.md`） |
+| `favorites/` | 画师串收藏页（委托 `components/favorites/`） |
 
 ## Dependencies
 
