@@ -30,6 +30,10 @@ import {
 import { VirtualGridPreviewCell } from "./virtual-grid-preview-cell";
 import { VirtualGridRowLabel } from "./virtual-grid-row-label";
 import { VirtualGridCellDialog } from "./virtual-grid-cell-dialog";
+import {
+  GridFavoritesPanel,
+  type GridFavoritesPanelRow,
+} from "./grid-favorites-panel";
 import { useVirtualGridLayout } from "./use-virtual-grid-layout";
 import { useVirtualGridRows } from "./use-virtual-grid-rows";
 import { useVirtualGridScroll } from "./use-virtual-grid-scroll";
@@ -43,6 +47,11 @@ import {
 import { clearPrivateObjectUrlCache } from "./use-renderable-variant-source";
 import { useColumnVisibility } from "./use-column-visibility";
 import type { RunViewAccess } from "@/app/models/[runDir]/model-detail-types";
+import { useStyleFavorites } from "@/app/models/[runDir]/use-style-favorites";
+import {
+  parseStyleItemsResponse,
+  type StyleKey,
+} from "@/lib/style-favorites";
 import type {
   BlurhashCell,
   RowCell,
@@ -73,7 +82,16 @@ const DEV_IMAGE_DOM_CAP_NOTE = 300;
 const PENDING_RESTORE_MAX_FRAMES = 8;
 const SCROLL_OFFSET_EPSILON = 1;
 
-export function VirtualGrid({
+export function VirtualGrid(props: VirtualGridProps) {
+  "use no memo";
+
+  const { user } = useAuth();
+  // 收藏状态按用户隔离：切换登录用户/退出登录时整体重置
+  // （参考 UserPreferencesProvider 的 key 重置模式），避免闪现上一用户的收藏态
+  return <VirtualGridContent key={user?.id ?? "anonymous"} {...props} />;
+}
+
+function VirtualGridContent({
   runDir,
   grid,
   blurhashMap,
@@ -93,6 +111,56 @@ export function VirtualGrid({
   );
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const { user } = useAuth();
+
+  const {
+    favorites: styleFavorites,
+    favoriteKeys,
+    toggle: toggleStyleFavorite,
+  } = useStyleFavorites();
+
+  // style-items 映射（y_index → style_key）：bootstrap ready（即网格挂载）后
+  // 惰性拉取，不限登录态。拉取失败/响应形态不符 → 静默降级为 null
+  // （星标不渲染），不重试、不阻塞网格。
+  const [styleKeyByYIndex, setStyleKeyByYIndex] = useState<ReadonlyMap<
+    number,
+    StyleKey
+  > | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/comfyui/run/${encodeURIComponent(runDir)}/style-items`,
+          { cache: "no-store" },
+        );
+        if (!res.ok) return;
+        const items = parseStyleItemsResponse(await res.json());
+        if (!items || cancelled) return;
+        const map = new Map<number, StyleKey>();
+        for (const item of items) {
+          map.set(item.y_index, item.style_key);
+        }
+        if (!cancelled) setStyleKeyByYIndex(map);
+      } catch {
+        // 静默降级：星标不渲染，其余一切如常
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [runDir]);
+
+  // 星标点击：未登录 → 沿用网格既有按需登录弹窗；已登录 → 乐观 toggle
+  const handleToggleFavorite = useCallback(
+    (styleKey: StyleKey, label: string) => {
+      if (!user) {
+        setLoginDialogOpen(true);
+        return;
+      }
+      void toggleStyleFavorite(styleKey, label);
+    },
+    [user, toggleStyleFavorite],
+  );
   const [gridToolsOpen, setGridToolsOpen] = useState(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("sd-style-lab:grid-tools-open") === "true";
@@ -198,6 +266,59 @@ export function VirtualGrid({
     }
     return result;
   }, [grid.y_prompt_parts]);
+
+  // 收藏面板数据：收藏 × style-items 客户端 join（favorites.style_key →
+  // style-items Map → y_index → 网格行），label 取当前 run 网格行标签
+  // （与行标签星标快照同一拼接规则），不用收藏快照。
+  // 防御性过滤：style_key 不在当前 run style-items / 网格行内的项跳过。
+  const favoritePanelRows = useMemo<GridFavoritesPanelRow[]>(() => {
+    if (!styleKeyByYIndex || styleFavorites.length === 0) return [];
+    const yIndexByStyleKey = new Map<StyleKey, number>();
+    for (const [yIndex, styleKey] of styleKeyByYIndex) {
+      yIndexByStyleKey.set(styleKey, yIndex);
+    }
+    const rowIndexByYIndex = new Map<number, number>();
+    grid.y_indexes.forEach((yIndex, rowIndex) => {
+      rowIndexByYIndex.set(yIndex, rowIndex);
+    });
+    const rows: GridFavoritesPanelRow[] = [];
+    for (const entry of styleFavorites) {
+      const yIndex = yIndexByStyleKey.get(entry.style_key);
+      if (yIndex === undefined) continue;
+      const rowIndex = rowIndexByYIndex.get(yIndex);
+      if (rowIndex === undefined) continue;
+      const promptParts = yPromptPartsByIndex.get(yIndex);
+      const currentLabel = promptParts
+        ? [promptParts.artist, promptParts.commonPrompt]
+            .filter(Boolean)
+            .join(" ")
+        : (grid.y_labels?.[rowIndex] ?? "");
+      rows.push({
+        styleKey: entry.style_key,
+        lineNumber: rowIndex + 1,
+        label: currentLabel || entry.label,
+      });
+    }
+    // 按行号升序
+    rows.sort((a, b) => a.lineNumber - b.lineNumber);
+    return rows;
+  }, [
+    styleFavorites,
+    styleKeyByYIndex,
+    grid.y_indexes,
+    grid.y_labels,
+    yPromptPartsByIndex,
+  ]);
+
+  // 面板点击跳转：复用既有行滚动 + hash 同步（lineNumber 为 1-based 行号）
+  const handleJumpToFavorite = useCallback(
+    (lineNumber: number) => {
+      if (scrollToLineNumber(lineNumber)) {
+        syncUrlHashWithLineNumber(lineNumber);
+      }
+    },
+    [scrollToLineNumber, syncUrlHashWithLineNumber],
+  );
 
   const searchMatches = useMemo(() => {
     const query = searchQuery.trim();
@@ -780,6 +901,14 @@ export function VirtualGrid({
               </CollapsibleContent>
             </Collapsible>
 
+            {/* 收藏的画师串 */}
+            <GridFavoritesPanel
+              isAuthenticated={!!user}
+              rows={favoritePanelRows}
+              onRequireLogin={() => setLoginDialogOpen(true)}
+              onJumpToLine={handleJumpToFavorite}
+            />
+
             {/* 列显示 */}
             <Collapsible>
               <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-center justify-between border-b border-border/40 px-3 py-2 text-left text-xs font-medium transition-colors">
@@ -909,6 +1038,7 @@ export function VirtualGrid({
                   cachedRow && cachedRow.status === "ready"
                     ? (cachedRow.yValue ?? preloadedYLabel)
                     : preloadedYLabel;
+                const styleKey = styleKeyByYIndex?.get(yIndex) ?? null;
                 return (
                   <div
                     key={virtualRow.key}
@@ -933,6 +1063,27 @@ export function VirtualGrid({
                         onCopyRowLabel={copyRowLabel}
                         onCopyPromptPart={copyPromptPart}
                         highlightTerm={searchQuery.trim() || undefined}
+                        favoriteStar={
+                          styleKey
+                            ? {
+                                isFavorite: favoriteKeys.has(styleKey),
+                                // label 快照与搜索摘要保持一致：Mixer 取
+                                // artist + common 拼接，Legacy 取行标签串
+                                onToggle: () =>
+                                  handleToggleFavorite(
+                                    styleKey,
+                                    promptParts
+                                      ? [
+                                          promptParts.artist,
+                                          promptParts.commonPrompt,
+                                        ]
+                                          .filter(Boolean)
+                                          .join(" ")
+                                      : yLabel,
+                                  ),
+                              }
+                            : null
+                        }
                       />
 
                       {visibleXColumns.map((col) => {

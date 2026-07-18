@@ -15,6 +15,7 @@
 | 服务端页面入口         | `app/[locale]/models/[runDir]/page.tsx` | Server Component；`params: Promise<{ locale, runDir }>`，校验 `hasLocale()` + `isValidRunDir()` |
 | 客户端状态与渲染       | `model-detail-client.tsx`      | 消费 `useModelDetailData`，状态机：loading / ready / not-found / error  |
 | 数据拉取 hook          | `use-model-detail-data.ts`     | 拉取 view/current.json → access → bootstrap，含 abort 清理与 type guard    |
+| 网格收藏 hook          | `use-style-favorites.ts`       | `useStyleFavorites()`：favoriteKeys + 乐观 toggle（失败回滚 + toast）；style-items 惰性拉取 |
 | 模型详情 Header        | `model-detail-header.tsx`      | 模型名、描述、外部链接（homepage/HuggingFace/Civitai）、workflow 下载入口   |
 | 类型守卫与响应类型     | `model-detail-types.ts`        | `ModelDetailResponse`、`RunViewAccess`、`CurrentRunView` 及相关 `is*` 守卫  |
 | skeleton 占位组件      | `model-detail-skeletons.tsx`   | `SummarySkeleton` + `GridSkeleton`                                          |
@@ -32,6 +33,7 @@
 - 所有 fetch 通过 `AbortController` 管理，组件卸载时自动取消。
 - `model-detail-types.ts` 中包含多层 type guard（`isModelDetailResponse` / `isRunGridIndexData` / `isCurrentRunView` / `isRunViewAccess`），服务端返回数据必须经过校验才进入渲染态。
 - 认证入口统一走 `AuthProvider` + `useAuth()`；workflow 下载需要登录态。
+- 收藏 hook 放本目录（`hooks/` 目录约定不放页面级业务数据 hook）；共享类型/guard 与薄 fetch/mutate 函数在 `lib/style-favorites.ts`。
 
 ## 反模式
 

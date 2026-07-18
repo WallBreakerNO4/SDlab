@@ -5,7 +5,7 @@
 
 ## 概览
 
-- 当前 ComfyUI API 已精简为三个核心 route：`runs`（首页列表）、`access`（媒体授权）、`workflow`（下载）。run 详情与 grid 数据不再通过独立 API route 返回，而是由前端直接拉取 R2 上的 view bootstrap JSON（`view/current.json` → `view/v2/{release_id}/bootstrap.*.json`）。
+- 当前 ComfyUI API 有四个核心 route：`runs`（首页列表）、`access`（媒体授权）、`workflow`（下载）、`style-items`（收藏 style_key 映射）。run 详情与 grid 数据不再通过独立 API route 返回，而是由前端直接拉取 R2 上的 view bootstrap JSON（`view/current.json` → `view/v2/{release_id}/bootstrap.*.json`）。
 - 术语约定：展示页缩略图（`display_*` / `thumb_*`）出现在 view bootstrap JSON 中；首页封面图与主页缩略图则在 `runs` 列表的 `assets.cover` / `assets.homepage_cards` 字段中。
 
 ## 去哪儿看
@@ -15,6 +15,7 @@
 | runs 列表     | `runs/route.ts`                       | 通过 `lib/run-list.ts:listRunSummaries()` 查询 Supabase         |
 | 媒体授权      | `run/[runDir]/access/route.ts`        | 认证用户获取 SFW/NSFW 视图 grant，由 `lib/run-media-grant.ts` 管理 |
 | workflow 下载 | `run/[runDir]/workflow/route.ts`      | 验证 artifact key 后从 R2_PUBLIC_BUCKET 流式返回                |
+| 收藏 style 映射 | `run/[runDir]/style-items/route.ts`   | 公开返回 `[{ y_index, style_key }]`（0-based），供网格星标与跳转 |
 | 公开对象代理  | `app/api/public-object/route.ts`      | R2 公开对象代理，直接回源                                       |
 | 私有对象代理  | `app/api/private-object/route.ts`     | R2 私有对象代理，需 grant token 验证                            |
 

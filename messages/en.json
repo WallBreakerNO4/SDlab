@@ -157,5 +157,23 @@
     "loginGateTitle": "Sign in to browse the Prompt Codex",
     "loginGateDescription": "Sign in to browse structured prompt tags, select and copy for NovelAI and ComfyUI image generation.",
     "loginGateButton": "Sign in / Register"
+  },
+  "styleFavorites": {
+    "navEntry": "Favorites",
+    "toggleFailed": "Failed to update favorite. Please try again.",
+    "add": "Favorite this style row",
+    "remove": "Remove from favorites",
+    "panelTitle": "Favorite styles",
+    "panelEmpty": "No favorites yet. Click the star on a row label to favorite a style row.",
+    "title": "Style Favorites — SD Style Lab",
+    "description": "View your favorited artist style rows and jump to the matching row in each model.",
+    "loginGateTitle": "Sign in to view favorites",
+    "loginGateDescription": "Sign in to view your favorited style rows and jump to the matching row in each model.",
+    "loginGateButton": "Sign in / Register",
+    "loading": "Loading...",
+    "empty": "No favorites yet. Click the star on a row label in a model detail page to favorite a style row.",
+    "favoritedAt": "Favorited at {time}",
+    "availableModels": "Available in",
+    "noAvailableModels": "No available models"
   }
 }

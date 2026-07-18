@@ -1,4 +1,4 @@
-import { Copy01Icon } from "@hugeicons/core-free-icons";
+import { Copy01Icon, StarIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useTranslations } from "next-intl";
 import type { CSSProperties, ReactNode } from "react";
@@ -9,6 +9,15 @@ import { cn } from "@/lib/utils";
 import type { CachedRow, RunGridYPromptParts } from "./virtual-grid-types";
 
 type PromptPartKind = "artist" | "common";
+
+/**
+ * 行标签收藏星标状态。
+ * 为 null / undefined 时（该行无 style_key 映射，或 style-items 拉取降级）不渲染星标。
+ */
+type FavoriteStarState = {
+  isFavorite: boolean;
+  onToggle: () => void;
+};
 
 type VirtualGridRowLabelProps = {
   cachedRow: CachedRow | undefined;
@@ -22,6 +31,7 @@ type VirtualGridRowLabelProps = {
     kind: PromptPartKind,
   ) => void | Promise<void>;
   highlightTerm?: string;
+  favoriteStar?: FavoriteStarState | null;
 };
 
 const NOVELAI_WEIGHT_RE = /^([\d.]+)::(.+?)( ::)?$/;
@@ -141,18 +151,61 @@ function PromptTokens({
   );
 }
 
+function FavoriteStarButton({
+  state,
+  className,
+}: {
+  state: FavoriteStarState;
+  className?: string;
+}) {
+  const t = useTranslations("styleFavorites");
+  const actionLabel = state.isFavorite ? t("remove") : t("add");
+  return (
+    <Button
+      type="button"
+      size="icon-xs"
+      variant="ghost"
+      className={cn(
+        "h-5 w-5",
+        state.isFavorite
+          ? "text-amber-500 hover:text-amber-600 dark:text-amber-400 dark:hover:text-amber-300"
+          : "text-muted-foreground hover:text-foreground",
+        className,
+      )}
+      aria-label={actionLabel}
+      aria-pressed={state.isFavorite}
+      title={actionLabel}
+      data-testid="run-grid-favorite-star"
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        state.onToggle();
+      }}
+    >
+      <HugeiconsIcon
+        icon={StarIcon}
+        className="h-3 w-3"
+        fill={state.isFavorite ? "currentColor" : "none"}
+      />
+    </Button>
+  );
+}
+
 function PromptPartSection({
   kind,
   label,
   value,
   highlightTerm,
   onCopy,
+  trailing,
 }: {
   kind: PromptPartKind;
   label: string;
   value: string;
   highlightTerm?: string;
   onCopy: (value: string, kind: PromptPartKind) => void | Promise<void>;
+  /** 头部右侧附加小图标（星标），渲染在复制按钮左侧，不挤压现有交互 */
+  trailing?: ReactNode;
 }) {
   const t = useTranslations("virtualGrid");
   const copyLabel = kind === "artist" ? t("copyArtist") : t("copyCommonPrompt");
@@ -166,22 +219,25 @@ function PromptPartSection({
         <span className="text-foreground/70 text-[9px] font-semibold uppercase">
           {label}
         </span>
-        <Button
-          type="button"
-          size="icon-xs"
-          variant="ghost"
-          className="text-muted-foreground hover:text-foreground -mr-1 h-5 w-5"
-          aria-label={copyLabel}
-          title={copyLabel}
-          data-testid={`run-grid-copy-${kind}`}
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            void onCopy(value, kind);
-          }}
-        >
-          <HugeiconsIcon icon={Copy01Icon} className="h-3 w-3" />
-        </Button>
+        <div className="flex items-center gap-0.5">
+          {trailing}
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            className="text-muted-foreground hover:text-foreground -mr-1 h-5 w-5"
+            aria-label={copyLabel}
+            title={copyLabel}
+            data-testid={`run-grid-copy-${kind}`}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void onCopy(value, kind);
+            }}
+          >
+            <HugeiconsIcon icon={Copy01Icon} className="h-3 w-3" />
+          </Button>
+        </div>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden pr-1">
         <PromptTokens value={value} highlightTerm={highlightTerm} />
@@ -226,6 +282,7 @@ export function VirtualGridRowLabel({
   onCopyRowLabel,
   onCopyPromptPart,
   highlightTerm,
+  favoriteStar,
 }: VirtualGridRowLabelProps) {
   const t = useTranslations("virtualGrid");
   const artist = promptParts?.artist?.trim() || null;
@@ -238,6 +295,10 @@ export function VirtualGridRowLabel({
       : cachedRow && cachedRow.status === "error"
         ? preloadedYLabel || t("loadFailed")
         : yLabel;
+
+  const starButton = favoriteStar ? (
+    <FavoriteStarButton state={favoriteStar} />
+  ) : null;
 
   return (
     <div
@@ -260,6 +321,7 @@ export function VirtualGridRowLabel({
               value={artist}
               highlightTerm={highlightTerm}
               onCopy={onCopyPromptPart}
+              trailing={starButton}
             />
           ) : null}
           {commonPrompt ? (
@@ -269,6 +331,7 @@ export function VirtualGridRowLabel({
               value={commonPrompt}
               highlightTerm={highlightTerm}
               onCopy={onCopyPromptPart}
+              trailing={artist ? null : starButton}
             />
           ) : null}
         </div>
@@ -279,6 +342,12 @@ export function VirtualGridRowLabel({
             highlightTerm={highlightTerm}
             onCopy={onCopyRowLabel}
           />
+          {favoriteStar ? (
+            <FavoriteStarButton
+              state={favoriteStar}
+              className="absolute right-1 top-1 z-10"
+            />
+          ) : null}
           <div className="from-background/95 pointer-events-none absolute inset-x-3 bottom-0 h-8 bg-linear-to-t to-transparent" />
         </div>
       )}

@@ -1,5 +1,5 @@
-<!-- Generated: 2026-04-06 | Updated: 2026-07-16 -->
-<!-- Commit: Anima Artist Mixer | 分支: dev -->
+<!-- Generated: 2026-04-06 | Updated: 2026-07-17 -->
+<!-- Commit: Style Favorites | 分支: dev -->
 
 # Agent Guide (sd-style-lab/images-script)
 
@@ -18,20 +18,22 @@
 - Prompt 法典浏览器（路由 `/[locale]/prompts`）是新增的面向用户功能：客户端从 `public/data/prompts/*.json` 加载结构化 Prompt，渲染 Tag/Choice/多角色卡片并按目标模型格式化复制；源资产在 `data/prompt-codex/*.yaml`，运行时不直接读源 YAML。
 - ComfyUI 生图链路已支持 Anima Artist Mixer：`workflow.anima_artist_mixer` 会把 Y 轴 general 标签留在正向 prompt，artists 标签单独写入 `artist_chain`；hash、回放与 strict retry 都把两者视为同一份生图输入。
 - Mixer metadata 会额外持久化 `y_common_prompt`；展示页 bootstrap 通过可选 `yPromptParts` 向前端提供 Artist/Common Prompt 拆分，首列分别复制，缺失部分不渲染。
+- 画师提示词收藏（Style Favorites）：登录用户可在详情页收藏 Y 轴画师串、在 `/[locale]/favorites` 查看并跨模型跳转；收藏身份用 `style_key`（`{collection_id}:{item_index}`），跨 run 匹配只比较 style_key，永不比较 prompt 字符串；`y_index` 一律 0-based，仅收藏页拼跳转 URL 时 `#{y_index + 1}`。
 
 ## 结构
 
 ```text
 ./
 ├── app/                    # App Router 页面与 API route
-│   ├── [locale]/           # 区域化页面入口（layout + 首页 + info + privacy-policy + models + prompts）
-│   ├── api/comfyui/        # runs/access/workflow + 公开/私有对象代理
-│   ├── api/viewer/         # 浏览者偏好（NSFW 开关）
+│   ├── [locale]/           # 区域化页面入口（layout + 首页 + info + privacy-policy + models + prompts + favorites）
+│   ├── api/comfyui/        # runs/access/workflow/style-items + 公开/私有对象代理
+│   ├── api/viewer/         # 浏览者偏好（NSFW 开关）+ 画师串收藏
 │   ├── api/telemetry/      # web-vitals 上报端点
 │   ├── auth/               # Supabase PKCE callback
 │   └── models/[runDir]/    # 模型详情页共享组件（由 [locale]/models/[runDir] 消费）
 ├── components/             # 业务组件 + UI primitives + auth provider
-│   ├── comfyui/            # 虚拟网格/图片预览/blurhash
+│   ├── comfyui/            # 虚拟网格/图片预览/blurhash/收藏星标与面板
+│   ├── favorites/          # 收藏页客户端 UI
 │   ├── home/               # 首页模型卡片/封面图/预览弹窗
 │   ├── prompt/             # Prompt 法典浏览器 UI（见 components/prompt/AGENTS.md）
 │   └── ui/                 # shadcn/radix primitives
@@ -103,6 +105,12 @@
 | Prompt 法典数据产物   | `public/data/prompts/index.json`、`public/data/prompts/files/*.json`               | 构建期产物，由源 YAML `data/prompt-codex/*.yaml` 生成；运行时只消费 JSON    |
 | 浏览者 NSFW 偏好 API  | `app/api/viewer/preferences/nsfw/route.ts`                                        | GET 读 cookie / PATCH 写 Supabase `user_preferences` + cookie            |
 | Web Vitals 上报       | `app/api/telemetry/web-vitals/route.ts`                                           | 接收 `console.log` 记录，204 空响应，不落库                              |
+| 画师串收藏页          | `app/[locale]/favorites/page.tsx` + `components/favorites/favorites-page.tsx`      | 登录门控 + 快照 label + 跨模型跳转 + noindex                             |
+| 收藏 API              | `app/api/viewer/style-favorites/route.ts`、`app/api/viewer/style-favorites/[styleKey]/route.ts` | GET 列表 / PUT upsert / DELETE；未登录 401                    |
+| style-items API       | `app/api/comfyui/run/[runDir]/style-items/route.ts`                                | 公开返回 `[{ y_index, style_key }]`（0-based），供网格星标与跳转          |
+| 收藏数据层            | `lib/style-favorites.ts`                                                           | 类型/guard + 薄 fetch/mutate 函数                                        |
+| 网格收藏 hook         | `app/models/[runDir]/use-style-favorites.ts`                                       | 乐观更新 + 失败回滚 + toast                                              |
+| 历史 run 收藏回填     | `scripts/other/backfill_run_style_items.py`                                        | 确定性重放 run.json + Y 资产 → `run_style_items`                         |
 
 ## 代码图
 
@@ -128,6 +136,9 @@
 | `requireViewerForPreferenceWrite` | function | `lib/server-user-preferences.ts`       | 浏览者偏好写入的前置鉴权 |
 | `PromptBrowserPage`         | component | `components/prompt/prompt-browser-page.tsx`   | 法典浏览器页面骨架 |
 | `patch_workflow`            | function | `scripts/generation/workflow_patch.py`        | 注入标准 prompt 或 Anima Artist Mixer 参数 |
+| `fetchStyleFavorites`       | function | `lib/style-favorites.ts`                      | 收藏列表薄 fetch（另有 upsert/delete 薄函数） |
+| `useStyleFavorites`         | hook     | `app/models/[runDir]/use-style-favorites.ts`  | 网格收藏态 + 乐观 toggle                    |
+| `GridFavoritesPanel`        | component | `components/comfyui/grid-favorites-panel.tsx` | 工具栏收藏面板（行号升序 + 跳转）           |
 
 ## 约定（项目特有）
 
@@ -145,6 +156,8 @@
 - 前端首页：`/api/comfyui/runs` 当前会输出封面图/主页缩略图字段；不要把 run 详情页的展示页缩略图直接挪作首页卡片素材。
 - Prompt 法典浏览器：运行时只消费 `public/data/prompts/*.json` 构建产物；源 YAML `data/prompt-codex/*.yaml` 是只读输入资产，不要在 Web 侧直接读取。目标模型/权重模式/Choice 选择的状态边界分别在 `lib/prompt-model-context.tsx` 与 `lib/prompt-choice-context.tsx`，格式化文本统一走 `lib/prompt-formatter.ts:formatPrompt()`。
 - SEO：所有页面 `generateMetadata` 统一使用 `lib/metadata-utils.ts:buildSeoMetadata()` 构建 OG/Twitter Card/canonical/hreflang 标签，不要手写重复模板。模型详情页的 `og:image` 通过 `lib/model-metadata.ts:getModelMetadata()` 从 Supabase 查询封面图 URL。JSON-LD 结构化数据使用 `components/json-ld.tsx` 的客户端组件注入，不消耗 Worker CPU。
+- E2E 已登录态：global setup 用 `SUPABASE_SERVICE_ROLE_KEY` 经 admin generate_link + 手工截 fragment token + `@supabase/ssr` cookie 编码生成 storageState；缺 Supabase 环境变量时已登录用例自动 skip（详见 `e2e/AGENTS.md` 与 spec 决策 13）。
+- E2E baseURL 固定 `http://localhost`：R2 CORS 只放行 `http://localhost:3000` 与生产域名，`127.0.0.1` 会被 CORS 拒且 dev 模式不 hydrate；start 模式 e2e 必须用默认 3000 端口。
 - 工具链：Python 用 `uv` + `pytest`（>=3.13）；Web 用 `pnpm` + Next 16 + React 19；E2E 用 Playwright。
 - Supabase CLI：本仓库统一使用 `pnpm dlx supabase ...` 运行 Supabase 命令。
 - CI 现状：当前仓库没有 `.github/workflows/`；变更后的验证依赖本地 `uv` / `pnpm` 命令串联完成。
@@ -171,8 +184,9 @@
 
 ### 当前 `dev` 分支开发进展
 
-以下为 `dev` 分支近期承载的主要开发主线（截至 2026-07-16，`dev` 已包含尚未发布到 `main` 的生图链路变更）：
+以下为 `dev` 分支近期承载的主要开发主线（截至 2026-07-17，`dev` 已包含尚未发布到 `main` 的生图链路变更）：
 
+- **Style Favorites（画师提示词收藏）**：新增 `user_style_favorites` + `run_style_items` 两表与 RLS；收藏身份用 `style_key` 跨 run 匹配；详情页行标签星标 + 工具栏收藏面板 + 收藏页 `/[locale]/favorites` 跨模型跳转；新 run 上传顺带写 `run_style_items`，历史 run 由 `scripts/other/backfill_run_style_items.py` 确定性重放回填（生产已执行 6 run × 432）；e2e 已登录态走 service-role admin 链路。
 - **Anima Artist Mixer**：新增 `data/models/Anima-base-1.0-Artist-Mixer/` 可执行配置；生图 runner 支持 general/artists 双通道注入，并将 `artist_chain` 纳入 metadata、prompt hash、run 回放和 strict retry 校验。
 - **虚拟网格稳定性**：工具栏展开/收起时立即提交目标 viewport 宽度；私有图片 object URL 在 cell 重挂载间复用，由 `VirtualGrid` 卸载时统一释放。
 - **Prompt 法典浏览器**：新增 `/[locale]/prompts` 浏览功能，含登录门禁、搜索匹配导航（从当前浏览位置跳转）、权重模式支持（Anima 模式，对所有标签统一平方处理）、ComfyUI 多角色提示词格式化（换行 + `Character N:` 前缀分隔角色）、Prompt 条目列表滚动对齐修复。
@@ -217,7 +231,7 @@ pnpm lint
 
 # E2E / Supabase
 pnpm test:e2e
-E2E_SERVER=start E2E_PORT=3001 pnpm test:e2e -- -g "task 13"
+E2E_SERVER=start pnpm test:e2e -- -g "task 13"
 pnpm dlx supabase start
 pnpm dlx supabase db reset
 pnpm dlx supabase migration new <name>

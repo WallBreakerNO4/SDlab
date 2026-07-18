@@ -35,6 +35,7 @@
 | run 网格列可见性        | `run-grid-visibility.ts`  | `VisibleRunGridXColumn` / `VisibleRunGridColumns`;解析可见 X 列与允许的原始索引 |
 | run 媒体授权 token       | `run-media-grant.ts`      | `server-only` + `node:crypto`;`ViewerVariant` / `RunMediaGrantClaims`;HMAC 签发 + `timingSafeEqual` 校验,服务 `access` route |
 | 主题常量与解析          | `theme.ts`                | `THEME_STORAGE_KEY` / `THEME_COOKIE_NAME` / `THEME_COOKIE_MAX_AGE`;明暗色 oklch 值;`parseThemePreference()` / `ThemePreference` |
+| 画师串收藏数据层        | `style-favorites.ts`      | `StyleKey` / `StyleItem` / `StyleFavoriteEntry` 类型与 guard + `fetchStyleFavorites()` / `upsertStyleFavorite()` / `deleteStyleFavorite()` 薄函数 |
 
 ## 约定(本目录特有)
 
@@ -50,6 +51,7 @@
 - Prompt 法典相关 lib 文件只服务 `/[locale]/prompts` 页面:`prompt-types.ts` 是与 PromptCodex schema 对齐的共享类型;`prompt-formatter.ts` 是唯一的目标模型文本格式化入口;`prompt-data-loader.ts` 只 fetch `public/data/prompts/*.json`(不读源 YAML);`prompt-model-context.tsx` / `prompt-choice-context.tsx` 是两个客户端 Context,不要在服务端组件里使用。
 - `run-list.ts` 用 `unstable_cache` 包裹首页 run 列表查询,缓存 5 分钟并以 `run-list` tag 标记;刷新 run 数据时通过 `revalidateTag("run-list")` 失效,不要在页面层自己加缓存。
 - `server-user-preferences.ts` 是 `server-only`,仅供 `app/api/viewer/**` 等 route 使用;浏览器端读取 NSFW 偏好只走 cookie(`viewer-nsfw-cookie.ts`),不要在客户端 import 本文件。
+- 收藏身份用 `style_key`（`{collection_id}:{item_index}`）,跨 run 匹配只比较 style_key,永不比较 prompt 字符串;`y_index` 一律 0-based,仅收藏页拼跳转 URL 时 `#{y_index + 1}`。
 
 ## 反模式
 

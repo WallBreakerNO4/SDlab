@@ -281,6 +281,12 @@ class SupabaseWriter:
             grid_item_rows=grid_item_rows,
         )
 
+        style_item_rows = self._build_run_style_item_rows(
+            run_id=run_id,
+            run_dir=run_dir,
+            images=images,
+        )
+
         run_view_index_row = self._build_run_view_index_row(
             run_id=run_id,
             run_dir=run_dir,
@@ -320,6 +326,14 @@ class SupabaseWriter:
                 table_name="run_grid_cells",
                 rows=grid_cell_rows,
                 on_conflict="run_id,x_index,y_index",
+                context_key="chunk_size",
+            )
+        )
+        write_operations.extend(
+            self._build_chunked_upsert_operations(
+                table_name="run_style_items",
+                rows=style_item_rows,
+                on_conflict="run_id,style_key",
                 context_key="chunk_size",
             )
         )
@@ -671,6 +685,35 @@ class SupabaseWriter:
                     "blurhash": row.get("blurhash"),
                 }
         return list(representatives.values())
+
+    def _build_run_style_item_rows(
+        self,
+        *,
+        run_id: str,
+        run_dir: str,
+        images: list[Mapping[str, object]],
+    ) -> list[dict[str, object]]:
+        # y_style_key 仅存在于新 run 的 image payload；老 run 缺该字段时静默跳过，
+        # 不阻断上传流程，历史 run 的 style 映射由回填脚本补齐。
+        rows_by_style_key: dict[str, dict[str, object]] = {}
+        for image in images:
+            style_key = _optional_required_string(image.get("y_style_key"))
+            if style_key is None or style_key in rows_by_style_key:
+                continue
+            metadata = required_json_object(image, "metadata")
+            label = _optional_required_string(
+                image.get("y_value")
+            ) or _optional_required_string(metadata.get("y_value"))
+            if label is None:
+                continue
+            rows_by_style_key[style_key] = {
+                "run_id": run_id,
+                "run_dir": run_dir,
+                "style_key": style_key,
+                "y_index": required_int(image, "y_index"),
+                "label": label,
+            }
+        return list(rows_by_style_key.values())
 
     def _upsert_run_snapshot(self, row: Mapping[str, object]) -> None:
         _ = self._execute_upsert(
@@ -1047,16 +1090,21 @@ def estimate_upload_index_records(payload: Mapping[str, object]) -> int:
     images = optional_object_list(payload.get("images"), field="images")
     prompts = optional_object_list(payload.get("prompts"), field="prompts")
     unique_grid_cells: set[tuple[int, int]] = set()
+    style_keys: set[str] = set()
     for image in images:
         x_index = int_with_default(image, "x_index", default=0)
         y_index = int_with_default(image, "y_index", default=0)
         unique_grid_cells.add((x_index, y_index))
+        style_key = image.get("y_style_key")
+        if isinstance(style_key, str) and style_key.strip():
+            style_keys.add(style_key)
     return (
         4
         + len(prompts)
         + len(images)
         + len(images)
         + len(unique_grid_cells)
+        + len(style_keys)
     )
 
 
