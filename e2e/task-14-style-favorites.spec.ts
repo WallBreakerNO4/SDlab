@@ -13,6 +13,8 @@ const hasAuthEnv = hasE2EAuthEnv();
 // 生产数据（run_style_items 各 432 行）：Mixer / Legacy 两形态各取一个 run
 const MIXER_RUN_DIR = "anima-base-1-arist-mixer";
 const LEGACY_RUN_DIR = "nai-diffusion-4-5-full";
+const GUEST_RELEASE_ID = "guest-style-favorite-release";
+const GUEST_BLURHASH = "LEHV6nWB2yk8pyo0adR*.7kCMdnj";
 
 interface StyleItem {
   y_index: number;
@@ -93,6 +95,105 @@ test.describe("task 14: style favorites guest flows", () => {
   test("task 14: guest clicking a row star opens the login dialog", async ({
     page,
   }) => {
+    await page.route(
+      new RegExp(`/runs/${MIXER_RUN_DIR}/view/current\\.json(\\?.*)?$`),
+      async (route) => {
+        await route.fulfill({
+          json: {
+            schema_version: 2,
+            run_dir: MIXER_RUN_DIR,
+            release_id: GUEST_RELEASE_ID,
+            bootstrap_sfw_key: `runs/${MIXER_RUN_DIR}/view/v2/${GUEST_RELEASE_ID}/bootstrap.sfw.json`,
+            public_row_prefix: `runs/${MIXER_RUN_DIR}/view/v2/${GUEST_RELEASE_ID}/rows/public/`,
+          },
+        });
+      },
+    );
+    await page.route(
+      new RegExp(
+        `/runs/${MIXER_RUN_DIR}/view/v2/${GUEST_RELEASE_ID}/bootstrap\\.sfw\\.json(\\?.*)?$`,
+      ),
+      async (route) => {
+        await route.fulfill({
+          json: {
+            run: {
+              run_id: "guest-style-favorite-run-id",
+              created_at: "2026-07-17T00:00:00.000Z",
+              run_dir: MIXER_RUN_DIR,
+              selection: { total_cells: 1 },
+              model: {
+                name: "Guest Style Favorite Run",
+                description: { zh: "未登录收藏入口测试。" },
+              },
+              workflow: null,
+            },
+            xLabels: ["构图示例"],
+            yLabels: ["@guest-artist"],
+            x_columns: [
+              { type: "normal", description: { zh: "构图示例" } },
+            ],
+            y_indexes: [0],
+            y_labels: ["@guest-artist"],
+            prompts: [],
+            blurhash_cells: [
+              {
+                x_index: 0,
+                y_index: 0,
+                batch_index: 0,
+                category: "normal",
+                width: 512,
+                height: 768,
+                blurhash: GUEST_BLURHASH,
+              },
+            ],
+          },
+        });
+      },
+    );
+    await page.route(
+      new RegExp(
+        `/runs/${MIXER_RUN_DIR}/view/v2/${GUEST_RELEASE_ID}/rows/public/0\\.json(\\?.*)?$`,
+      ),
+      async (route) => {
+        await route.fulfill({
+          json: {
+            run_dir: MIXER_RUN_DIR,
+            y_index: 0,
+            cells: [
+              {
+                x_index: 0,
+                y_index: 0,
+                items: [
+                  {
+                    batch_index: 0,
+                    category: "normal",
+                    width: 512,
+                    height: 768,
+                    blurhash: GUEST_BLURHASH,
+                    meta: {
+                      seed: "14000",
+                      prompt_hash: "guest-style-favorite-prompt",
+                      positive_prompt: "guest prompt",
+                      y_value: "@guest-artist",
+                    },
+                    thumb: null,
+                    display: null,
+                  },
+                ],
+              },
+            ],
+          },
+        });
+      },
+    );
+    await page.route(
+      `**/api/comfyui/run/${MIXER_RUN_DIR}/style-items`,
+      async (route) => {
+        await route.fulfill({
+          json: [{ y_index: 0, style_key: "e2e-style-table:0" }],
+        });
+      },
+    );
     await page.goto(`/zh/models/${MIXER_RUN_DIR}`);
     const star = rowStar(page, 0);
     await expect(star).toBeVisible({ timeout: 15_000 });

@@ -81,8 +81,7 @@ export function VirtualGridCellDialog({
     onRefreshViewAccess,
   });
   const currentDownloadUrl = fetchedDisplayUrl ?? cachedDisplayUrl ?? null;
-  const showPreviewPlaceholder =
-    previewWasLoaded && !!currentPreviewUrl && !currentDownloadUrl;
+  const showPreviewPlaceholder = previewWasLoaded && !!currentPreviewUrl;
   const dialogAlt =
     cell && (cell.yLabel || cell.xLabel)
       ? [cell.yLabel, cell.xLabel].filter(Boolean).join(" × ")

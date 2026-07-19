@@ -1,36 +1,28 @@
 import { expect, test } from "@playwright/test";
 
-const hasSupabaseConfig = Boolean(
-  process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY,
-);
+import {
+  installModelViewMock,
+  MOCK_MODEL_VIEW_RUN_DIR,
+  PUBLIC_ROW_URL_PATTERN,
+} from "./model-view-test-helpers";
 
-test.describe("task 13: models -> detail -> grid -> scroll row lazy load", () => {
-  test.skip(!hasSupabaseConfig, "缺少 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY，跳过数据相关用例");
-
+test.describe("task 13: detail -> grid -> scroll row lazy load", () => {
   test("grid renders and scrolling triggers more row requests", async ({ page }) => {
     const requestedYIndexes = new Set<number>();
 
     page.on("response", (response) => {
       const url = response.url();
-      if (!url.includes("/api/comfyui/run/") || !url.includes("/row?")) return;
       if (!response.ok()) return;
 
-      try {
-        const parsed = new URL(url);
-        const yIndex = parsed.searchParams.get("y_index");
-        if (!yIndex) return;
-        const n = Number(yIndex);
-        if (Number.isFinite(n)) requestedYIndexes.add(n);
-      } catch {
-      }
+      const match = url.match(PUBLIC_ROW_URL_PATTERN);
+      if (!match) return;
+      const yIndex = Number(match[1]);
+      if (Number.isFinite(yIndex)) requestedYIndexes.add(yIndex);
     });
 
-    await page.goto("/");
+    await installModelViewMock(page);
+    await page.goto(`/models/${MOCK_MODEL_VIEW_RUN_DIR}`);
 
-    const modelLink = page.locator("a[href^='/models/']").first();
-    await expect(modelLink).toBeVisible();
-
-    await modelLink.click();
     await expect(page).toHaveURL(/\/models\//);
     await expect(page.getByTestId("run-grid")).toBeVisible();
 

@@ -1,24 +1,14 @@
 import { expect, test } from "@playwright/test";
 
-const hasSupabaseConfig = Boolean(
-  process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY,
-);
-
-const r2PublicBaseUrl = process.env.R2_PUBLIC_BASE_URL ?? "";
-const normalizedR2PublicBaseUrl = r2PublicBaseUrl.endsWith("/")
-  ? r2PublicBaseUrl.slice(0, -1)
-  : r2PublicBaseUrl;
+import {
+  installModelViewMock,
+  MOCK_MODEL_VIEW_RUN_DIR,
+} from "./model-view-test-helpers";
 
 test.describe("task 13: grid image src uses R2 public URL", () => {
-  test.skip(!hasSupabaseConfig, "缺少 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY，跳过数据相关用例");
-  test.skip(!normalizedR2PublicBaseUrl, "缺少 R2_PUBLIC_BASE_URL，无法断言公开直链域名");
-
   test("normal column images should not use /api/comfyui/image proxy", async ({ page }) => {
-    await page.goto("/");
-
-    const modelLink = page.locator("a[href^='/models/']").first();
-    await expect(modelLink).toBeVisible();
-    await modelLink.click();
+    await installModelViewMock(page);
+    await page.goto(`/models/${MOCK_MODEL_VIEW_RUN_DIR}`);
 
     await expect(page.getByTestId("run-grid")).toBeVisible();
 
@@ -31,7 +21,10 @@ test.describe("task 13: grid image src uses R2 public URL", () => {
     });
 
     expect(src).not.toContain("/api/comfyui/image/");
-    expect(src).toMatch(/^https:\/\//);
-    expect(src.startsWith(`${normalizedR2PublicBaseUrl}/`)).toBeTruthy();
+    expect(new URL(src).pathname).toMatch(
+      new RegExp(
+        `^/runs/${MOCK_MODEL_VIEW_RUN_DIR}/media/\\d+-\\d+/thumb_webp\\.webp$`,
+      ),
+    );
   });
 });
