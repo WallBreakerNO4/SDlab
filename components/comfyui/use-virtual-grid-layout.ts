@@ -52,6 +52,7 @@ export function useVirtualGridLayout({
   // 跟踪 ResizeObserver 已知的最新宽度，供 setScrollViewportWidthImmediate
   // 同步更新，避免工具栏过渡期间 debounce 到期后二次提交导致列宽突变。
   const lastWidthRef = useRef(0);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const element = scrollElementRef.current;
@@ -59,7 +60,6 @@ export function useVirtualGridLayout({
       return;
     }
 
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     lastWidthRef.current = element.clientWidth;
 
     const commitWidth = (width: number) => {
@@ -75,8 +75,11 @@ export function useVirtualGridLayout({
       if (nextWidth === lastWidthRef.current) return;
       lastWidthRef.current = nextWidth;
 
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      debounceTimerRef.current = setTimeout(() => {
+        debounceTimerRef.current = null;
         commitWidth(nextWidth);
       }, 200);
     };
@@ -89,7 +92,10 @@ export function useVirtualGridLayout({
 
     return () => {
       observer.disconnect();
-      if (debounceTimer) clearTimeout(debounceTimer);
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- scrollElementRef is a stable ref
   }, []);
@@ -97,6 +103,10 @@ export function useVirtualGridLayout({
   // 绕过 debounce 立即提交目标宽度，供工具栏展开/收起时预计算使用。
   // 同步 lastWidthRef 防止过渡期间 ResizeObserver 的 update 误触发二次提交。
   const setScrollViewportWidthImmediate = useCallback((width: number) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
     lastWidthRef.current = width;
     setScrollViewportWidth((previousWidth) =>
       previousWidth === width ? previousWidth : width,
