@@ -34,30 +34,30 @@
 
 - [x] **T7: 行标签星标（Mixer + Legacy 两形态）**
   - Acceptance: `virtual-grid-row-label.tsx` 两种形态各加星标按钮，不挤压现有 Artist/Common 复制交互；星标对未登录用户同样渲染（点击弹 `AuthLoginDialog`），故 style-items 拉取**不限登录态**，在 bootstrap ready 后惰性拉取，失败静默隐藏星标；登录用户点击 toggle 收藏，状态即时反馈。
-  - Verify: 手工浏览器核对两形态 UI 截图 + 点击行为；`pnpm lint` 绿。
+  - Verify: 用户已于 2026-07-19 手工核对 Mixer / Legacy 两形态 UI 与点击行为并确认通过；`pnpm lint` 绿。
   - Files: `components/comfyui/virtual-grid-row-label.tsx`、`components/comfyui/virtual-grid.tsx`
 
 - [x] **T8: 工具栏收藏面板（详情页内跳转）**
   - Acceptance: 工具栏新增收藏入口，面板按行号升序列出全部收藏（所有模型均用同一 Y 资产全量 432 项、用户确认无例外，收藏串必然在当前 run 中；保留防御性过滤）；label 摘要取当前 run 网格行标签（经 style-items 的 style_key↔y_index 映射客户端 join，不用收藏快照）；点击调用 `scrollToLineNumber()` 并 `syncUrlHashWithLineNumber()`；无收藏时空态文案；未登录入口点击弹登录框（与 T7 一致）。
-  - Verify: 手工验证滚动落点与 URL hash；复跑现有 `task-13-hash-jump` e2e 确认无回归。
+  - Verify: 用户已于 2026-07-19 手工验证滚动落点与 URL hash 并确认通过；`task-13-hash-jump` 已按当前 R2 view 数据链修复 mock 并回归通过。
   - Files: `components/comfyui/virtual-grid.tsx`（如拆分则新增 `components/comfyui/grid-favorites-panel.tsx`）
 
 - [x] **T9: 收藏页 `/[locale]/favorites`**
   - Acceptance: 登录门控（未登录显示登录引导，参考 prompts 页门控）；列表按收藏时间倒序，每项显示 label、时间、可用模型（run 名称），点击模型跳 `/{locale}/models/{runDir}#{y_index + 1}`；每项可取消收藏；无可用的模型显示"暂无可用模型"；`generateMetadata` 用 `buildSeoMetadata()` 且 `robots: { index: false }`。
-  - Verify: 手工浏览器验证 + e2e 未登录引导（T11）。
+  - Verify: 用户已于 2026-07-19 手工验证收藏列表、跨模型跳转与取消收藏并确认通过；e2e 未登录引导通过（T11）。
   - Files: `app/[locale]/favorites/page.tsx`、`components/favorites/favorites-page.tsx`、`middleware.ts`（`LOCALIZED_PATH_PATTERNS` 加 `/^\/favorites/`）
 
 - [x] **T10: 站点头部收藏入口**
   - Acceptance: 登录后 `SiteHeader` nav 显示收藏页链接（"Prompt 法典"旁），未登录不渲染；i18n 文案。
-  - Verify: 手工验证两语言两登录态。
+  - Verify: 用户已于 2026-07-19 手工验证两语言两登录态并确认通过。
   - Files: `components/site-header.tsx`、`messages/zh.json`、`messages/en.json`
 
 - [x] **T11: e2e**
   - Acceptance: 第一步先做最小 spike：service-role admin `generate_link` + Playwright goto 验证能在远端（`email: false`）建立 session，被阻断则降级为未登录路径 e2e + curl 验已登录 API 并改写 spec 决策 13。通过后：global setup 用 `SUPABASE_SERVICE_ROLE_KEY` 确保专用测试用户存在（固定邮箱，create-or-update 幂等）→ `generate_link` → `page.goto(action_link)` 经应用 `/auth/callback` 建真实 session → `storageState()` 存 `test-results/`；global teardown 用 service role 清空该测试用户的收藏。用例：未登录路径（行标签星标点击弹登录框、`/{locale}/favorites` 显示登录引导）+ 已登录路径（收藏 toggle、面板跳转、收藏页渲染与跨模型跳转）。
-  - Verify: `E2E_SERVER=start pnpm test:e2e -- -g "task 14"`（默认 3000 端口）8/8 全绿；全量套件另有 7 个失败均为陈旧 spec（首页链接选择器未含 locale 前缀、mock 旧 `/api/comfyui/image` 代理/旧 run API 路径、环境敏感用例），与本功能无关、base 上即失败，是否修复由用户另行决定。
+  - Verify: 2026-07-17 真实登录态 `E2E_SERVER=start pnpm test:e2e -- -g "task 14"`（默认 3000 端口）8/8 全绿。原全量套件 7 个陈旧 spec 债务已于 2026-07-19 修复：locale 链接、R2 current/bootstrap/row/media mock、hash jump 与环境敏感入口均已对齐当前实现；fresh-build targeted 8/8。无密钥 full no-env fresh-build 共 24 项，19 passed / 5 signed-in task-14 skipped / 0 failed，耗时 1.5m；scroll-restore 5/5（含同状态 stale-anchor 与 release token 受控竞态回归），no-env worker marker 1/1。5 个跳过项全部是 signed-in task-14，仍需真实 Supabase 登录密钥，本轮实际未运行且未伪造为已通过。
   - Files: `e2e/task-14-style-favorites.spec.ts`（按需新增 fixture）
 
 - [x] **T12: 文档与终验**
   - Acceptance: 更新根 `AGENTS.md`（结构表/去哪儿看/约定中的收藏功能条目）及触达目录的分层 `AGENTS.md`（`app/api`、`components/comfyui`、`hooks`、`scripts` 等）；spec 状态改为已实现；远端操作由用户主导，按发布顺序执行：远端 migration → 生产回填 → web 部署。
-  - Verify: `pnpm lint` + `uv run pytest -q` + `pnpm test:e2e` 全绿（CP5）。
+  - Verify: CP5 已完成：空白 `label` 校验修复及 Node 回归通过；同一 style_key 跨 identity/square 权重渲染、跨两个 run 写入的集成测试通过；`pnpm test` 12/12；fresh-build targeted 8/8；full no-env fresh-build 共 24 项，19 passed / 5 signed-in task-14 skipped / 0 failed，耗时 1.5m，其中 scroll-restore 5/5（含同状态 stale-anchor 与 release token 受控竞态回归），no-env worker marker 1/1；`pnpm lint`、`pnpm typecheck`、`git diff --check` 通过。5 个真实登录态跳过项全部属于 signed-in task-14，本轮因缺密钥按约定 skip，实际未运行；沿用 2026-07-17 task-14 8/8 的独立验收记录。
   - Files: `AGENTS.md` 及分层 `AGENTS.md`、`tasks/spec-style-favorites.md`

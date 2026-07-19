@@ -1,6 +1,6 @@
 # Spec: 画师提示词收藏（Style Favorites）
 
-> 状态：已实现（2026-07-17） | 日期：2026-07-17 | 分支：dev
+> 状态：已实现（2026-07-17），验收回写（2026-07-19） | 日期：2026-07-17 | 分支：dev
 
 ## 背景与教训
 
@@ -77,7 +77,10 @@ uv run pytest -q
 
 # E2E
 pnpm test:e2e
-E2E_SERVER=start E2E_PORT=3001 pnpm test:e2e -- -g "<相关 spec>"
+E2E_SERVER=start pnpm test:e2e -- -g "<相关 spec>"
+
+# 无密钥公开/mock 套件：fresh build + start，阻断 .env* 读取
+./node_modules/.bin/playwright test --config=playwright.no-env.config.ts
 
 # Supabase 迁移
 pnpm dlx supabase migration new add_style_favorites
@@ -137,7 +140,7 @@ export async function PUT(request: NextRequest) {
   - `supabase_writer.py` 写入 `run_style_items` 的契约测试（沿用 fake Supabase client 模式；顺手清理 `tests/test_supabase_writer.py:159` 的 `run_y_prompt_refs` 死引用）。
   - 回填脚本：fixture run.json + metadata.jsonl + 两版 YAML 资产 → 重放出正确 `y_index → style_key` 映射与 upsert 行；hash 无法解析 / 条目数不符时安全跳过。
 - **e2e**（`e2e/`，Playwright）：沿用 mock-run fixture 模式 —— 行标签收藏 toggle（含未登录弹登录框）、工具栏面板跳转、收藏页渲染与跨模型跳转。已登录态：service-role admin 链路建专用测试用户 + `generate_link` 经应用 `/auth/callback` 建立真实 session（详见决策记录 13）。
-- 验证命令：`uv run pytest -q`、`pnpm lint`、`pnpm test:e2e`。
+- 验证命令：`uv run pytest -q`、`pnpm test`、`pnpm lint`、`pnpm typecheck`、`pnpm test:e2e`。无密钥公开/mock 回归使用 `./node_modules/.bin/playwright test --config=playwright.no-env.config.ts`；该入口不运行 global setup/teardown，缺 Supabase 登录密钥的 signed-in 用例按约定 skip，不能替代真实登录态验收。
 
 ## Boundaries
 
@@ -164,7 +167,7 @@ export async function PUT(request: NextRequest) {
 5. **label 快照**：直接显示快照；用户确认不会回改 YAML 权重，快照过期不作问题处理。
 6. **性能**：style-items 不加缓存（MVP 直接接受每详情页 +1~2 请求），有真实数据后再议。
 7. **e2e**：优先覆盖已登录路径；第一轮设想的"本地 supabase + 种子测试用户"前提不成立（本项目无本地 Supabase，全部在远端），已在第二轮决策 13 重新设计。
-8. **CP4 手工验证**：用户本人执行。
+8. **CP4 手工验证**：用户本人执行；已于 2026-07-19 验证通过。
 
 ## 评审决策记录（2026-07-17 grilling 第二轮）
 
@@ -179,10 +182,14 @@ export async function PUT(request: NextRequest) {
 1. 收藏页可用模型列表是否需要封面缩略图？（默认：纯文本 run 名称列表，保持轻量；如要封面则复用首页卡片资源约定。）
 2. 行标签星标在 Mixer 形态（已有 Artist/Common 两个复制按钮）中的摆放位置，实施时以不挤压现有交互为准，必要时先做 Legacy 形态。
 
-## 实施记录（2026-07-17）
+## 实施记录（2026-07-17；2026-07-19 验收回写）
 
 - **CP1（migration 验证）**：本地无 Supabase 栈（全部在远端），改用一次性 Postgres 容器按序应用全部 migrations 干净通过：两表 + policies + grants 齐备、迁移链无冲突、重复执行幂等。
 - **CP3（API curl 闭环）**：dev server 下用 service-role admin 链路（generate_link + 手工截 fragment token + `@supabase/ssr` cookie 编码注入）完成 curl 验证：未登录 401、坏 body 400、PUT→GET→DELETE 闭环正确，重复 PUT 的 ON CONFLICT DO UPDATE 分支亦覆盖。
 - **生产回填已执行**：`scripts/other/backfill_run_style_items.py` 对 6 个 run 各回填 432 行（6×432），幂等复跑结果一致。
-- **CP5（终验口径）**：`pnpm lint`、`pnpm typecheck`、`uv run pytest -q` 全绿；e2e task-14 8/8 绿（`E2E_SERVER=start` + 默认 3000 端口）；全量 e2e 套件另有 7 个失败均为陈旧 spec（首页链接选择器未含 locale 前缀、mock 旧 `/api/comfyui/image` 代理/旧 run API 路径、环境敏感用例），与本功能无关、base 上即失败；用户已决定（2026-07-17）陈旧 spec 修复另立 hygiene 任务，不在本分支处理。
+- **CP4（手工验收）**：用户已于 2026-07-19 完成并确认通过 T7-T10 主流程：Mixer / Legacy 行标签收藏、工具栏跳转与 hash、收藏页列表/跨模型跳转/取消收藏、两语言两登录态头部入口。
+- **输入校验回归**：`isStyleFavoriteLabel()` 已拒绝仅含空白字符的 `label`，对应 Node 回归测试通过。
+- **跨权重 / 跨 run 集成测试**：同一 YAML 条目在 identity 与 square 权重 profile 下渲染文本不同但 `style_key` 相同，并可分别写入两个 run 的 `run_style_items`；集成测试通过，未使用 prompt/label 字符串做身份匹配。
+- **原 7 个 E2E 债务已修复**：locale 前缀链接、R2 current/bootstrap/public row/thumb/display mock、hash jump 存储与环境敏感入口均已对齐当前实现；相关 5 个旧 live-data 用例已改为确定性 mock，不再因缺 Supabase 数据跳过。
+- **CP5（2026-07-19 终验）**：`pnpm test` 12/12；fresh-build targeted 8/8；full no-env fresh-build 共 24 项，19 passed / 5 signed-in task-14 skipped / 0 failed，耗时 1.5m，其中 scroll-restore 5/5（含同状态 stale-anchor 与 release token 受控竞态回归），no-env worker marker 1/1；`pnpm lint`、`pnpm typecheck`、`git diff --check` 通过。no-env 使用 `playwright.no-env.config.ts` 阻断 `.env*`、禁用登录 setup 并强制启动独立服务；5 个跳过项全部是 signed-in task-14，本轮因缺真实 Supabase 登录密钥按约定 skip，实际未运行且未记作通过。2026-07-17 的真实登录态 task-14 8/8 仍作为独立历史验收记录。
 - **`playwright.config.ts` baseURL 改 `localhost`**：R2 CORS 只放行 `http://localhost:3000` 与生产域名，`127.0.0.1` 会被 CORS 拒且 dev 模式下不 hydrate；start 模式 e2e 因此必须用默认 3000 端口。

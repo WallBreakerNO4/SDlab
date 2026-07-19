@@ -29,7 +29,7 @@ T1 DB migration ──┬── T2 Python writer（supabase_writer 写 run_style
 2. **0-based / 1-based 边界**：`run_style_items.y_index`、style-items API、网格内部一律 0-based；仅 T9 收藏页拼跳转 URL 时 `#{y_index + 1}`（hash 机制是 1-based 行号）。
 3. **runs 表 name 字段**：T5 的 join 需要模型显示名；以 `lib/model-metadata.ts` 实际查询的列名为准（实施时确认，不猜）。
 4. **缺失容忍与重放**：writer 对无 `y_style_key` 的 payload 跳过不报错、不阻断上传（已核实该字段平铺在 `image_payload` 顶层，`upload_planner.py:1544`）。回填脚本不依赖 `y_style_key`，也不用 `read_y_rows` 重放（它硬校验 `prompt-y-table/v3`，老资产是 v2）：改为 `yaml.safe_load` 最小解析 `items[].info.index` + 顶层 `collection_id`；`y_index` 即 YAML items 原始索引（`runner_coordinator.py:232`），映射为 `items[y_index].info.index → style_key`，并用 `run.json` 的 `selection.y_indexes` 做集合校验。
-5. **style-items 拉取时机**：网格在「用户已登录 且 bootstrap ready」后惰性拉取；失败静默降级（星标隐藏），不重试风暴、不阻塞网格。
+5. **style-items 拉取时机**：网格在 bootstrap ready 后不限登录态惰性拉取，访客星标映射也依赖该公开数据；失败静默降级（星标隐藏），不重试风暴、不阻塞网格。
 6. **收藏页是用户私有页**：`generateMetadata` 在 `buildSeoMetadata()` 之上加 `robots: { index: false }`（若工具函数不支持则直接合并 metadata 返回）。
 7. **头部入口**：登录后在 `components/site-header.tsx` 的 nav（"Prompt 法典" 链接旁）显示收藏页链接；未登录不渲染。
 8. **面板内容**：所有模型生图均使用同一 Y 资产 `data/prompts/Y/300_NAI_Styles_Table.yaml`（432 项全量选择，用户确认无例外），收藏串必然存在于当前 run 且 `y_index + 1` 恒等于网格行号——面板按行号升序列出全部收藏、全部可跳，不做"包含 N/M"区分（仅保留防御性过滤）；面板 label 取当前 run 网格行标签（客户端 join），收藏页按收藏时间倒序、用快照 label。
@@ -56,5 +56,5 @@ T1 DB migration ──┬── T2 Python writer（supabase_writer 写 run_style
 - **CP1**（T1 后）：本地无 Supabase 栈（用户确认全部在远端），改用一次性 Postgres 容器按序应用全部 migrations 验证：两表 + policies + grants 存在、迁移链干净通过、重复执行幂等；远端推送后由用户复核。
 - **CP2**（T3 后）：`uv run pytest -q` 全绿。
 - **CP3**（T5 后）：dev server curl —— 未登录 401、坏 body 400、PUT→GET→DELETE 闭环正确、GET 的 runs join 形态正确。
-- **CP4**（T10 后）：浏览器手工主流程：登录 → mixer run 收藏一行 → 普通 run 收藏一行 → 面板跳转 → 收藏页看到两条 → 跨模型跳转落点正确 → 取消收藏生效。
-- **CP5**（T12）：`pnpm lint` + `uv run pytest -q` + e2e 全绿。
+- **CP4**（T10 后）：浏览器手工主流程：登录 → mixer run 收藏一行 → 普通 run 收藏一行 → 面板跳转 → 收藏页看到两条 → 跨模型跳转落点正确 → 取消收藏生效。用户已于 2026-07-19 验证通过，并同时确认 T7-T10 两种行标签、工具栏、收藏页与两语言头部入口符合预期。
+- **CP5**（T12）：2026-07-19 终验已完成：空白 `label` 回归、跨权重/跨 run 集成测试通过；原 7 个陈旧 E2E 债务已修复；`pnpm test` 12/12，fresh-build targeted 8/8，full no-env fresh-build 共 24 项（19 passed / 5 signed-in task-14 skipped / 0 failed），耗时 1.5m，其中 scroll-restore 5/5（含同状态 stale-anchor 与 release token 受控竞态回归），no-env worker marker 1/1；`pnpm lint`、`pnpm typecheck`、`git diff --check` 通过。no-env 套件只覆盖公开/mock 路径，缺密钥的 5 个跳过项全部是 signed-in task-14，按约定 skip，本轮实际未运行。
