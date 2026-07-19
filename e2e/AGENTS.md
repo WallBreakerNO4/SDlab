@@ -32,6 +32,9 @@ pnpm test:e2e -- -g "task 13"
 
 # 以 start 模式跑（更接近生产；必须用默认 3000 端口，R2 CORS 白名单限定）：
 E2E_SERVER=start pnpm test:e2e
+
+# 无密钥公开/mock 套件：阻断 .env*、禁用登录 setup、使用 localhost 假 public 配置
+./node_modules/.bin/playwright test --config=playwright.no-env.config.ts
 ```
 
 ## 约定（本目录特有）
@@ -42,6 +45,7 @@ E2E_SERVER=start pnpm test:e2e
 - 旧 spec 已清理：task-11 ~ task-16（旧安全/性能/虚拟滚动等）已移除；当前 spec 聚焦 Supabase + R2 流程
 - 新增 spec 时命名建议：`task-{N}-{描述}.spec.ts`
 - 已登录用例：global setup 用 `SUPABASE_SERVICE_ROLE_KEY` 经 admin API（generate_link + 手工截 fragment tokens + @supabase/ssr cookie 编码）把测试用户 session 写入 `test-results/e2e-auth-state.json`，用例侧 `test.use({ storageState })` 复用；缺环境变量（`.env` 由 `process.loadEnvFile` 加载）时 setup 不写 state、已登录用例 skip；global teardown 清空该测试用户的 `user_style_favorites`
+- 无密钥入口：`playwright.no-env.config.ts` 不注册 global setup/teardown，先构建再启动 3100 端口；`e2e/block-env-file-access.cjs` 同时阻断测试进程与 Next 子进程读取 `.env*`，清除继承的 service-role 变量，测试产物只写 `/tmp/sdlab-playwright-no-env/`
 
 ## 反模式
 
