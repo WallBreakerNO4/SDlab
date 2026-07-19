@@ -41,7 +41,7 @@ export const LABEL_MAX_LENGTH = 1000;
 export function isStyleFavoriteLabel(value: unknown): value is string {
   return (
     typeof value === "string" &&
-    value.length > 0 &&
+    value.trim().length > 0 &&
     value.length <= LABEL_MAX_LENGTH
   );
 }
