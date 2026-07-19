@@ -12,6 +12,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from scripts.generation.prompt_grid import Y_STYLE_KEY, read_y_rows
 from scripts.r2_upload.supabase_writer import (
     SupabaseArgumentError,
     SupabaseConfigError,
@@ -20,6 +21,7 @@ from scripts.r2_upload.supabase_writer import (
     _normalize_rows_for_postgrest,
     estimate_upload_index_records,
 )
+from scripts.r2_upload.upload_planner import _assemble_image_payload
 
 
 def _sample_payload() -> dict[str, object]:
@@ -800,3 +802,72 @@ def test_estimate_upload_index_records_counts_distinct_style_keys() -> None:
     # 基础 payload 估算 + 2 个去重后的 style 行
     assert estimate_upload_index_records(payload) == 4 + 0 + 3 + 3 + 3 + 2
     assert estimate_upload_index_records(_sample_payload()) == 4 + 0 + 1 + 1 + 1 + 0
+
+
+def test_cross_run_style_key_survives_weight_profiles(tmp_path: Path) -> None:
+    y_path = tmp_path / "shared-styles.yaml"
+    y_path.write_text(
+        """schema: prompt-y-table/v3
+collection_id: shared-styles
+items:
+  - info:
+      index: 9
+    tags:
+      - text: wlop
+        weight: 1.1
+        type: artists
+""",
+        encoding="utf-8",
+    )
+
+    identity_row = read_y_rows(y_path, artist_weight_profile="identity")[0]
+    square_row = read_y_rows(y_path, artist_weight_profile="square")[0]
+
+    assert identity_row["y"] != square_row["y"]
+    assert identity_row[Y_STYLE_KEY] == square_row[Y_STYLE_KEY] == "shared-styles:9"
+
+    def build_payload(run_dir: str, y_row: dict[str, str]) -> dict[str, object]:
+        payload = _sample_payload()
+        payload["run_dir"] = run_dir
+        payload["run_id"] = run_dir
+        payload["y_indexes"] = [0]
+        payload["x_count"] = 1
+        payload["y_count"] = 1
+        payload["total_cells"] = 1
+        payload["images"] = [
+            _assemble_image_payload(
+                metadata_record={
+                    "status": "success",
+                    "x_index": 0,
+                    "y_index": 0,
+                    "y_value": y_row["y"],
+                    "y_style_key": y_row[Y_STYLE_KEY],
+                },
+                category="normal",
+                batch_index=0,
+                variant_rows=[],
+                width=None,
+                height=None,
+                blurhash_value=None,
+            )
+        ]
+        return payload
+
+    client = _InMemorySupabaseClient(return_upsert_rows=True)
+    writer = SupabaseWriter(client=client, dry_run=False)
+    writer.upsert_upload_index(build_payload("identity-run", identity_row))
+    writer.upsert_upload_index(build_payload("square-run", square_row))
+
+    matching_rows = [
+        row
+        for row in client._tables["run_style_items"].values()
+        if row["style_key"] == identity_row[Y_STYLE_KEY]
+    ]
+    assert {row["run_dir"] for row in matching_rows} == {
+        "identity-run",
+        "square-run",
+    }
+    assert len({row["run_id"] for row in matching_rows}) == 2
+    expected_labels = {identity_row["y"].strip(), square_row["y"].strip()}
+    assert len(expected_labels) == 2
+    assert {row["label"] for row in matching_rows} == expected_labels
