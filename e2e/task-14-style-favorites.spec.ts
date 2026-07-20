@@ -536,7 +536,9 @@ test.describe("task 14: style favorites signed-in flows", () => {
 
       const frameBox = await frame.boundingBox();
       expect(frameBox).not.toBeNull();
-      expect(frameBox!.width / frameBox!.height).toBeCloseTo(13 / 19, 2);
+      // 图片框应撑满单元格内容区：列宽 216 - 2.5 内边距 ×2,行高 312 - 内边距 20 - 下边框 1
+      expect(frameBox!.width).toBeCloseTo(196, 0);
+      expect(frameBox!.height).toBeCloseTo(291, 0);
 
       await expect(
         page.getByRole("button", { name: /上一组模型|Previous models/ }),

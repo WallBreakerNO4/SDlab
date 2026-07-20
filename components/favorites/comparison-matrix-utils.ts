@@ -165,3 +165,45 @@ export function getShiftWheelDelta({
   }
   return deltaY;
 }
+
+export type ComparisonSyncMode = "cell" | "column" | "all";
+
+export function isComparisonSyncMode(
+  value: unknown,
+): value is ComparisonSyncMode {
+  return value === "cell" || value === "column" || value === "all";
+}
+
+/** 把可能越界或为负的索引折叠进 [0, length) 区间,实现首尾循环。 */
+export function wrapSlideIndex(index: number, length: number): number {
+  if (length <= 0) return 0;
+  return ((index % length) + length) % length;
+}
+
+type SceneDescriptionColumn = {
+  x_index: number;
+  type: string | null;
+  description: { zh?: string | null; en?: string | null } | null;
+};
+
+/**
+ * 解析某列模型当前场景的文字描述;xIndex 为 null 时退回第一个场景,
+ * 语言缺失时按 当前 locale → zh → en → type 顺序兜底。
+ */
+export function getSceneColumnDescription(
+  columns: readonly SceneDescriptionColumn[],
+  xIndex: number | null,
+  locale: string,
+): string {
+  const column =
+    (xIndex === null
+      ? undefined
+      : columns.find((item) => item.x_index === xIndex)) ?? columns[0];
+  const description = column?.description;
+  if (!description) return column?.type ?? "";
+  const localized =
+    (locale === "en" ? description.en : description.zh) ??
+    description.zh ??
+    description.en;
+  return typeof localized === "string" ? localized : (column?.type ?? "");
+}

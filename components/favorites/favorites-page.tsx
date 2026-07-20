@@ -5,7 +5,7 @@ import { useLocale, useTranslations } from "next-intl";
 import {
   ChevronLeft,
   ChevronRight,
-  ImageOff,
+  Info,
   SlidersHorizontal,
   X,
 } from "lucide-react";
@@ -32,6 +32,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Link } from "@/i18n/navigation";
 import { useUserPreferences } from "@/components/user-preferences-provider";
 import { deleteStyleFavorite } from "@/lib/style-favorites";
@@ -57,11 +63,16 @@ import {
   getComparisonBlurhash,
   getComparisonPlaceholderBlurhash,
   getHorizontalModelWindow,
+  getSceneColumnDescription,
   getShiftWheelDelta,
   getVariantBoundValue,
+  isComparisonSyncMode,
+  wrapSlideIndex,
+  type ComparisonSyncMode,
 } from "./comparison-matrix-utils";
 
 const HIDDEN_MODELS_KEY = "sdlab:favorites:hidden-models";
+const SYNC_MODE_KEY = "sdlab:favorites:sync-mode";
 const VISIBLE_ROWS = 6;
 const MODEL_COLUMN_WIDTH = 216;
 const DESKTOP_PROMPT_COLUMN_WIDTH = 280;
@@ -83,6 +94,15 @@ function readHiddenModels(): Set<string> {
   }
 }
 
+function readSyncMode(): ComparisonSyncMode {
+  try {
+    const value = localStorage.getItem(SYNC_MODE_KEY);
+    return isComparisonSyncMode(value) ? value : "cell";
+  } catch {
+    return "cell";
+  }
+}
+
 function formatTime(iso: string, locale: string) {
   const value = new Date(iso);
   return Number.isNaN(value.getTime())
@@ -91,17 +111,6 @@ function formatTime(iso: string, locale: string) {
         dateStyle: "medium",
         timeStyle: "short",
       }).format(value);
-}
-
-function modelDescription(model: ComparisonModel, locale: string) {
-  const column = model.x_columns[0];
-  const description = column?.description;
-  if (!description) return column?.type ?? "";
-  const localized =
-    (locale === "en" ? description.en : description.zh) ??
-    description.zh ??
-    description.en;
-  return typeof localized === "string" ? localized : (column?.type ?? "");
 }
 
 function ComparisonImage({
@@ -123,6 +132,7 @@ function ComparisonImage({
   onClick?: () => void;
   blurhash: string | null;
 }) {
+  const t = useTranslations("styleFavorites");
   if (state.status === "loading") {
     if (blurhash) {
       return (
@@ -136,7 +146,7 @@ function ComparisonImage({
       <div
         data-testid="comparison-image-skeleton"
         data-state="loading"
-        className="h-full w-full animate-pulse bg-muted"
+        className="h-full w-full animate-pulse rounded-lg bg-muted/60"
       />
     );
   }
@@ -144,16 +154,16 @@ function ComparisonImage({
     return (
       <div
         data-state={state.status === "ready" ? "missing" : state.status}
-        className="flex h-full min-h-28 items-center justify-center rounded border border-dashed text-muted-foreground"
+        className="flex h-full min-h-28 items-center justify-center text-[11px] text-muted-foreground/50"
       >
-        <ImageOff className="size-5" aria-hidden="true" />
+        {t("noImage")}
       </div>
     );
   }
   return (
     <button
       type="button"
-      className="block h-full w-full cursor-zoom-in text-left"
+      className="block h-full w-full cursor-zoom-in text-left transition-transform duration-500 ease-out group-hover:scale-[1.03]"
       onClick={onClick}
       disabled={!onClick}
     >
@@ -238,7 +248,7 @@ function ComparisonDialog({
             variant="outline"
             aria-label="Previous image"
             onClick={onPrevious}
-            disabled={current <= 0}
+            disabled={total <= 1}
           >
             <ChevronLeft className="size-4" />
           </Button>
@@ -251,7 +261,7 @@ function ComparisonDialog({
             variant="outline"
             aria-label="Next image"
             onClick={onNext}
-            disabled={current >= total - 1}
+            disabled={total <= 1}
           >
             <ChevronRight className="size-4" />
           </Button>
@@ -320,10 +330,27 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
   const [slideIndexes, setSlideIndexes] = useState<Map<string, number>>(
     new Map(),
   );
+  const [syncMode, setSyncMode] = useState<ComparisonSyncMode>("cell");
+  const [columnIndexes, setColumnIndexes] = useState<Map<string, number>>(
+    new Map(),
+  );
+  const [allIndex, setAllIndex] = useState(0);
   const [dialog, setDialog] = useState<{ key: string; index: number } | null>(
     null,
   );
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate browser-only preference after mount
+    setSyncMode(readSyncMode());
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem(SYNC_MODE_KEY, syncMode);
+    } catch {
+      /* storage unavailable */
+    }
+  }, [syncMode]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate browser-only preference after mount
@@ -553,6 +580,36 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
     [slice],
   );
 
+  const shiftSlide = (key: string, runDir: string, delta: number) => {
+    if (syncMode === "all") {
+      setAllIndex((current) => current + delta);
+    } else if (syncMode === "column") {
+      setColumnIndexes((current) =>
+        new Map(current).set(runDir, (current.get(runDir) ?? 0) + delta),
+      );
+    } else {
+      setSlideIndexes((current) =>
+        new Map(current).set(key, (current.get(key) ?? 0) + delta),
+      );
+    }
+  };
+  // 整列/全部模式下,表头场景描述跟随该列当前展示的 slide;取该列第一个已就绪的行来定位场景。
+  const getSyncedHeaderXIndex = (runDir: string): number | null => {
+    if (syncMode === "cell") return null;
+    const raw =
+      syncMode === "all" ? allIndex : (columnIndexes.get(runDir) ?? 0);
+    for (const favorite of visibleFavorites) {
+      const state = rows.get(
+        `${rowVariantKey}|${favorite.style_key}|${runDir}`,
+      );
+      if (state?.status !== "ready") continue;
+      const slides = flattenRowSlides(state.row);
+      if (slides.length) {
+        return slides[wrapSlideIndex(raw, slides.length)].xIndex;
+      }
+    }
+    return null;
+  };
   const toggleHidden = (runDir: string) =>
     setHidden((current) => {
       const next = new Set(current);
@@ -603,12 +660,12 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
 
   if (loading)
     return (
-      <main className="p-8 text-sm text-muted-foreground">Loading...</main>
+      <main className="p-8 text-sm text-muted-foreground">{t("loading")}</main>
     );
   if (error)
     return (
       <main className="p-8 text-sm text-muted-foreground">
-        Unable to load favorites.
+        {t("loadFailed")}
       </main>
     );
   if (!favorites.length)
@@ -628,7 +685,7 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
       <div className="flex w-full min-h-0 flex-1 flex-col gap-4">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b pb-4">
           <div className="min-w-0">
-            <h1 className="text-lg font-semibold sm:text-xl">
+            <h1 className="text-lg font-semibold tracking-tight sm:text-xl">
               {t("comparisonTitle")}
             </h1>
             <p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground">
@@ -636,6 +693,49 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              size="sm"
+              value={syncMode}
+              onValueChange={(value) => {
+                if (isComparisonSyncMode(value)) setSyncMode(value);
+              }}
+              aria-label={t("syncMode")}
+            >
+              <ToggleGroupItem value="cell" aria-label={t("syncModeCell")}>
+                {t("syncModeCell")}
+              </ToggleGroupItem>
+              <ToggleGroupItem value="column" aria-label={t("syncModeColumn")}>
+                {t("syncModeColumn")}
+              </ToggleGroupItem>
+              <ToggleGroupItem value="all" aria-label={t("syncModeAll")}>
+                {t("syncModeAll")}
+              </ToggleGroupItem>
+            </ToggleGroup>
+            <HoverCard openDelay={200}>
+              <HoverCardTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-muted-foreground"
+                  aria-label={t("syncModeHelpTitle")}
+                >
+                  <Info className="size-4" aria-hidden="true" />
+                </Button>
+              </HoverCardTrigger>
+              <HoverCardContent align="end" className="w-72">
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs font-semibold">
+                    {t("syncModeHelpTitle")}
+                  </p>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {t("syncModeHelpDescription")}
+                  </p>
+                </div>
+              </HoverCardContent>
+            </HoverCard>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="gap-2">
@@ -711,7 +811,7 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
             );
             updateMatrixViewport(event.currentTarget);
           }}
-          className="min-h-0 flex-1 overflow-auto overscroll-contain border-y bg-background [scrollbar-gutter:stable]"
+          className="min-h-0 flex-1 overflow-auto overscroll-contain bg-background [scrollbar-gutter:stable]"
         >
           <div
             className="grid"
@@ -720,24 +820,31 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
               gridTemplateColumns: `${matrixViewport.promptColumnWidth}px ${leftModelSpacer}px repeat(${activeModels.length}, ${MODEL_COLUMN_WIDTH}px) ${rightModelSpacer}px`,
             }}
           >
-            <div className="sticky top-0 left-0 z-30 flex h-16 items-end border-r border-b bg-background px-4 py-3 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase shadow-[8px_0_16px_-16px_rgba(0,0,0,0.55)]">
+            <div className="sticky top-0 left-0 z-30 flex h-16 items-end border-r border-b border-border/40 bg-background/85 px-4 py-3 text-[11px] font-semibold tracking-widest text-muted-foreground uppercase backdrop-blur-md">
               {t("favoriteLabel")}
             </div>
-            <div className="sticky top-0 z-20 h-16 border-b bg-background" />
+            <div className="sticky top-0 z-20 h-16 border-b border-border/40 bg-background/85 backdrop-blur-md" />
             {activeModels.map((model) => (
               <div
                 key={model.run_dir}
-                className="sticky top-0 z-20 flex h-16 min-w-0 flex-col justify-end border-r border-b bg-background px-3 py-3"
+                className="sticky top-0 z-20 flex h-16 min-w-0 flex-col justify-end border-b border-border/40 bg-background/85 px-3 py-3 backdrop-blur-md"
               >
-                <div className="truncate text-xs font-semibold">
+                <Link
+                  href={`/models/${encodeURIComponent(model.run_dir)}`}
+                  className="truncate text-[13px] font-semibold transition-colors hover:text-primary hover:underline"
+                >
                   {model.name ?? model.run_dir}
-                </div>
-                <div className="mt-0.5 truncate text-[10px] text-muted-foreground">
-                  {modelDescription(model, locale)}
+                </Link>
+                <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  {getSceneColumnDescription(
+                    model.x_columns,
+                    getSyncedHeaderXIndex(model.run_dir),
+                    locale,
+                  )}
                 </div>
               </div>
             ))}
-            <div className="sticky top-0 z-20 h-16 border-b bg-background" />
+            <div className="sticky top-0 z-20 h-16 border-b border-border/40 bg-background/85 backdrop-blur-md" />
             <div
               className="col-span-full"
               style={{ height: start * ROW_HEIGHT }}
@@ -747,17 +854,17 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
               <div key={favorite.style_key} className="contents">
                 <div
                   data-favorite-entry={favorite.style_key}
-                  className="sticky left-0 z-10 flex border-r border-b bg-background p-4 shadow-[8px_0_16px_-16px_rgba(0,0,0,0.55)]"
+                  className="sticky left-0 z-10 flex border-r border-b border-border/40 bg-background p-4"
                   style={{ height: ROW_HEIGHT }}
                 >
                   <div className="flex min-w-0 flex-1 flex-col">
                     <Link
                       href={`/favorites/${encodeURIComponent(favorite.style_key)}`}
-                      className="line-clamp-6 text-sm leading-relaxed font-medium hover:text-primary hover:underline"
+                      className="line-clamp-4 text-sm leading-relaxed font-medium transition-colors hover:text-primary hover:underline"
                     >
                       {favorite.label}
                     </Link>
-                    <p className="mt-2 text-[10px] text-muted-foreground">
+                    <p className="mt-2 text-[11px] text-muted-foreground">
                       {formatTime(favorite.created_at, locale)}
                     </p>
                     <div className="mt-auto flex flex-col items-start gap-2 pt-3">
@@ -768,7 +875,7 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
                             <Link
                               key={placement.run_dir}
                               href={`/models/${encodeURIComponent(placement.run_dir)}#${placement.y_index + 1}`}
-                              className="max-w-full truncate text-[9px] text-muted-foreground/70 hover:text-muted-foreground hover:underline"
+                              className="max-w-full truncate text-[10px] text-muted-foreground/70 transition-colors hover:text-muted-foreground hover:underline"
                             >
                               {models.find(
                                 (model) => model.run_dir === placement.run_dir,
@@ -779,7 +886,7 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 px-2 text-[10px] text-muted-foreground hover:text-destructive"
+                        className="h-7 px-2 text-[10px] text-muted-foreground/70 transition-colors hover:text-destructive"
                         onClick={() => void removeFavorite(favorite.style_key)}
                       >
                         <X className="mr-1 size-3" />
@@ -788,7 +895,7 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
                     </div>
                   </div>
                 </div>
-                <div className="border-b bg-muted/10" />
+                <div className="border-b border-border/40" />
                 {activeModels.map((model) => {
                   const key = `${favorite.style_key}|${model.run_dir}`;
                   const placement = (
@@ -800,10 +907,13 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
                   );
                   const row = state.status === "ready" ? state.row : null;
                   const slides = flattenRowSlides(row);
-                  const index = Math.min(
-                    slideIndexes.get(key) ?? 0,
-                    Math.max(slides.length - 1, 0),
-                  );
+                  const rawIndex =
+                    syncMode === "all"
+                      ? allIndex
+                      : syncMode === "column"
+                        ? (columnIndexes.get(model.run_dir) ?? 0)
+                        : (slideIndexes.get(key) ?? 0);
+                  const index = wrapSlideIndex(rawIndex, slides.length);
                   const access =
                     slice?.access.find(
                       (item) => item.run_dir === model.run_dir,
@@ -828,12 +938,12 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
                   return (
                     <div
                       key={key}
-                      className="flex items-center border-r border-b bg-muted/10 p-2"
+                      className="border-b border-border/40 p-2.5"
                       style={{ height: ROW_HEIGHT }}
                     >
                       <div
                         data-testid="comparison-image-frame"
-                        className="group relative mx-auto aspect-[13/19] w-full max-w-full overflow-hidden bg-muted/30 shadow-sm ring-1 ring-border/70"
+                        className="group relative h-full w-full overflow-hidden rounded-lg"
                       >
                         <ComparisonImage
                           state={state}
@@ -850,38 +960,22 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
                             <Button
                               size="icon"
                               variant="secondary"
-                              className="absolute top-1/2 left-1 size-7 -translate-y-1/2 bg-background/75 opacity-100 shadow-sm backdrop-blur-sm transition-opacity md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100"
+                              className="absolute top-1/2 left-1.5 size-7 -translate-y-1/2 rounded-full bg-background/75 opacity-100 shadow-sm backdrop-blur-sm transition-opacity md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100"
                               aria-label="Previous image"
-                              onClick={() =>
-                                setSlideIndexes((current) =>
-                                  new Map(current).set(
-                                    key,
-                                    Math.max(0, index - 1),
-                                  ),
-                                )
-                              }
-                              disabled={index === 0}
+                              onClick={() => shiftSlide(key, model.run_dir, -1)}
                             >
                               <ChevronLeft className="size-3.5" />
                             </Button>
                             <Button
                               size="icon"
                               variant="secondary"
-                              className="absolute top-1/2 right-1 size-7 -translate-y-1/2 bg-background/75 opacity-100 shadow-sm backdrop-blur-sm transition-opacity md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100"
+                              className="absolute top-1/2 right-1.5 size-7 -translate-y-1/2 rounded-full bg-background/75 opacity-100 shadow-sm backdrop-blur-sm transition-opacity md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100"
                               aria-label="Next image"
-                              onClick={() =>
-                                setSlideIndexes((current) =>
-                                  new Map(current).set(
-                                    key,
-                                    Math.min(slides.length - 1, index + 1),
-                                  ),
-                                )
-                              }
-                              disabled={index >= slides.length - 1}
+                              onClick={() => shiftSlide(key, model.run_dir, 1)}
                             >
                               <ChevronRight className="size-3.5" />
                             </Button>
-                            <span className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 bg-black/65 px-1.5 py-0.5 text-[9px] font-medium text-white tabular-nums backdrop-blur-sm">
+                            <span className="pointer-events-none absolute bottom-1.5 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-medium text-white/90 tabular-nums backdrop-blur-sm">
                               {index + 1}/{slides.length}
                             </span>
                           </>
@@ -890,7 +984,7 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
                     </div>
                   );
                 })}
-                <div className="border-b bg-muted/10" />
+                <div className="border-b border-border/40" />
               </div>
             ))}
             <div
@@ -923,7 +1017,13 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
             onPrevious={() =>
               setDialog((current) =>
                 current
-                  ? { ...current, index: Math.max(0, current.index - 1) }
+                  ? {
+                      ...current,
+                      index: wrapSlideIndex(
+                        current.index - 1,
+                        dialogData.slides.length,
+                      ),
+                    }
                   : current,
               )
             }
@@ -932,9 +1032,9 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
                 current
                   ? {
                       ...current,
-                      index: Math.min(
-                        dialogData.slides.length - 1,
+                      index: wrapSlideIndex(
                         current.index + 1,
+                        dialogData.slides.length,
                       ),
                     }
                   : current,
