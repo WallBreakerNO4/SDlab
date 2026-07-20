@@ -1,12 +1,12 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-07-16 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-07-20 -->
 
 # scripts/other/ — 离线资产转换工具
 
 ## 概览
 
 - 本目录放轻量离线脚本：把 prompt CSV 转成 YAML 资产，供 `data/` 与生图脚本消费；文件名历史上保留了 `json`，但当前实际输出是 YAML。
-- 例外：`backfill_run_style_items.py` 是 spec 批准的一次性回填脚本（`tasks/spec-style-favorites.md`），会读 Supabase `runs` 并幂等 upsert `run_style_items`；除此之外本目录仍不引入数据库逻辑。
+- 例外：`backfill_run_style_items.py` 是已落地的一次性回填脚本，会读 Supabase `runs` 并幂等 upsert `run_style_items`；除此之外本目录仍不引入数据库逻辑。
 
 ## 去哪儿看
 

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-07-16 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-07-20 -->
 
 # components/comfyui/ — ComfyUI 业务组件
 
@@ -24,6 +24,7 @@
 | 单元格/行标签组件        | `virtual-grid-preview-cell.tsx`、`virtual-grid-row-label.tsx` | 预览单元格(`GridImage` + `pickBestVariants`)/ Y 轴行标签（含收藏星标） |
 | 工具栏收藏面板           | `grid-favorites-panel.tsx`                                    | 行号升序列出收藏，点击 `scrollToLineNumber()` + hash 同步 |
 | 网格类型与工具           | `virtual-grid-types.ts`、`virtual-grid-utils.ts`          | `ImageVariantSource` / `CachedRow` 等共享类型 + `pickBestVariants()` 等工具 |
+| 收藏模型对比消费者       | `components/favorites/`                                   | 复用 `GridImage`、变体选择与 row payload 标准化；见其 `AGENTS.md` |
 
 ## 约定（本目录特有）
 
@@ -33,6 +34,7 @@
 - 数据流：`use-virtual-grid-rows.ts` 按可见行直接拉取 `view/v2/{release_id}/rows/{viewer_variant}/{y}.json`；row item 携带 `thumb` / `display` variants，弹窗再通过 `useRenderableVariantSource()` 按需解析 display 图片。
 - Mixer bootstrap 的可选 `y_prompt_parts` 按 `yIndex` 提供 Artist/Common Prompt；首列对存在的部分分别渲染与复制，两者都存在时上下分区，搜索同一行只计一次匹配。
 - 私有图缓存：`use-renderable-variant-source.ts` 的模块级 object URL cache 用于跨 cell 重挂载复用，hook cleanup 不单独 revoke；所有权在 `VirtualGrid`，由其卸载时调用 `clearPrivateObjectUrlCache()` 统一释放。
+- 私有对象边缘缓存：`/api/private-object` 必须先验证 grant 与对象 key，再查询共享 cache；cache URL 去掉 grant 但保留 key。组件只负责携带 grant，不得直接构造去 grant URL 或在授权前读取 cache。
 - 工具栏布局：展开/收起前要保存滚动锚点，并用 `setScrollViewportWidthImmediate()` 提交目标宽度；不要只等 200ms `ResizeObserver` debounce，否则会造成列宽二次跳变。
 - 收藏星标：两种行标签形态（Mixer/Legacy）均渲染，未登录点击弹 `AuthLoginDialog`；style-items 映射在 bootstrap ready 后惰性拉取（不限登录态），失败静默隐藏星标、不阻塞网格。
 - 收藏面板 label 取当前 run 网格行标签（style_key↔y_index 客户端 join），不用收藏快照；toggle 乐观更新、失败回滚 + toast，stateful hook 在 `app/models/[runDir]/use-style-favorites.ts`。
