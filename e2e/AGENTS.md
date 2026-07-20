@@ -20,7 +20,7 @@
 | hash 跳转 | `task-13-hash-jump.spec.ts` | URL hash 定位到特定 cell |
 | 滚动恢复 | `task-13-scroll-restore.spec.ts` | 弹窗关闭后恢复滚动位置 |
 | Mixer prompt parts 渲染 | `task-13-mixer-prompt-parts.spec.ts` | Mixer 的 y_prompt_parts（Artist/Common Prompt）前端分栏渲染 |
-| 画师串收藏 | `task-14-style-favorites.spec.ts` | 未登录弹登录框/收藏页门控 + 已登录 toggle/面板跳转/收藏页 |
+| 画师串收藏 | `task-14-style-favorites.spec.ts` | 未登录弹登录框/收藏页门控 + 已登录 toggle/面板跳转/收藏页 + 对比页历史 BlurHash 回退 |
 | 已登录态机制 | `global-setup.ts` / `global-teardown.ts` / `e2e-auth-state.ts` | service role admin 链路建 session 写 storageState；teardown 清空测试用户收藏 |
 
 ## 运行

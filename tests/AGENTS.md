@@ -43,7 +43,7 @@
 | NovelAI 生图入口        | `test_novelai_generate.py`                                | NovelAI 生图 argparse + 流程测试 |
 | 历史 run 回填           | `test_backfill_run_style_items.py`                        | Y 资产 sha256 重放/git stub、集合校验、幂等 upsert、dry-run |
 | 画师串收藏 label        | `style-favorites.test.ts`                                 | 仅覆盖 `isStyleFavoriteLabel()` 的空白、1000 字符上限 |
-| 模型对比部分合约        | `style-comparison.test.ts`                                | cursor、limit、slice body 边界、目录/详情 guard、viewer cookie、cache URL |
+| 模型对比部分合约        | `style-comparison.test.ts`、`comparison-matrix-utils.test.ts` | cursor、limit、slice body 边界、目录/详情 guard、viewer cookie、cache URL、BlurHash lookup |
 | 无环境文件测试入口      | `env-file-path.test.ts`、`no-env-node-options.test.ts`     | Node 测试入口的路径与参数防护 |
 
 ## 约定（本目录特有）

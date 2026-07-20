@@ -7,7 +7,7 @@ import type {
 } from "@/lib/style-comparison";
 import {
   isStyleComparisonResponse,
-  isStyleComparisonSliceResponse,
+  normalizeStyleComparisonSliceResponse,
 } from "@/lib/style-comparison";
 
 export async function fetchComparisonCatalog(
@@ -46,10 +46,11 @@ export async function fetchComparisonSlice(
   });
   if (!response.ok) throw new Error("comparison-slice-failed");
   const raw: unknown = await response.json();
-  if (!isStyleComparisonSliceResponse(raw)) {
+  const normalized = normalizeStyleComparisonSliceResponse(raw);
+  if (!normalized) {
     throw new Error("comparison-slice-invalid");
   }
-  return raw;
+  return normalized;
 }
 
 const rowCache = new Map<string, RowPayload>();

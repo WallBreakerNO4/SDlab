@@ -8,7 +8,9 @@ import {
   buildStyleComparisonPlacements,
   isStyleComparisonResponse,
   isStyleComparisonDetailResponse,
+  isStyleComparisonSliceResponse,
   normalizeStyleComparisonModelsRpcRows,
+  normalizeStyleComparisonSliceResponse,
   normalizeStyleComparisonSliceRpcResult,
   ownsAllRequestedStyleKeys,
   parseStyleComparisonLimit,
@@ -85,7 +87,16 @@ test("slice RPC response is bounded to the requested styles and runs", () => {
       owned_style_keys: ["collection:2", "collection:1"],
       placements: [
         { style_key: "collection:1", run_dir: "run-2", y_index: 0 },
-        { style_key: "collection:1", run_dir: "run-1", y_index: 7 },
+        {
+          style_key: "collection:1",
+          run_dir: "run-1",
+          y_index: 7,
+          blurhashes: [
+            [2, 1, "hash-2-1"],
+            [0, 0, "hash-0-0"],
+            [2, 0, "hash-2-0"],
+          ],
+        },
       ],
       runs: [
         {
@@ -104,8 +115,16 @@ test("slice RPC response is bounded to the requested styles and runs", () => {
     buildStyleComparisonPlacements(request.style_keys, result.placements),
     {
       "collection:1": [
-        { run_dir: "run-1", y_index: 7 },
-        { run_dir: "run-2", y_index: 0 },
+        {
+          run_dir: "run-1",
+          y_index: 7,
+          blurhashes: [
+            [0, 0, "hash-0-0"],
+            [2, 0, "hash-2-0"],
+            [2, 1, "hash-2-1"],
+          ],
+        },
+        { run_dir: "run-2", y_index: 0, blurhashes: [] },
       ],
       "collection:2": [],
     },
@@ -136,6 +155,127 @@ test("slice RPC response is bounded to the requested styles and runs", () => {
       request,
     ),
     null,
+  );
+});
+
+test("slice response normalizer keeps BlurHash tuples and upgrades legacy placements", () => {
+  const normalized = normalizeStyleComparisonSliceResponse({
+    access: [],
+    placements: {
+      "collection:1": [
+        {
+          run_dir: "run-1",
+          y_index: 3,
+          blurhashes: [
+            [1, 2, "hash-1-2"],
+            [0, 0, "hash-0-0"],
+          ],
+        },
+        { run_dir: "run-2", y_index: 4 },
+      ],
+    },
+  });
+
+  assert.deepEqual(normalized, {
+    access: [],
+    placements: {
+      "collection:1": [
+        {
+          run_dir: "run-1",
+          y_index: 3,
+          blurhashes: [
+            [0, 0, "hash-0-0"],
+            [1, 2, "hash-1-2"],
+          ],
+        },
+        { run_dir: "run-2", y_index: 4, blurhashes: [] },
+      ],
+    },
+  });
+  assert.equal(isStyleComparisonSliceResponse(normalized), true);
+  assert.equal(
+    normalizeStyleComparisonSliceResponse({
+      access: [],
+      placements: {
+        "collection:1": [
+          { run_dir: "run-1", y_index: 0, blurhashes: [[0, 0, ""]] },
+        ],
+      },
+    }),
+    null,
+  );
+});
+
+test("slice response normalizer rejects oversized and duplicate response data", () => {
+  const access = (runDir: string) => ({
+    run_dir: runDir,
+    release_id: `release-${runDir}`,
+    viewer_variant: "auth_sfw" as const,
+    grant: `grant-${runDir}`,
+    expires_at: 1_800_000_000,
+  });
+  const placement = (runDir: string) => ({
+    run_dir: runDir,
+    y_index: 0,
+    blurhashes: [],
+  });
+
+  assert.equal(
+    normalizeStyleComparisonSliceResponse({
+      access: Array.from({ length: 13 }, (_, index) => access(`run-${index}`)),
+      placements: {},
+    }),
+    null,
+  );
+  assert.equal(
+    normalizeStyleComparisonSliceResponse({
+      access: [access("run-1"), access("run-1")],
+      placements: {},
+    }),
+    null,
+  );
+  assert.equal(
+    normalizeStyleComparisonSliceResponse({
+      access: [],
+      placements: Object.fromEntries(
+        Array.from({ length: 41 }, (_, index) => [`collection:${index}`, []]),
+      ),
+    }),
+    null,
+  );
+  assert.equal(
+    normalizeStyleComparisonSliceResponse({
+      access: [],
+      placements: {
+        "collection:1": Array.from({ length: 13 }, (_, index) =>
+          placement(`run-${index}`),
+        ),
+      },
+    }),
+    null,
+  );
+  assert.equal(
+    normalizeStyleComparisonSliceResponse({
+      access: [],
+      placements: {
+        "collection:1": [placement("run-1"), placement("run-1")],
+      },
+    }),
+    null,
+  );
+  assert.equal(
+    normalizeStyleComparisonSliceResponse({
+      access: [],
+      placements: Object.fromEntries(
+        Array.from({ length: 40 }, (_, styleIndex) => [
+          `collection:${styleIndex}`,
+          Array.from({ length: 12 }, (_, runIndex) =>
+            placement(`run-${runIndex}`),
+          ),
+        ]),
+      ),
+    }) !== null,
+    true,
   );
 });
 

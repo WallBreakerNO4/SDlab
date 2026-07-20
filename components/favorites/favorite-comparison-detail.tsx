@@ -30,6 +30,12 @@ import {
   resolveComparisonRowState,
   type ComparisonRowState,
 } from "./comparison-loader";
+import {
+  buildComparisonBlurhashLookup,
+  getComparisonBlurhash,
+  getComparisonPlaceholderBlurhash,
+  getVariantBoundValue,
+} from "./comparison-matrix-utils";
 
 export default function FavoriteComparisonDetail({
   styleKey,
@@ -39,12 +45,17 @@ export default function FavoriteComparisonDetail({
   const t = useTranslations("styleFavorites");
   const { user } = useAuth();
   const { showNsfw } = useUserPreferences();
+  const rowVariantKey = showNsfw ? "nsfw" : "sfw";
   const [favorite, setFavorite] = useState<{
     style_key: string;
     label: string;
   } | null>(null);
   const [models, setModels] = useState<ComparisonModel[]>([]);
-  const [slice, setSlice] = useState<ComparisonSlice | null>(null);
+  const [sliceSnapshot, setSliceSnapshot] = useState<{
+    variantKey: string;
+    data: ComparisonSlice;
+  } | null>(null);
+  const slice = getVariantBoundValue(sliceSnapshot, rowVariantKey);
   const [sliceError, setSliceError] = useState(false);
   const [rows, setRows] = useState<Map<string, ComparisonRowState>>(new Map());
   const [indexes, setIndexes] = useState<Map<string, number>>(new Map());
@@ -78,7 +89,7 @@ export default function FavoriteComparisonDetail({
     if (!favorite || !models.length) return;
     const controller = new AbortController();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset stale detail data before loading a new comparison window
-    setSlice(null);
+    setSliceSnapshot(null);
     setSliceError(false);
     setRows(new Map());
     const runDirs = models.map((model) => model.run_dir);
@@ -100,7 +111,7 @@ export default function FavoriteComparisonDetail({
             ),
           },
         };
-        setSlice(next);
+        setSliceSnapshot({ variantKey: rowVariantKey, data: next });
         const accessByRun = new Map(
           next.access.map((access) => [access.run_dir, access]),
         );
@@ -138,12 +149,16 @@ export default function FavoriteComparisonDetail({
         if (!controller.signal.aborted) setSliceError(true);
       });
     return () => controller.abort();
-  }, [favorite, models, showNsfw, styleKey]);
+  }, [favorite, models, rowVariantKey, styleKey]);
 
   const xColumns = models[0]?.x_columns ?? [];
   const accessByRun = useMemo(
     () =>
       new Map((slice?.access ?? []).map((access) => [access.run_dir, access])),
+    [slice],
+  );
+  const blurhashLookup = useMemo(
+    () => buildComparisonBlurhashLookup(slice?.placements ?? null),
     [slice],
   );
   if (!user) return null;
@@ -163,10 +178,25 @@ export default function FavoriteComparisonDetail({
           dialog.xIndex === undefined
             ? allSlides
             : allSlides.filter((slide) => slide.xIndex === dialog.xIndex);
+        const placement = (slice?.placements[styleKey] ?? []).find(
+          (item) => item.run_dir === runDir,
+        );
+        const slide = slides[dialog.index] ?? null;
         return {
           slides,
-          slide: slides[dialog.index] ?? null,
+          slide,
           access: accessByRun.get(runDir) ?? null,
+          blurhash:
+            slide && placement
+              ? getComparisonBlurhash(
+                  blurhashLookup,
+                  runDir,
+                  placement.y_index,
+                  slide.xIndex,
+                  slide.batchIndex,
+                  slide.item.blurhash,
+                )
+              : null,
         };
       })()
     : null;
@@ -232,6 +262,23 @@ export default function FavoriteComparisonDetail({
                       Math.max(slides.length - 1, 0),
                     );
                     const slide = slides[index] ?? null;
+                    const blurhash = placement
+                      ? slide
+                        ? getComparisonBlurhash(
+                            blurhashLookup,
+                            model.run_dir,
+                            placement.y_index,
+                            slide.xIndex,
+                            slide.batchIndex,
+                            slide.item.blurhash,
+                          )
+                        : getComparisonPlaceholderBlurhash(
+                            blurhashLookup,
+                            model.run_dir,
+                            placement.y_index,
+                            column.x_index,
+                          )
+                      : null;
                     const access = accessByRun.get(model.run_dir) ?? null;
                     return (
                       <td key={model.run_dir} className="border-l p-2">
@@ -245,7 +292,12 @@ export default function FavoriteComparisonDetail({
                             }
                             disabled={!slide}
                           >
-                            {state.status === "loading" ? (
+                            {state.status === "loading" && blurhash ? (
+                              <BlurhashCanvas
+                                blurhash={blurhash}
+                                className="h-full w-full object-cover blur-md"
+                              />
+                            ) : state.status === "loading" ? (
                               <div
                                 data-testid="comparison-image-skeleton"
                                 data-state="loading"
@@ -254,7 +306,7 @@ export default function FavoriteComparisonDetail({
                             ) : slide ? (
                               <GridImage
                                 thumbVariants={slide.item.thumb}
-                                blurhash={slide.item.blurhash}
+                                blurhash={blurhash}
                                 alt={`${favorite.label} × ${model.name ?? model.run_dir}`}
                                 currentUserId={user.id}
                                 grant={access?.grant ?? null}
@@ -324,6 +376,7 @@ export default function FavoriteComparisonDetail({
             open={!!dialog}
             slide={dialogData.slide}
             slides={dialogData.slides}
+            blurhash={dialogData.blurhash}
             access={dialogData.access}
             userId={user.id}
             onOpenChange={(open) => {
@@ -361,6 +414,7 @@ function DetailDialog({
   open,
   slide,
   slides,
+  blurhash,
   access,
   userId,
   onOpenChange,
@@ -371,6 +425,7 @@ function DetailDialog({
   open: boolean;
   slide: ComparisonSlide | null;
   slides: ComparisonSlide[];
+  blurhash: string | null;
   access: ComparisonSlice["access"][number] | null;
   userId: string;
   onOpenChange: (open: boolean) => void;
@@ -394,9 +449,9 @@ function DetailDialog({
           <DialogDescription>Image preview</DialogDescription>
         </DialogHeader>
         <div className="relative flex min-h-[55vh] items-center justify-center overflow-hidden rounded bg-black">
-          {slide?.item.blurhash ? (
+          {blurhash ? (
             <BlurhashCanvas
-              blurhash={slide.item.blurhash}
+              blurhash={blurhash}
               className={`absolute inset-0 h-full w-full object-cover blur-md transition-opacity duration-500 ${isLoaded ? "opacity-0" : "opacity-100"}`}
             />
           ) : null}
@@ -407,7 +462,7 @@ function DetailDialog({
               className={`relative z-10 max-h-[75vh] max-w-full object-contain transition-opacity duration-500 ${isLoaded ? "opacity-100" : "opacity-0"}`}
               onLoad={() => setLoadedSrc(src)}
             />
-          ) : !slide?.item.blurhash ? (
+          ) : !blurhash ? (
             <span className="text-sm text-white/70">
               {loading ? "Loading..." : "-"}
             </span>

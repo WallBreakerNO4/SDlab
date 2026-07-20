@@ -83,6 +83,53 @@ function waitFavoritesLoaded(page: Page): Promise<PlaywrightResponse> {
   );
 }
 
+async function mockComparisonSliceBlurhashFallback(page: Page): Promise<void> {
+  await page.route("**/api/viewer/style-comparison/slice", async (route) => {
+    const response = await route.fetch();
+    const payload = (await response.json()) as {
+      placements?: Record<
+        string,
+        Array<{
+          blurhashes?: Array<[number, number, string]>;
+        }>
+      >;
+    };
+    for (const placements of Object.values(payload.placements ?? {})) {
+      for (const placement of placements) {
+        placement.blurhashes = Array.from(
+          { length: 20 },
+          (_, xIndex) => [xIndex, 0, GUEST_BLURHASH],
+        );
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    await route.fulfill({ response, json: payload });
+  });
+
+  await page.route("**/api/private-object?*", async (route) => {
+    const key = new URL(route.request().url()).searchParams.get("key") ?? "";
+    if (key.includes("/sha256/")) {
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      await route.continue();
+      return;
+    }
+    if (!key.includes("/rows/")) {
+      await route.continue();
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    const response = await route.fetch();
+    const payload = (await response.json()) as {
+      cells?: Array<{ items?: Array<Record<string, unknown>> }>;
+    };
+    for (const cell of payload.cells ?? []) {
+      for (const item of cell.items ?? []) delete item.blurhash;
+    }
+    await route.fulfill({ response, json: payload });
+  });
+}
+
 /** 点击星标并等待对应 mutation 响应落库，避免乐观更新与后续断言竞争 */
 async function clickStarAndWait(
   page: Page,
@@ -440,50 +487,7 @@ test.describe("task 14: style favorites signed-in flows", () => {
     await putFavorite(page, styleKey, "e2e 横向模型矩阵验证收藏");
 
     try {
-      await page.route("**/api/private-object?*", async (route) => {
-        const key =
-          new URL(route.request().url()).searchParams.get("key") ?? "";
-        if (key.includes("/sha256/")) {
-          await new Promise((resolve) => setTimeout(resolve, 1_000));
-          await route.fulfill({
-            status: 200,
-            contentType: "image/webp",
-            body: Buffer.from([]),
-          });
-          return;
-        }
-        if (!key.includes("/rows/")) {
-          await route.continue();
-          return;
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, 1_000));
-        const response = await route.fetch();
-        const payload = (await response.json()) as {
-          cells?: Array<{ items?: Array<Record<string, unknown>> }>;
-        };
-        const runDir = key.split("/")[1] ?? MIXER_RUN_DIR;
-        for (const cell of payload.cells ?? []) {
-          for (const item of cell.items ?? []) {
-            item.blurhash = GUEST_BLURHASH;
-            item.thumb = {
-              webp: {
-                bucket: "private",
-                cache_key: `e2e-thumb-${runDir}`,
-                key: `runs/${runDir}/sha256/ee/${"e".repeat(64)}/thumb_webp.webp`,
-              },
-            };
-            item.display = {
-              webp: {
-                bucket: "private",
-                cache_key: `e2e-display-${runDir}`,
-                key: `runs/${runDir}/sha256/ff/${"f".repeat(64)}/display_webp.webp`,
-              },
-            };
-          }
-        }
-        await route.fulfill({ response, json: payload });
-      });
+      await mockComparisonSliceBlurhashFallback(page);
       await page.goto("/zh/favorites");
       const matrix = page.getByTestId("comparison-matrix-scroll");
       const frame = page.getByTestId("comparison-image-frame").first();
@@ -495,6 +499,11 @@ test.describe("task 14: style favorites signed-in flows", () => {
       await expect(page.getByTestId("blurhash-canvas").first()).toBeVisible({
         timeout: 15_000,
       });
+      const thumb = frame.getByTestId("run-grid-image");
+      await expect(thumb).toHaveClass(/opacity-100/, { timeout: 15_000 });
+      await expect(frame.getByTestId("blurhash-canvas")).toHaveClass(
+        /opacity-0/,
+      );
       await frame.locator('button[type="button"]').first().click();
       const previewDialog = page.getByRole("dialog");
       await expect(previewDialog).toBeVisible();
@@ -540,6 +549,30 @@ test.describe("task 14: style favorites signed-in flows", () => {
         path: "test-results/comparison-matrix-ui.png",
         fullPage: false,
       });
+    } finally {
+      await deleteFavoriteQuiet(page, styleKey);
+    }
+  });
+
+  test("task 14: comparison detail falls back to slice blurhash for legacy row manifests", async ({
+    page,
+  }) => {
+    const items = await fetchStyleItems(page, MIXER_RUN_DIR);
+    const styleKey = styleKeyAt(items, 31);
+    await putFavorite(page, styleKey, "e2e 详情 BlurHash 回退收藏");
+
+    try {
+      await mockComparisonSliceBlurhashFallback(page);
+      await page.goto(`/zh/favorites/${encodeURIComponent(styleKey)}`);
+
+      const firstCell = page.locator("tbody td").first();
+      const placeholder = firstCell.getByTestId("blurhash-canvas");
+      await expect(placeholder).toBeVisible({ timeout: 15_000 });
+      await expect(firstCell.getByTestId("run-grid-image")).toHaveClass(
+        /opacity-100/,
+        { timeout: 15_000 },
+      );
+      await expect(placeholder).toHaveClass(/opacity-0/);
     } finally {
       await deleteFavoriteQuiet(page, styleKey);
     }

@@ -60,9 +60,16 @@ export type StyleComparisonAccess = {
   expires_at: number;
 };
 
+export type StyleComparisonBlurhashTuple = [
+  x_index: number,
+  batch_index: number,
+  blurhash: string,
+];
+
 export type StyleComparisonPlacement = {
   run_dir: string;
   y_index: number;
+  blurhashes: StyleComparisonBlurhashTuple[];
 };
 
 export type StyleComparisonSliceResponse = {
@@ -92,6 +99,33 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+function normalizeBlurhashTuples(
+  value: unknown,
+): StyleComparisonBlurhashTuple[] | null {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) return null;
+
+  const seen = new Set<string>();
+  const tuples: StyleComparisonBlurhashTuple[] = [];
+  for (const raw of value) {
+    if (
+      !Array.isArray(raw) ||
+      raw.length !== 3 ||
+      !isNonNegativeInteger(raw[0]) ||
+      !isNonNegativeInteger(raw[1]) ||
+      typeof raw[2] !== "string" ||
+      raw[2].trim().length === 0
+    ) {
+      return null;
+    }
+    const key = `${raw[0]}\u0000${raw[1]}`;
+    if (seen.has(key)) return null;
+    seen.add(key);
+    tuples.push([raw[0], raw[1], raw[2]]);
+  }
+  return tuples.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
 }
 
 function normalizeXColumns(value: unknown): StyleComparisonXColumn[] | null {
@@ -196,6 +230,8 @@ export function normalizeStyleComparisonSliceRpcResult(
     ) {
       return null;
     }
+    const blurhashes = normalizeBlurhashTuples(raw.blurhashes);
+    if (!blurhashes) return null;
     const placementKey = `${raw.style_key}\u0000${raw.run_dir}`;
     if (placementKeys.has(placementKey)) return null;
     placementKeys.add(placementKey);
@@ -203,6 +239,7 @@ export function normalizeStyleComparisonSliceRpcResult(
       style_key: raw.style_key,
       run_dir: raw.run_dir,
       y_index: raw.y_index,
+      blurhashes,
     });
   }
 
@@ -256,6 +293,7 @@ export function buildStyleComparisonPlacements(
     placements[row.style_key]?.push({
       run_dir: row.run_dir,
       y_index: row.y_index,
+      blurhashes: row.blurhashes,
     });
   }
   for (const styleKey of styleKeys) {
@@ -332,18 +370,7 @@ export function isStyleComparisonSliceResponse(
     !isRecord(value.placements)
   )
     return false;
-  const accessOk = value.access.every((item) => {
-    return (
-      isRecord(item) &&
-      typeof item.run_dir === "string" &&
-      typeof item.release_id === "string" &&
-      (item.viewer_variant === "auth_sfw" ||
-        item.viewer_variant === "auth_nsfw") &&
-      typeof item.grant === "string" &&
-      typeof item.expires_at === "number" &&
-      Number.isFinite(item.expires_at)
-    );
-  });
+  const accessOk = value.access.every(isStyleComparisonAccess);
   if (!accessOk) return false;
   return Object.values(value.placements).every(
     (placements) =>
@@ -352,9 +379,88 @@ export function isStyleComparisonSliceResponse(
         (item) =>
           isRecord(item) &&
           typeof item.run_dir === "string" &&
-          isNonNegativeInteger(item.y_index),
+          isNonNegativeInteger(item.y_index) &&
+          Array.isArray(item.blurhashes) &&
+          normalizeBlurhashTuples(item.blurhashes) !== null,
       ),
   );
+}
+
+function isStyleComparisonAccess(value: unknown): value is StyleComparisonAccess {
+  return (
+    isRecord(value) &&
+    typeof value.run_dir === "string" &&
+    typeof value.release_id === "string" &&
+    (value.viewer_variant === "auth_sfw" ||
+      value.viewer_variant === "auth_nsfw") &&
+    typeof value.grant === "string" &&
+    typeof value.expires_at === "number" &&
+    Number.isFinite(value.expires_at)
+  );
+}
+
+export function normalizeStyleComparisonSliceResponse(
+  value: unknown,
+): StyleComparisonSliceResponse | null {
+  if (
+    !isRecord(value) ||
+    !Array.isArray(value.access) ||
+    value.access.length > STYLE_COMPARISON_MAX_RUN_DIRS ||
+    !value.access.every(isStyleComparisonAccess) ||
+    !isRecord(value.placements) ||
+    Object.keys(value.placements).length > STYLE_COMPARISON_MAX_STYLE_KEYS
+  ) {
+    return null;
+  }
+
+  const accessRunDirs = new Set<string>();
+  for (const access of value.access) {
+    if (accessRunDirs.has(access.run_dir)) return null;
+    accessRunDirs.add(access.run_dir);
+  }
+
+  const placements: Record<string, StyleComparisonPlacement[]> = {};
+  let placementCount = 0;
+  for (const [styleKey, rawPlacements] of Object.entries(value.placements)) {
+    if (
+      !isStyleKey(styleKey) ||
+      !Array.isArray(rawPlacements) ||
+      rawPlacements.length > STYLE_COMPARISON_MAX_RUN_DIRS
+    ) {
+      return null;
+    }
+    placementCount += rawPlacements.length;
+    if (
+      placementCount >
+      STYLE_COMPARISON_MAX_STYLE_KEYS * STYLE_COMPARISON_MAX_RUN_DIRS
+    ) {
+      return null;
+    }
+    const normalizedPlacements: StyleComparisonPlacement[] = [];
+    const placementRunDirs = new Set<string>();
+    for (const raw of rawPlacements) {
+      if (
+        !isRecord(raw) ||
+        typeof raw.run_dir !== "string" ||
+        !isValidRunDir(raw.run_dir) ||
+        !isNonNegativeInteger(raw.y_index) ||
+        placementRunDirs.has(raw.run_dir)
+      ) {
+        return null;
+      }
+      placementRunDirs.add(raw.run_dir);
+      const blurhashes = normalizeBlurhashTuples(raw.blurhashes);
+      if (!blurhashes) return null;
+      normalizedPlacements.push({
+        run_dir: raw.run_dir,
+        y_index: raw.y_index,
+        blurhashes,
+      });
+    }
+    placements[styleKey] = normalizedPlacements;
+  }
+
+  return { access: [...value.access], placements };
 }
 
 export function isStyleComparisonDetailResponse(
@@ -504,7 +610,7 @@ export async function fetchStyleComparisonSlice(
     });
     if (!response.ok) return null;
     const payload: unknown = await response.json();
-    return isStyleComparisonSliceResponse(payload) ? payload : null;
+    return normalizeStyleComparisonSliceResponse(payload);
   } catch {
     return null;
   }

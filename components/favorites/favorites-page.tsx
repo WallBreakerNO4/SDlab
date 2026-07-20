@@ -53,8 +53,12 @@ import {
   type ComparisonRowState,
 } from "./comparison-loader";
 import {
+  buildComparisonBlurhashLookup,
+  getComparisonBlurhash,
+  getComparisonPlaceholderBlurhash,
   getHorizontalModelWindow,
   getShiftWheelDelta,
+  getVariantBoundValue,
 } from "./comparison-matrix-utils";
 
 const HIDDEN_MODELS_KEY = "sdlab:favorites:hidden-models";
@@ -108,6 +112,7 @@ function ComparisonImage({
   onRefresh,
   alt,
   onClick,
+  blurhash,
 }: {
   state: ComparisonRowState;
   slide: ComparisonSlide | null;
@@ -116,8 +121,17 @@ function ComparisonImage({
   onRefresh: () => Promise<ComparisonSlice["access"][number] | null>;
   alt: string;
   onClick?: () => void;
+  blurhash: string | null;
 }) {
   if (state.status === "loading") {
+    if (blurhash) {
+      return (
+        <BlurhashCanvas
+          blurhash={blurhash}
+          className="h-full w-full object-cover blur-md"
+        />
+      );
+    }
     return (
       <div
         data-testid="comparison-image-skeleton"
@@ -145,7 +159,7 @@ function ComparisonImage({
     >
       <GridImage
         thumbVariants={slide.item.thumb}
-        blurhash={slide.item.blurhash}
+        blurhash={blurhash}
         alt={alt}
         currentUserId={userId}
         grant={access?.grant ?? null}
@@ -167,6 +181,7 @@ function ComparisonDialog({
   current,
   total,
   title,
+  blurhash,
 }: {
   open: boolean;
   slide: ComparisonSlide | null;
@@ -179,6 +194,7 @@ function ComparisonDialog({
   current: number;
   total: number;
   title: string;
+  blurhash: string | null;
 }) {
   const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
   const { src, loading } = useRenderableVariantSource({
@@ -196,9 +212,9 @@ function ComparisonDialog({
           <DialogDescription>{title}</DialogDescription>
         </DialogHeader>
         <div className="relative flex min-h-[55vh] items-center justify-center rounded bg-black">
-          {slide?.item.blurhash ? (
+          {blurhash ? (
             <BlurhashCanvas
-              blurhash={slide.item.blurhash}
+              blurhash={blurhash}
               className={`absolute inset-0 h-full w-full object-cover blur-md transition-opacity duration-500 ${isLoaded ? "opacity-0" : "opacity-100"}`}
             />
           ) : null}
@@ -209,7 +225,7 @@ function ComparisonDialog({
               className={`relative z-10 max-h-[76vh] max-w-full object-contain transition-opacity duration-500 ${isLoaded ? "opacity-100" : "opacity-0"}`}
               onLoad={() => setLoadedSrc(src)}
             />
-          ) : !slide?.item.blurhash ? (
+          ) : !blurhash ? (
             <span className="text-sm text-white/70">
               {loading ? "Loading..." : "-"}
             </span>
@@ -280,6 +296,7 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
   const t = useTranslations("styleFavorites");
   const locale = useLocale();
   const { showNsfw } = useUserPreferences();
+  const rowVariantKey = showNsfw ? "nsfw" : "sfw";
   const [pages, setPages] = useState<
     import("@/lib/style-comparison").ComparisonCatalogPage[]
   >([]);
@@ -294,7 +311,11 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
     width: 1280,
     promptColumnWidth: DESKTOP_PROMPT_COLUMN_WIDTH,
   });
-  const [slice, setSlice] = useState<ComparisonSlice | null>(null);
+  const [sliceSnapshot, setSliceSnapshot] = useState<{
+    variantKey: string;
+    data: ComparisonSlice;
+  } | null>(null);
+  const slice = getVariantBoundValue(sliceSnapshot, rowVariantKey);
   const [rows, setRows] = useState<Map<string, ComparisonRowState>>(new Map());
   const [slideIndexes, setSlideIndexes] = useState<Map<string, number>>(
     new Map(),
@@ -405,8 +426,6 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
     };
   }, [updateMatrixViewport]);
 
-  const rowVariantKey = showNsfw ? "nsfw" : "sfw";
-
   const loadSlice = useCallback(
     async (signal?: AbortSignal) => {
       if (!activeModels.length || !visibleFavorites.length) return;
@@ -451,7 +470,7 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
             ]),
           ),
         };
-        setSlice(next);
+        setSliceSnapshot({ variantKey: rowVariantKey, data: next });
         setRows((current) => {
           const nextRows = new Map(current);
           for (const favorite of visibleFavorites) {
@@ -529,6 +548,11 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
     return () => controller.abort();
   }, [loadSlice, showNsfw]);
 
+  const blurhashLookup = useMemo(
+    () => buildComparisonBlurhashLookup(slice?.placements ?? null),
+    [slice],
+  );
+
   const toggleHidden = (runDir: string) =>
     setHidden((current) => {
       const next = new Set(current);
@@ -554,13 +578,28 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
     const state = rows.get(`${rowVariantKey}|${dialog.key}`);
     const row = state?.status === "ready" ? state.row : null;
     const slides = flattenRowSlides(row);
+    const placement = (slice.placements[styleKey] ?? []).find(
+      (item) => item.run_dir === runDir,
+    );
+    const slide = slides[dialog.index] ?? null;
     return {
-      slide: slides[dialog.index] ?? null,
+      slide,
       slides,
       access: slice.access.find((item) => item.run_dir === runDir) ?? null,
       title: styleKey,
+      blurhash:
+        slide && placement
+          ? getComparisonBlurhash(
+              blurhashLookup,
+              runDir,
+              placement.y_index,
+              slide.xIndex,
+              slide.batchIndex,
+              slide.item.blurhash,
+            )
+          : null,
     };
-  }, [dialog, rowVariantKey, rows, slice]);
+  }, [blurhashLookup, dialog, rowVariantKey, rows, slice]);
 
   if (loading)
     return (
@@ -770,6 +809,22 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
                       (item) => item.run_dir === model.run_dir,
                     ) ?? null;
                   const slide = slides[index] ?? null;
+                  const blurhash = placement
+                    ? slide
+                      ? getComparisonBlurhash(
+                          blurhashLookup,
+                          model.run_dir,
+                          placement.y_index,
+                          slide.xIndex,
+                          slide.batchIndex,
+                          slide.item.blurhash,
+                        )
+                      : getComparisonPlaceholderBlurhash(
+                          blurhashLookup,
+                          model.run_dir,
+                          placement.y_index,
+                        )
+                    : null;
                   return (
                     <div
                       key={key}
@@ -788,6 +843,7 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
                           onRefresh={async () => access}
                           alt={`${favorite.label} × ${model.name ?? model.run_dir}`}
                           onClick={() => setDialog({ key, index })}
+                          blurhash={blurhash}
                         />
                         {slides.length ? (
                           <>
@@ -863,6 +919,7 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
             current={dialog?.index ?? 0}
             total={dialogData.slides.length}
             title={dialogData.title}
+            blurhash={dialogData.blurhash}
             onPrevious={() =>
               setDialog((current) =>
                 current

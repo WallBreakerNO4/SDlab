@@ -25,17 +25,17 @@
 - 所有 placement 的 `y_index` 均为 0-based，并直接对应 `rows/{viewer_variant}/{y_index}.json`；不要为 UI 展示提前改成 1-based。
 - 首次目录响应携带模型目录，后续 cursor 页只合并收藏；隐藏模型状态存于 `sdlab:favorites:hidden-models`，模型集合变化后必须清理失效 runDir。
 - `comparison-loader.ts` 的 row cache key 包含 `runDir/releaseId/viewerVariant/yIndex`；grant 刷新不应改变同一对象的 row cache 身份。
-- row manifest 的 `items[].blurhash` 是可选字段：新 release 在图片 item 级携带，旧 manifest 缺失时归一化为 `null` 并降级到 Skeleton；不要把 BlurHash 放进数据库 slice。
+- row manifest 的 `items[].blurhash` 是可选字段：新 release 在图片 item 级携带；旧 manifest 缺失时使用 slice placement 的 `blurhashes: [x_index, batch_index, blurhash][]` 回退。前端为 slice BlurHash 构建 `run/y/x/batch` lookup，row item 自带值始终优先。
 - row 状态必须区分 `loading` 与 `missing`：有 placement 且 row 请求仍在进行时保持 loading，占位可由 Skeleton/BlurHash 承接；只有确认该模型无 placement 时才是 missing，不能在异步请求尚未完成时提前显示“暂无图片”。
 - 私有 row/图片必须使用 slice 返回的 grant 和 `privateObjectProxyUrl()`；API route 先授权再访问共享 edge cache，cache URL 去除 grant 但保留对象 key，客户端不得自行模拟该流程。
 - 图片渲染复用 `GridImage` 与 `useRenderableVariantSource()`；公开/私有变体选择、object URL 生命周期继续遵守 `components/comfyui/AGENTS.md`。
-- `showNsfw` 变化后重新请求 slice，使 `viewer_variant` 与 grant 同步；不要在客户端自行推断未授权的 NSFW 路径。
+- `showNsfw` 变化后重新请求 slice，使 `viewer_variant`、grant 与 slice BlurHash 同步；slice 状态必须绑定 variant，切换后不能继续读取旧 variant 的 BlurHash。不要在客户端自行推断未授权的 NSFW 路径。
 
 ### Testing Requirements
 
-- `pnpm test` 已覆盖 slice RPC guard、row manifest BlurHash 新旧兼容和 loading/missing/ready/error 状态；模型 merge/显隐/reconcile 与 row slide 排序仍需在修改时补对应测试。
+- `pnpm test` 已覆盖 slice RPC guard、row manifest BlurHash 新旧兼容、slice BlurHash lookup 和 loading/missing/ready/error 状态；模型 merge/显隐/reconcile 与 row slide 排序仍需在修改时补对应测试。
 - 修改 `mergeComparisonFavorites()`、`getVisibleModels()`、`reconcileHiddenRunDirs()`、`flattenRowSlides()` 或 placement/row 逻辑时，应补对应单测，并明确验证 0-based `y_index`。
-- 修改交互后至少运行 `pnpm lint` 与 `pnpm typecheck`；当前没有模型对比专项 E2E，不要在文档中宣称已经覆盖。
+- 修改交互后至少运行 `pnpm lint` 与 `pnpm typecheck`；模型对比 E2E 覆盖旧 row manifest 使用 slice BlurHash 的总览与单收藏详情路径。
 
 ### Common Patterns
 

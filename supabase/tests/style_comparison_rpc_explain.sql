@@ -51,6 +51,31 @@ rollback;
 \quit 1
 \endif
 
+with target_placements as materialized (
+  select distinct on (items.style_key, items.run_dir)
+    items.style_key,
+    items.run_dir,
+    items.run_id,
+    items.y_index
+  from public.run_style_items as items
+  where items.style_key = any(:'fixture_style_keys'::text[])
+    and items.run_dir = any(:'fixture_run_dirs'::text[])
+  order by items.style_key, items.run_dir, items.y_index, items.run_id
+)
+select
+  count(*) filter (
+    where nullif(btrim(grid.blurhash), '') is not null
+      and grid.category <> 'nsfw'
+  )::integer as sfw_count,
+  count(*) filter (
+    where nullif(btrim(grid.blurhash), '') is not null
+  )::integer as nsfw_count
+from target_placements as placements
+inner join public.run_grid_items as grid
+  on grid.run_id = placements.run_id
+  and grid.y_index = placements.y_index
+\gset expected_
+
 select set_config('request.jwt.claim.sub', :'viewer_id', true);
 set local role authenticated;
 
@@ -58,33 +83,64 @@ set local role authenticated;
 explain (analyze, buffers)
 select public.get_style_comparison_slice(
   (:'fixture_style_keys'::text[])[1:1],
-  (:'fixture_run_dirs'::text[])[1:1]
+  (:'fixture_run_dirs'::text[])[1:1],
+  false
 );
 
 -- 1 x 6：常见可见模型窗口。
 explain (analyze, buffers)
 select public.get_style_comparison_slice(
   (:'fixture_style_keys'::text[])[1:1],
-  (:'fixture_run_dirs'::text[])[1:6]
+  (:'fixture_run_dirs'::text[])[1:6],
+  false
 );
 
 -- 40 x 12：接口允许的最大 slice。
 explain (analyze, buffers)
 select public.get_style_comparison_slice(
   :'fixture_style_keys'::text[],
-  :'fixture_run_dirs'::text[]
+  :'fixture_run_dirs'::text[],
+  false
 );
+
+-- 同一最大 slice 开启 NSFW，用于比较过滤前后的执行计划与返回规模。
+explain (analyze, buffers)
+select public.get_style_comparison_slice(
+  :'fixture_style_keys'::text[],
+  :'fixture_run_dirs'::text[],
+  true
+) as result;
 
 select public.get_style_comparison_slice(
   :'fixture_style_keys'::text[],
-  :'fixture_run_dirs'::text[]
+  :'fixture_run_dirs'::text[],
+  false
 ) as result
-\gset rpc_
+\gset sfw_
+
+select public.get_style_comparison_slice(
+  :'fixture_style_keys'::text[],
+  :'fixture_run_dirs'::text[],
+  true
+) as result
+\gset nsfw_
 
 select
-  jsonb_array_length(:'rpc_result'::jsonb -> 'owned_style_keys') = 40 as owned_ok,
-  jsonb_array_length(:'rpc_result'::jsonb -> 'placements') = 480 as placements_ok,
-  jsonb_array_length(:'rpc_result'::jsonb -> 'runs') = 12 as runs_ok
+  coalesce(sum(jsonb_array_length(placement -> 'blurhashes')), 0)::integer as count
+from jsonb_array_elements(:'sfw_result'::jsonb -> 'placements') as placement
+\gset sfw_blurhash_
+
+select
+  coalesce(sum(jsonb_array_length(placement -> 'blurhashes')), 0)::integer as count
+from jsonb_array_elements(:'nsfw_result'::jsonb -> 'placements') as placement
+\gset nsfw_blurhash_
+
+select
+  jsonb_array_length(:'sfw_result'::jsonb -> 'owned_style_keys') = 40 as owned_ok,
+  jsonb_array_length(:'sfw_result'::jsonb -> 'placements') = 480 as placements_ok,
+  jsonb_array_length(:'sfw_result'::jsonb -> 'runs') = 12 as runs_ok,
+  :'sfw_blurhash_count'::integer = :'expected_sfw_count'::integer as sfw_blurhashes_ok,
+  :'nsfw_blurhash_count'::integer = :'expected_nsfw_count'::integer as nsfw_filter_ok
 \gset verify_
 
 \if :verify_owned_ok
@@ -103,6 +159,18 @@ rollback;
 \else
 rollback;
 \echo 'runs 数量不是 12'
+\quit 1
+\endif
+\if :verify_sfw_blurhashes_ok
+\else
+rollback;
+\echo 'SFW slice 没有返回 BlurHash'
+\quit 1
+\endif
+\if :verify_nsfw_filter_ok
+\else
+rollback;
+\echo '开启 NSFW 后的 BlurHash 数量少于 SFW'
 \quit 1
 \endif
 

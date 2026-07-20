@@ -26,10 +26,14 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const supabase = await createSupabaseAuthClient();
     await requireViewerForPreferenceWrite(supabase);
+    const viewerVariant: ViewerVariant = readViewerVariantFromCookie(
+      request.headers.get("cookie"),
+    );
 
     const { data, error } = await supabase.rpc("get_style_comparison_slice", {
       p_style_keys: body.style_keys,
       p_run_dirs: body.run_dirs,
+      p_include_nsfw: viewerVariant === "auth_nsfw",
     });
     if (error) return jsonError(500, "Failed to load style comparison");
 
@@ -44,7 +48,6 @@ export async function POST(request: Request): Promise<Response> {
       rpcResult.placements,
     );
 
-    const viewerVariant: ViewerVariant = readViewerVariantFromCookie(request.headers.get("cookie"));
     const expiresAt = Math.floor(Date.now() / 1000) + 60 * 60 * 24;
 
     const payload: StyleComparisonSliceResponse = {
