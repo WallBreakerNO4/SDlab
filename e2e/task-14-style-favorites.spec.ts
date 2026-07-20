@@ -416,6 +416,65 @@ test.describe("task 14: style favorites signed-in flows", () => {
     }
   });
 
+  test("task 14: favorites comparison matrix shows every model in a horizontal workspace", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const items = await fetchStyleItems(page, MIXER_RUN_DIR);
+    const styleKey = styleKeyAt(items, 30);
+    await putFavorite(page, styleKey, "e2e 横向模型矩阵验证收藏");
+
+    try {
+      await page.goto("/zh/favorites");
+      const matrix = page.getByTestId("comparison-matrix-scroll");
+      const frame = page.getByTestId("comparison-image-frame").first();
+      await expect(matrix).toBeVisible({ timeout: 15_000 });
+      await expect(frame).toBeVisible({ timeout: 15_000 });
+
+      const initialScroll = await matrix.evaluate((element) => ({
+        left: element.scrollLeft,
+        top: element.scrollTop,
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+      }));
+      expect(initialScroll.scrollWidth).toBeGreaterThan(
+        initialScroll.clientWidth,
+      );
+
+      await matrix.dispatchEvent("wheel", {
+        bubbles: true,
+        cancelable: true,
+        shiftKey: true,
+        deltaX: 0,
+        deltaY: 240,
+      });
+      await expect
+        .poll(() => matrix.evaluate((element) => element.scrollLeft))
+        .toBeGreaterThan(initialScroll.left);
+      expect(await matrix.evaluate((element) => element.scrollTop)).toBe(
+        initialScroll.top,
+      );
+
+      const frameBox = await frame.boundingBox();
+      expect(frameBox).not.toBeNull();
+      expect(frameBox!.width / frameBox!.height).toBeCloseTo(13 / 19, 2);
+
+      await expect(
+        page.getByRole("button", { name: /上一组模型|Previous models/ }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: /下一组模型|Next models/ }),
+      ).toHaveCount(0);
+
+      await page.screenshot({
+        path: "test-results/comparison-matrix-ui.png",
+        fullPage: false,
+      });
+    } finally {
+      await deleteFavoriteQuiet(page, styleKey);
+    }
+  });
+
   test("task 14: favorites page remove deletes the entry", async ({ page }) => {
     const items = await fetchStyleItems(page, LEGACY_RUN_DIR);
     const styleKey = styleKeyAt(items, 3);

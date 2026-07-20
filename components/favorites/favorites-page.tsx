@@ -5,7 +5,6 @@ import { useLocale, useTranslations } from "next-intl";
 import {
   ChevronLeft,
   ChevronRight,
-  EyeOff,
   ImageOff,
   SlidersHorizontal,
   X,
@@ -17,7 +16,6 @@ import { AuthLoginDialog } from "@/components/auth-login-dialog";
 import { GridImage } from "@/components/comfyui/grid-image";
 import { useRenderableVariantSource } from "@/components/comfyui/use-renderable-variant-source";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +23,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Link } from "@/i18n/navigation";
 import { useUserPreferences } from "@/components/user-preferences-provider";
 import { deleteStyleFavorite } from "@/lib/style-favorites";
@@ -43,10 +49,19 @@ import {
   fetchComparisonSlice,
   mapWithConcurrency,
 } from "./comparison-loader";
+import {
+  getHorizontalModelWindow,
+  getShiftWheelDelta,
+} from "./comparison-matrix-utils";
 
 const HIDDEN_MODELS_KEY = "sdlab:favorites:hidden-models";
 const VISIBLE_ROWS = 6;
-const DESKTOP_COLUMNS = 4;
+const MODEL_COLUMN_WIDTH = 216;
+const DESKTOP_PROMPT_COLUMN_WIDTH = 280;
+const MOBILE_PROMPT_COLUMN_WIDTH = 176;
+const ROW_HEIGHT = 312;
+const HEADER_HEIGHT = 64;
+const SLICE_MODEL_LIMIT = 12;
 
 function readHiddenModels(): Set<string> {
   try {
@@ -248,8 +263,11 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [start, setStart] = useState(0);
-  const [mobileRun, setMobileRun] = useState<string | null>(null);
-  const [columnStart, setColumnStart] = useState(0);
+  const [matrixViewport, setMatrixViewport] = useState({
+    scrollLeft: 0,
+    width: 1280,
+    promptColumnWidth: DESKTOP_PROMPT_COLUMN_WIDTH,
+  });
   const [slice, setSlice] = useState<ComparisonSlice | null>(null);
   const [rows, setRows] = useState<
     Map<string, Awaited<ReturnType<typeof fetchComparisonRow>>>
@@ -292,19 +310,26 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
     () => getVisibleModels(models, hidden),
     [models, hidden],
   );
-  const activeModels = useMemo(() => {
-    if (visibleModels.length === 0) return [];
-    if (typeof window !== "undefined" && window.innerWidth < 768)
-      return visibleModels.filter((model) => {
-        const selected = visibleModels.some(
-          (candidate) => candidate.run_dir === mobileRun,
-        )
-          ? mobileRun
-          : visibleModels[0].run_dir;
-        return model.run_dir === selected;
-      });
-    return visibleModels.slice(columnStart, columnStart + DESKTOP_COLUMNS);
-  }, [columnStart, mobileRun, visibleModels]);
+  const horizontalWindow = useMemo(
+    () =>
+      getHorizontalModelWindow({
+        scrollLeft: matrixViewport.scrollLeft,
+        viewportWidth: matrixViewport.width,
+        promptColumnWidth: matrixViewport.promptColumnWidth,
+        modelColumnWidth: MODEL_COLUMN_WIDTH,
+        modelCount: visibleModels.length,
+        overscan: 1,
+      }),
+    [matrixViewport, visibleModels.length],
+  );
+  const activeModels = useMemo(
+    () =>
+      visibleModels.slice(
+        horizontalWindow.startIndex,
+        horizontalWindow.endIndex,
+      ),
+    [horizontalWindow, visibleModels],
+  );
   const visibleFavorites = useMemo(
     () => favorites.slice(start, start + VISIBLE_ROWS),
     [favorites, start],
@@ -323,18 +348,73 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
     }
   }, [hidden]);
 
+  const updateMatrixViewport = useCallback((element: HTMLDivElement) => {
+    const promptColumnWidth =
+      element.clientWidth < 640
+        ? MOBILE_PROMPT_COLUMN_WIDTH
+        : DESKTOP_PROMPT_COLUMN_WIDTH;
+    setMatrixViewport((current) => {
+      const next = {
+        scrollLeft:
+          Math.floor(element.scrollLeft / MODEL_COLUMN_WIDTH) *
+          MODEL_COLUMN_WIDTH,
+        width: element.clientWidth,
+        promptColumnWidth,
+      };
+      return current.scrollLeft === next.scrollLeft &&
+        current.width === next.width &&
+        current.promptColumnWidth === next.promptColumnWidth
+        ? current
+        : next;
+    });
+  }, []);
+
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const frame = requestAnimationFrame(() => updateMatrixViewport(element));
+    const observer = new ResizeObserver(() => updateMatrixViewport(element));
+    observer.observe(element);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [updateMatrixViewport]);
+
+  const rowVariantKey = showNsfw ? "nsfw" : "sfw";
+
   const loadSlice = useCallback(
     async (signal?: AbortSignal) => {
       if (!activeModels.length || !visibleFavorites.length) return;
-      setSlice(null);
-      setRows(new Map());
       try {
-        const next = await fetchComparisonSlice(
-          visibleFavorites.map((item) => item.style_key),
-          activeModels.map((model) => model.run_dir),
-          signal,
+        const styleKeys = visibleFavorites.map((item) => item.style_key);
+        const modelChunks = Array.from(
+          { length: Math.ceil(activeModels.length / SLICE_MODEL_LIMIT) },
+          (_, index) =>
+            activeModels.slice(
+              index * SLICE_MODEL_LIMIT,
+              (index + 1) * SLICE_MODEL_LIMIT,
+            ),
+        );
+        const slices = await Promise.all(
+          modelChunks.map((chunk) =>
+            fetchComparisonSlice(
+              styleKeys,
+              chunk.map((model) => model.run_dir),
+              signal,
+            ),
+          ),
         );
         if (signal?.aborted) return;
+        const next: ComparisonSlice = {
+          access: slices.flatMap((item) => item.access),
+          placements: Object.fromEntries(
+            styleKeys.map((styleKey) => [
+              styleKey,
+              slices.flatMap((item) => item.placements[styleKey] ?? []),
+            ]),
+          ),
+        };
         setSlice(next);
         const accessByRun = new Map(
           next.access.map((item) => [item.run_dir, item]),
@@ -358,7 +438,7 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
               if (signal?.aborted) return;
               setRows((current) =>
                 new Map(current).set(
-                  `${favorite.style_key}|${placement.run_dir}`,
+                  `${rowVariantKey}|${favorite.style_key}|${placement.run_dir}`,
                   row,
                 ),
               );
@@ -369,7 +449,7 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
         /* transient slice errors leave empty cells */
       }
     },
-    [activeModels, visibleFavorites],
+    [activeModels, rowVariantKey, visibleFavorites],
   );
   useEffect(() => {
     const controller = new AbortController();
@@ -400,7 +480,7 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
   const dialogData = useMemo(() => {
     if (!dialog || !slice) return null;
     const [styleKey, runDir] = dialog.key.split("|");
-    const row = rows.get(dialog.key) ?? null;
+    const row = rows.get(`${rowVariantKey}|${dialog.key}`) ?? null;
     const slides = flattenRowSlides(row);
     return {
       slide: slides[dialog.index] ?? null,
@@ -408,7 +488,7 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
       access: slice.access.find((item) => item.run_dir === runDir) ?? null,
       title: styleKey,
     };
-  }, [dialog, rows, slice]);
+  }, [dialog, rowVariantKey, rows, slice]);
 
   if (loading)
     return (
@@ -425,27 +505,54 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
       <main className="p-8 text-sm text-muted-foreground">{t("empty")}</main>
     );
 
+  const leftModelSpacer = horizontalWindow.startIndex * MODEL_COLUMN_WIDTH;
+  const rightModelSpacer =
+    (visibleModels.length - horizontalWindow.endIndex) * MODEL_COLUMN_WIDTH;
+  const matrixWidth =
+    matrixViewport.promptColumnWidth +
+    visibleModels.length * MODEL_COLUMN_WIDTH;
+
   return (
-    <main className="flex h-full min-h-0 flex-col overflow-hidden px-4 py-6 sm:px-6">
-      <div className="mx-auto flex w-full max-w-[1600px] min-h-0 flex-1 flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold">{t("comparisonTitle")}</h1>
-            <p className="text-xs text-muted-foreground">
+    <main className="flex h-full min-h-0 flex-col overflow-hidden px-3 py-4 sm:px-5 sm:py-5 lg:px-6">
+      <div className="flex w-full min-h-0 flex-1 flex-col gap-4">
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b pb-4">
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold sm:text-xl">
+              {t("comparisonTitle")}
+            </h1>
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground">
               {t("comparisonDescription")}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <SlidersHorizontal
-              className="size-4 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <span className="text-xs text-muted-foreground">
-              {t("visibleModels", { count: visibleModels.length })}
-            </span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <SlidersHorizontal className="size-3.5" aria-hidden="true" />
+                  {t("visibleModels", { count: visibleModels.length })}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                <DropdownMenuLabel>{t("modelSelector")}</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {models.map((model) => (
+                  <DropdownMenuCheckboxItem
+                    key={model.run_dir}
+                    checked={!hidden.has(model.run_dir)}
+                    onCheckedChange={() => toggleHidden(model.run_dir)}
+                    onSelect={(event) => event.preventDefault()}
+                    className="truncate"
+                  >
+                    <span className="truncate">
+                      {model.name ?? model.run_dir}
+                    </span>
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             {nextCursor ? (
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 onClick={() => {
                   fetchComparisonCatalog(nextCursor, 40)
@@ -461,156 +568,119 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
             ) : null}
           </div>
         </div>
-        <div className="flex flex-wrap gap-2 rounded border p-2">
-          {models.map((model) => (
-            <label
-              key={model.run_dir}
-              className="flex items-center gap-2 rounded px-2 py-1 text-xs hover:bg-muted"
-            >
-              <Checkbox
-                checked={!hidden.has(model.run_dir)}
-                onCheckedChange={() => toggleHidden(model.run_dir)}
-              />
-              <span>{model.name ?? model.run_dir}</span>
-              <EyeOff
-                className="size-3 text-muted-foreground"
-                aria-hidden="true"
-              />
-            </label>
-          ))}
-        </div>
-        <div className="flex items-center gap-2 md:hidden">
-          <select
-            className="h-9 w-full rounded border bg-background px-2 text-sm"
-            value={activeModels[0]?.run_dir ?? ""}
-            onChange={(event) => setMobileRun(event.target.value)}
-            aria-label={t("modelSelector")}
-          >
-            {visibleModels.map((model) => (
-              <option key={model.run_dir} value={model.run_dir}>
-                {model.name ?? model.run_dir}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="hidden items-center justify-end gap-2 md:flex">
-          <Button
-            size="icon"
-            variant="outline"
-            aria-label={t("previousModels")}
-            onClick={() =>
-              setColumnStart((value) => Math.max(0, value - DESKTOP_COLUMNS))
-            }
-            disabled={columnStart === 0}
-          >
-            <ChevronLeft className="size-4" />
-          </Button>
-          <span className="text-xs text-muted-foreground">
-            {visibleModels.length
-              ? `${columnStart + 1}-${Math.min(columnStart + DESKTOP_COLUMNS, visibleModels.length)} / ${visibleModels.length}`
-              : "0"}
-          </span>
-          <Button
-            size="icon"
-            variant="outline"
-            aria-label={t("nextModels")}
-            onClick={() =>
-              setColumnStart((value) =>
-                Math.min(
-                  Math.max(visibleModels.length - DESKTOP_COLUMNS, 0),
-                  value + DESKTOP_COLUMNS,
-                ),
-              )
-            }
-            disabled={columnStart + DESKTOP_COLUMNS >= visibleModels.length}
-          >
-            <ChevronRight className="size-4" />
-          </Button>
-        </div>
         <div
           ref={scrollRef}
-          onScroll={(event) =>
+          data-testid="comparison-matrix-scroll"
+          onWheel={(event) => {
+            const delta = getShiftWheelDelta({
+              shiftKey: event.shiftKey,
+              deltaX: event.deltaX,
+              deltaY: event.deltaY,
+            });
+            if (delta === null) return;
+            event.preventDefault();
+            event.currentTarget.scrollLeft += delta;
+            updateMatrixViewport(event.currentTarget);
+          }}
+          onScroll={(event) => {
             setStart(
               Math.max(
                 0,
                 Math.min(
                   favorites.length - VISIBLE_ROWS,
-                  Math.floor(event.currentTarget.scrollTop / 144),
+                  Math.max(
+                    0,
+                    Math.floor(
+                      (event.currentTarget.scrollTop - HEADER_HEIGHT) /
+                        ROW_HEIGHT,
+                    ) - 1,
+                  ),
                 ),
               ),
-            )
-          }
-          className="min-h-0 flex-1 overflow-auto rounded border"
+            );
+            updateMatrixViewport(event.currentTarget);
+          }}
+          className="min-h-0 flex-1 overflow-auto overscroll-contain border-y bg-background [scrollbar-gutter:stable]"
         >
           <div
-            className="grid min-w-[720px]"
+            className="grid"
             style={{
-              minHeight: favorites.length * 144,
-              gridTemplateColumns: `minmax(180px, 1.2fr) repeat(${Math.max(activeModels.length, 1)}, minmax(150px, 1fr))`,
+              minWidth: matrixWidth,
+              gridTemplateColumns: `${matrixViewport.promptColumnWidth}px ${leftModelSpacer}px repeat(${activeModels.length}, ${MODEL_COLUMN_WIDTH}px) ${rightModelSpacer}px`,
             }}
           >
-            <div className="sticky top-0 z-10 border-b bg-background p-3 text-xs font-semibold">
+            <div className="sticky top-0 left-0 z-30 flex h-16 items-end border-r border-b bg-background px-4 py-3 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase shadow-[8px_0_16px_-16px_rgba(0,0,0,0.55)]">
               {t("favoriteLabel")}
             </div>
+            <div className="sticky top-0 z-20 h-16 border-b bg-background" />
             {activeModels.map((model) => (
               <div
                 key={model.run_dir}
-                className="sticky top-0 z-10 border-b border-l bg-background p-3 text-xs font-semibold"
+                className="sticky top-0 z-20 flex h-16 min-w-0 flex-col justify-end border-r border-b bg-background px-3 py-3"
               >
-                <div className="truncate">{model.name ?? model.run_dir}</div>
-                <div className="truncate font-normal text-muted-foreground">
+                <div className="truncate text-xs font-semibold">
+                  {model.name ?? model.run_dir}
+                </div>
+                <div className="mt-0.5 truncate text-[10px] text-muted-foreground">
                   {modelDescription(model, locale)}
                 </div>
               </div>
             ))}
+            <div className="sticky top-0 z-20 h-16 border-b bg-background" />
             <div
               className="col-span-full"
-              style={{ height: start * 144 }}
+              style={{ height: start * ROW_HEIGHT }}
               aria-hidden="true"
             />
             {visibleFavorites.map((favorite) => (
               <div key={favorite.style_key} className="contents">
                 <div
                   data-favorite-entry={favorite.style_key}
-                  className="min-h-36 border-b p-3"
+                  className="sticky left-0 z-10 flex border-r border-b bg-background p-4 shadow-[8px_0_16px_-16px_rgba(0,0,0,0.55)]"
+                  style={{ height: ROW_HEIGHT }}
                 >
-                  <Link
-                    href={`/favorites/${encodeURIComponent(favorite.style_key)}`}
-                    className="text-sm font-medium hover:underline"
-                  >
-                    {favorite.label}
-                  </Link>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    {formatTime(favorite.created_at, locale)}
-                  </p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="mt-2 h-7 px-2 text-xs"
-                    onClick={() => void removeFavorite(favorite.style_key)}
-                  >
-                    <X className="mr-1 size-3" />
-                    {t("remove")}
-                  </Button>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {(slice?.placements[favorite.style_key] ?? [])
-                      .slice(0, 3)
-                      .map((placement) => (
-                        <Link
-                          key={placement.run_dir}
-                          href={`/models/${encodeURIComponent(placement.run_dir)}#${placement.y_index + 1}`}
-                          className="text-[10px] text-muted-foreground hover:underline"
-                        >
-                          {models.find(
-                            (model) => model.run_dir === placement.run_dir,
-                          )?.name ?? placement.run_dir}
-                        </Link>
-                      ))}
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <Link
+                      href={`/favorites/${encodeURIComponent(favorite.style_key)}`}
+                      className="line-clamp-6 text-sm leading-relaxed font-medium hover:text-primary hover:underline"
+                    >
+                      {favorite.label}
+                    </Link>
+                    <p className="mt-2 text-[10px] text-muted-foreground">
+                      {formatTime(favorite.created_at, locale)}
+                    </p>
+                    <div className="mt-auto flex flex-col items-start gap-2 pt-3">
+                      <div className="flex max-w-full flex-wrap gap-x-2 gap-y-1">
+                        {(slice?.placements[favorite.style_key] ?? [])
+                          .slice(0, 2)
+                          .map((placement) => (
+                            <Link
+                              key={placement.run_dir}
+                              href={`/models/${encodeURIComponent(placement.run_dir)}#${placement.y_index + 1}`}
+                              className="max-w-full truncate text-[9px] text-muted-foreground/70 hover:text-muted-foreground hover:underline"
+                            >
+                              {models.find(
+                                (model) => model.run_dir === placement.run_dir,
+                              )?.name ?? placement.run_dir}
+                            </Link>
+                          ))}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-[10px] text-muted-foreground hover:text-destructive"
+                        onClick={() => void removeFavorite(favorite.style_key)}
+                      >
+                        <X className="mr-1 size-3" />
+                        {t("remove")}
+                      </Button>
+                    </div>
                   </div>
                 </div>
+                <div className="border-b bg-muted/10" />
                 {activeModels.map((model) => {
                   const key = `${favorite.style_key}|${model.run_dir}`;
-                  const row = rows.get(key) ?? null;
+                  const row = rows.get(`${rowVariantKey}|${key}`) ?? null;
                   const slides = flattenRowSlides(row);
                   const index = Math.min(
                     slideIndexes.get(key) ?? 0,
@@ -622,8 +692,15 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
                     ) ?? null;
                   const slide = slides[index] ?? null;
                   return (
-                    <div key={key} className="min-h-36 border-b border-l p-2">
-                      <div className="relative h-28 overflow-hidden rounded bg-muted/30">
+                    <div
+                      key={key}
+                      className="flex items-center border-r border-b bg-muted/10 p-2"
+                      style={{ height: ROW_HEIGHT }}
+                    >
+                      <div
+                        data-testid="comparison-image-frame"
+                        className="group relative mx-auto aspect-[13/19] w-full max-w-full overflow-hidden bg-muted/30 shadow-sm ring-1 ring-border/70"
+                      >
                         <ComparisonImage
                           slide={slide}
                           access={access}
@@ -632,55 +709,52 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
                           alt={`${favorite.label} × ${model.name ?? model.run_dir}`}
                           onClick={() => setDialog({ key, index })}
                         />
+                        {slides.length ? (
+                          <>
+                            <Button
+                              size="icon"
+                              variant="secondary"
+                              className="absolute top-1/2 left-1 size-7 -translate-y-1/2 bg-background/75 opacity-100 shadow-sm backdrop-blur-sm transition-opacity md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100"
+                              aria-label="Previous image"
+                              onClick={() =>
+                                setSlideIndexes((current) =>
+                                  new Map(current).set(
+                                    key,
+                                    Math.max(0, index - 1),
+                                  ),
+                                )
+                              }
+                              disabled={index === 0}
+                            >
+                              <ChevronLeft className="size-3.5" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="secondary"
+                              className="absolute top-1/2 right-1 size-7 -translate-y-1/2 bg-background/75 opacity-100 shadow-sm backdrop-blur-sm transition-opacity md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100"
+                              aria-label="Next image"
+                              onClick={() =>
+                                setSlideIndexes((current) =>
+                                  new Map(current).set(
+                                    key,
+                                    Math.min(slides.length - 1, index + 1),
+                                  ),
+                                )
+                              }
+                              disabled={index >= slides.length - 1}
+                            >
+                              <ChevronRight className="size-3.5" />
+                            </Button>
+                            <span className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 bg-black/65 px-1.5 py-0.5 text-[9px] font-medium text-white tabular-nums backdrop-blur-sm">
+                              {index + 1}/{slides.length}
+                            </span>
+                          </>
+                        ) : null}
                       </div>
-                      {slides.length ? (
-                        <div className="mt-1 flex items-center justify-between gap-1">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="size-7"
-                            aria-label="Previous image"
-                            onClick={() =>
-                              setSlideIndexes((current) =>
-                                new Map(current).set(
-                                  key,
-                                  Math.max(0, index - 1),
-                                ),
-                              )
-                            }
-                            disabled={index === 0}
-                          >
-                            <ChevronLeft className="size-3" />
-                          </Button>
-                          <span className="text-[10px] text-muted-foreground">
-                            {index + 1}/{slides.length}
-                          </span>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="size-7"
-                            aria-label="Next image"
-                            onClick={() =>
-                              setSlideIndexes((current) =>
-                                new Map(current).set(
-                                  key,
-                                  Math.min(slides.length - 1, index + 1),
-                                ),
-                              )
-                            }
-                            disabled={index >= slides.length - 1}
-                          >
-                            <ChevronRight className="size-3" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <p className="mt-1 text-center text-[10px] text-muted-foreground">
-                          {t("noImage")}
-                        </p>
-                      )}
                     </div>
                   );
                 })}
+                <div className="border-b bg-muted/10" />
               </div>
             ))}
             <div
@@ -690,7 +764,7 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
                   Math.max(
                     0,
                     favorites.length - start - visibleFavorites.length,
-                  ) * 144,
+                  ) * ROW_HEIGHT,
               }}
               aria-hidden="true"
             />

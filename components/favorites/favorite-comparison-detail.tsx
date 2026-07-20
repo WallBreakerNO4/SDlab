@@ -75,11 +75,10 @@ export default function FavoriteComparisonDetail({
   useEffect(() => {
     if (!favorite || !models.length) return;
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset stale detail data before loading a new comparison window
     setSlice(null);
     setRows(new Map());
     const runDirs = models.map((model) => model.run_dir);
-    setSlice(null);
-    setRows(new Map());
     Promise.all(
       Array.from({ length: Math.ceil(runDirs.length / 12) }, (_, index) =>
         fetchComparisonSlice(
