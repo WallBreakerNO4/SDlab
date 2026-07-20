@@ -54,6 +54,20 @@ export async function fetchComparisonSlice(
 
 const rowCache = new Map<string, RowPayload>();
 
+export type ComparisonRowState =
+  | { status: "loading" }
+  | { status: "ready"; row: RowPayload }
+  | { status: "missing" }
+  | { status: "error" };
+
+export function resolveComparisonRowState(
+  hasPlacement: boolean,
+  state: ComparisonRowState | undefined,
+): ComparisonRowState {
+  if (state) return state;
+  return hasPlacement ? { status: "loading" } : { status: "missing" };
+}
+
 export type ComparisonRowRequest = {
   key: string;
   runDir: string;
@@ -97,10 +111,31 @@ export async function fetchComparisonRow(
     grant,
   );
   const response = await fetch(url, { cache: "force-cache", signal });
-  if (!response.ok) return null;
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error("comparison-row-failed");
   const payload = normalizeRowPayload(await response.json(), yIndex);
+  if (!payload) throw new Error("comparison-row-invalid");
   if (payload) rowCache.set(cacheKey, payload);
   return payload;
+}
+
+export async function loadComparisonRowState(
+  request: ComparisonRowRequest,
+  signal?: AbortSignal,
+): Promise<ComparisonRowState> {
+  try {
+    const row = await fetchComparisonRow(
+      request.runDir,
+      request.releaseId,
+      request.viewerVariant,
+      request.grant,
+      request.yIndex,
+      signal,
+    );
+    return row ? { status: "ready", row } : { status: "missing" };
+  } catch {
+    return { status: "error" };
+  }
 }
 
 export async function fetchComparisonRows(

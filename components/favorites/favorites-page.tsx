@@ -13,6 +13,7 @@ import { toast } from "sonner";
 
 import { useAuth } from "@/components/auth-provider";
 import { AuthLoginDialog } from "@/components/auth-login-dialog";
+import { BlurhashCanvas } from "@/components/comfyui/blurhash-canvas";
 import { GridImage } from "@/components/comfyui/grid-image";
 import { useRenderableVariantSource } from "@/components/comfyui/use-renderable-variant-source";
 import { Button } from "@/components/ui/button";
@@ -45,9 +46,11 @@ import {
 } from "@/lib/style-comparison";
 import {
   fetchComparisonCatalog,
-  fetchComparisonRow,
   fetchComparisonSlice,
+  loadComparisonRowState,
   mapWithConcurrency,
+  resolveComparisonRowState,
+  type ComparisonRowState,
 } from "./comparison-loader";
 import {
   getHorizontalModelWindow,
@@ -98,6 +101,7 @@ function modelDescription(model: ComparisonModel, locale: string) {
 }
 
 function ComparisonImage({
+  state,
   slide,
   access,
   userId,
@@ -105,6 +109,7 @@ function ComparisonImage({
   alt,
   onClick,
 }: {
+  state: ComparisonRowState;
   slide: ComparisonSlide | null;
   access: ComparisonSlice["access"][number] | null;
   userId: string;
@@ -112,9 +117,21 @@ function ComparisonImage({
   alt: string;
   onClick?: () => void;
 }) {
-  if (!slide) {
+  if (state.status === "loading") {
     return (
-      <div className="flex h-full min-h-28 items-center justify-center rounded border border-dashed text-muted-foreground">
+      <div
+        data-testid="comparison-image-skeleton"
+        data-state="loading"
+        className="h-full w-full animate-pulse bg-muted"
+      />
+    );
+  }
+  if (state.status !== "ready" || !slide) {
+    return (
+      <div
+        data-state={state.status === "ready" ? "missing" : state.status}
+        className="flex h-full min-h-28 items-center justify-center rounded border border-dashed text-muted-foreground"
+      >
         <ImageOff className="size-5" aria-hidden="true" />
       </div>
     );
@@ -128,7 +145,7 @@ function ComparisonImage({
     >
       <GridImage
         thumbVariants={slide.item.thumb}
-        blurhash={null}
+        blurhash={slide.item.blurhash}
         alt={alt}
         currentUserId={userId}
         grant={access?.grant ?? null}
@@ -163,12 +180,14 @@ function ComparisonDialog({
   total: number;
   title: string;
 }) {
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
   const { src, loading } = useRenderableVariantSource({
     variants: open ? (slide?.item.display ?? null) : null,
     currentUserId: userId,
     grant: access?.grant ?? null,
     onRefreshViewAccess: onRefresh,
   });
+  const isLoaded = src !== null && loadedSrc === src;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] max-w-5xl overflow-auto p-4">
@@ -177,17 +196,24 @@ function ComparisonDialog({
           <DialogDescription>{title}</DialogDescription>
         </DialogHeader>
         <div className="relative flex min-h-[55vh] items-center justify-center rounded bg-black">
+          {slide?.item.blurhash ? (
+            <BlurhashCanvas
+              blurhash={slide.item.blurhash}
+              className={`absolute inset-0 h-full w-full object-cover blur-md transition-opacity duration-500 ${isLoaded ? "opacity-0" : "opacity-100"}`}
+            />
+          ) : null}
           {src ? (
             <img
               src={src}
               alt={title}
-              className="max-h-[76vh] max-w-full object-contain"
+              className={`relative z-10 max-h-[76vh] max-w-full object-contain transition-opacity duration-500 ${isLoaded ? "opacity-100" : "opacity-0"}`}
+              onLoad={() => setLoadedSrc(src)}
             />
-          ) : (
+          ) : !slide?.item.blurhash ? (
             <span className="text-sm text-white/70">
               {loading ? "Loading..." : "-"}
             </span>
-          )}
+          ) : null}
         </div>
         <div className="flex items-center justify-between gap-3">
           <Button
@@ -269,9 +295,7 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
     promptColumnWidth: DESKTOP_PROMPT_COLUMN_WIDTH,
   });
   const [slice, setSlice] = useState<ComparisonSlice | null>(null);
-  const [rows, setRows] = useState<
-    Map<string, Awaited<ReturnType<typeof fetchComparisonRow>>>
-  >(new Map());
+  const [rows, setRows] = useState<Map<string, ComparisonRowState>>(new Map());
   const [slideIndexes, setSlideIndexes] = useState<Map<string, number>>(
     new Map(),
   );
@@ -386,6 +410,18 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
   const loadSlice = useCallback(
     async (signal?: AbortSignal) => {
       if (!activeModels.length || !visibleFavorites.length) return;
+      setRows((current) => {
+        const next = new Map(current);
+        for (const favorite of visibleFavorites) {
+          for (const model of activeModels) {
+            const stateKey = `${rowVariantKey}|${favorite.style_key}|${model.run_dir}`;
+            if (!next.has(stateKey)) {
+              next.set(stateKey, { status: "loading" });
+            }
+          }
+        }
+        return next;
+      });
       try {
         const styleKeys = visibleFavorites.map((item) => item.style_key);
         const modelChunks = Array.from(
@@ -416,6 +452,25 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
           ),
         };
         setSlice(next);
+        setRows((current) => {
+          const nextRows = new Map(current);
+          for (const favorite of visibleFavorites) {
+            const placedRuns = new Set(
+              (next.placements[favorite.style_key] ?? []).map(
+                (placement) => placement.run_dir,
+              ),
+            );
+            for (const model of activeModels) {
+              if (!placedRuns.has(model.run_dir)) {
+                nextRows.set(
+                  `${rowVariantKey}|${favorite.style_key}|${model.run_dir}`,
+                  { status: "missing" },
+                );
+              }
+            }
+          }
+          return nextRows;
+        });
         const accessByRun = new Map(
           next.access.map((item) => [item.run_dir, item]),
         );
@@ -425,28 +480,44 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
               activeModels.some((model) => model.run_dir === placement.run_dir),
             )
             .map((placement) => async () => {
+              const stateKey = `${rowVariantKey}|${favorite.style_key}|${placement.run_dir}`;
               const access = accessByRun.get(placement.run_dir);
-              if (!access) return;
-              const row = await fetchComparisonRow(
-                placement.run_dir,
-                access.release_id,
-                access.viewer_variant,
-                access.grant,
-                placement.y_index,
+              if (!access) {
+                setRows((current) =>
+                  new Map(current).set(stateKey, { status: "error" }),
+                );
+                return;
+              }
+              const state = await loadComparisonRowState(
+                {
+                  key: stateKey,
+                  runDir: placement.run_dir,
+                  releaseId: access.release_id,
+                  viewerVariant: access.viewer_variant,
+                  grant: access.grant,
+                  yIndex: placement.y_index,
+                },
                 signal,
               );
               if (signal?.aborted) return;
-              setRows((current) =>
-                new Map(current).set(
-                  `${rowVariantKey}|${favorite.style_key}|${placement.run_dir}`,
-                  row,
-                ),
-              );
+              setRows((current) => new Map(current).set(stateKey, state));
             }),
         );
         await mapWithConcurrency(jobs, async (job) => job(), 4);
       } catch {
-        /* transient slice errors leave empty cells */
+        if (signal?.aborted) return;
+        setRows((current) => {
+          const next = new Map(current);
+          for (const favorite of visibleFavorites) {
+            for (const model of activeModels) {
+              next.set(
+                `${rowVariantKey}|${favorite.style_key}|${model.run_dir}`,
+                { status: "error" },
+              );
+            }
+          }
+          return next;
+        });
       }
     },
     [activeModels, rowVariantKey, visibleFavorites],
@@ -480,7 +551,8 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
   const dialogData = useMemo(() => {
     if (!dialog || !slice) return null;
     const [styleKey, runDir] = dialog.key.split("|");
-    const row = rows.get(`${rowVariantKey}|${dialog.key}`) ?? null;
+    const state = rows.get(`${rowVariantKey}|${dialog.key}`);
+    const row = state?.status === "ready" ? state.row : null;
     const slides = flattenRowSlides(row);
     return {
       slide: slides[dialog.index] ?? null,
@@ -680,7 +752,14 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
                 <div className="border-b bg-muted/10" />
                 {activeModels.map((model) => {
                   const key = `${favorite.style_key}|${model.run_dir}`;
-                  const row = rows.get(`${rowVariantKey}|${key}`) ?? null;
+                  const placement = (
+                    slice?.placements[favorite.style_key] ?? []
+                  ).find((item) => item.run_dir === model.run_dir);
+                  const state = resolveComparisonRowState(
+                    slice === null || placement !== undefined,
+                    rows.get(`${rowVariantKey}|${key}`),
+                  );
+                  const row = state.status === "ready" ? state.row : null;
                   const slides = flattenRowSlides(row);
                   const index = Math.min(
                     slideIndexes.get(key) ?? 0,
@@ -702,6 +781,7 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
                         className="group relative mx-auto aspect-[13/19] w-full max-w-full overflow-hidden bg-muted/30 shadow-sm ring-1 ring-border/70"
                       >
                         <ComparisonImage
+                          state={state}
                           slide={slide}
                           access={access}
                           userId={userId}

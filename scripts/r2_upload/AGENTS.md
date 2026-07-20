@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-07-19 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-07-20 -->
 
 # scripts/r2_upload/ — R2 上传 + Supabase 写入
 
@@ -24,7 +24,7 @@
 | 上传 I/O                  | `upload_io.py`           | 文件读写工具                                                                         |
 | 上传发现                  | `upload_discovery.py`    | 从 metadata.jsonl 发现待上传图片                                                     |
 | 上传运行时                | `upload_runtime.py`      | 运行时环境初始化                                                                     |
-| manifest 生成             | `manifest.py`            | JSON manifest 构建（公开/私有）                                                      |
+| manifest 生成             | `manifest.py`            | JSON manifest 构建（公开/私有）；row `items[]` 携带可选图片级 BlurHash                |
 | run 级静态资产上传        | `upload_planner.py`      | 识别并规划封面图/主页缩略图资产的上传与 DB 字段                                      |
 | 路径安全                  | `path_safety.py`         | R2 key 路径校验                                                                      |
 | PostgREST HTTP            | `postgrest_http.py`      | Supabase PostgREST HTTP 客户端封装                                                   |
@@ -70,6 +70,7 @@ supabase_writer.py → 批量 upsert 到 Supabase（runs + snapshots + projectio
 - 旧 Mixer metadata 缺少 `y_common_prompt` 时，上传规划会校验 run 快照中的 Y YAML SHA256，并按 Y prompt 身份在内存中严格回填；不会改写本地 `metadata.jsonl`
 - Mixer bootstrap 以可选 `yPromptParts` 暴露 Artist/Common Prompt；继续保留 `yLabels` 兼容旧前端，view schema 保持 v2
 - Style Favorites 上传链路：新 run 上传时从 image payload 的 `y_style_key` 提取并 upsert `run_style_items`（`run_id,style_key,y_index,label`）；老 run 缺该字段时静默跳过，不阻断上传，历史映射由 `scripts/other/backfill_run_style_items.py` 回填
+- row manifest 在每个图片 `items[]` 上写入可选 `blurhash`，与该 item 的 thumb/display 描述一起发布；public、`auth_sfw`、`auth_nsfw` 仍先按 category 过滤，不能让 NSFW BlurHash 进入 SFW manifest。旧 release 没有该字段时由 Web 端兼容为 `null`。
 - I/O 统一用 `pathlib.Path`；中间编码产物写入 `_r2_upload_intermediate/`
 
 ## 反模式

@@ -359,6 +359,7 @@ export function normalizeRowPayload(
                     category: getNonEmptyString(item.category),
                     width: getFiniteNumber(item.width),
                     height: getFiniteNumber(item.height),
+                    blurhash: getNonEmptyString(item.blurhash),
                     meta,
                     thumb,
                     display,
@@ -383,9 +384,7 @@ export function normalizeRowPayload(
   };
 }
 
-export function formatValue(
-  value: string | number | null | undefined,
-): string {
+export function formatValue(value: string | number | null | undefined): string {
   return value === null || value === undefined || value === ""
     ? "-"
     : String(value);

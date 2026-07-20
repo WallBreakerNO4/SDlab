@@ -1,3 +1,4 @@
+import { isValidRunDir } from "@/lib/comfyui-types";
 import { isStyleKey, type StyleKey } from "@/lib/style-favorites";
 
 export const STYLE_COMPARISON_DEFAULT_LIMIT = 40;
@@ -69,12 +70,198 @@ export type StyleComparisonSliceResponse = {
   placements: Record<string, StyleComparisonPlacement[]>;
 };
 
+export type StyleComparisonSliceRpcPlacement = StyleComparisonPlacement & {
+  style_key: StyleKey;
+};
+
+export type StyleComparisonSliceRpcRun = {
+  run_dir: string;
+  release_id: string;
+  media_access_version: number;
+};
+
+export type StyleComparisonSliceRpcResult = {
+  owned_style_keys: StyleKey[];
+  placements: StyleComparisonSliceRpcPlacement[];
+  runs: StyleComparisonSliceRpcRun[];
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+function normalizeXColumns(value: unknown): StyleComparisonXColumn[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.map((raw, index) => {
+    if (!isRecord(raw)) return { x_index: index, type: null, description: null };
+    const description = isRecord(raw.description)
+      ? {
+          zh: typeof raw.description.zh === "string" ? raw.description.zh : null,
+          en: typeof raw.description.en === "string" ? raw.description.en : null,
+        }
+      : null;
+    return {
+      x_index: index,
+      type: typeof raw.type === "string" ? raw.type : null,
+      description,
+    };
+  });
+}
+
+export function normalizeStyleComparisonModelsRpcRows(
+  value: unknown,
+): StyleComparisonModel[] | null {
+  if (!Array.isArray(value)) return null;
+  const seen = new Set<string>();
+  const models: StyleComparisonModel[] = [];
+  for (const raw of value) {
+    if (
+      !isRecord(raw) ||
+      typeof raw.run_dir !== "string" ||
+      !isValidRunDir(raw.run_dir) ||
+      (typeof raw.name !== "string" && raw.name !== null) ||
+      typeof raw.created_at !== "string"
+    ) {
+      return null;
+    }
+    const xColumns = normalizeXColumns(raw.x_columns);
+    if (!xColumns || seen.has(raw.run_dir)) return null;
+    seen.add(raw.run_dir);
+    models.push({
+      run_dir: raw.run_dir,
+      name: raw.name,
+      created_at: raw.created_at,
+      x_columns: xColumns,
+    });
+  }
+  return models.sort(
+    (a, b) =>
+      b.created_at.localeCompare(a.created_at) ||
+      a.run_dir.localeCompare(b.run_dir),
+  );
+}
+
+type SliceRpcRequestScope = {
+  readonly style_keys: readonly StyleKey[];
+  readonly run_dirs: readonly string[];
+};
+
+export function normalizeStyleComparisonSliceRpcResult(
+  value: unknown,
+  request: SliceRpcRequestScope,
+): StyleComparisonSliceRpcResult | null {
+  if (
+    !isRecord(value) ||
+    !Array.isArray(value.owned_style_keys) ||
+    !Array.isArray(value.placements) ||
+    !Array.isArray(value.runs)
+  ) {
+    return null;
+  }
+
+  const requestedStyles = new Set<string>(request.style_keys);
+  const requestedRuns = new Set(request.run_dirs);
+  const ownedStyles = new Set<string>();
+  const ownedStyleKeys: StyleKey[] = [];
+  for (const styleKey of value.owned_style_keys) {
+    if (
+      !isStyleKey(styleKey) ||
+      !requestedStyles.has(styleKey) ||
+      ownedStyles.has(styleKey)
+    ) {
+      return null;
+    }
+    ownedStyles.add(styleKey);
+    ownedStyleKeys.push(styleKey);
+  }
+
+  if (value.placements.length > requestedStyles.size * requestedRuns.size) {
+    return null;
+  }
+  const placementKeys = new Set<string>();
+  const placements: StyleComparisonSliceRpcPlacement[] = [];
+  for (const raw of value.placements) {
+    if (
+      !isRecord(raw) ||
+      !isStyleKey(raw.style_key) ||
+      !requestedStyles.has(raw.style_key) ||
+      typeof raw.run_dir !== "string" ||
+      !requestedRuns.has(raw.run_dir) ||
+      !isValidRunDir(raw.run_dir) ||
+      !isNonNegativeInteger(raw.y_index)
+    ) {
+      return null;
+    }
+    const placementKey = `${raw.style_key}\u0000${raw.run_dir}`;
+    if (placementKeys.has(placementKey)) return null;
+    placementKeys.add(placementKey);
+    placements.push({
+      style_key: raw.style_key,
+      run_dir: raw.run_dir,
+      y_index: raw.y_index,
+    });
+  }
+
+  if (value.runs.length > requestedRuns.size) return null;
+  const runDirs = new Set<string>();
+  const runs: StyleComparisonSliceRpcRun[] = [];
+  for (const raw of value.runs) {
+    if (
+      !isRecord(raw) ||
+      typeof raw.run_dir !== "string" ||
+      !requestedRuns.has(raw.run_dir) ||
+      !isValidRunDir(raw.run_dir) ||
+      typeof raw.release_id !== "string" ||
+      raw.release_id.length < 1 ||
+      typeof raw.media_access_version !== "number" ||
+      !Number.isInteger(raw.media_access_version) ||
+      raw.media_access_version < 1 ||
+      runDirs.has(raw.run_dir)
+    ) {
+      return null;
+    }
+    runDirs.add(raw.run_dir);
+    runs.push({
+      run_dir: raw.run_dir,
+      release_id: raw.release_id,
+      media_access_version: raw.media_access_version,
+    });
+  }
+
+  return { owned_style_keys: ownedStyleKeys, placements, runs };
+}
+
+export function ownsAllRequestedStyleKeys(
+  result: StyleComparisonSliceRpcResult,
+  requestedStyleKeys: readonly StyleKey[],
+): boolean {
+  const owned = new Set(result.owned_style_keys);
+  return (
+    owned.size === requestedStyleKeys.length &&
+    requestedStyleKeys.every((styleKey) => owned.has(styleKey))
+  );
+}
+
+export function buildStyleComparisonPlacements(
+  styleKeys: readonly StyleKey[],
+  rows: readonly StyleComparisonSliceRpcPlacement[],
+): Record<string, StyleComparisonPlacement[]> {
+  const placements: Record<string, StyleComparisonPlacement[]> = {};
+  for (const styleKey of styleKeys) placements[styleKey] = [];
+  for (const row of rows) {
+    placements[row.style_key]?.push({
+      run_dir: row.run_dir,
+      y_index: row.y_index,
+    });
+  }
+  for (const styleKey of styleKeys) {
+    placements[styleKey].sort((a, b) => a.run_dir.localeCompare(b.run_dir));
+  }
+  return placements;
 }
 
 function isDescription(

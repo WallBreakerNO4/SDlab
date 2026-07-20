@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, ImageOff } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/components/auth-provider";
 import { useUserPreferences } from "@/components/user-preferences-provider";
+import { BlurhashCanvas } from "@/components/comfyui/blurhash-canvas";
 import { GridImage } from "@/components/comfyui/grid-image";
 import { useRenderableVariantSource } from "@/components/comfyui/use-renderable-variant-source";
 import { Button } from "@/components/ui/button";
@@ -23,9 +24,11 @@ import {
   type ComparisonSlide,
 } from "@/lib/style-comparison";
 import {
-  fetchComparisonRow,
   fetchComparisonSlice,
+  loadComparisonRowState,
   mapWithConcurrency,
+  resolveComparisonRowState,
+  type ComparisonRowState,
 } from "./comparison-loader";
 
 export default function FavoriteComparisonDetail({
@@ -42,9 +45,8 @@ export default function FavoriteComparisonDetail({
   } | null>(null);
   const [models, setModels] = useState<ComparisonModel[]>([]);
   const [slice, setSlice] = useState<ComparisonSlice | null>(null);
-  const [rows, setRows] = useState<
-    Map<string, Awaited<ReturnType<typeof fetchComparisonRow>>>
-  >(new Map());
+  const [sliceError, setSliceError] = useState(false);
+  const [rows, setRows] = useState<Map<string, ComparisonRowState>>(new Map());
   const [indexes, setIndexes] = useState<Map<string, number>>(new Map());
   const [dialog, setDialog] = useState<{
     key: string;
@@ -77,6 +79,7 @@ export default function FavoriteComparisonDetail({
     const controller = new AbortController();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset stale detail data before loading a new comparison window
     setSlice(null);
+    setSliceError(false);
     setRows(new Map());
     const runDirs = models.map((model) => model.run_dir);
     Promise.all(
@@ -104,26 +107,36 @@ export default function FavoriteComparisonDetail({
         const jobs = (next.placements[styleKey] ?? []).map(
           (placement) => async () => {
             const access = accessByRun.get(placement.run_dir);
-            if (!access) return;
-            const row = await fetchComparisonRow(
-              placement.run_dir,
-              access.release_id,
-              access.viewer_variant,
-              access.grant,
-              placement.y_index,
+            const stateKey = `${placement.run_dir}|${placement.y_index}`;
+            if (!access) {
+              setRows((current) =>
+                new Map(current).set(stateKey, { status: "error" }),
+              );
+              return;
+            }
+            setRows((current) =>
+              new Map(current).set(stateKey, { status: "loading" }),
+            );
+            const state = await loadComparisonRowState(
+              {
+                key: stateKey,
+                runDir: placement.run_dir,
+                releaseId: access.release_id,
+                viewerVariant: access.viewer_variant,
+                grant: access.grant,
+                yIndex: placement.y_index,
+              },
               controller.signal,
             );
-            setRows((current) =>
-              new Map(current).set(
-                `${placement.run_dir}|${placement.y_index}`,
-                row,
-              ),
-            );
+            if (controller.signal.aborted) return;
+            setRows((current) => new Map(current).set(stateKey, state));
           },
         );
         await mapWithConcurrency(jobs, async (job) => job(), 4);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!controller.signal.aborted) setSliceError(true);
+      });
     return () => controller.abort();
   }, [favorite, models, showNsfw, styleKey]);
 
@@ -142,8 +155,9 @@ export default function FavoriteComparisonDetail({
   const dialogData = dialog
     ? (() => {
         const [runDir, yIndex] = dialog.key.split("|");
+        const state = rows.get(`${runDir}|${yIndex}`);
         const allSlides = flattenRowSlides(
-          rows.get(`${runDir}|${yIndex}`) ?? null,
+          state?.status === "ready" ? state.row : null,
         );
         const slides =
           dialog.xIndex === undefined
@@ -201,7 +215,13 @@ export default function FavoriteComparisonDetail({
                     const key = placement
                       ? `${model.run_dir}|${placement.y_index}`
                       : "";
-                    const row = placement ? (rows.get(key) ?? null) : null;
+                    const state = sliceError
+                      ? ({ status: "error" } satisfies ComparisonRowState)
+                      : resolveComparisonRowState(
+                          slice === null || placement !== undefined,
+                          placement ? rows.get(key) : undefined,
+                        );
+                    const row = state.status === "ready" ? state.row : null;
                     const slides = row
                       ? flattenRowSlides(row).filter(
                           (slide) => slide.xIndex === column.x_index,
@@ -225,17 +245,30 @@ export default function FavoriteComparisonDetail({
                             }
                             disabled={!slide}
                           >
-                            {slide ? (
+                            {state.status === "loading" ? (
+                              <div
+                                data-testid="comparison-image-skeleton"
+                                data-state="loading"
+                                className="h-full w-full animate-pulse bg-muted"
+                              />
+                            ) : slide ? (
                               <GridImage
                                 thumbVariants={slide.item.thumb}
-                                blurhash={null}
+                                blurhash={slide.item.blurhash}
                                 alt={`${favorite.label} × ${model.name ?? model.run_dir}`}
                                 currentUserId={user.id}
                                 grant={access?.grant ?? null}
                                 onRefreshViewAccess={async () => access ?? null}
                               />
                             ) : (
-                              <div className="flex h-full items-center justify-center text-muted-foreground">
+                              <div
+                                data-state={
+                                  state.status === "ready"
+                                    ? "missing"
+                                    : state.status
+                                }
+                                className="flex h-full items-center justify-center text-muted-foreground"
+                              >
                                 <ImageOff className="size-4" />
                               </div>
                             )}
@@ -345,12 +378,14 @@ function DetailDialog({
   onPrevious: () => void;
   onNext: () => void;
 }) {
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
   const { src, loading } = useRenderableVariantSource({
     variants: open ? (slide?.item.display ?? null) : null,
     currentUserId: userId,
     grant: access?.grant ?? null,
     onRefreshViewAccess: async () => access,
   });
+  const isLoaded = src !== null && loadedSrc === src;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl">
@@ -358,18 +393,25 @@ function DetailDialog({
           <DialogTitle>Image preview</DialogTitle>
           <DialogDescription>Image preview</DialogDescription>
         </DialogHeader>
-        <div className="flex min-h-[55vh] items-center justify-center rounded bg-black">
+        <div className="relative flex min-h-[55vh] items-center justify-center overflow-hidden rounded bg-black">
+          {slide?.item.blurhash ? (
+            <BlurhashCanvas
+              blurhash={slide.item.blurhash}
+              className={`absolute inset-0 h-full w-full object-cover blur-md transition-opacity duration-500 ${isLoaded ? "opacity-0" : "opacity-100"}`}
+            />
+          ) : null}
           {src ? (
             <img
               src={src}
               alt="Image preview"
-              className="max-h-[75vh] max-w-full object-contain"
+              className={`relative z-10 max-h-[75vh] max-w-full object-contain transition-opacity duration-500 ${isLoaded ? "opacity-100" : "opacity-0"}`}
+              onLoad={() => setLoadedSrc(src)}
             />
-          ) : (
+          ) : !slide?.item.blurhash ? (
             <span className="text-sm text-white/70">
               {loading ? "Loading..." : "-"}
             </span>
-          )}
+          ) : null}
         </div>
         <div className="flex items-center justify-between">
           <Button

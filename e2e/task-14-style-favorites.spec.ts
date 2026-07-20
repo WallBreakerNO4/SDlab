@@ -22,7 +22,10 @@ interface StyleItem {
 }
 
 /** 从活体 style-items API 取真实 y_index ↔ style_key 映射（只依赖结构，不写死 label） */
-async function fetchStyleItems(page: Page, runDir: string): Promise<StyleItem[]> {
+async function fetchStyleItems(
+  page: Page,
+  runDir: string,
+): Promise<StyleItem[]> {
   const res = await page.request.get(`/api/comfyui/run/${runDir}/style-items`);
   expect(res.ok(), `style-items API 不可用：${runDir}`).toBeTruthy();
   return (await res.json()) as StyleItem[];
@@ -35,7 +38,11 @@ function styleKeyAt(items: StyleItem[], yIndex: number): string {
 }
 
 /** 经应用 API 直接收藏（测试数据只用测试用户自己的收藏行） */
-async function putFavorite(page: Page, styleKey: string, label: string): Promise<void> {
+async function putFavorite(
+  page: Page,
+  styleKey: string,
+  label: string,
+): Promise<void> {
   const res = await page.request.put("/api/viewer/style-favorites", {
     data: { style_key: styleKey, label },
   });
@@ -43,7 +50,10 @@ async function putFavorite(page: Page, styleKey: string, label: string): Promise
 }
 
 /** 用例收尾清理；失败静默（global teardown 最终兜底清空） */
-async function deleteFavoriteQuiet(page: Page, styleKey: string): Promise<void> {
+async function deleteFavoriteQuiet(
+  page: Page,
+  styleKey: string,
+): Promise<void> {
   try {
     await page.request.delete(
       `/api/viewer/style-favorites/${encodeURIComponent(styleKey)}`,
@@ -88,7 +98,10 @@ async function clickStarAndWait(
     ),
     star.click(),
   ]);
-  expect(res.ok(), `${method} 收藏 API 失败：HTTP ${res.status()}`).toBeTruthy();
+  expect(
+    res.ok(),
+    `${method} 收藏 API 失败：HTTP ${res.status()}`,
+  ).toBeTruthy();
 }
 
 test.describe("task 14: style favorites guest flows", () => {
@@ -129,9 +142,7 @@ test.describe("task 14: style favorites guest flows", () => {
             },
             xLabels: ["构图示例"],
             yLabels: ["@guest-artist"],
-            x_columns: [
-              { type: "normal", description: { zh: "构图示例" } },
-            ],
+            x_columns: [{ type: "normal", description: { zh: "构图示例" } }],
             y_indexes: [0],
             y_labels: ["@guest-artist"],
             prompts: [],
@@ -315,7 +326,9 @@ test.describe("task 14: style favorites signed-in flows", () => {
       await expect(page).toHaveURL(
         new RegExp(`/zh/models/${MIXER_RUN_DIR}#${lineNumber}$`),
       );
-      const rowHeight = Number((await grid.getAttribute("data-row-height")) ?? "0");
+      const rowHeight = Number(
+        (await grid.getAttribute("data-row-height")) ?? "0",
+      );
       expect(rowHeight).toBeGreaterThan(0);
       await expect
         .poll(async () => scrollEl.evaluate((el) => el.scrollTop), {
@@ -397,7 +410,9 @@ test.describe("task 14: style favorites signed-in flows", () => {
       );
       const grid = page.getByTestId("run-grid");
       await expect(grid).toBeVisible({ timeout: 15_000 });
-      const rowHeight = Number((await grid.getAttribute("data-row-height")) ?? "0");
+      const rowHeight = Number(
+        (await grid.getAttribute("data-row-height")) ?? "0",
+      );
       expect(rowHeight).toBeGreaterThan(0);
       const scrollEl = page.getByTestId("run-grid-scroll");
       await expect
@@ -425,11 +440,66 @@ test.describe("task 14: style favorites signed-in flows", () => {
     await putFavorite(page, styleKey, "e2e 横向模型矩阵验证收藏");
 
     try {
+      await page.route("**/api/private-object?*", async (route) => {
+        const key =
+          new URL(route.request().url()).searchParams.get("key") ?? "";
+        if (key.includes("/sha256/")) {
+          await new Promise((resolve) => setTimeout(resolve, 1_000));
+          await route.fulfill({
+            status: 200,
+            contentType: "image/webp",
+            body: Buffer.from([]),
+          });
+          return;
+        }
+        if (!key.includes("/rows/")) {
+          await route.continue();
+          return;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+        const response = await route.fetch();
+        const payload = (await response.json()) as {
+          cells?: Array<{ items?: Array<Record<string, unknown>> }>;
+        };
+        const runDir = key.split("/")[1] ?? MIXER_RUN_DIR;
+        for (const cell of payload.cells ?? []) {
+          for (const item of cell.items ?? []) {
+            item.blurhash = GUEST_BLURHASH;
+            item.thumb = {
+              webp: {
+                bucket: "private",
+                cache_key: `e2e-thumb-${runDir}`,
+                key: `runs/${runDir}/sha256/ee/${"e".repeat(64)}/thumb_webp.webp`,
+              },
+            };
+            item.display = {
+              webp: {
+                bucket: "private",
+                cache_key: `e2e-display-${runDir}`,
+                key: `runs/${runDir}/sha256/ff/${"f".repeat(64)}/display_webp.webp`,
+              },
+            };
+          }
+        }
+        await route.fulfill({ response, json: payload });
+      });
       await page.goto("/zh/favorites");
       const matrix = page.getByTestId("comparison-matrix-scroll");
       const frame = page.getByTestId("comparison-image-frame").first();
       await expect(matrix).toBeVisible({ timeout: 15_000 });
       await expect(frame).toBeVisible({ timeout: 15_000 });
+      await expect(
+        page.getByTestId("comparison-image-skeleton").first(),
+      ).toBeVisible();
+      await expect(page.getByTestId("blurhash-canvas").first()).toBeVisible({
+        timeout: 15_000,
+      });
+      await frame.locator('button[type="button"]').first().click();
+      const previewDialog = page.getByRole("dialog");
+      await expect(previewDialog).toBeVisible();
+      await expect(previewDialog.getByTestId("blurhash-canvas")).toBeVisible();
+      await page.keyboard.press("Escape");
 
       const initialScroll = await matrix.evaluate((element) => ({
         left: element.scrollLeft,
@@ -489,7 +559,9 @@ test.describe("task 14: style favorites signed-in flows", () => {
 
       await expect(entry).toHaveCount(0);
       await expect(
-        page.getByText("暂无收藏。在模型详情页点击行标签上的星标即可收藏画师串。"),
+        page.getByText(
+          "暂无收藏。在模型详情页点击行标签上的星标即可收藏画师串。",
+        ),
       ).toBeVisible();
     } finally {
       await deleteFavoriteQuiet(page, styleKey);

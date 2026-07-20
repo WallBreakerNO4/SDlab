@@ -49,7 +49,7 @@ def _sample_payload() -> dict[str, object]:
                 "prompt_hash": "p1",
                 "width": 1024,
                 "height": 1024,
-                "blurhash": "L6PZfSi_.AyE_3t7t7R**0o#DgR4",
+                "blurhash": "normal-blurhash",
                 "seed": "111",
                 "y_value": "cfg_7.0",
                 "thumb_webp_bucket": "public",
@@ -68,7 +68,7 @@ def _sample_payload() -> dict[str, object]:
                 "prompt_hash": "p2",
                 "width": 1024,
                 "height": 1024,
-                "blurhash": "L6PZfSi_.AyE_3t7t7R**0o#DgR4",
+                "blurhash": "advance-blurhash",
                 "seed": "222",
                 "y_value": "cfg_7.0",
                 "thumb_webp_bucket": "private",
@@ -87,7 +87,7 @@ def _sample_payload() -> dict[str, object]:
                 "prompt_hash": "p1",
                 "width": 1024,
                 "height": 1024,
-                "blurhash": "L6PZfSi_.AyE_3t7t7R**0o#DgR4",
+                "blurhash": "nsfw-blurhash",
                 "seed": "333",
                 "y_value": "cfg_7.0",
                 "thumb_webp_bucket": "private",
@@ -241,17 +241,32 @@ def test_auth_nsfw_row_has_all_categories() -> None:
     assert categories == {"normal", "advance", "nsfw"}
 
 
-def test_row_items_do_not_include_blurhash() -> None:
+def test_row_items_include_blurhash_without_leaking_inaccessible_categories() -> None:
     release = build_view_release(_sample_payload())
 
     row_manifests = cast(dict[str, object], release["row_manifests"])
-    for variant in ("public", "auth_sfw", "auth_nsfw"):
+    expected_by_variant = {
+        "public": {"normal": "normal-blurhash"},
+        "auth_sfw": {
+            "normal": "normal-blurhash",
+            "advance": "advance-blurhash",
+        },
+        "auth_nsfw": {
+            "normal": "normal-blurhash",
+            "advance": "advance-blurhash",
+            "nsfw": "nsfw-blurhash",
+        },
+    }
+    for variant, expected in expected_by_variant.items():
         rows = cast(dict[int, dict[str, object]], row_manifests[variant])
         row = rows[0]
         cells = cast(list[dict[str, object]], row["cells"])
-        for cell in cells:
-            for item in cast(list[dict[str, object]], cell["items"]):
-                assert "blurhash" not in item
+        actual = {
+            cast(str, item["category"]): item["blurhash"]
+            for cell in cells
+            for item in cast(list[dict[str, object]], cell["items"])
+        }
+        assert actual == expected
 
 
 def test_public_row_variant_sources_not_leaked() -> None:
