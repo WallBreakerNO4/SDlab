@@ -175,5 +175,17 @@
     "favoritedAt": "收藏于 {time}",
     "availableModels": "可用模型",
     "noAvailableModels": "暂无可用模型"
+    ,"comparisonTitle": "模型对比"
+    ,"comparisonDetailTitle": "提示词模型对比"
+    ,"comparisonDescription": "比较同一画师提示词在不同模型下的生成结果。"
+    ,"visibleModels": "显示 {count} 个模型"
+    ,"favoriteLabel": "收藏提示词"
+    ,"comparisonScene": "测试场景"
+    ,"modelSelector": "选择模型"
+    ,"loadMore": "加载更多"
+    ,"noImage": "暂无图片"
+    ,"backToFavorites": "返回收藏"
+    ,"previousModels": "上一组模型"
+    ,"nextModels": "下一组模型"
   }
 }
