@@ -13,6 +13,8 @@ const hasAuthEnv = hasE2EAuthEnv();
 // 生产数据（run_style_items 各 432 行）：Mixer / Legacy 两形态各取一个 run
 const MIXER_RUN_DIR = "anima-base-1-arist-mixer";
 const LEGACY_RUN_DIR = "nai-diffusion-4-5-full";
+const GUEST_RELEASE_ID = "guest-style-favorite-release";
+const GUEST_BLURHASH = "LEHV6nWB2yk8pyo0adR*.7kCMdnj";
 
 interface StyleItem {
   y_index: number;
@@ -20,7 +22,10 @@ interface StyleItem {
 }
 
 /** 从活体 style-items API 取真实 y_index ↔ style_key 映射（只依赖结构，不写死 label） */
-async function fetchStyleItems(page: Page, runDir: string): Promise<StyleItem[]> {
+async function fetchStyleItems(
+  page: Page,
+  runDir: string,
+): Promise<StyleItem[]> {
   const res = await page.request.get(`/api/comfyui/run/${runDir}/style-items`);
   expect(res.ok(), `style-items API 不可用：${runDir}`).toBeTruthy();
   return (await res.json()) as StyleItem[];
@@ -33,7 +38,11 @@ function styleKeyAt(items: StyleItem[], yIndex: number): string {
 }
 
 /** 经应用 API 直接收藏（测试数据只用测试用户自己的收藏行） */
-async function putFavorite(page: Page, styleKey: string, label: string): Promise<void> {
+async function putFavorite(
+  page: Page,
+  styleKey: string,
+  label: string,
+): Promise<void> {
   const res = await page.request.put("/api/viewer/style-favorites", {
     data: { style_key: styleKey, label },
   });
@@ -41,7 +50,10 @@ async function putFavorite(page: Page, styleKey: string, label: string): Promise
 }
 
 /** 用例收尾清理；失败静默（global teardown 最终兜底清空） */
-async function deleteFavoriteQuiet(page: Page, styleKey: string): Promise<void> {
+async function deleteFavoriteQuiet(
+  page: Page,
+  styleKey: string,
+): Promise<void> {
   try {
     await page.request.delete(
       `/api/viewer/style-favorites/${encodeURIComponent(styleKey)}`,
@@ -71,6 +83,53 @@ function waitFavoritesLoaded(page: Page): Promise<PlaywrightResponse> {
   );
 }
 
+async function mockComparisonSliceBlurhashFallback(page: Page): Promise<void> {
+  await page.route("**/api/viewer/style-comparison/slice", async (route) => {
+    const response = await route.fetch();
+    const payload = (await response.json()) as {
+      placements?: Record<
+        string,
+        Array<{
+          blurhashes?: Array<[number, number, string]>;
+        }>
+      >;
+    };
+    for (const placements of Object.values(payload.placements ?? {})) {
+      for (const placement of placements) {
+        placement.blurhashes = Array.from(
+          { length: 20 },
+          (_, xIndex) => [xIndex, 0, GUEST_BLURHASH],
+        );
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    await route.fulfill({ response, json: payload });
+  });
+
+  await page.route("**/api/private-object?*", async (route) => {
+    const key = new URL(route.request().url()).searchParams.get("key") ?? "";
+    if (key.includes("/sha256/")) {
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      await route.continue();
+      return;
+    }
+    if (!key.includes("/rows/")) {
+      await route.continue();
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    const response = await route.fetch();
+    const payload = (await response.json()) as {
+      cells?: Array<{ items?: Array<Record<string, unknown>> }>;
+    };
+    for (const cell of payload.cells ?? []) {
+      for (const item of cell.items ?? []) delete item.blurhash;
+    }
+    await route.fulfill({ response, json: payload });
+  });
+}
+
 /** 点击星标并等待对应 mutation 响应落库，避免乐观更新与后续断言竞争 */
 async function clickStarAndWait(
   page: Page,
@@ -86,13 +145,113 @@ async function clickStarAndWait(
     ),
     star.click(),
   ]);
-  expect(res.ok(), `${method} 收藏 API 失败：HTTP ${res.status()}`).toBeTruthy();
+  expect(
+    res.ok(),
+    `${method} 收藏 API 失败：HTTP ${res.status()}`,
+  ).toBeTruthy();
 }
 
 test.describe("task 14: style favorites guest flows", () => {
   test("task 14: guest clicking a row star opens the login dialog", async ({
     page,
   }) => {
+    await page.route(
+      new RegExp(`/runs/${MIXER_RUN_DIR}/view/current\\.json(\\?.*)?$`),
+      async (route) => {
+        await route.fulfill({
+          json: {
+            schema_version: 2,
+            run_dir: MIXER_RUN_DIR,
+            release_id: GUEST_RELEASE_ID,
+            bootstrap_sfw_key: `runs/${MIXER_RUN_DIR}/view/v2/${GUEST_RELEASE_ID}/bootstrap.sfw.json`,
+            public_row_prefix: `runs/${MIXER_RUN_DIR}/view/v2/${GUEST_RELEASE_ID}/rows/public/`,
+          },
+        });
+      },
+    );
+    await page.route(
+      new RegExp(
+        `/runs/${MIXER_RUN_DIR}/view/v2/${GUEST_RELEASE_ID}/bootstrap\\.sfw\\.json(\\?.*)?$`,
+      ),
+      async (route) => {
+        await route.fulfill({
+          json: {
+            run: {
+              run_id: "guest-style-favorite-run-id",
+              created_at: "2026-07-17T00:00:00.000Z",
+              run_dir: MIXER_RUN_DIR,
+              selection: { total_cells: 1 },
+              model: {
+                name: "Guest Style Favorite Run",
+                description: { zh: "未登录收藏入口测试。" },
+              },
+              workflow: null,
+            },
+            xLabels: ["构图示例"],
+            yLabels: ["@guest-artist"],
+            x_columns: [{ type: "normal", description: { zh: "构图示例" } }],
+            y_indexes: [0],
+            y_labels: ["@guest-artist"],
+            prompts: [],
+            blurhash_cells: [
+              {
+                x_index: 0,
+                y_index: 0,
+                batch_index: 0,
+                category: "normal",
+                width: 512,
+                height: 768,
+                blurhash: GUEST_BLURHASH,
+              },
+            ],
+          },
+        });
+      },
+    );
+    await page.route(
+      new RegExp(
+        `/runs/${MIXER_RUN_DIR}/view/v2/${GUEST_RELEASE_ID}/rows/public/0\\.json(\\?.*)?$`,
+      ),
+      async (route) => {
+        await route.fulfill({
+          json: {
+            run_dir: MIXER_RUN_DIR,
+            y_index: 0,
+            cells: [
+              {
+                x_index: 0,
+                y_index: 0,
+                items: [
+                  {
+                    batch_index: 0,
+                    category: "normal",
+                    width: 512,
+                    height: 768,
+                    blurhash: GUEST_BLURHASH,
+                    meta: {
+                      seed: "14000",
+                      prompt_hash: "guest-style-favorite-prompt",
+                      positive_prompt: "guest prompt",
+                      y_value: "@guest-artist",
+                    },
+                    thumb: null,
+                    display: null,
+                  },
+                ],
+              },
+            ],
+          },
+        });
+      },
+    );
+    await page.route(
+      `**/api/comfyui/run/${MIXER_RUN_DIR}/style-items`,
+      async (route) => {
+        await route.fulfill({
+          json: [{ y_index: 0, style_key: "e2e-style-table:0" }],
+        });
+      },
+    );
     await page.goto(`/zh/models/${MIXER_RUN_DIR}`);
     const star = rowStar(page, 0);
     await expect(star).toBeVisible({ timeout: 15_000 });
@@ -214,7 +373,9 @@ test.describe("task 14: style favorites signed-in flows", () => {
       await expect(page).toHaveURL(
         new RegExp(`/zh/models/${MIXER_RUN_DIR}#${lineNumber}$`),
       );
-      const rowHeight = Number((await grid.getAttribute("data-row-height")) ?? "0");
+      const rowHeight = Number(
+        (await grid.getAttribute("data-row-height")) ?? "0",
+      );
       expect(rowHeight).toBeGreaterThan(0);
       await expect
         .poll(async () => scrollEl.evaluate((el) => el.scrollTop), {
@@ -296,7 +457,9 @@ test.describe("task 14: style favorites signed-in flows", () => {
       );
       const grid = page.getByTestId("run-grid");
       await expect(grid).toBeVisible({ timeout: 15_000 });
-      const rowHeight = Number((await grid.getAttribute("data-row-height")) ?? "0");
+      const rowHeight = Number(
+        (await grid.getAttribute("data-row-height")) ?? "0",
+      );
       expect(rowHeight).toBeGreaterThan(0);
       const scrollEl = page.getByTestId("run-grid-scroll");
       await expect
@@ -315,6 +478,106 @@ test.describe("task 14: style favorites signed-in flows", () => {
     }
   });
 
+  test("task 14: favorites comparison matrix shows every model in a horizontal workspace", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const items = await fetchStyleItems(page, MIXER_RUN_DIR);
+    const styleKey = styleKeyAt(items, 30);
+    await putFavorite(page, styleKey, "e2e 横向模型矩阵验证收藏");
+
+    try {
+      await mockComparisonSliceBlurhashFallback(page);
+      await page.goto("/zh/favorites");
+      const matrix = page.getByTestId("comparison-matrix-scroll");
+      const frame = page.getByTestId("comparison-image-frame").first();
+      await expect(matrix).toBeVisible({ timeout: 15_000 });
+      await expect(frame).toBeVisible({ timeout: 15_000 });
+      await expect(
+        page.getByTestId("comparison-image-skeleton").first(),
+      ).toBeVisible();
+      await expect(page.getByTestId("blurhash-canvas").first()).toBeVisible({
+        timeout: 15_000,
+      });
+      const thumb = frame.getByTestId("run-grid-image");
+      await expect(thumb).toHaveClass(/opacity-100/, { timeout: 15_000 });
+      await expect(frame.getByTestId("blurhash-canvas")).toHaveClass(
+        /opacity-0/,
+      );
+      await frame.locator('button[type="button"]').first().click();
+      const previewDialog = page.getByRole("dialog");
+      await expect(previewDialog).toBeVisible();
+      await expect(previewDialog.getByTestId("blurhash-canvas")).toBeVisible();
+      await page.keyboard.press("Escape");
+
+      const initialScroll = await matrix.evaluate((element) => ({
+        left: element.scrollLeft,
+        top: element.scrollTop,
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+      }));
+      expect(initialScroll.scrollWidth).toBeGreaterThan(
+        initialScroll.clientWidth,
+      );
+
+      await matrix.dispatchEvent("wheel", {
+        bubbles: true,
+        cancelable: true,
+        shiftKey: true,
+        deltaX: 0,
+        deltaY: 240,
+      });
+      await expect
+        .poll(() => matrix.evaluate((element) => element.scrollLeft))
+        .toBeGreaterThan(initialScroll.left);
+      expect(await matrix.evaluate((element) => element.scrollTop)).toBe(
+        initialScroll.top,
+      );
+
+      const frameBox = await frame.boundingBox();
+      expect(frameBox).not.toBeNull();
+      expect(frameBox!.width / frameBox!.height).toBeCloseTo(13 / 19, 2);
+
+      await expect(
+        page.getByRole("button", { name: /上一组模型|Previous models/ }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: /下一组模型|Next models/ }),
+      ).toHaveCount(0);
+
+      await page.screenshot({
+        path: "test-results/comparison-matrix-ui.png",
+        fullPage: false,
+      });
+    } finally {
+      await deleteFavoriteQuiet(page, styleKey);
+    }
+  });
+
+  test("task 14: comparison detail falls back to slice blurhash for legacy row manifests", async ({
+    page,
+  }) => {
+    const items = await fetchStyleItems(page, MIXER_RUN_DIR);
+    const styleKey = styleKeyAt(items, 31);
+    await putFavorite(page, styleKey, "e2e 详情 BlurHash 回退收藏");
+
+    try {
+      await mockComparisonSliceBlurhashFallback(page);
+      await page.goto(`/zh/favorites/${encodeURIComponent(styleKey)}`);
+
+      const firstCell = page.locator("tbody td").first();
+      const placeholder = firstCell.getByTestId("blurhash-canvas");
+      await expect(placeholder).toBeVisible({ timeout: 15_000 });
+      await expect(firstCell.getByTestId("run-grid-image")).toHaveClass(
+        /opacity-100/,
+        { timeout: 15_000 },
+      );
+      await expect(placeholder).toHaveClass(/opacity-0/);
+    } finally {
+      await deleteFavoriteQuiet(page, styleKey);
+    }
+  });
+
   test("task 14: favorites page remove deletes the entry", async ({ page }) => {
     const items = await fetchStyleItems(page, LEGACY_RUN_DIR);
     const styleKey = styleKeyAt(items, 3);
@@ -329,7 +592,9 @@ test.describe("task 14: style favorites signed-in flows", () => {
 
       await expect(entry).toHaveCount(0);
       await expect(
-        page.getByText("暂无收藏。在模型详情页点击行标签上的星标即可收藏画师串。"),
+        page.getByText(
+          "暂无收藏。在模型详情页点击行标签上的星标即可收藏画师串。",
+        ),
       ).toBeVisible();
     } finally {
       await deleteFavoriteQuiet(page, styleKey);

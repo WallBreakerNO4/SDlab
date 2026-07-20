@@ -78,8 +78,12 @@ type VirtualGridProps = {
   onRefreshViewAccess: () => Promise<RunViewAccess | null>;
 };
 
+type PendingRestoreSession = {
+  anchor: SavedScrollAnchor;
+  token: number;
+};
+
 const DEV_IMAGE_DOM_CAP_NOTE = 300;
-const PENDING_RESTORE_MAX_FRAMES = 8;
 const SCROLL_OFFSET_EPSILON = 1;
 
 export function VirtualGrid(props: VirtualGridProps) {
@@ -104,6 +108,7 @@ function VirtualGridContent({
 
   const t = useTranslations("virtualGrid");
   const scrollElementRef = useRef<HTMLDivElement | null>(null);
+  const toolsPanelRef = useRef<HTMLDivElement | null>(null);
   const loadedThumbKeysRef = useRef(new Set<string>());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedCell, setSelectedCell] = useState<SelectedCellPreview | null>(
@@ -182,7 +187,8 @@ function VirtualGridContent({
     };
   }, []);
 
-  const pendingRestoreRef = useRef<SavedScrollAnchor | null>(null);
+  const pendingRestoreRef = useRef<PendingRestoreSession | null>(null);
+  const restoreSessionTokenRef = useRef(0);
   const suppressScrollAnchorPersistRef = useRef(false);
 
   const [jumpInputValue, setJumpInputValue] = useState("");
@@ -422,13 +428,28 @@ function VirtualGridContent({
 
   const toggleGridTools = useCallback(
     (nextOpen: boolean) => {
+      if (nextOpen === gridToolsOpen) {
+        return;
+      }
+
       const scrollElement = scrollElementRef.current;
       if (scrollElement) {
-        pendingRestoreRef.current = buildScrollAnchor(
-          scrollElement.scrollTop,
-          grid.y_indexes,
-          rowHeight,
-        );
+        const pendingRestore = pendingRestoreRef.current;
+        const anchor =
+          pendingRestore?.anchor ??
+          buildScrollAnchor(
+            scrollElement.scrollTop,
+            grid.y_indexes,
+            rowHeight,
+          );
+        if (anchor) {
+          if (!pendingRestore) {
+            const token = restoreSessionTokenRef.current + 1;
+            restoreSessionTokenRef.current = token;
+            pendingRestoreRef.current = { anchor, token };
+          }
+          suppressScrollAnchorPersistRef.current = true;
+        }
 
         // 预计算目标滚动宽度并在过渡起点立即提交，避免 debounce 到期后
         // 列宽突变引发的闪烁。同步 lastWidthRef 阻断过渡期间二次提交。
@@ -456,41 +477,57 @@ function VirtualGridContent({
     void rowHeight;
     rowVirtualizer.measure();
 
-    const anchor = pendingRestoreRef.current;
-    if (!anchor) {
+    const restoreSession = pendingRestoreRef.current;
+    if (!restoreSession) {
       return;
     }
+    const { anchor: restoreAnchor, token: restoreToken } = restoreSession;
 
-    let frameId: number | null = null;
+    let initialFrameId: number | null = null;
+    let releaseFrameId: number | null = null;
+    let resizeObserver: ResizeObserver | null = null;
     let cancelled = false;
     suppressScrollAnchorPersistRef.current = true;
 
     const releasePersistSuppression = () => {
-      frameId = window.requestAnimationFrame(() => {
-        if (!cancelled) {
+      releaseFrameId = window.requestAnimationFrame(() => {
+        if (
+          !cancelled &&
+          restoreSessionTokenRef.current === restoreToken
+        ) {
           suppressScrollAnchorPersistRef.current = false;
         }
       });
     };
 
-    const restoreWhenScrollRangeIsReady = (attempt: number) => {
-      if (cancelled) return;
+    function stopWaitingForLayout() {
+      resizeObserver?.disconnect();
+      toolsPanelRef.current?.removeEventListener(
+        "transitionend",
+        restoreWhenScrollRangeIsReady,
+      );
+    }
+
+    function restoreWhenScrollRangeIsReady() {
+      if (cancelled || pendingRestoreRef.current !== restoreSession) return;
 
       const scrollElement = scrollElementRef.current;
       if (!scrollElement) {
         pendingRestoreRef.current = null;
+        stopWaitingForLayout();
         suppressScrollAnchorPersistRef.current = false;
         return;
       }
 
       rowVirtualizer.measure();
       const targetOffset = resolveScrollOffsetFromAnchor(
-        anchor,
+        restoreAnchor,
         grid.y_indexes,
         rowHeight,
       );
       if (targetOffset === null) {
         pendingRestoreRef.current = null;
+        stopWaitingForLayout();
         suppressScrollAnchorPersistRef.current = false;
         return;
       }
@@ -507,28 +544,47 @@ function VirtualGridContent({
         targetOffset <= expectedMaxOffset + SCROLL_OFFSET_EPSILON &&
         targetOffset > currentMaxOffset + SCROLL_OFFSET_EPSILON;
 
-      if (isWaitingForDomScrollRange && attempt < PENDING_RESTORE_MAX_FRAMES) {
-        frameId = window.requestAnimationFrame(() => {
-          restoreWhenScrollRangeIsReady(attempt + 1);
-        });
+      if (isWaitingForDomScrollRange) {
         return;
       }
 
       pendingRestoreRef.current = null;
+      stopWaitingForLayout();
       rowVirtualizer.scrollToOffset(targetOffset, { align: "start" });
       releasePersistSuppression();
-    };
+    }
 
-    frameId = window.requestAnimationFrame(() => {
-      restoreWhenScrollRangeIsReady(0);
+    resizeObserver = new ResizeObserver(restoreWhenScrollRangeIsReady);
+    const scrollElement = scrollElementRef.current;
+    if (scrollElement) {
+      resizeObserver.observe(scrollElement);
+      const scrollContent = scrollElement.firstElementChild;
+      if (scrollContent instanceof HTMLElement) {
+        resizeObserver.observe(scrollContent);
+      }
+    }
+    toolsPanelRef.current?.addEventListener(
+      "transitionend",
+      restoreWhenScrollRangeIsReady,
+    );
+
+    initialFrameId = window.requestAnimationFrame(() => {
+      restoreWhenScrollRangeIsReady();
     });
 
     return () => {
       cancelled = true;
-      if (frameId !== null) {
-        window.cancelAnimationFrame(frameId);
+      stopWaitingForLayout();
+      if (initialFrameId !== null) {
+        window.cancelAnimationFrame(initialFrameId);
       }
-      if (pendingRestoreRef.current !== anchor) {
+      if (releaseFrameId !== null) {
+        window.cancelAnimationFrame(releaseFrameId);
+      }
+      if (
+        pendingRestoreRef.current !== restoreSession &&
+        restoreSessionTokenRef.current === restoreToken
+      ) {
         suppressScrollAnchorPersistRef.current = false;
       }
     };
@@ -659,6 +715,7 @@ function VirtualGridContent({
 
   const toolsPanel = (
     <div
+      ref={toolsPanelRef}
       className={cn(
         "flex flex-col border-l border-border/40 bg-background/95 backdrop-blur-sm transition-all duration-300 ease-in-out overflow-hidden",
         gridToolsOpen ? "w-96" : "w-10",

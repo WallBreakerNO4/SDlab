@@ -524,6 +524,7 @@ def _build_row_manifest(
                 "category": category,
                 "width": image.get("width"),
                 "height": image.get("height"),
+                "blurhash": _optional_non_empty_str(image.get("blurhash")),
                 "meta": {
                     "seed": _optional_non_empty_str(image.get("seed")),
                     "prompt_id": int(prompt_row["prompt_id"]),

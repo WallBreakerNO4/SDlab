@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-07-16 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-07-19 -->
 
 # e2e/ — Playwright 端到端测试
 
@@ -19,7 +19,8 @@
 | 弹窗按需加载 | `task-13-dialog-on-demand.spec.ts` | 弹窗 display 图片按需加载 |
 | hash 跳转 | `task-13-hash-jump.spec.ts` | URL hash 定位到特定 cell |
 | 滚动恢复 | `task-13-scroll-restore.spec.ts` | 弹窗关闭后恢复滚动位置 |
-| 画师串收藏 | `task-14-style-favorites.spec.ts` | 未登录弹登录框/收藏页门控 + 已登录 toggle/面板跳转/收藏页 |
+| Mixer prompt parts 渲染 | `task-13-mixer-prompt-parts.spec.ts` | Mixer 的 y_prompt_parts（Artist/Common Prompt）前端分栏渲染 |
+| 画师串收藏 | `task-14-style-favorites.spec.ts` | 未登录弹登录框/收藏页门控 + 已登录 toggle/面板跳转/收藏页 + 对比页历史 BlurHash 回退 |
 | 已登录态机制 | `global-setup.ts` / `global-teardown.ts` / `e2e-auth-state.ts` | service role admin 链路建 session 写 storageState；teardown 清空测试用户收藏 |
 
 ## 运行
@@ -31,6 +32,9 @@ pnpm test:e2e -- -g "task 13"
 
 # 以 start 模式跑（更接近生产；必须用默认 3000 端口，R2 CORS 白名单限定）：
 E2E_SERVER=start pnpm test:e2e
+
+# 无密钥公开/mock 套件：阻断 .env*、禁用登录 setup、使用 localhost 假 public 配置
+./node_modules/.bin/playwright test --config=playwright.no-env.config.ts
 ```
 
 ## 约定（本目录特有）
@@ -41,6 +45,7 @@ E2E_SERVER=start pnpm test:e2e
 - 旧 spec 已清理：task-11 ~ task-16（旧安全/性能/虚拟滚动等）已移除；当前 spec 聚焦 Supabase + R2 流程
 - 新增 spec 时命名建议：`task-{N}-{描述}.spec.ts`
 - 已登录用例：global setup 用 `SUPABASE_SERVICE_ROLE_KEY` 经 admin API（generate_link + 手工截 fragment tokens + @supabase/ssr cookie 编码）把测试用户 session 写入 `test-results/e2e-auth-state.json`，用例侧 `test.use({ storageState })` 复用；缺环境变量（`.env` 由 `process.loadEnvFile` 加载）时 setup 不写 state、已登录用例 skip；global teardown 清空该测试用户的 `user_style_favorites`
+- 无密钥入口：`playwright.no-env.config.ts` 不注册 global setup/teardown，先构建再启动 3100 端口；`e2e/block-env-file-access.cjs` 同时阻断测试进程与 Next 子进程读取 `.env*`，清除继承的 service-role 变量，测试产物只写 `/tmp/sdlab-playwright-no-env/`
 
 ## 反模式
 

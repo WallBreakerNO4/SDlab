@@ -1,5 +1,5 @@
-<!-- Generated: 2026-04-06 | Updated: 2026-07-17 -->
-<!-- Commit: Style Favorites | 分支: dev -->
+<!-- Generated: 2026-04-06 | Updated: 2026-07-20 -->
+<!-- Commit: Style Comparison（模型对比收藏） | 分支: dev -->
 
 # Agent Guide (sd-style-lab/images-script)
 
@@ -19,6 +19,7 @@
 - ComfyUI 生图链路已支持 Anima Artist Mixer：`workflow.anima_artist_mixer` 会把 Y 轴 general 标签留在正向 prompt，artists 标签单独写入 `artist_chain`；hash、回放与 strict retry 都把两者视为同一份生图输入。
 - Mixer metadata 会额外持久化 `y_common_prompt`；展示页 bootstrap 通过可选 `yPromptParts` 向前端提供 Artist/Common Prompt 拆分，首列分别复制，缺失部分不渲染。
 - 画师提示词收藏（Style Favorites）：登录用户可在详情页收藏 Y 轴画师串、在 `/[locale]/favorites` 查看并跨模型跳转；收藏身份用 `style_key`（`{collection_id}:{item_index}`），跨 run 匹配只比较 style_key，永不比较 prompt 字符串；`y_index` 一律 0-based，仅收藏页拼跳转 URL 时 `#{y_index + 1}`。
+- Style Comparison（模型对比收藏）：`/[locale]/favorites` 以收藏画师串为行、已发布模型为列展示同风格结果，`/[locale]/favorites/[styleKey]` 提供单收藏详情；目录 API 使用 keyset cursor 且每页最多 40 条，slice 每次最多 40 个 style key / 12 个 run，模型目录缓存 5 分钟。
 
 ## 结构
 
@@ -26,14 +27,16 @@
 ./
 ├── app/                    # App Router 页面与 API route
 │   ├── [locale]/           # 区域化页面入口（layout + 首页 + info + privacy-policy + models + prompts + favorites）
-│   ├── api/comfyui/        # runs/access/workflow/style-items + 公开/私有对象代理
-│   ├── api/viewer/         # 浏览者偏好（NSFW 开关）+ 画师串收藏
+│   ├── api/comfyui/        # runs/access/workflow/style-items
+│   ├── api/viewer/         # 浏览者偏好 + 画师串收藏 + 模型对比目录/切片
+│   ├── api/private-object/ # 使用 media grant 读取私有 R2 对象
+│   ├── api/public-object/  # 读取公开 R2 对象
 │   ├── api/telemetry/      # web-vitals 上报端点
 │   ├── auth/               # Supabase PKCE callback
 │   └── models/[runDir]/    # 模型详情页共享组件（由 [locale]/models/[runDir] 消费）
 ├── components/             # 业务组件 + UI primitives + auth provider
 │   ├── comfyui/            # 虚拟网格/图片预览/blurhash/收藏星标与面板
-│   ├── favorites/          # 收藏页客户端 UI
+│   ├── favorites/          # 收藏列表、跨模型对比矩阵与单收藏详情 UI
 │   ├── home/               # 首页模型卡片/封面图/预览弹窗
 │   ├── prompt/             # Prompt 法典浏览器 UI（见 components/prompt/AGENTS.md）
 │   └── ui/                 # shadcn/radix primitives
@@ -46,7 +49,7 @@
 │   ├── r2_upload/          # R2 上传 + Supabase 写入
 │   ├── cli/                # 交互菜单与入口注册
 │   └── other/              # CSV/YAML 资产转换工具
-├── tests/                  # pytest（合约与可观测输出）
+├── tests/                  # pytest + Node node:test（合约与可观测输出）
 ├── e2e/                    # Playwright 端到端
 ├── supabase/               # 本地配置与迁移
 ├── data/                   # 只读输入资产
@@ -106,7 +109,10 @@
 | 浏览者 NSFW 偏好 API  | `app/api/viewer/preferences/nsfw/route.ts`                                        | GET 读 cookie / PATCH 写 Supabase `user_preferences` + cookie            |
 | Web Vitals 上报       | `app/api/telemetry/web-vitals/route.ts`                                           | 接收 `console.log` 记录，204 空响应，不落库                              |
 | 画师串收藏页          | `app/[locale]/favorites/page.tsx` + `components/favorites/favorites-page.tsx`      | 登录门控 + 快照 label + 跨模型跳转 + noindex                             |
+| 单收藏模型对比页      | `app/[locale]/favorites/[styleKey]/page.tsx` + `components/favorites/favorite-comparison-detail.tsx` | 同一 `style_key` 跨已发布模型对比；noindex |
 | 收藏 API              | `app/api/viewer/style-favorites/route.ts`、`app/api/viewer/style-favorites/[styleKey]/route.ts` | GET 列表 / PUT upsert / DELETE；未登录 401                    |
+| 模型对比 API          | `app/api/viewer/style-comparison/**/route.ts`                                      | 收藏目录/单收藏详情/slice；见 `app/api/viewer/AGENTS.md`                  |
+| 模型对比数据层        | `lib/style-comparison.ts`、`lib/style-comparison-server.ts`                        | 类型/guard、游标与 slice 校验、已发布模型 5min 缓存                       |
 | style-items API       | `app/api/comfyui/run/[runDir]/style-items/route.ts`                                | 公开返回 `[{ y_index, style_key }]`（0-based），供网格星标与跳转          |
 | 收藏数据层            | `lib/style-favorites.ts`                                                           | 类型/guard + 薄 fetch/mutate 函数                                        |
 | 网格收藏 hook         | `app/models/[runDir]/use-style-favorites.ts`                                       | 乐观更新 + 失败回滚 + toast                                              |
@@ -139,6 +145,9 @@
 | `fetchStyleFavorites`       | function | `lib/style-favorites.ts`                      | 收藏列表薄 fetch（另有 upsert/delete 薄函数） |
 | `useStyleFavorites`         | hook     | `app/models/[runDir]/use-style-favorites.ts`  | 网格收藏态 + 乐观 toggle                    |
 | `GridFavoritesPanel`        | component | `components/comfyui/grid-favorites-panel.tsx` | 工具栏收藏面板（行号升序 + 跳转）           |
+| `parseStyleComparisonSliceBody` | function | `lib/style-comparison.ts`                  | 对比 slice 请求校验（40 style keys / 12 run dirs） |
+| `getCachedPublishedRuns`    | function | `lib/style-comparison-server.ts`             | 已发布模型目录查询与 5 分钟缓存             |
+| `buildPrivateObjectCacheUrl` | function | `lib/style-comparison.ts`                   | 私有对象边缘 cache URL 去除 grant、保留 key |
 
 ## 约定（项目特有）
 
@@ -154,6 +163,8 @@
 - 路径与 URL：API 入口的 `runDir` 先用 `lib/comfyui-types.ts:isValidRunDir()` 判形态；共享路径处理再走 `lib/comfyui-path.ts`；R2 URL 统一走 `lib/r2-url.ts`。
 - 前端：大网格必须虚拟化；图片优先消费 R2 display/thumb 变体并配合 blurhash 占位，这套变体统一称为“展示页缩略图”。
 - 前端首页：`/api/comfyui/runs` 当前会输出封面图/主页缩略图字段；不要把 run 详情页的展示页缩略图直接挪作首页卡片素材。
+- 模型对比：收藏目录分页上限固定为 40；slice 请求最多 40 个 `style_key`、12 个 `run_dir`；`run_style_items.y_index` 与所有前端 placement 均保持 0-based。
+- 模型对比缓存：`getCachedPublishedRuns()` 通过 `unstable_cache` 缓存已发布模型目录 5 分钟；私有对象 route 必须先验证 grant 和 key 范围，再查询去 grant 的共享边缘 cache，cache URL 必须保留对象 `key`。
 - Prompt 法典浏览器：运行时只消费 `public/data/prompts/*.json` 构建产物；源 YAML `data/prompt-codex/*.yaml` 是只读输入资产，不要在 Web 侧直接读取。目标模型/权重模式/Choice 选择的状态边界分别在 `lib/prompt-model-context.tsx` 与 `lib/prompt-choice-context.tsx`，格式化文本统一走 `lib/prompt-formatter.ts:formatPrompt()`。
 - SEO：所有页面 `generateMetadata` 统一使用 `lib/metadata-utils.ts:buildSeoMetadata()` 构建 OG/Twitter Card/canonical/hreflang 标签，不要手写重复模板。模型详情页的 `og:image` 通过 `lib/model-metadata.ts:getModelMetadata()` 从 Supabase 查询封面图 URL。JSON-LD 结构化数据使用 `components/json-ld.tsx` 的客户端组件注入，不消耗 Worker CPU。
 - E2E 已登录态：global setup 用 `SUPABASE_SERVICE_ROLE_KEY` 经 admin generate_link + 手工截 fragment token + `@supabase/ssr` cookie 编码生成 storageState；缺 Supabase 环境变量时已登录用例自动 skip（详见 `e2e/AGENTS.md` 与 spec 决策 13）。
@@ -184,9 +195,10 @@
 
 ### 当前 `dev` 分支开发进展
 
-以下为 `dev` 分支近期承载的主要开发主线（截至 2026-07-17，`dev` 已包含尚未发布到 `main` 的生图链路变更）：
+以下为 `dev` 分支近期承载的主要开发主线（截至 2026-07-20，`dev` 已包含尚未发布到 `main` 的生图链路变更）：
 
 - **Style Favorites（画师提示词收藏）**：新增 `user_style_favorites` + `run_style_items` 两表与 RLS；收藏身份用 `style_key` 跨 run 匹配；详情页行标签星标 + 工具栏收藏面板 + 收藏页 `/[locale]/favorites` 跨模型跳转；新 run 上传顺带写 `run_style_items`，历史 run 由 `scripts/other/backfill_run_style_items.py` 确定性重放回填（生产已执行 6 run × 432）；e2e 已登录态走 service-role admin 链路。
+- **Style Comparison（模型对比收藏）**：收藏页升级为同画师串跨模型矩阵，并新增 `favorites/[styleKey]` 详情页；viewer API 提供 keyset 分页、模型目录与有界 slice，私有 row/图片通过 media grant 访问并复用去 grant 的边缘 cache；数据库增加收藏分页和 style/run placement 索引。当前仅有 Node 单元测试，不宣称已有对比专项 E2E。
 - **Anima Artist Mixer**：新增 `data/models/Anima-base-1.0-Artist-Mixer/` 可执行配置；生图 runner 支持 general/artists 双通道注入，并将 `artist_chain` 纳入 metadata、prompt hash、run 回放和 strict retry 校验。
 - **虚拟网格稳定性**：工具栏展开/收起时立即提交目标 viewport 宽度；私有图片 object URL 在 cell 重挂载间复用，由 `VirtualGrid` 卸载时统一释放。
 - **Prompt 法典浏览器**：新增 `/[locale]/prompts` 浏览功能，含登录门禁、搜索匹配导航（从当前浏览位置跳转）、权重模式支持（Anima 模式，对所有标签统一平方处理）、ComfyUI 多角色提示词格式化（换行 + `Character N:` 前缀分隔角色）、Prompt 条目列表滚动对齐修复。
@@ -228,6 +240,7 @@ pnpm dev
 pnpm build
 pnpm start
 pnpm lint
+pnpm test
 
 # E2E / Supabase
 pnpm test:e2e
@@ -239,8 +252,8 @@ pnpm dlx supabase migration new <name>
 
 ## 分层文档
 
-- `app/AGENTS.md`、`app/api/AGENTS.md`、`app/api/comfyui/AGENTS.md`、`app/auth/AGENTS.md`、`app/[locale]/AGENTS.md`、`app/models/[runDir]/AGENTS.md`：页面/API/Auth/I18N 的分层规则与 PKCE 特例。
-- `components/AGENTS.md`、`components/ui/AGENTS.md`、`components/comfyui/AGENTS.md`、`components/home/AGENTS.md`、`components/prompt/AGENTS.md`：业务组件、UI primitives、虚拟网格/图片渲染约定、Prompt 法典浏览器 UI。
+- `app/AGENTS.md`、`app/api/AGENTS.md`、`app/api/comfyui/AGENTS.md`、`app/api/viewer/AGENTS.md`、`app/auth/AGENTS.md`、`app/[locale]/AGENTS.md`、`app/models/[runDir]/AGENTS.md`：页面/API/Auth/I18N 的分层规则与 PKCE 特例。
+- `components/AGENTS.md`、`components/ui/AGENTS.md`、`components/comfyui/AGENTS.md`、`components/favorites/AGENTS.md`、`components/home/AGENTS.md`、`components/prompt/AGENTS.md`：业务组件、UI primitives、虚拟网格/图片渲染、收藏对比与 Prompt 法典浏览器约定。
 - `i18n/AGENTS.md`、`messages/AGENTS.md`：国际化路由配置与翻译消息约定。
 - `lib/AGENTS.md`、`lib/env/AGENTS.md`：Supabase/R2/路径安全/共享类型边界与环境变量读取。
 - `scripts/AGENTS.md`、`scripts/generation/AGENTS.md`、`scripts/r2_upload/AGENTS.md`、`scripts/cli/AGENTS.md`、`scripts/other/AGENTS.md`：Python 主代码域与子系统边界。

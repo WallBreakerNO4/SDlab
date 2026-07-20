@@ -175,5 +175,17 @@
     "favoritedAt": "Favorited at {time}",
     "availableModels": "Available in",
     "noAvailableModels": "No available models"
+    ,"comparisonTitle": "Model Comparison"
+    ,"comparisonDetailTitle": "Prompt Model Comparison"
+    ,"comparisonDescription": "Compare the same artist prompt across models."
+    ,"visibleModels": "Showing {count} models"
+    ,"favoriteLabel": "Favorite Prompt"
+    ,"comparisonScene": "Test Scene"
+    ,"modelSelector": "Select model"
+    ,"loadMore": "Load more"
+    ,"noImage": "No image"
+    ,"backToFavorites": "Back to favorites"
+    ,"previousModels": "Previous models"
+    ,"nextModels": "Next models"
   }
 }

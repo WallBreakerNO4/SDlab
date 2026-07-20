@@ -42,64 +42,72 @@ test.describe("task 13: model detail hash jump", () => {
   test("url hash jumps to the requested line before restoring saved scroll", async ({
     page,
   }) => {
+    const bootstrap = {
+      run: {
+        run_id: "mock-run-id",
+        created_at: "2026-04-17T00:00:00.000Z",
+        run_dir: MOCK_RUN_DIR,
+        selection: {
+          total_cells: MOCK_X_COLUMNS.length * MOCK_Y_INDEXES.length,
+        },
+        model: {
+          name: "Mock Hash Jump Run",
+          description: {
+            zh: "用于验证详情页可通过 URL 哈希跳转到指定行。",
+          },
+        },
+        workflow: null,
+      },
+      xLabels: MOCK_X_COLUMNS.map((column) => column.description.zh),
+      yLabels: MOCK_Y_INDEXES.map((yIndex) => `第 ${yIndex} 行`),
+      x_columns: MOCK_X_COLUMNS,
+      y_indexes: MOCK_Y_INDEXES,
+      y_labels: MOCK_Y_INDEXES.map((yIndex) => `第 ${yIndex} 行`),
+      prompts: [],
+      blurhash_cells: MOCK_Y_INDEXES.slice(0, 160).flatMap((yIndex) =>
+        MOCK_X_COLUMNS.map((_, xIndex) => ({
+          x_index: xIndex,
+          y_index: yIndex,
+          batch_index: 0,
+          category: "normal",
+          width: 512,
+          height: 768,
+          blurhash: MOCK_BLURHASH,
+        })),
+      ),
+    };
+
     await page.route(
-      new RegExp(`/api/comfyui/run/${MOCK_RUN_DIR}(\\?.*)?$`),
+      new RegExp(`/runs/${MOCK_RUN_DIR}/view/current\\.json(\\?.*)?$`),
       async (route) => {
         await route.fulfill({
           json: {
-            run: {
-              run_id: "mock-run-id",
-              created_at: "2026-04-17T00:00:00.000Z",
-              run_dir: MOCK_RUN_DIR,
-              selection: {
-                total_cells: MOCK_X_COLUMNS.length * MOCK_Y_INDEXES.length,
-              },
-              model: {
-                name: "Mock Hash Jump Run",
-                description: {
-                  zh: "用于验证详情页可通过 URL 哈希跳转到指定行。",
-                },
-              },
-              workflow: null,
-            },
-            xLabels: MOCK_X_COLUMNS.map((column) => column.description.zh),
-            yLabels: MOCK_Y_INDEXES.map((yIndex) => `第 ${yIndex} 行`),
-            x_columns: MOCK_X_COLUMNS,
-            y_indexes: MOCK_Y_INDEXES,
+            schema_version: 2,
+            run_dir: MOCK_RUN_DIR,
+            release_id: "hash-jump-release",
+            bootstrap_sfw_key: `runs/${MOCK_RUN_DIR}/view/v2/hash-jump-release/bootstrap.sfw.json`,
+            public_row_prefix: `runs/${MOCK_RUN_DIR}/view/v2/hash-jump-release/rows/public/`,
           },
         });
       },
     );
 
     await page.route(
-      new RegExp(`/api/comfyui/run/${MOCK_RUN_DIR}/grid(\\?.*)?$`),
+      new RegExp(
+        `/runs/${MOCK_RUN_DIR}/view/v2/hash-jump-release/bootstrap\\.sfw\\.json(\\?.*)?$`,
+      ),
       async (route) => {
-        await route.fulfill({
-          json: {
-            x_columns: MOCK_X_COLUMNS,
-            y_indexes: MOCK_Y_INDEXES,
-            y_labels: MOCK_Y_INDEXES.map((yIndex) => `第 ${yIndex} 行`),
-            blurhash_cells: MOCK_Y_INDEXES.slice(0, 160).flatMap((yIndex) =>
-              MOCK_X_COLUMNS.map((_, xIndex) => ({
-                x_index: xIndex,
-                y_index: yIndex,
-                batch_index: 0,
-                category: "normal",
-                width: 512,
-                height: 768,
-                blurhash: MOCK_BLURHASH,
-              })),
-            ),
-          },
-        });
+        await route.fulfill({ json: bootstrap });
       },
     );
 
     await page.route(
-      new RegExp(`/api/comfyui/run/${MOCK_RUN_DIR}/row\\?.*$`),
+      new RegExp(
+        `/runs/${MOCK_RUN_DIR}/view/v2/hash-jump-release/rows/public/\\d+\\.json(\\?.*)?$`,
+      ),
       async (route) => {
-        const requestUrl = new URL(route.request().url());
-        const yIndex = Number(requestUrl.searchParams.get("y_index") ?? "0");
+        const match = route.request().url().match(/\/public\/(\d+)\.json/);
+        const yIndex = match ? Number(match[1]) : 0;
         await route.fulfill({
           json: buildRowPayload(Number.isFinite(yIndex) ? yIndex : 0),
         });
@@ -109,7 +117,7 @@ test.describe("task 13: model detail hash jump", () => {
     const storageKey = `sd-style-lab:model-grid-anchor:${MOCK_RUN_DIR}`;
     await page.addInitScript(
       ({ key, value }) => {
-        window.sessionStorage.setItem(key, value);
+        window.localStorage.setItem(key, value);
       },
       {
         key: storageKey,

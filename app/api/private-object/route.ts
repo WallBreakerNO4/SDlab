@@ -2,6 +2,7 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 import { writeR2HttpMetadata } from "@/lib/r2-response";
 import { verifyRunMediaGrant } from "@/lib/run-media-grant";
+import { buildPrivateObjectCacheUrl } from "@/lib/style-comparison";
 
 export const runtime = "nodejs";
 
@@ -57,7 +58,29 @@ export async function GET(request: Request): Promise<Response> {
       return jsonError(403, "Access denied");
     }
 
-    const { env } = getCloudflareContext();
+    const { env, ctx } = getCloudflareContext();
+    const cacheStorage = (globalThis as typeof globalThis & {
+      caches?: { default?: Cache };
+    }).caches;
+    const edgeCache = cacheStorage?.default;
+    const cacheRequest = new Request(buildPrivateObjectCacheUrl(request.url));
+
+    // Authorization is deliberately completed before this lookup. The cache key
+    // omits the grant, but it can only be reached by a request with a valid grant.
+    if (edgeCache) {
+      const cached = await edgeCache.match(cacheRequest);
+      if (cached) {
+        const ifNoneMatch = request.headers.get("If-None-Match");
+        const cachedEtag = cached.headers.get("ETag");
+        if (ifNoneMatch && cachedEtag && ifNoneMatch === cachedEtag) {
+          const headers = new Headers();
+          headers.set("ETag", cachedEtag);
+          return new Response(null, { status: 304, headers });
+        }
+        return cached;
+      }
+    }
+
     const object = await env.R2_PRIVATE_BUCKET.get(key);
     if (!object) {
       return jsonError(404, "Object not found");
@@ -85,7 +108,12 @@ export async function GET(request: Request): Promise<Response> {
     );
     headers.set("Content-Length", String(object.size));
     headers.set("ETag", object.httpEtag);
-    return new Response(object.body, { status: 200, headers });
+    const response = new Response(object.body, { status: 200, headers });
+    if (edgeCache) {
+      // Cache API writes are intentionally detached from the response path.
+      ctx.waitUntil(edgeCache.put(cacheRequest, response.clone()));
+    }
+    return response;
   } catch (error) {
     console.error("[api/private-object]", error);
     return jsonError(500, "Failed to load private object");

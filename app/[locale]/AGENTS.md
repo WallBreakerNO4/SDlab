@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-05-30 | Updated: 2026-07-16 -->
+<!-- Generated: 2026-05-30 | Updated: 2026-07-20 -->
 
 # app/[locale]/ — 区域化页面层
 
@@ -20,16 +20,17 @@
 | `models/[runDir]/page.tsx` | 模型详情页（Server Component）：验证 locale + `isValidRunDir()` → 渲染 `ModelDetailClientPage(runDir)` |
 | `prompts/page.tsx` | Prompt 法典浏览器页（Server Component）：验证 locale → `buildSeoMetadata()` → 用 `ModelProvider` + `ChoiceProvider` 包裹 `PromptBrowserPage`；未登录时由客户端组件渲染登录门控 |
 | `favorites/page.tsx` | 画师串收藏页（Server Component）：验证 locale → `buildSeoMetadata()` + `robots: { index: false }` → 渲染 `components/favorites/favorites-page.tsx`；未登录由客户端渲染登录引导 |
+| `favorites/[styleKey]/page.tsx` | 单收藏模型对比页（Server Component）：验证 locale、解码 `styleKey` → `buildSeoMetadata()` + `robots: { index: false }` → 渲染 `FavoriteComparisonDetail` |
 
 ## For AI Agents
 
 ### Working In This Directory
 - **Locale 校验是强制步骤**：每个 `page.tsx` / `layout.tsx` 入口必须先 `if (!hasLocale(routing.locales, locale)) notFound()`
 - 校验通过后必须调用 `setRequestLocale(locale)`，否则 `next-intl` 服务端 API（如 `getTranslations`）会报错
-- `params` 统一使用 `Promise<{ locale: string }>` 形态；`await params` 后解构 locale
+- `params` 统一使用 `Promise<...>` 形态；普通页面为 `{ locale: string }`，动态详情页再加入 `runDir` / `styleKey`，统一 `await params` 后解构
 - `app/[locale]/layout.tsx` 替代了旧 `app/layout.tsx` 的大部分职责；不要在旧的 `app/layout.tsx` 里加 Provider 或字体
 - 根 `/` 的 redirect（`app/page.tsx` → `/zh`）保持不变；新增语言时需要同步更新默认跳转目标
-- 页面元数据（`generateMetadata`）使用 `getTranslations({ locale, namespace: "metadata.xxx" })` 获取翻译后的 title/description
+- 页面元数据（`generateMetadata`）使用 `getTranslations(...)` 获取翻译后的 title/description；收藏页使用 `styleFavorites` namespace，并保持 `robots.index = false`
 - error 和 not-found 页面都是客户端组件（`"use client"`），通过 `useTranslations("metadata.error")` / `useTranslations("metadata.notFound")` 获取翻译文案
 
 ### Common Patterns
@@ -58,7 +59,7 @@
 | `privacy-policy/` | 隐私政策页面（静态 Markdown） |
 | `models/[runDir]/` | 模型详情页（委托 `app/models/[runDir]/` 的组件） |
 | `prompts/` | Prompt 法典浏览器（委托 `components/prompt/`，见 `components/prompt/AGENTS.md`） |
-| `favorites/` | 画师串收藏页（委托 `components/favorites/`） |
+| `favorites/` | 画师串收藏矩阵与单收藏跨模型详情（委托 `components/favorites/`，见 `components/favorites/AGENTS.md`） |
 
 ## Dependencies
 
@@ -67,6 +68,7 @@
 - `app/home-page-client.tsx` - 首页客户端组件
 - `components/` - 全站组件（header、footer、auth provider 等）
 - `components/prompt/` - Prompt 法典浏览器 UI（`PromptBrowserPage` + 子组件）
+- `components/favorites/` - 收藏矩阵、对比数据加载与单收藏详情 UI
 - `lib/prompt-model-context.tsx` / `lib/prompt-choice-context.tsx` - 法典页面的两个 Context Provider
 - `i18n/routing.ts` - locale 白名单
 - `i18n/navigation.ts` - 国际化 Link/useRouter

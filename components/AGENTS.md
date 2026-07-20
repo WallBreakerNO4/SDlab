@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-07-16 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-07-20 -->
 
 # components/ — 前端组件（业务 + 基础 UI）
 
@@ -28,7 +28,9 @@
 | JSON-LD 结构化数据    | `components/json-ld.tsx`                | `JsonLdWebsite` + `JsonLdBreadcrumbList`，客户端注入 schema.org 标签 |
 | shadcn 配置           | `components.json`                        | aliases、style、cssVariables 等                    |
 | Prompt 法典浏览器 UI  | `components/prompt/`                      | TOC + 虚拟滚动条目 + Tag/Choice/多角色渲染（见 `components/prompt/AGENTS.md`） |
-| 收藏页客户端 UI       | `components/favorites/favorites-page.tsx` | 登录门控 + 收藏列表（快照 label）+ 跨模型跳转 + 取消收藏 |
+| 收藏模型对比工作区   | `components/favorites/favorites-page.tsx` | 登录门控 + 收藏分页 + 已发布模型显隐 + 对比矩阵/预览 |
+| 单收藏对比详情       | `components/favorites/favorite-comparison-detail.tsx` | 单一 `style_key` 的跨模型/测试场景详情 |
+| 收藏组件约定         | `components/favorites/AGENTS.md`          | 对比目录、slice、row cache 与私有媒体约定 |
 | 悬浮登录按钮            | `auth-floating-button.tsx`               | `"use client"`;未登录时悬浮按钮 → `AuthLoginDialog`;已登录显示头像下拉菜单 |
 | shadcn 示例布局          | `example.tsx`                            | `ExampleWrapper` 布局组件,用于组件展示页面 |
 | 用户偏好 Provider        | `user-preferences-provider.tsx`          | `"use client"`;用户偏好 Context（NSFW 等）,基于 `useAuth()` |
@@ -44,6 +46,8 @@
 - JSON-LD：结构化数据组件（`json-ld.tsx`）是客户端组件，通过 `dangerouslySetInnerHTML` 注入 `<script type="application/ld+json">`；这样做避免在 Cloudflare Worker 侧执行 React 渲染，不消耗 Worker CPU
 - 主题切换通过 `next-themes`；按钮类组件需处理 mounted 前后的 hydration 差异
 - 多语言：客户端组件使用 `useTranslations("namespace")` 获取翻译文案；导航链接使用 `@/i18n/navigation` 的 `Link` 而非 `next/link`
+- 收藏对比：目录分页与 slice 必须分别遵守 40 条、40 style keys / 12 run dirs 上限；placement 的 `y_index` 保持 0-based。
+- 私有媒体：组件只携带服务端签发的 grant 调用 `privateObjectProxyUrl()`；共享 edge cache 的去 grant URL 由 API route 构建，组件不得绕过授权或自行构造 cache key。
 
 ## 反模式
 
