@@ -174,6 +174,24 @@ export function isComparisonSyncMode(
   return value === "cell" || value === "column" || value === "all";
 }
 
+export function resolveComparisonSyncMode(value: unknown): ComparisonSyncMode {
+  return isComparisonSyncMode(value) ? value : "all";
+}
+
+export function getComparisonSyncModePersistenceValue(
+  syncMode: ComparisonSyncMode,
+  hydrated: boolean,
+): ComparisonSyncMode | null {
+  return hydrated ? syncMode : null;
+}
+
+export function getComparisonSyncModeToggleValue(
+  syncMode: ComparisonSyncMode,
+  hydrated: boolean,
+): ComparisonSyncMode | "" {
+  return hydrated ? syncMode : "";
+}
+
 /** 把可能越界或为负的索引折叠进 [0, length) 区间,实现首尾循环。 */
 export function wrapSlideIndex(index: number, length: number): number {
   if (length <= 0) return 0;
@@ -185,6 +203,15 @@ type SceneDescriptionColumn = {
   type: string | null;
   description: { zh?: string | null; en?: string | null } | null;
 };
+
+export function buildVisibleComparisonXColumns(
+  columns: readonly SceneDescriptionColumn[],
+  showNsfw: boolean,
+): SceneDescriptionColumn[] {
+  return columns
+    .filter((column) => showNsfw || column.type !== "nsfw")
+    .map((column, xIndex) => ({ ...column, x_index: xIndex }));
+}
 
 /**
  * 解析某列模型当前场景的文字描述;xIndex 为 null 时退回第一个场景,

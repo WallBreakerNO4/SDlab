@@ -65,8 +65,11 @@ import {
   getHorizontalModelWindow,
   getSceneColumnDescription,
   getShiftWheelDelta,
+  getComparisonSyncModePersistenceValue,
+  getComparisonSyncModeToggleValue,
   getVariantBoundValue,
   isComparisonSyncMode,
+  resolveComparisonSyncMode,
   wrapSlideIndex,
   type ComparisonSyncMode,
 } from "./comparison-matrix-utils";
@@ -96,10 +99,9 @@ function readHiddenModels(): Set<string> {
 
 function readSyncMode(): ComparisonSyncMode {
   try {
-    const value = localStorage.getItem(SYNC_MODE_KEY);
-    return isComparisonSyncMode(value) ? value : "cell";
+    return resolveComparisonSyncMode(localStorage.getItem(SYNC_MODE_KEY));
   } catch {
-    return "cell";
+    return "all";
   }
 }
 
@@ -330,7 +332,8 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
   const [slideIndexes, setSlideIndexes] = useState<Map<string, number>>(
     new Map(),
   );
-  const [syncMode, setSyncMode] = useState<ComparisonSyncMode>("cell");
+  const [syncMode, setSyncMode] = useState<ComparisonSyncMode>("all");
+  const [syncModeHydrated, setSyncModeHydrated] = useState(false);
   const [columnIndexes, setColumnIndexes] = useState<Map<string, number>>(
     new Map(),
   );
@@ -343,14 +346,20 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate browser-only preference after mount
     setSyncMode(readSyncMode());
+    setSyncModeHydrated(true);
   }, []);
   useEffect(() => {
+    const value = getComparisonSyncModePersistenceValue(
+      syncMode,
+      syncModeHydrated,
+    );
+    if (value === null) return;
     try {
-      localStorage.setItem(SYNC_MODE_KEY, syncMode);
+      localStorage.setItem(SYNC_MODE_KEY, value);
     } catch {
       /* storage unavailable */
     }
-  }, [syncMode]);
+  }, [syncMode, syncModeHydrated]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate browser-only preference after mount
@@ -697,11 +706,15 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
               type="single"
               variant="outline"
               size="sm"
-              value={syncMode}
+              value={getComparisonSyncModeToggleValue(
+                syncMode,
+                syncModeHydrated,
+              )}
               onValueChange={(value) => {
                 if (isComparisonSyncMode(value)) setSyncMode(value);
               }}
               aria-label={t("syncMode")}
+              aria-busy={!syncModeHydrated}
             >
               <ToggleGroupItem value="cell" aria-label={t("syncModeCell")}>
                 {t("syncModeCell")}

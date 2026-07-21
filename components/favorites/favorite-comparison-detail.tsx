@@ -32,6 +32,7 @@ import {
 } from "./comparison-loader";
 import {
   buildComparisonBlurhashLookup,
+  buildVisibleComparisonXColumns,
   getComparisonBlurhash,
   getComparisonPlaceholderBlurhash,
   getVariantBoundValue,
@@ -152,7 +153,11 @@ export default function FavoriteComparisonDetail({
     return () => controller.abort();
   }, [favorite, models, rowVariantKey, styleKey]);
 
-  const xColumns = models[0]?.x_columns ?? [];
+  const xColumns = useMemo(
+    () =>
+      buildVisibleComparisonXColumns(models[0]?.x_columns ?? [], showNsfw),
+    [models, showNsfw],
+  );
   const accessByRun = useMemo(
     () =>
       new Map((slice?.access ?? []).map((access) => [access.run_dir, access])),
@@ -296,7 +301,10 @@ export default function FavoriteComparisonDetail({
                     const access = accessByRun.get(model.run_dir) ?? null;
                     return (
                       <td key={model.run_dir} className="p-2.5 align-top">
-                        <div className="h-44 overflow-hidden rounded-lg bg-muted/40">
+                        <div
+                          data-testid="favorite-comparison-image-frame"
+                          className="aspect-[13/19] w-full overflow-hidden rounded-lg bg-muted/40"
+                        >
                           <button
                             type="button"
                             className="block h-full w-full"
