@@ -1,13 +1,21 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
   buildComparisonBlurhashLookup,
+  buildVisibleComparisonXColumns,
   getComparisonBlurhash,
   getComparisonPlaceholderBlurhash,
+  getComparisonSyncModePersistenceValue,
+  getComparisonSyncModeToggleValue,
+  getSceneColumnDescription,
   getVariantBoundValue,
   getHorizontalModelWindow,
   getShiftWheelDelta,
+  isComparisonSyncMode,
+  resolveComparisonSyncMode,
+  wrapSlideIndex,
 } from "../components/favorites/comparison-matrix-utils";
 
 const RUN_DIR = "model-a";
@@ -184,4 +192,110 @@ test("plain wheel and native horizontal gestures are left to the browser", () =>
     getShiftWheelDelta({ shiftKey: true, deltaX: 80, deltaY: 20 }),
     null,
   );
+});
+
+test("comparison sync mode guard accepts only the three known modes", () => {
+  assert.equal(isComparisonSyncMode("cell"), true);
+  assert.equal(isComparisonSyncMode("column"), true);
+  assert.equal(isComparisonSyncMode("all"), true);
+  assert.equal(isComparisonSyncMode("row"), false);
+  assert.equal(isComparisonSyncMode(null), false);
+});
+
+test("comparison sync mode defaults to all while preserving valid saved modes", () => {
+  assert.equal(resolveComparisonSyncMode(null), "all");
+  assert.equal(resolveComparisonSyncMode("row"), "all");
+  assert.equal(resolveComparisonSyncMode("cell"), "cell");
+  assert.equal(resolveComparisonSyncMode("column"), "column");
+  assert.equal(resolveComparisonSyncMode("all"), "all");
+});
+
+test("comparison sync mode persistence waits until the saved preference is hydrated", () => {
+  assert.equal(getComparisonSyncModePersistenceValue("all", false), null);
+  assert.equal(getComparisonSyncModePersistenceValue("cell", true), "cell");
+  assert.equal(getComparisonSyncModePersistenceValue("column", true), "column");
+  assert.equal(getComparisonSyncModePersistenceValue("all", true), "all");
+});
+
+test("comparison sync mode toggle hides its selection until hydration completes", () => {
+  assert.equal(getComparisonSyncModeToggleValue("all", false), "");
+  assert.equal(getComparisonSyncModeToggleValue("cell", true), "cell");
+  assert.equal(getComparisonSyncModeToggleValue("column", true), "column");
+  assert.equal(getComparisonSyncModeToggleValue("all", true), "all");
+});
+
+const COMPARISON_X_COLUMNS = [
+  { x_index: 4, type: "portrait", description: { zh: "肖像" } },
+  { x_index: 7, type: "nsfw", description: { zh: "NSFW 图片" } },
+  { x_index: 11, type: "wide", description: { zh: "全身像" } },
+] as const;
+
+test("SFW comparison columns remove NSFW rows and compact x indexes", () => {
+  assert.deepEqual(buildVisibleComparisonXColumns(COMPARISON_X_COLUMNS, false), [
+    { x_index: 0, type: "portrait", description: { zh: "肖像" } },
+    { x_index: 1, type: "wide", description: { zh: "全身像" } },
+  ]);
+});
+
+test("NSFW comparison columns preserve every row in positional order", () => {
+  assert.deepEqual(buildVisibleComparisonXColumns(COMPARISON_X_COLUMNS, true), [
+    { x_index: 0, type: "portrait", description: { zh: "肖像" } },
+    { x_index: 1, type: "nsfw", description: { zh: "NSFW 图片" } },
+    { x_index: 2, type: "wide", description: { zh: "全身像" } },
+  ]);
+});
+
+test("favorite comparison image frames expose the 832 by 1216 portrait ratio", () => {
+  const source = readFileSync(
+    new URL(
+      "../components/favorites/favorite-comparison-detail.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+
+  assert.match(
+    source,
+    /data-testid="favorite-comparison-image-frame"[\s\S]*?aspect-\[13\/19\]/,
+  );
+});
+
+test("wrapSlideIndex cycles forward past the end and backward past the start", () => {
+  assert.equal(wrapSlideIndex(0, 4), 0);
+  assert.equal(wrapSlideIndex(3, 4), 3);
+  assert.equal(wrapSlideIndex(4, 4), 0);
+  assert.equal(wrapSlideIndex(9, 4), 1);
+  assert.equal(wrapSlideIndex(-1, 4), 3);
+  assert.equal(wrapSlideIndex(-5, 4), 3);
+});
+
+test("wrapSlideIndex collapses to 0 when there are no slides", () => {
+  assert.equal(wrapSlideIndex(2, 0), 0);
+  assert.equal(wrapSlideIndex(-1, 0), 0);
+});
+
+const SCENE_COLUMNS = [
+  { x_index: 0, type: "close-up", description: { zh: "面部特写", en: null } },
+  {
+    x_index: 1,
+    type: "half-body",
+    description: { zh: "半身构图", en: "Half body" },
+  },
+] as const;
+
+test("scene column description falls back to the first column without a synced scene", () => {
+  assert.equal(getSceneColumnDescription(SCENE_COLUMNS, null, "zh"), "面部特写");
+  assert.equal(getSceneColumnDescription(SCENE_COLUMNS, null, "en"), "面部特写");
+});
+
+test("scene column description resolves the synced scene with locale fallback", () => {
+  assert.equal(getSceneColumnDescription(SCENE_COLUMNS, 1, "zh"), "半身构图");
+  assert.equal(getSceneColumnDescription(SCENE_COLUMNS, 1, "en"), "Half body");
+  assert.equal(getSceneColumnDescription(SCENE_COLUMNS, 0, "en"), "面部特写");
+});
+
+test("scene column description falls back to the column type when description is missing", () => {
+  const columns = [{ x_index: 2, type: "wide", description: null }] as const;
+  assert.equal(getSceneColumnDescription(columns, 2, "zh"), "wide");
+  assert.equal(getSceneColumnDescription(columns, 9, "zh"), "wide");
 });

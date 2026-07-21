@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { ChevronLeft, ChevronRight, ImageOff } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/components/auth-provider";
 import { useUserPreferences } from "@/components/user-preferences-provider";
@@ -32,9 +32,11 @@ import {
 } from "./comparison-loader";
 import {
   buildComparisonBlurhashLookup,
+  buildVisibleComparisonXColumns,
   getComparisonBlurhash,
   getComparisonPlaceholderBlurhash,
   getVariantBoundValue,
+  wrapSlideIndex,
 } from "./comparison-matrix-utils";
 
 export default function FavoriteComparisonDetail({
@@ -151,7 +153,11 @@ export default function FavoriteComparisonDetail({
     return () => controller.abort();
   }, [favorite, models, rowVariantKey, styleKey]);
 
-  const xColumns = models[0]?.x_columns ?? [];
+  const xColumns = useMemo(
+    () =>
+      buildVisibleComparisonXColumns(models[0]?.x_columns ?? [], showNsfw),
+    [models, showNsfw],
+  );
   const accessByRun = useMemo(
     () =>
       new Map((slice?.access ?? []).map((access) => [access.run_dir, access])),
@@ -206,37 +212,50 @@ export default function FavoriteComparisonDetail({
         <div>
           <Link
             href="/favorites"
-            className="text-xs text-muted-foreground hover:underline"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
+            <ChevronLeft className="size-3.5" aria-hidden="true" />
             {t("backToFavorites")}
           </Link>
-          <h1 className="mt-2 text-xl font-semibold">{favorite.label}</h1>
+          <h1 className="mt-3 max-w-3xl text-xl font-semibold tracking-tight">
+            {favorite.label}
+          </h1>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {t("visibleModels", { count: models.length })}
+          </p>
         </div>
-        <div className="min-h-0 flex-1 overflow-auto rounded border">
-          <table className="w-full min-w-[720px] border-collapse text-xs">
+        <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-border/40">
+          <table className="w-full min-w-[720px] table-fixed border-collapse text-xs">
             <thead>
-              <tr className="border-b bg-background">
-                <th className="sticky left-0 top-0 z-20 min-w-44 border-r bg-background p-3 text-left">
+              <tr className="border-b border-border/40">
+                <th className="sticky top-0 left-0 z-20 w-48 border-r border-border/40 bg-background/85 px-4 py-3 text-left text-[11px] font-semibold tracking-widest text-muted-foreground uppercase backdrop-blur-md">
                   {t("comparisonScene")}
                 </th>
                 {models.map((model) => (
                   <th
                     key={model.run_dir}
-                    className="sticky top-0 z-10 min-w-40 border-l bg-background p-3 text-left"
+                    className="sticky top-0 z-10 w-44 bg-background/85 px-3 py-3 text-left text-[13px] font-semibold backdrop-blur-md"
                   >
-                    {model.name ?? model.run_dir}
+                    <Link
+                      href={`/models/${encodeURIComponent(model.run_dir)}`}
+                      className="transition-colors hover:text-primary hover:underline"
+                    >
+                      {model.name ?? model.run_dir}
+                    </Link>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {xColumns.map((column) => (
-                <tr key={column.x_index} className="border-b">
-                  <th className="sticky left-0 z-10 border-r bg-background p-3 text-left font-medium">
-                    {column.description?.zh ??
-                      column.description?.en ??
-                      column.type ??
-                      `#${column.x_index + 1}`}
+                <tr key={column.x_index} className="border-b border-border/40">
+                  <th className="sticky left-0 z-10 border-r border-border/40 bg-background px-4 py-3 text-left align-top">
+                    <div className="max-w-44 text-[13px] leading-snug font-medium">
+                      {column.description?.zh ??
+                        column.description?.en ??
+                        column.type ??
+                        `#${column.x_index + 1}`}
+                    </div>
                   </th>
                   {models.map((model) => {
                     const placement = (slice?.placements[styleKey] ?? []).find(
@@ -257,9 +276,9 @@ export default function FavoriteComparisonDetail({
                           (slide) => slide.xIndex === column.x_index,
                         )
                       : [];
-                    const index = Math.min(
+                    const index = wrapSlideIndex(
                       indexes.get(`${key}|${column.x_index}`) ?? 0,
-                      Math.max(slides.length - 1, 0),
+                      slides.length,
                     );
                     const slide = slides[index] ?? null;
                     const blurhash = placement
@@ -281,8 +300,11 @@ export default function FavoriteComparisonDetail({
                       : null;
                     const access = accessByRun.get(model.run_dir) ?? null;
                     return (
-                      <td key={model.run_dir} className="border-l p-2">
-                        <div className="h-28 rounded bg-muted/30">
+                      <td key={model.run_dir} className="p-2.5 align-top">
+                        <div
+                          data-testid="favorite-comparison-image-frame"
+                          className="aspect-[13/19] w-full overflow-hidden rounded-lg bg-muted/40"
+                        >
                           <button
                             type="button"
                             className="block h-full w-full"
@@ -301,7 +323,7 @@ export default function FavoriteComparisonDetail({
                               <div
                                 data-testid="comparison-image-skeleton"
                                 data-state="loading"
-                                className="h-full w-full animate-pulse bg-muted"
+                                className="h-full w-full animate-pulse bg-muted/60"
                               />
                             ) : slide ? (
                               <GridImage
@@ -319,42 +341,42 @@ export default function FavoriteComparisonDetail({
                                     ? "missing"
                                     : state.status
                                 }
-                                className="flex h-full items-center justify-center text-muted-foreground"
+                                className="flex h-full items-center justify-center text-[11px] text-muted-foreground/50"
                               >
-                                <ImageOff className="size-4" />
+                                {t("noImage")}
                               </div>
                             )}
                           </button>
                         </div>
                         {slides.length > 1 ? (
-                          <div className="mt-1 flex items-center justify-between">
+                          <div className="mt-1.5 flex items-center justify-center gap-3">
                             <Button
                               size="icon"
                               variant="ghost"
-                              className="size-6"
+                              className="size-6 rounded-full"
                               onClick={() =>
                                 setIndexes((current) =>
                                   new Map(current).set(
                                     `${key}|${column.x_index}`,
-                                    Math.max(0, index - 1),
+                                    wrapSlideIndex(index - 1, slides.length),
                                   ),
                                 )
                               }
                             >
                               <ChevronLeft className="size-3" />
                             </Button>
-                            <span>
+                            <span className="text-[11px] text-muted-foreground tabular-nums">
                               {index + 1}/{slides.length}
                             </span>
                             <Button
                               size="icon"
                               variant="ghost"
-                              className="size-6"
+                              className="size-6 rounded-full"
                               onClick={() =>
                                 setIndexes((current) =>
                                   new Map(current).set(
                                     `${key}|${column.x_index}`,
-                                    Math.min(slides.length - 1, index + 1),
+                                    wrapSlideIndex(index + 1, slides.length),
                                   ),
                                 )
                               }
@@ -386,7 +408,13 @@ export default function FavoriteComparisonDetail({
             onPrevious={() =>
               setDialog((current) =>
                 current
-                  ? { ...current, index: Math.max(0, current.index - 1) }
+                  ? {
+                      ...current,
+                      index: wrapSlideIndex(
+                        current.index - 1,
+                        dialogData.slides.length,
+                      ),
+                    }
                   : current,
               )
             }
@@ -395,9 +423,9 @@ export default function FavoriteComparisonDetail({
                 current
                   ? {
                       ...current,
-                      index: Math.min(
-                        dialogData.slides.length - 1,
+                      index: wrapSlideIndex(
                         current.index + 1,
+                        dialogData.slides.length,
                       ),
                     }
                   : current,
@@ -448,7 +476,7 @@ function DetailDialog({
           <DialogTitle>Image preview</DialogTitle>
           <DialogDescription>Image preview</DialogDescription>
         </DialogHeader>
-        <div className="relative flex min-h-[55vh] items-center justify-center overflow-hidden rounded bg-black">
+        <div className="relative flex min-h-[55vh] items-center justify-center overflow-hidden rounded-lg bg-black">
           {blurhash ? (
             <BlurhashCanvas
               blurhash={blurhash}
@@ -473,7 +501,7 @@ function DetailDialog({
             size="icon"
             variant="outline"
             onClick={onPrevious}
-            disabled={current <= 0}
+            disabled={slides.length <= 1}
           >
             <ChevronLeft className="size-4" />
           </Button>
@@ -484,7 +512,7 @@ function DetailDialog({
             size="icon"
             variant="outline"
             onClick={onNext}
-            disabled={current >= slides.length - 1}
+            disabled={slides.length <= 1}
           >
             <ChevronRight className="size-4" />
           </Button>

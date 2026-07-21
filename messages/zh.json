@@ -187,5 +187,12 @@
     ,"backToFavorites": "返回收藏"
     ,"previousModels": "上一组模型"
     ,"nextModels": "下一组模型"
+    ,"loadFailed": "收藏加载失败，请刷新重试。"
+    ,"syncMode": "同步切换"
+    ,"syncModeCell": "单张"
+    ,"syncModeColumn": "整列"
+    ,"syncModeAll": "全部"
+    ,"syncModeHelpTitle": "同步切换"
+    ,"syncModeHelpDescription": "点击图片两侧的箭头时的联动方式：单张只切换当前这一张；整列会同步切换该模型下所有收藏的图片；全部会同步切换矩阵中的所有图片。整列和全部模式下，列表头的场景描述会跟随当前图片一起更新。"
   }
 }

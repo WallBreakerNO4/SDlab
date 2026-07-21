@@ -187,5 +187,12 @@
     ,"backToFavorites": "Back to favorites"
     ,"previousModels": "Previous models"
     ,"nextModels": "Next models"
+    ,"loadFailed": "Failed to load favorites. Please refresh and try again."
+    ,"syncMode": "Sync switching"
+    ,"syncModeCell": "Single"
+    ,"syncModeColumn": "Column"
+    ,"syncModeAll": "All"
+    ,"syncModeHelpTitle": "Sync switching"
+    ,"syncModeHelpDescription": "Controls how the arrow buttons switch images: Single switches only the current image; Column switches every favorited row in that model's column together; All switches the entire matrix together. In Column and All modes, the scene description in each column header follows the currently shown image."
   }
 }

@@ -66,88 +66,88 @@
 
 ## 去哪儿看
 
-| 任务                  | 位置                                                                             | 备注                                                                           |
-| --------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Python 顶层入口       | `main.py`                                                                        | 菜单/主 runner 的统一入口                                                      |
-| 生图主入口            | `scripts/generation/comfyui_part1_generate.py`                                   | dry-run / retry / 落盘合约                                                     |
-| 生图配置加载          | `scripts/generation/runner_config.py`                                            | `--config` YAML schema + repo-relative 资产校验；也识别封面图/主页缩略图源资产 |
-| Prompt 网格/画师链      | `scripts/generation/prompt_grid.py`                                              | Y 轴 general/artists 拆分、权重 profile、prompt + artist chain hash                  |
-| Workflow 参数注入         | `scripts/generation/workflow_patch.py`                                           | 标准 CLIPTextEncode 与 AnimaArtistPack 两种注入拓扑                             |
-| 并发 runner           | `scripts/generation/runner_coordinator.py`                                       | ThreadPoolExecutor 双池                                                        |
-| ComfyUI 通信          | `scripts/generation/comfyui_client.py`                                           | HTTP / WS / 错误码                                                             |
-| R2 上传入口           | `scripts/r2_upload/upload_images_to_r2.py`                                       | 编码、上传、写 Supabase                                                        |
-| 上传规划              | `scripts/r2_upload/upload_planner.py`                                            | 多变体规划 + 并发编码；也处理 run 级静态图片资产上传                           |
-| 资产转换脚本          | `scripts/other/convert_*.py`                                                     | 文件名遗留 `json`，实际输出 YAML 资产                                          |
-| run 配置示例          | `data/models/example/config.yaml`                                                | `image-run-config/v1` 示例                                                     |
-| 网站首页              | `app/[locale]/page.tsx`                                                          | 读取 `/api/comfyui/runs`；消费 `assets.cover` / `assets.homepage_cards`        |
-| 模型详情页           | `app/[locale]/models/[runDir]/page.tsx`                                          | 拉取 view bootstrap JSON + 虚拟网格 + workflow 下载                            |
-| App API 总约定        | `app/api/AGENTS.md`                                                              | `app/api/**/route.ts` 共享约束                                                 |
-| ComfyUI API           | `app/api/comfyui/**/route.ts`                                                    | runs 列表 / access 授权 / workflow 下载                                        |
-| Auth 回调特例         | `app/auth/AGENTS.md`                                                             | PKCE callback 直接交换 session                                                 |
-| 站点壳层 / 登录入口   | `app/[locale]/layout.tsx`、`components/site-header.tsx`                          | ThemeProvider + AuthProvider + NextIntlClientProvider + 登录弹窗入口             |
-| 国际化路由配置        | `i18n/routing.ts`                                                                | `defineRouting({ locales, defaultLocale, localePrefix })`                      |
-| 翻译消息文件          | `messages/zh.json`、`messages/en.json`                                           | 各 namespace 的翻译 key-value                                                  |
-| Cloudflare / OpenNext | `next.config.ts`、`open-next.config.ts`、`cloudflare-env.d.ts`、`wrangler.jsonc` | 本地 Miniflare + Workers bindings / vars                                       |
-| 服务端 Supabase       | `lib/supabase-auth.ts`                                                           | `server-only` + cookie session                                                 |
-| 浏览器端 Supabase     | `lib/supabase-browser.ts`                                                        | AuthProvider 使用                                                              |
-| runDir 校验           | `lib/comfyui-types.ts`                                                           | API 侧 `isValidRunDir()` type guard                                            |
-| 路径安全              | `lib/comfyui-path.ts`                                                            | 共享路径工具与相对路径逃逸防护                                                 |
-| R2 URL 构建           | `lib/r2-url.ts`                                                                  | 公开/私有 URL 与变体白名单                                                     |
-| 会话刷新 + I18N       | `middleware.ts`                                                                  | Edge middleware：next-intl 路由 + Supabase session refresh                     |
-| Webpack loader        | `loaders/markdown-source-loader.cjs`                                             | 构建时将 `.md` 内联为 JS 字符串；见 `loaders/AGENTS.md`                        |
-| SEO metadata 工具     | `lib/metadata-utils.ts`                                                          | `buildSeoMetadata()`：统一生成 OG/Twitter Card/canonical/hreflang 标签        |
-| 模型 SEO 元数据       | `lib/model-metadata.ts`                                                          | 从 Supabase 查询模型 name/description/cover 用于 og:image，带 1h cache        |
-| 站点根 URL            | `lib/site-origin.ts`                                                             | `SITE_ORIGIN` 常量，供 sitemap/robots/metadata 共享                           |
-| JSON-LD 结构化数据    | `components/json-ld.tsx`                                                         | `JsonLdWebsite` + `JsonLdBreadcrumbList` 客户端组件                           |
-| robots.txt            | `app/robots.ts`                                                                  | 爬虫规则 + sitemap 引用                                                       |
-| sitemap.xml           | `app/sitemap.ts`                                                                 | 多语言 sitemap + hreflang alternates，动态包含模型详情页                      |
-| 错误页                | `app/[locale]/error.tsx`                                                         | 客户端错误页 + i18n + 重试/回首页                                            |
-| 404 页                | `app/[locale]/not-found.tsx`                                                     | 客户端 404 页 + i18n + 回首页链接                                            |
-| Prompt 法典浏览器     | `app/[locale]/prompts/page.tsx` + `components/prompt/`                              | 登录门控 + ModelProvider/ChoiceProvider + 客户端加载 `public/data/prompts/*.json` |
-| Prompt 法典浏览器组件 | `components/prompt/AGENTS.md`                                                       | TOC + 虚拟滚动条目 + Tag/Choice/多角色渲染 + 格式化复制                    |
-| Prompt 法典数据产物   | `public/data/prompts/index.json`、`public/data/prompts/files/*.json`               | 构建期产物，由源 YAML `data/prompt-codex/*.yaml` 生成；运行时只消费 JSON    |
-| 浏览者 NSFW 偏好 API  | `app/api/viewer/preferences/nsfw/route.ts`                                        | GET 读 cookie / PATCH 写 Supabase `user_preferences` + cookie            |
-| Web Vitals 上报       | `app/api/telemetry/web-vitals/route.ts`                                           | 接收 `console.log` 记录，204 空响应，不落库                              |
-| 画师串收藏页          | `app/[locale]/favorites/page.tsx` + `components/favorites/favorites-page.tsx`      | 登录门控 + 快照 label + 跨模型跳转 + noindex                             |
-| 单收藏模型对比页      | `app/[locale]/favorites/[styleKey]/page.tsx` + `components/favorites/favorite-comparison-detail.tsx` | 同一 `style_key` 跨已发布模型对比；noindex |
-| 收藏 API              | `app/api/viewer/style-favorites/route.ts`、`app/api/viewer/style-favorites/[styleKey]/route.ts` | GET 列表 / PUT upsert / DELETE；未登录 401                    |
-| 模型对比 API          | `app/api/viewer/style-comparison/**/route.ts`                                      | 收藏目录/单收藏详情/slice；见 `app/api/viewer/AGENTS.md`                  |
-| 模型对比数据层        | `lib/style-comparison.ts`、`lib/style-comparison-server.ts`                        | 类型/guard、游标与 slice 校验、已发布模型 5min 缓存                       |
-| style-items API       | `app/api/comfyui/run/[runDir]/style-items/route.ts`                                | 公开返回 `[{ y_index, style_key }]`（0-based），供网格星标与跳转          |
-| 收藏数据层            | `lib/style-favorites.ts`                                                           | 类型/guard + 薄 fetch/mutate 函数                                        |
-| 网格收藏 hook         | `app/models/[runDir]/use-style-favorites.ts`                                       | 乐观更新 + 失败回滚 + toast                                              |
-| 历史 run 收藏回填     | `scripts/other/backfill_run_style_items.py`                                        | 确定性重放 run.json + Y 资产 → `run_style_items`                         |
+| 任务                  | 位置                                                                                                 | 备注                                                                              |
+| --------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Python 顶层入口       | `main.py`                                                                                            | 菜单/主 runner 的统一入口                                                         |
+| 生图主入口            | `scripts/generation/comfyui_part1_generate.py`                                                       | dry-run / retry / 落盘合约                                                        |
+| 生图配置加载          | `scripts/generation/runner_config.py`                                                                | `--config` YAML schema + repo-relative 资产校验；也识别封面图/主页缩略图源资产    |
+| Prompt 网格/画师链    | `scripts/generation/prompt_grid.py`                                                                  | Y 轴 general/artists 拆分、权重 profile、prompt + artist chain hash               |
+| Workflow 参数注入     | `scripts/generation/workflow_patch.py`                                                               | 标准 CLIPTextEncode 与 AnimaArtistPack 两种注入拓扑                               |
+| 并发 runner           | `scripts/generation/runner_coordinator.py`                                                           | ThreadPoolExecutor 双池                                                           |
+| ComfyUI 通信          | `scripts/generation/comfyui_client.py`                                                               | HTTP / WS / 错误码                                                                |
+| R2 上传入口           | `scripts/r2_upload/upload_images_to_r2.py`                                                           | 编码、上传、写 Supabase                                                           |
+| 上传规划              | `scripts/r2_upload/upload_planner.py`                                                                | 多变体规划 + 并发编码；也处理 run 级静态图片资产上传                              |
+| 资产转换脚本          | `scripts/other/convert_*.py`                                                                         | 文件名遗留 `json`，实际输出 YAML 资产                                             |
+| run 配置示例          | `data/models/example/config.yaml`                                                                    | `image-run-config/v1` 示例                                                        |
+| 网站首页              | `app/[locale]/page.tsx`                                                                              | 读取 `/api/comfyui/runs`；消费 `assets.cover` / `assets.homepage_cards`           |
+| 模型详情页            | `app/[locale]/models/[runDir]/page.tsx`                                                              | 拉取 view bootstrap JSON + 虚拟网格 + workflow 下载                               |
+| App API 总约定        | `app/api/AGENTS.md`                                                                                  | `app/api/**/route.ts` 共享约束                                                    |
+| ComfyUI API           | `app/api/comfyui/**/route.ts`                                                                        | runs 列表 / access 授权 / workflow 下载                                           |
+| Auth 回调特例         | `app/auth/AGENTS.md`                                                                                 | PKCE callback 直接交换 session                                                    |
+| 站点壳层 / 登录入口   | `app/[locale]/layout.tsx`、`components/site-header.tsx`                                              | ThemeProvider + AuthProvider + NextIntlClientProvider + 登录弹窗入口              |
+| 国际化路由配置        | `i18n/routing.ts`                                                                                    | `defineRouting({ locales, defaultLocale, localePrefix })`                         |
+| 翻译消息文件          | `messages/zh.json`、`messages/en.json`                                                               | 各 namespace 的翻译 key-value                                                     |
+| Cloudflare / OpenNext | `next.config.ts`、`open-next.config.ts`、`cloudflare-env.d.ts`、`wrangler.jsonc`                     | 本地 Miniflare + Workers bindings / vars                                          |
+| 服务端 Supabase       | `lib/supabase-auth.ts`                                                                               | `server-only` + cookie session                                                    |
+| 浏览器端 Supabase     | `lib/supabase-browser.ts`                                                                            | AuthProvider 使用                                                                 |
+| runDir 校验           | `lib/comfyui-types.ts`                                                                               | API 侧 `isValidRunDir()` type guard                                               |
+| 路径安全              | `lib/comfyui-path.ts`                                                                                | 共享路径工具与相对路径逃逸防护                                                    |
+| R2 URL 构建           | `lib/r2-url.ts`                                                                                      | 公开/私有 URL 与变体白名单                                                        |
+| 会话刷新 + I18N       | `middleware.ts`                                                                                      | Edge middleware：next-intl 路由 + Supabase session refresh                        |
+| Webpack loader        | `loaders/markdown-source-loader.cjs`                                                                 | 构建时将 `.md` 内联为 JS 字符串；见 `loaders/AGENTS.md`                           |
+| SEO metadata 工具     | `lib/metadata-utils.ts`                                                                              | `buildSeoMetadata()`：统一生成 OG/Twitter Card/canonical/hreflang 标签            |
+| 模型 SEO 元数据       | `lib/model-metadata.ts`                                                                              | 从 Supabase 查询模型 name/description/cover 用于 og:image，带 1h cache            |
+| 站点根 URL            | `lib/site-origin.ts`                                                                                 | `SITE_ORIGIN` 常量，供 sitemap/robots/metadata 共享                               |
+| JSON-LD 结构化数据    | `components/json-ld.tsx`                                                                             | `JsonLdWebsite` + `JsonLdBreadcrumbList` 客户端组件                               |
+| robots.txt            | `app/robots.ts`                                                                                      | 爬虫规则 + sitemap 引用                                                           |
+| sitemap.xml           | `app/sitemap.ts`                                                                                     | 多语言 sitemap + hreflang alternates，动态包含模型详情页                          |
+| 错误页                | `app/[locale]/error.tsx`                                                                             | 客户端错误页 + i18n + 重试/回首页                                                 |
+| 404 页                | `app/[locale]/not-found.tsx`                                                                         | 客户端 404 页 + i18n + 回首页链接                                                 |
+| Prompt 法典浏览器     | `app/[locale]/prompts/page.tsx` + `components/prompt/`                                               | 登录门控 + ModelProvider/ChoiceProvider + 客户端加载 `public/data/prompts/*.json` |
+| Prompt 法典浏览器组件 | `components/prompt/AGENTS.md`                                                                        | TOC + 虚拟滚动条目 + Tag/Choice/多角色渲染 + 格式化复制                           |
+| Prompt 法典数据产物   | `public/data/prompts/index.json`、`public/data/prompts/files/*.json`                                 | 构建期产物，由源 YAML `data/prompt-codex/*.yaml` 生成；运行时只消费 JSON          |
+| 浏览者 NSFW 偏好 API  | `app/api/viewer/preferences/nsfw/route.ts`                                                           | GET 读 cookie / PATCH 写 Supabase `user_preferences` + cookie                     |
+| Web Vitals 上报       | `app/api/telemetry/web-vitals/route.ts`                                                              | 接收 `console.log` 记录，204 空响应，不落库                                       |
+| 画师串收藏页          | `app/[locale]/favorites/page.tsx` + `components/favorites/favorites-page.tsx`                        | 登录门控 + 快照 label + 跨模型跳转 + noindex                                      |
+| 单收藏模型对比页      | `app/[locale]/favorites/[styleKey]/page.tsx` + `components/favorites/favorite-comparison-detail.tsx` | 同一 `style_key` 跨已发布模型对比；noindex                                        |
+| 收藏 API              | `app/api/viewer/style-favorites/route.ts`、`app/api/viewer/style-favorites/[styleKey]/route.ts`      | GET 列表 / PUT upsert / DELETE；未登录 401                                        |
+| 模型对比 API          | `app/api/viewer/style-comparison/**/route.ts`                                                        | 收藏目录/单收藏详情/slice；见 `app/api/viewer/AGENTS.md`                          |
+| 模型对比数据层        | `lib/style-comparison.ts`、`lib/style-comparison-server.ts`                                          | 类型/guard、游标与 slice 校验、已发布模型 5min 缓存                               |
+| style-items API       | `app/api/comfyui/run/[runDir]/style-items/route.ts`                                                  | 公开返回 `[{ y_index, style_key }]`（0-based），供网格星标与跳转                  |
+| 收藏数据层            | `lib/style-favorites.ts`                                                                             | 类型/guard + 薄 fetch/mutate 函数                                                 |
+| 网格收藏 hook         | `app/models/[runDir]/use-style-favorites.ts`                                                         | 乐观更新 + 失败回滚 + toast                                                       |
+| 历史 run 收藏回填     | `scripts/other/backfill_run_style_items.py`                                                          | 确定性重放 run.json + Y 资产 → `run_style_items`                                  |
 
 ## 代码图
 
-| 符号                          | 类型     | 位置                                           | 角色                |
-| ----------------------------- | -------- | ---------------------------------------------- | ------------------- |
-| `main`                        | function | `main.py`                                      | Python CLI 总入口   |
-| `run`                         | function | `scripts/generation/comfyui_part1_generate.py` | 生图主流程          |
-| `run_retry`                   | function | `scripts/generation/comfyui_part1_generate.py` | retry / replay 入口 |
-| `GET`                         | function | `app/api/comfyui/runs/route.ts`                | runs 列表 API          |
-| `GET`                         | function | `app/api/comfyui/run/[runDir]/access/route.ts` | 媒体授权 API           |
-| `GET`                         | function | `app/api/comfyui/run/[runDir]/workflow/route.ts` | workflow 下载 API    |
-| `publicObjectUrl`             | function | `lib/r2-url.ts`                                | 公开变体 URL        |
-| `privateObjectProxyUrl`       | function | `lib/r2-url.ts`                                | 使用媒体 grant 构建私有对象代理 URL |
-| `isValidRunDir`               | function | `lib/comfyui-types.ts`                         | runDir 形态校验     |
-| `assertSafeRelativeImagePath` | function | `lib/comfyui-path.ts`                          | 相对图片路径校验    |
-| `buildSeoMetadata`           | function | `lib/metadata-utils.ts`                       | SEO metadata 构建   |
-| `getModelMetadata`           | function | `lib/model-metadata.ts`                       | 模型 SEO metadata   |
-| `JsonLdWebsite`              | component | `components/json-ld.tsx`                     | WebSite schema     |
-| `JsonLdBreadcrumbList`       | component | `components/json-ld.tsx`                     | BreadcrumbList schema |
-| `SITE_ORIGIN`                | const    | `lib/site-origin.ts`                          | 站点根 URL          |
-| `formatPrompt`              | function | `lib/prompt-formatter.ts`                    | 结构化 Prompt → 目标模型文本（novelai / comfyui + anima 权重模式） |
-| `listRunSummaries`          | function | `lib/run-list.ts`                            | 首页 run 列表查询，`unstable_cache` 5min + tag `run-list` |
-| `requireViewerForPreferenceWrite` | function | `lib/server-user-preferences.ts`       | 浏览者偏好写入的前置鉴权 |
-| `PromptBrowserPage`         | component | `components/prompt/prompt-browser-page.tsx`   | 法典浏览器页面骨架 |
-| `patch_workflow`            | function | `scripts/generation/workflow_patch.py`        | 注入标准 prompt 或 Anima Artist Mixer 参数 |
-| `fetchStyleFavorites`       | function | `lib/style-favorites.ts`                      | 收藏列表薄 fetch（另有 upsert/delete 薄函数） |
-| `useStyleFavorites`         | hook     | `app/models/[runDir]/use-style-favorites.ts`  | 网格收藏态 + 乐观 toggle                    |
-| `GridFavoritesPanel`        | component | `components/comfyui/grid-favorites-panel.tsx` | 工具栏收藏面板（行号升序 + 跳转）           |
-| `parseStyleComparisonSliceBody` | function | `lib/style-comparison.ts`                  | 对比 slice 请求校验（40 style keys / 12 run dirs） |
-| `getCachedPublishedRuns`    | function | `lib/style-comparison-server.ts`             | 已发布模型目录查询与 5 分钟缓存             |
-| `buildPrivateObjectCacheUrl` | function | `lib/style-comparison.ts`                   | 私有对象边缘 cache URL 去除 grant、保留 key |
+| 符号                              | 类型      | 位置                                             | 角色                                                               |
+| --------------------------------- | --------- | ------------------------------------------------ | ------------------------------------------------------------------ |
+| `main`                            | function  | `main.py`                                        | Python CLI 总入口                                                  |
+| `run`                             | function  | `scripts/generation/comfyui_part1_generate.py`   | 生图主流程                                                         |
+| `run_retry`                       | function  | `scripts/generation/comfyui_part1_generate.py`   | retry / replay 入口                                                |
+| `GET`                             | function  | `app/api/comfyui/runs/route.ts`                  | runs 列表 API                                                      |
+| `GET`                             | function  | `app/api/comfyui/run/[runDir]/access/route.ts`   | 媒体授权 API                                                       |
+| `GET`                             | function  | `app/api/comfyui/run/[runDir]/workflow/route.ts` | workflow 下载 API                                                  |
+| `publicObjectUrl`                 | function  | `lib/r2-url.ts`                                  | 公开变体 URL                                                       |
+| `privateObjectProxyUrl`           | function  | `lib/r2-url.ts`                                  | 使用媒体 grant 构建私有对象代理 URL                                |
+| `isValidRunDir`                   | function  | `lib/comfyui-types.ts`                           | runDir 形态校验                                                    |
+| `assertSafeRelativeImagePath`     | function  | `lib/comfyui-path.ts`                            | 相对图片路径校验                                                   |
+| `buildSeoMetadata`                | function  | `lib/metadata-utils.ts`                          | SEO metadata 构建                                                  |
+| `getModelMetadata`                | function  | `lib/model-metadata.ts`                          | 模型 SEO metadata                                                  |
+| `JsonLdWebsite`                   | component | `components/json-ld.tsx`                         | WebSite schema                                                     |
+| `JsonLdBreadcrumbList`            | component | `components/json-ld.tsx`                         | BreadcrumbList schema                                              |
+| `SITE_ORIGIN`                     | const     | `lib/site-origin.ts`                             | 站点根 URL                                                         |
+| `formatPrompt`                    | function  | `lib/prompt-formatter.ts`                        | 结构化 Prompt → 目标模型文本（novelai / comfyui + anima 权重模式） |
+| `listRunSummaries`                | function  | `lib/run-list.ts`                                | 首页 run 列表查询，`unstable_cache` 5min + tag `run-list`          |
+| `requireViewerForPreferenceWrite` | function  | `lib/server-user-preferences.ts`                 | 浏览者偏好写入的前置鉴权                                           |
+| `PromptBrowserPage`               | component | `components/prompt/prompt-browser-page.tsx`      | 法典浏览器页面骨架                                                 |
+| `patch_workflow`                  | function  | `scripts/generation/workflow_patch.py`           | 注入标准 prompt 或 Anima Artist Mixer 参数                         |
+| `fetchStyleFavorites`             | function  | `lib/style-favorites.ts`                         | 收藏列表薄 fetch（另有 upsert/delete 薄函数）                      |
+| `useStyleFavorites`               | hook      | `app/models/[runDir]/use-style-favorites.ts`     | 网格收藏态 + 乐观 toggle                                           |
+| `GridFavoritesPanel`              | component | `components/comfyui/grid-favorites-panel.tsx`    | 工具栏收藏面板（行号升序 + 跳转）                                  |
+| `parseStyleComparisonSliceBody`   | function  | `lib/style-comparison.ts`                        | 对比 slice 请求校验（40 style keys / 12 run dirs）                 |
+| `getCachedPublishedRuns`          | function  | `lib/style-comparison-server.ts`                 | 已发布模型目录查询与 5 分钟缓存                                    |
+| `buildPrivateObjectCacheUrl`      | function  | `lib/style-comparison.ts`                        | 私有对象边缘 cache URL 去除 grant、保留 key                        |
 
 ## 约定（项目特有）
 
@@ -177,7 +177,7 @@
 ## 分支与合并策略
 
 - 分支模型：`dev` 为日常开发分支，`main` 为稳定发布分支。所有功能与修复先合入 `dev`，再由 `dev` 合并到 `main`。
-- **合并时机由用户决定**：agent 不得在开发完成后自行触发 `dev` → `main` 合并。是否合并、何时合并、本次合并涵盖哪些内容，一律由用户明确指示后才能执行。
+- **合并时机由用户决定**：agent 不得在开发完成后自行触发 `dev` → `main` 合并。是否合并、何时合并、本次合并涵盖哪些内容，一律由用户明确指示后才能执行。合并时需清晰地描述这个开发分支做了什么，而不是简单地用一个“将 dev 合并到 main 中”敷衍了事。
 - `dev` → `main` 合并必须使用 `--no-ff` 选项，以保留一条明确的合并提交记录，便于追溯每一次发布窗口的内容与时间：
   ```bash
   git checkout main
