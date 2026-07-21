@@ -225,16 +225,16 @@ export default function FavoriteComparisonDetail({
           </p>
         </div>
         <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-border/40">
-          <table className="w-full min-w-[720px] border-collapse text-xs">
+          <table className="w-full min-w-[720px] table-fixed border-collapse text-xs">
             <thead>
               <tr className="border-b border-border/40">
-                <th className="sticky top-0 left-0 z-20 min-w-48 border-r border-border/40 bg-background/85 px-4 py-3 text-left text-[11px] font-semibold tracking-widest text-muted-foreground uppercase backdrop-blur-md">
+                <th className="sticky top-0 left-0 z-20 w-48 border-r border-border/40 bg-background/85 px-4 py-3 text-left text-[11px] font-semibold tracking-widest text-muted-foreground uppercase backdrop-blur-md">
                   {t("comparisonScene")}
                 </th>
                 {models.map((model) => (
                   <th
                     key={model.run_dir}
-                    className="sticky top-0 z-10 min-w-44 bg-background/85 px-3 py-3 text-left text-[13px] font-semibold backdrop-blur-md"
+                    className="sticky top-0 z-10 w-44 bg-background/85 px-3 py-3 text-left text-[13px] font-semibold backdrop-blur-md"
                   >
                     <Link
                       href={`/models/${encodeURIComponent(model.run_dir)}`}
