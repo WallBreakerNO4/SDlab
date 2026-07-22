@@ -86,8 +86,8 @@
     "collapseTools": "Collapse Tool Panel",
     "loadFailed": "Load Failed",
     "clickToCopy": "Click to copy",
-    "searchPrompt": "Search Artist Tags",
-    "searchPlaceholder": "Search artists...",
+    "searchPrompt": "Search Row Prompt",
+    "searchPlaceholder": "Search Artist or Common Prompt...",
     "clearSearch": "Clear Search",
     "prevMatch": "Previous Match",
     "nextMatch": "Next Match",
@@ -101,6 +101,12 @@
     "selectNone": "Select None",
     "columnLabel": "Column {index}",
     "copiedPrompt": "Artist tags copied",
+    "artistLabel": "Artist",
+    "commonPromptLabel": "Common Prompt",
+    "copyArtist": "Copy Artist",
+    "copyCommonPrompt": "Copy Common Prompt",
+    "copiedArtist": "Artist copied",
+    "copiedCommonPrompt": "Common Prompt copied",
     "copyFailed": "Copy failed",
     "rowRangeError": "Row number must be between 1 and {max}",
     "searchShortcut": "Press / to search",
@@ -151,5 +157,42 @@
     "loginGateTitle": "Sign in to browse the Prompt Codex",
     "loginGateDescription": "Sign in to browse structured prompt tags, select and copy for NovelAI and ComfyUI image generation.",
     "loginGateButton": "Sign in / Register"
+  },
+  "styleFavorites": {
+    "navEntry": "Favorites",
+    "toggleFailed": "Failed to update favorite. Please try again.",
+    "add": "Favorite this style row",
+    "remove": "Remove from favorites",
+    "panelTitle": "Favorite styles",
+    "panelEmpty": "No favorites yet. Click the star on a row label to favorite a style row.",
+    "title": "Style Favorites — SD Style Lab",
+    "description": "View your favorited artist style rows and jump to the matching row in each model.",
+    "loginGateTitle": "Sign in to view favorites",
+    "loginGateDescription": "Sign in to view your favorited style rows and jump to the matching row in each model.",
+    "loginGateButton": "Sign in / Register",
+    "loading": "Loading...",
+    "empty": "No favorites yet. Click the star on a row label in a model detail page to favorite a style row.",
+    "favoritedAt": "Favorited at {time}",
+    "availableModels": "Available in",
+    "noAvailableModels": "No available models"
+    ,"comparisonTitle": "Model Comparison"
+    ,"comparisonDetailTitle": "Prompt Model Comparison"
+    ,"comparisonDescription": "Compare the same artist prompt across models."
+    ,"visibleModels": "Showing {count} models"
+    ,"favoriteLabel": "Favorite Prompt"
+    ,"comparisonScene": "Test Scene"
+    ,"modelSelector": "Select model"
+    ,"loadMore": "Load more"
+    ,"noImage": "No image"
+    ,"backToFavorites": "Back to favorites"
+    ,"previousModels": "Previous models"
+    ,"nextModels": "Next models"
+    ,"loadFailed": "Failed to load favorites. Please refresh and try again."
+    ,"syncMode": "Sync switching"
+    ,"syncModeCell": "Single"
+    ,"syncModeColumn": "Column"
+    ,"syncModeAll": "All"
+    ,"syncModeHelpTitle": "Sync switching"
+    ,"syncModeHelpDescription": "Controls how the arrow buttons switch images: Single switches only the current image; Column switches every favorited row in that model's column together; All switches the entire matrix together. In Column and All modes, the scene description in each column header follows the currently shown image."
   }
 }

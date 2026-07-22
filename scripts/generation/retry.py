@@ -1,6 +1,7 @@
 import random
 import time
 from collections.abc import Callable
+from math import isfinite
 from typing import TypeVar
 
 
@@ -42,6 +43,7 @@ def retry_call(
     random_fn: Callable[[], float] | None = None,
     on_retry: Callable[[int, float, Exception], None] | None = None,
     on_giveup: Callable[[int, Exception], None] | None = None,
+    retry_wait_override: Callable[[Exception], float | None] | None = None,
 ) -> T:
     if max_attempts is not None and max_attempts <= 0:
         raise ValueError("max_attempts must be greater than 0")
@@ -87,6 +89,15 @@ def retry_call(
                 max_delay_per_sleep_s=max_delay_per_sleep_s,
                 random_fn=random_value_fn,
             )
+
+            if retry_wait_override is not None:
+                override_wait_s = retry_wait_override(exc)
+                if (
+                    override_wait_s is not None
+                    and isfinite(override_wait_s)
+                    and override_wait_s >= 0
+                ):
+                    planned_wait_s = max(planned_wait_s, override_wait_s)
 
             if remaining_budget_s is not None:
                 planned_wait_s = min(planned_wait_s, remaining_budget_s)

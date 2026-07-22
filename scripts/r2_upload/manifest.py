@@ -59,6 +59,7 @@ def build_view_release(payload: Mapping[str, object]) -> dict[str, object]:
         (row["prompt_hash"], row["positive_prompt"]): row for row in prompt_rows
     }
     y_labels = _build_y_labels(y_indexes=y_indexes, images=images)
+    y_prompt_parts = _build_y_prompt_parts(y_indexes=y_indexes, images=images)
 
     run_detail = _build_run_detail(payload=payload, run_json=run_json, y_indexes=y_indexes)
 
@@ -70,6 +71,7 @@ def build_view_release(payload: Mapping[str, object]) -> dict[str, object]:
         run_detail=run_detail,
         y_indexes=y_indexes,
         y_labels=y_labels,
+        y_prompt_parts=y_prompt_parts,
         images=images,
         prompts_by_key=prompts_by_key,
         visible_columns=visible_columns_sfw,
@@ -79,6 +81,7 @@ def build_view_release(payload: Mapping[str, object]) -> dict[str, object]:
         run_detail=run_detail,
         y_indexes=y_indexes,
         y_labels=y_labels,
+        y_prompt_parts=y_prompt_parts,
         images=images,
         prompts_by_key=prompts_by_key,
         visible_columns=visible_columns_nsfw,
@@ -304,6 +307,39 @@ def _build_y_labels(
     return [labels_by_index.get(y_index, "") for y_index in y_indexes]
 
 
+def _build_y_prompt_parts(
+    *,
+    y_indexes: list[int],
+    images: Sequence[Mapping[str, object]],
+) -> list[dict[str, object]]:
+    parts_by_index: dict[int, tuple[str | None, str | None]] = {}
+    for image in images:
+        y_index = image.get("y_index")
+        if not isinstance(y_index, int):
+            continue
+        artist = _optional_non_empty_str(image.get("artist_chain"))
+        common_prompt = _optional_non_empty_str(image.get("y_common_prompt"))
+        if artist is None and common_prompt is None:
+            continue
+
+        prompt_parts = (artist, common_prompt)
+        existing = parts_by_index.get(y_index)
+        if existing is not None and existing != prompt_parts:
+            raise ValueError(f"同一 Y 行的 Mixer prompt 拆分不一致: y_index={y_index}")
+        parts_by_index[y_index] = prompt_parts
+
+    return [
+        {
+            "yIndex": y_index,
+            "artist": artist,
+            "commonPrompt": common_prompt,
+        }
+        for y_index in y_indexes
+        for artist, common_prompt in [parts_by_index.get(y_index, (None, None))]
+        if artist is not None or common_prompt is not None
+    ]
+
+
 def _build_prompt_rows(
     *,
     run_dir: str,
@@ -357,6 +393,7 @@ def _build_bootstrap_manifest(
     run_detail: Mapping[str, object],
     y_indexes: list[int],
     y_labels: list[str],
+    y_prompt_parts: list[dict[str, object]],
     images: Sequence[Mapping[str, object]],
     prompts_by_key: Mapping[tuple[str | None, str], Mapping[str, object]],
     visible_columns: Mapping[str, object],
@@ -428,7 +465,7 @@ def _build_bootstrap_manifest(
         )
     ]
 
-    return {
+    manifest: dict[str, object] = {
         "schema_version": VIEW_SCHEMA_VERSION,
         "run": copy.deepcopy(run_detail),
         "xLabels": [_build_x_label(column) for column in cast(list[dict[str, object]], visible_columns["columns"])],
@@ -438,6 +475,9 @@ def _build_bootstrap_manifest(
         "prompts": prompts,
         "blurhash_cells": blurhash_cells,
     }
+    if y_prompt_parts:
+        manifest["yPromptParts"] = copy.deepcopy(y_prompt_parts)
+    return manifest
 
 
 def _build_x_label(column: Mapping[str, object]) -> str:
@@ -484,6 +524,7 @@ def _build_row_manifest(
                 "category": category,
                 "width": image.get("width"),
                 "height": image.get("height"),
+                "blurhash": _optional_non_empty_str(image.get("blurhash")),
                 "meta": {
                     "seed": _optional_non_empty_str(image.get("seed")),
                     "prompt_id": int(prompt_row["prompt_id"]),

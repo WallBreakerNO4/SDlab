@@ -1,11 +1,11 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-05-30 | Updated: 2026-06-18 -->
+<!-- Generated: 2026-05-30 | Updated: 2026-07-20 -->
 
 # messages/ — 翻译消息 JSON
 
 ## 概览
 
-- 存放 `next-intl` 的翻译消息文件。当前支持 `zh`（简体中文）和 `en`（英语）。每个 JSON 文件按 namespace 组织：`metadata`、`header`、`home`、`footer`、`auth`、`modelDetail`、`virtualGrid`、`cellDialog`、`modelCard`、`prompts`。
+- 存放 `next-intl` 的翻译消息文件。当前支持 `zh`（简体中文）和 `en`（英语）。每个 JSON 文件按 namespace 组织：`metadata`、`header`、`home`、`footer`、`auth`、`modelDetail`、`virtualGrid`、`cellDialog`、`modelCard`、`prompts`、`styleFavorites`。
 
 ## Key Files
 
@@ -28,6 +28,7 @@
 | `cellDialog` | 单元格预览弹窗：prompt、seed、图片下载、翻页 |
 | `modelCard` | 首页模型卡片：大图预览、展开收起、横向滚动 |
 | `prompts`   | Prompt 法典浏览器:文件切换、搜索、过滤、模型/权重模式、复制、登录门控等 |
+| `styleFavorites` | 画师串收藏与模型对比：星标 toggle、收藏面板、登录引导、模型显隐、对比矩阵/详情、加载与错误状态 |
 
 ## For AI Agents
 

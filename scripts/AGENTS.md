@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-06-18 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-07-16 -->
 
 # scripts/ — 核心实现（生图 + R2 上传）
 
@@ -12,11 +12,11 @@
 | 任务                       | 位置                                                       | 备注                                          |
 | -------------------------- | ---------------------------------------------------------- | --------------------------------------------- |
 | CLI 参数/环境变量/落盘合约 | `scripts/generation/comfyui_part1_generate.py`             | 入口；fresh-run 主链路走 `--config`           |
-| run 配置解析               | `scripts/generation/runner_config.py`                      | 校验 `data/runs/*.yaml` 与 repo-relative 资产 |
+| run 配置解析               | `scripts/generation/runner_config.py`                      | 校验 `data/models/*/config.yaml`、v1/v2 schema 与 repo-relative 资产 |
 | 并发协调                   | `scripts/generation/runner_coordinator.py`                 | ThreadPoolExecutor 双池                       |
 | ComfyUI 请求/WS/错误码     | `scripts/generation/comfyui_client.py`                     | `ComfyUIClientError`（`code`+`context`）      |
-| workflow JSON 注入         | `scripts/generation/workflow_patch.py`                     | 追溯 KSampler 引用链                          |
-| prompt 组合/hash/seed      | `scripts/generation/prompt_grid.py`                        | 纯函数优先                                    |
+| workflow JSON 注入         | `scripts/generation/workflow_patch.py`                     | 标准 CLIPTextEncode 与 Anima Artist Mixer 引用链 |
+| prompt 组合/hash/seed      | `scripts/generation/prompt_grid.py`                        | general/artists 拆分；hash 可包含 `artist_chain` |
 | 重试失败项                 | `scripts/generation/retry_failed_selection.py`、`retry.py` | 筛选 + 重跑                                   |
 | 菜单交互与入口注册         | `scripts/cli/menu.py`、`scripts/cli/registry.py`           | 交互菜单、入口动态加载                        |
 | CSV / prompt 资产转换      | `scripts/other/convert_*.py`                               | 文件名遗留 `json`，实际输出 YAML              |
@@ -29,10 +29,10 @@
 
 ## 子目录职责（避免串层）
 
-- `scripts/generation/`：核心 runner（已拆分 15+ 模块）+ ComfyUI 通信 + workflow patch + metadata 落盘
+- `scripts/generation/`：核心 runner + ComfyUI/NovelAI 通信 + workflow patch + metadata 落盘
 - `scripts/cli/`：仅处理"如何选择并执行脚本"；不持有生图/上传业务状态
 - `scripts/other/`：离线资产转换工具；规则见 `scripts/other/AGENTS.md`
-- `scripts/r2_upload/`：R2 上传 + Supabase 写入（19 个 Python 文件）；不把凭证细节扩散到其他目录
+- `scripts/r2_upload/`：R2 上传 + Supabase 写入 + run 删除；不把凭证细节扩散到其他目录
 
 - 当前 fresh-run 主链路：`main.py` / 菜单 → `comfyui_part1_generate.py --config ...` → `runner_config.py` → runner\_\* 模块
 
@@ -41,6 +41,7 @@
 - 允许在"直接运行脚本文件"场景下修正 `sys.path`（`# noqa: E402`）
 - pyright：用文件级 `# pyright:` 指令做最小必要的规则调整
 - 结构化错误：`context` 里不要放敏感信息/超大对象（测试对 message/内容有约束）
+- `workflow.anima_artist_mixer` 仅允许 ComfyUI + Anima 模型；启用后 `artist_chain` 是 prompt hash、metadata、回放与 strict retry 合约的一部分
 
 ## 反模式
 

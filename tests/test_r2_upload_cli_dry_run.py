@@ -426,6 +426,8 @@ def test_build_run_plan_embeds_image_variants_in_public_row_manifest(
     assert str(display_webp["key"]).endswith("display_webp.webp")
     assert len(str(thumb_webp["cache_key"])) == 64
     assert len(str(display_webp["cache_key"])) == 64
+    assert isinstance(item["blurhash"], str)
+    assert item["blurhash"]
 
 
 def test_build_run_plan_collapses_resume_hit_metadata_records(
@@ -591,7 +593,7 @@ def test_build_view_release_filters_public_rows_to_accessible_items() -> None:
 
     assert len(items) == 1
     assert items[0]["category"] == "normal"
-    assert "blurhash" not in items[0]
+    assert items[0]["blurhash"] == "normal-blurhash"
 
     meta = cast(dict[str, object], items[0]["meta"])
     assert meta["positive_prompt"] == "normal prompt"

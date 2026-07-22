@@ -434,8 +434,15 @@ test.describe("task 13: model detail scroll restoration", () => {
       await scrollEl.evaluate((el) => el.scrollTop),
     );
 
-    await page.getByLabel("打开网格工具").click();
-    await page.getByLabel("收起工具面板").waitFor({ timeout: 5_000 });
+    const openToolsButton = page.getByRole("button", {
+      name: /Open Grid Tools|打开网格工具/,
+    });
+    const collapseToolsButton = page.getByRole("button", {
+      name: /Collapse Tool Panel|收起工具面板/,
+    });
+
+    await openToolsButton.click();
+    await collapseToolsButton.waitFor({ timeout: 5_000 });
     await expect
       .poll(
         async () => Number((await grid.getAttribute("data-row-height")) ?? "0"),
@@ -443,8 +450,8 @@ test.describe("task 13: model detail scroll restoration", () => {
       )
       .toBeLessThan(rowHeight);
 
-    await page.getByLabel("收起工具面板").click();
-    await page.getByLabel("打开网格工具").waitFor({ timeout: 5_000 });
+    await collapseToolsButton.click();
+    await openToolsButton.waitFor({ timeout: 5_000 });
     await expect
       .poll(
         async () => Math.round(await scrollEl.evaluate((el) => el.scrollTop)),
@@ -475,6 +482,297 @@ test.describe("task 13: model detail scroll restoration", () => {
         { timeout: 10_000 },
       )
       .toBe(targetRowIndex);
+
+    await context.close();
+  });
+
+  test("an older restore release frame cannot unlock a newly pending reverse toggle", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      viewport: { width: 1280, height: 720 },
+    });
+    await installMockRoutes(context, {
+      runDir: MOCK_NARROW_RUN_DIR,
+      xColumns: MOCK_NARROW_X_COLUMNS,
+    });
+    const page = await context.newPage();
+
+    await page.goto(`/models/${MOCK_NARROW_RUN_DIR}`);
+
+    const grid = page.getByTestId("run-grid");
+    const scrollEl = page.getByTestId("run-grid-scroll");
+    const openToolsButton = page.getByRole("button", {
+      name: /Open Grid Tools|打开网格工具/,
+    });
+    const collapseToolsButton = page.getByRole("button", {
+      name: /Collapse Tool Panel|收起工具面板/,
+    });
+
+    await expect(grid).toBeVisible();
+    await expect
+      .poll(
+        async () => Number((await grid.getAttribute("data-row-height")) ?? "0"),
+        { timeout: 10_000 },
+      )
+      .toBeGreaterThan(0);
+
+    const closedRowHeight = Number(
+      (await grid.getAttribute("data-row-height")) ?? "0",
+    );
+    const targetRowIndex = 160;
+    const storageKey = `sd-style-lab:model-grid-anchor:${MOCK_NARROW_RUN_DIR}`;
+
+    await scrollEl.evaluate(
+      (element, targetOffset) => {
+        element.scrollTop = targetOffset;
+      },
+      closedRowHeight * targetRowIndex + closedRowHeight / 2,
+    );
+    await expect
+      .poll(
+        () =>
+          page.evaluate((key) => {
+            const raw = window.localStorage.getItem(key);
+            if (!raw) return null;
+            return (JSON.parse(raw) as { yIndex?: unknown }).yIndex ?? null;
+          }, storageKey),
+        { timeout: 10_000 },
+      )
+      .toBe(targetRowIndex);
+
+    await page.evaluate(() => {
+      type HeldFrame = {
+        callback: FrameRequestCallback;
+        cancelled: boolean;
+        id: number;
+      };
+      type RafControl = {
+        holdAll: boolean;
+        held: HeldFrame[];
+        insideFrame: boolean;
+        nativeCancel: typeof window.cancelAnimationFrame;
+        nativeRequest: typeof window.requestAnimationFrame;
+        nextId: number;
+        released: number;
+      };
+
+      const control: RafControl = {
+        holdAll: false,
+        held: [],
+        insideFrame: false,
+        nativeCancel: window.cancelAnimationFrame.bind(window),
+        nativeRequest: window.requestAnimationFrame.bind(window),
+        nextId: 1_000_000,
+        released: 0,
+      };
+
+      window.requestAnimationFrame = (callback) => {
+        if (control.holdAll || control.insideFrame) {
+          const frame = {
+            callback,
+            cancelled: false,
+            id: control.nextId++,
+          };
+          control.held.push(frame);
+          return frame.id;
+        }
+
+        return control.nativeRequest((timestamp) => {
+          control.insideFrame = true;
+          try {
+            callback(timestamp);
+          } finally {
+            control.insideFrame = false;
+          }
+        });
+      };
+      window.cancelAnimationFrame = (id) => {
+        const heldFrame = control.held.find((frame) => frame.id === id);
+        if (heldFrame) {
+          heldFrame.cancelled = true;
+          return;
+        }
+        control.nativeCancel(id);
+      };
+
+      Object.assign(window, { __scrollRestoreRafControl: control });
+    });
+
+    await openToolsButton.click();
+    await expect(collapseToolsButton).toBeVisible();
+    await expect
+      .poll(
+        async () => Number((await grid.getAttribute("data-row-height")) ?? "0"),
+        { timeout: 10_000 },
+      )
+      .toBeLessThan(closedRowHeight);
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const control = (
+            window as typeof window & {
+              __scrollRestoreRafControl?: { held: unknown[] };
+            }
+          ).__scrollRestoreRafControl;
+          return control?.held.length ?? 0;
+        }),
+      )
+      .toBeGreaterThan(0);
+
+    await collapseToolsButton.evaluate((button) => {
+      const control = (
+        window as typeof window & {
+          __scrollRestoreRafControl: {
+            holdAll: boolean;
+            held: Array<{
+              callback: FrameRequestCallback;
+              cancelled: boolean;
+            }>;
+            insideFrame: boolean;
+            released: number;
+          };
+        }
+      ).__scrollRestoreRafControl;
+
+      control.holdAll = true;
+      document.addEventListener(
+        "click",
+        () => {
+          const olderFrames = control.held.splice(0);
+          control.insideFrame = true;
+          try {
+            for (const frame of olderFrames) {
+              if (frame.cancelled) continue;
+              control.released += 1;
+              frame.callback(performance.now());
+            }
+          } finally {
+            control.insideFrame = false;
+          }
+        },
+        { once: true },
+      );
+      (button as HTMLButtonElement).click();
+    });
+
+    await expect(openToolsButton).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const control = (
+            window as typeof window & {
+              __scrollRestoreRafControl?: { released: number };
+            }
+          ).__scrollRestoreRafControl;
+          return control?.released ?? 0;
+        }),
+      )
+      .toBeGreaterThan(0);
+    await expect
+      .poll(
+        () =>
+          page.evaluate((key) => {
+            const raw = window.localStorage.getItem(key);
+            if (!raw) return null;
+            return (JSON.parse(raw) as { yIndex?: unknown }).yIndex ?? null;
+          }, storageKey),
+        { timeout: 10_000 },
+      )
+      .toBe(targetRowIndex);
+
+    await context.close();
+  });
+
+  test("repeating the search shortcut while tools are open does not restore a stale anchor after resize", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      viewport: { width: 1280, height: 720 },
+    });
+    await installMockRoutes(context, {
+      runDir: MOCK_RUN_DIR,
+      xColumns: MOCK_WIDE_X_COLUMNS,
+    });
+    const page = await context.newPage();
+
+    await page.goto(`/models/${MOCK_RUN_DIR}`);
+
+    const grid = page.getByTestId("run-grid");
+    const scrollEl = page.getByTestId("run-grid-scroll");
+    const openToolsButton = page.getByRole("button", {
+      name: /Open Grid Tools|打开网格工具/,
+    });
+    const collapseToolsButton = page.getByRole("button", {
+      name: /Collapse Tool Panel|收起工具面板/,
+    });
+
+    await expect(grid).toBeVisible();
+    await expect
+      .poll(
+        async () => Number((await grid.getAttribute("data-row-height")) ?? "0"),
+        { timeout: 10_000 },
+      )
+      .toBeGreaterThan(0);
+
+    await openToolsButton.click();
+    await expect(collapseToolsButton).toBeVisible();
+    await expect
+      .poll(() =>
+        collapseToolsButton.evaluate(
+          (button) =>
+            button.parentElement?.parentElement?.getBoundingClientRect().width ??
+            0,
+        ),
+      )
+      .toBe(384);
+
+    const rowHeight = Number(
+      (await grid.getAttribute("data-row-height")) ?? "0",
+    );
+    const staleAnchorRowIndex = 70;
+    const currentRowIndex = 150;
+
+    await scrollEl.evaluate(
+      (element, targetOffset) => {
+        element.scrollTop = targetOffset;
+      },
+      rowHeight * staleAnchorRowIndex + rowHeight / 2,
+    );
+
+    await page.keyboard.press("/");
+    const searchInput = page.getByPlaceholder(
+      /Search Artist or Common Prompt|搜索 Artist 或 Common Prompt/,
+    );
+    await expect(searchInput).toBeFocused();
+    await searchInput.evaluate((input) => input.blur());
+
+    await scrollEl.evaluate(
+      (element, targetOffset) => {
+        element.scrollTop = targetOffset;
+      },
+      rowHeight * currentRowIndex + rowHeight / 2,
+    );
+    const beforeResize = Math.round(
+      await scrollEl.evaluate((element) => element.scrollTop),
+    );
+    const beforeResizeWidth = await scrollEl.evaluate(
+      (element) => element.clientWidth,
+    );
+
+    await page.setViewportSize({ width: 1180, height: 720 });
+    await expect
+      .poll(() => scrollEl.evaluate((element) => element.clientWidth))
+      .toBeLessThan(beforeResizeWidth);
+    // useVirtualGridLayout debounces ResizeObserver width commits for 200 ms.
+    await page.waitForTimeout(400);
+
+    const afterResize = Math.round(
+      await scrollEl.evaluate((element) => element.scrollTop),
+    );
+    const tolerance = Math.max(rowHeight, 48);
+
+    expect(Math.abs(afterResize - beforeResize)).toBeLessThanOrEqual(tolerance);
 
     await context.close();
   });

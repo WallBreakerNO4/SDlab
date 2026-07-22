@@ -1,6 +1,7 @@
 # pyright: reportMissingImports=false, reportUnknownVariableType=false, reportUnknownMemberType=false, reportUnknownArgumentType=false
 
 import hashlib
+import json
 import sys
 from pathlib import Path
 
@@ -11,8 +12,10 @@ sys.path.insert(0, str(ROOT))
 
 from scripts.generation.prompt_grid import (
     MAX_SEED,
+    Y_ARTIST_CHAIN,
     Y_COLLECTION_ID,
     Y_ITEM_INDEX,
+    Y_POSITIVE_VALUE,
     Y_STYLE_KEY,
     X_INFO_TYPE_KEY,
     build_prompt_cell,
@@ -129,6 +132,25 @@ def test_compute_prompt_hash_uses_normalized_prompt_sha256_hex():
     expected = hashlib.sha256("A, B, C".encode("utf-8")).hexdigest()
 
     assert compute_prompt_hash(prompt) == expected
+
+
+def test_compute_prompt_hash_includes_normalized_artist_chain_when_provided():
+    prompt = "  masterpiece , 1girl, "
+    artist_chain = "  1.21::@wlop,   @artist-b  "
+    expected_payload = json.dumps(
+        {
+            "artist_chain": normalize_prompt(artist_chain),
+            "positive_prompt": normalize_prompt(prompt),
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+    assert compute_prompt_hash(prompt, artist_chain) == hashlib.sha256(
+        expected_payload.encode("utf-8")
+    ).hexdigest()
+    assert compute_prompt_hash(prompt, artist_chain) != compute_prompt_hash(prompt)
 
 
 def test_derive_seed_is_deterministic_and_uses_sha256_first_16_hex_modulo():
@@ -311,6 +333,81 @@ def test_read_y_rows_square_profile_applies_to_all_weights(tmp_path: Path):
 
     assert rows[0]["y"] == "(@wlop:1.21), (@piyodera mucha:0.656), (furry:1.21), "
     assert rows[0][Y_STYLE_KEY] == "y:0"
+
+
+def test_read_y_rows_anima_mixer_splits_artists_from_general_tags(
+    tmp_path: Path,
+) -> None:
+    y_path = tmp_path / "y.yaml"
+    _write_y_yaml(
+        y_path,
+        """
+      - text: wlop
+        weight: 1.1
+        type: artists
+      - text: unit artist
+        weight: 1.0
+        type: artists
+      - text: furry
+        weight: 1.1
+        type: general
+""",
+    )
+
+    rows = read_y_rows(
+        y_path,
+        artist_prefix="@",
+        artist_weight_profile="square",
+        anima_artist_mixer=True,
+    )
+
+    assert rows[0]["y"] == "(@wlop:1.21), @unit artist, (furry:1.21), "
+    assert rows[0][Y_POSITIVE_VALUE] == "(furry:1.21), "
+    assert rows[0][Y_ARTIST_CHAIN] == "1.21::@wlop, @unit artist"
+
+
+def test_read_y_rows_anima_mixer_identity_keeps_source_weights(
+    tmp_path: Path,
+) -> None:
+    y_path = tmp_path / "y.yaml"
+    _write_y_yaml(
+        y_path,
+        """
+      - text: wlop
+        weight: 0.81
+        type: artists
+      - text: year 2025
+        weight: 1.0
+        type: general
+""",
+    )
+
+    row = read_y_rows(
+        y_path,
+        artist_prefix="@",
+        artist_weight_profile="identity",
+        anima_artist_mixer=True,
+    )[0]
+
+    assert row[Y_POSITIVE_VALUE] == "year 2025, "
+    assert row[Y_ARTIST_CHAIN] == "0.81::@wlop"
+
+
+def test_read_y_rows_anima_mixer_allows_empty_artist_chain(tmp_path: Path) -> None:
+    y_path = tmp_path / "y.yaml"
+    _write_y_yaml(
+        y_path,
+        """
+      - text: year 2025
+        weight: 1.0
+        type: general
+""",
+    )
+
+    row = read_y_rows(y_path, anima_artist_mixer=True)[0]
+
+    assert row[Y_POSITIVE_VALUE] == "year 2025, "
+    assert row[Y_ARTIST_CHAIN] == ""
 
 
 def test_read_y_rows_rejects_unknown_artist_weight_profile(tmp_path: Path):

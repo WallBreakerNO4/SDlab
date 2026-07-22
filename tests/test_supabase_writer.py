@@ -12,13 +12,16 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from scripts.generation.prompt_grid import Y_STYLE_KEY, read_y_rows
 from scripts.r2_upload.supabase_writer import (
     SupabaseArgumentError,
     SupabaseConfigError,
     SupabaseRemoteError,
     SupabaseWriter,
     _normalize_rows_for_postgrest,
+    estimate_upload_index_records,
 )
+from scripts.r2_upload.upload_planner import _assemble_image_payload
 
 
 def _sample_payload() -> dict[str, object]:
@@ -156,7 +159,7 @@ class _InMemorySupabaseClient:
             "run_grid_cells": {},
             "run_view_index": {},
             "run_prompts": {},
-            "run_y_prompt_refs": {},
+            "run_style_items": {},
         }
         self._next_id = {
             "runs": 1,
@@ -683,3 +686,188 @@ def test_normalize_rows_for_postgrest_fills_missing_keys_with_null() -> None:
     assert set(normalized[0].keys()) == set(normalized[1].keys())
     assert normalized[0]["avif_quality"] is None
     assert normalized[1]["webp_quality"] is None
+
+
+def _sample_payload_with_style_items() -> dict[str, object]:
+    payload = _sample_payload()
+    images = cast(list[dict[str, object]], payload["images"])
+    images[0]["y_index"] = 9
+    images[0]["y_style_key"] = "300-nai-styles-table:9"
+    images[0]["y_value"] = "artist:a, artist:b"
+    # 同一 style_key 在不同 x/batch 下重复出现（共享同一 y_index），写入时按 style_key 去重
+    images.append(
+        {
+            "x_index": 1,
+            "y_index": 9,
+            "batch_index": 0,
+            "category": "normal",
+            "metadata": {"prompt": "same style, another x"},
+            "y_style_key": "300-nai-styles-table:9",
+            "y_value": "artist:a, artist:b",
+            "variants": [],
+        }
+    )
+    images.append(
+        {
+            "x_index": 0,
+            "y_index": 10,
+            "batch_index": 0,
+            "category": "normal",
+            "metadata": {"prompt": "second style"},
+            "y_style_key": "300-nai-styles-table:10",
+            "y_value": "artist:c",
+            "variants": [],
+        }
+    )
+    return payload
+
+
+def test_upsert_upload_index_persists_run_style_items() -> None:
+    client = _InMemorySupabaseClient(return_upsert_rows=True)
+    writer = SupabaseWriter(client=client, dry_run=False)
+
+    writer.upsert_upload_index(_sample_payload_with_style_items())
+
+    run_row = next(iter(client._tables["runs"].values()))
+    style_rows = sorted(
+        client._tables["run_style_items"].values(),
+        key=lambda row: str(row["style_key"]),
+    )
+    assert style_rows == [
+        {
+            "run_id": run_row["id"],
+            "run_dir": "test-run",
+            "style_key": "300-nai-styles-table:10",
+            "y_index": 10,
+            "label": "artist:c",
+        },
+        {
+            "run_id": run_row["id"],
+            "run_dir": "test-run",
+            "style_key": "300-nai-styles-table:9",
+            "y_index": 9,
+            "label": "artist:a, artist:b",
+        },
+    ]
+
+    on_conflicts = {str(call["on_conflict"]) for call in client.upsert_calls}
+    assert "run_id,style_key" in on_conflicts
+
+
+def test_upsert_upload_index_run_style_items_is_idempotent() -> None:
+    client = _InMemorySupabaseClient(return_upsert_rows=True)
+    writer = SupabaseWriter(client=client, dry_run=False)
+    payload = _sample_payload_with_style_items()
+
+    writer.upsert_upload_index(payload)
+    writer.upsert_upload_index(payload)
+
+    assert client.row_count("run_style_items") == 2
+
+
+def test_upsert_upload_index_skips_style_items_without_style_key() -> None:
+    client = _InMemorySupabaseClient(return_upsert_rows=True)
+    writer = SupabaseWriter(client=client, dry_run=False)
+
+    # 老 run 的 payload 没有 y_style_key，静默跳过、不阻断上传
+    writer.upsert_upload_index(_sample_payload())
+
+    assert client.row_count("runs") == 1
+    assert client.row_count("run_style_items") == 0
+    style_calls = [
+        call for call in client.upsert_calls if call["table"] == "run_style_items"
+    ]
+    assert style_calls == []
+
+
+def test_upsert_upload_index_style_item_label_falls_back_to_metadata() -> None:
+    client = _InMemorySupabaseClient(return_upsert_rows=True)
+    writer = SupabaseWriter(client=client, dry_run=False)
+    payload = _sample_payload()
+    images = cast(list[dict[str, object]], payload["images"])
+    images[0]["y_style_key"] = "300-nai-styles-table:9"
+    metadata = cast(dict[str, object], images[0]["metadata"])
+    metadata["y_value"] = "artist:from-metadata"
+
+    writer.upsert_upload_index(payload)
+
+    style_row = next(iter(client._tables["run_style_items"].values()))
+    assert style_row["label"] == "artist:from-metadata"
+    assert style_row["y_index"] == 0
+
+
+def test_estimate_upload_index_records_counts_distinct_style_keys() -> None:
+    payload = _sample_payload_with_style_items()
+
+    # 基础 payload 估算 + 2 个去重后的 style 行
+    assert estimate_upload_index_records(payload) == 4 + 0 + 3 + 3 + 3 + 2
+    assert estimate_upload_index_records(_sample_payload()) == 4 + 0 + 1 + 1 + 1 + 0
+
+
+def test_cross_run_style_key_survives_weight_profiles(tmp_path: Path) -> None:
+    y_path = tmp_path / "shared-styles.yaml"
+    y_path.write_text(
+        """schema: prompt-y-table/v3
+collection_id: shared-styles
+items:
+  - info:
+      index: 9
+    tags:
+      - text: wlop
+        weight: 1.1
+        type: artists
+""",
+        encoding="utf-8",
+    )
+
+    identity_row = read_y_rows(y_path, artist_weight_profile="identity")[0]
+    square_row = read_y_rows(y_path, artist_weight_profile="square")[0]
+
+    assert identity_row["y"] != square_row["y"]
+    assert identity_row[Y_STYLE_KEY] == square_row[Y_STYLE_KEY] == "shared-styles:9"
+
+    def build_payload(run_dir: str, y_row: dict[str, str]) -> dict[str, object]:
+        payload = _sample_payload()
+        payload["run_dir"] = run_dir
+        payload["run_id"] = run_dir
+        payload["y_indexes"] = [0]
+        payload["x_count"] = 1
+        payload["y_count"] = 1
+        payload["total_cells"] = 1
+        payload["images"] = [
+            _assemble_image_payload(
+                metadata_record={
+                    "status": "success",
+                    "x_index": 0,
+                    "y_index": 0,
+                    "y_value": y_row["y"],
+                    "y_style_key": y_row[Y_STYLE_KEY],
+                },
+                category="normal",
+                batch_index=0,
+                variant_rows=[],
+                width=None,
+                height=None,
+                blurhash_value=None,
+            )
+        ]
+        return payload
+
+    client = _InMemorySupabaseClient(return_upsert_rows=True)
+    writer = SupabaseWriter(client=client, dry_run=False)
+    writer.upsert_upload_index(build_payload("identity-run", identity_row))
+    writer.upsert_upload_index(build_payload("square-run", square_row))
+
+    matching_rows = [
+        row
+        for row in client._tables["run_style_items"].values()
+        if row["style_key"] == identity_row[Y_STYLE_KEY]
+    ]
+    assert {row["run_dir"] for row in matching_rows} == {
+        "identity-run",
+        "square-run",
+    }
+    assert len({row["run_id"] for row in matching_rows}) == 2
+    expected_labels = {identity_row["y"].strip(), square_row["y"].strip()}
+    assert len(expected_labels) == 2
+    assert {row["label"] for row in matching_rows} == expected_labels

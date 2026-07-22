@@ -18,6 +18,7 @@
 ## 约定（本目录特有）
 
 - 菜单层只做分发，不复制 `scripts/generation/` 或 `scripts/r2_upload/` 的业务实现
+- 上传菜单先选择普通上传或强制重新发布；强制模式只向上传入口传递 `-F`，发布判定仍由 `scripts/r2_upload/` 负责
 - 执行入口必须通过 `entrypoint` 动态加载，保持主入口可测试
 - 处理 `EOFError`/`KeyboardInterrupt` 时返回明确退出码，不抛裸异常到用户界面
 

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-25 | Updated: 2026-05-30 -->
+<!-- Generated: 2026-04-25 | Updated: 2026-07-19 -->
 
 # components/home/ — 首页模型卡片组件
 
@@ -12,7 +12,7 @@
 | 场景             | 位置                     | 备注                                                                                |
 | ---------------- | ------------------------ | ----------------------------------------------------------------------------------- |
 | 模型卡片         | `model-card.tsx`         | 封面图（cover）+ 描述展开收起 + 主页缩略图水平卷轴（HorizontalScrollList）          |
-| 预览大图弹窗     | `preview-dialog.tsx`     | 全屏大图预览，基于 `components/ui/dialog.tsx`；点击关闭                             |
+| 预览大图弹窗     | `preview-dialog.tsx`     | 主页缩略图大图预览（基于 `components/ui/dialog.tsx`）；封面图已不再点击放大，仅主页缩略图点击触发           |
 | 封面图/主页缩略图 | `API: /api/comfyui/runs` | 首页 runs 列表返回 `assets.cover` 与 `assets.homepage_cards`                        |
 | 图片源构建       | `lib/r2-url.ts`          | R2 公开 URL 生成                                                                    |
 | Blurhash 占位    | `components/comfyui/blurhash-canvas.tsx` | 用于封面图/缩略图加载占位                                            |
@@ -22,9 +22,10 @@
 - 封面图（cover）来自 `assets.cover`，统一走 `resolvePreferredImageSource()` 优先选 display → thumb 降级。
 - 主页缩略图（homepage_cards）来自 `assets.homepage_cards[]`，同样走 display/thumb 降级。
 - `CardImage` 子组件使用 `<picture>` + `<source>` 支持 avif/webp 格式，配合 blurhash canvas 做加载占位。
-- `HorizontalScrollList` 实现无限滚动效果：通过 `copyCount` 份循环复制 + 滚动位置归位（middleCopyIndex），支持左右箭头按钮与平滑滚动。
+- `HorizontalScrollList` 实现无限滚动效果：通过 `copyCount` 份循环复制 + 滚动位置归位（middleCopyIndex），支持左右箭头按钮与平滑滚动；滚动条用 `scrollbar-none` 隐藏。
 - 描述 `ExpandableDescription` 检测文本是否溢出（`scrollHeight > clientHeight`），按需提供展开/收起按钮。
 - 这些组件只消费 Supabase + R2 返回的 URL 数据，不直接访问数据层。
+- i18n：组件用 `useTranslations("modelCard")` 取文案、`useLocale()` 选择模型描述语言（`description?.[locale]` 降级到 zh/en）；导航链接用 `@/i18n/navigation` 的 `Link`，不直接用 `next/link`。
 - 封面图/主页缩略图属于首页独立资产，不要与 run 详情页的展示页缩略图混用。
 
 ## 反模式

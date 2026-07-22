@@ -24,16 +24,27 @@ _RUN_DIR_NAME = "local-supabase-run"
 class _FakeR2Client:
     def __init__(self) -> None:
         self._objects: set[tuple[str, str]] = set()
+        self._object_bodies: dict[tuple[str, str], bytes] = {}
         self.upload_calls = 0
 
     def head_exists(self, bucket_name: str, key: str, *, bucket_scope: str) -> bool:
         _ = bucket_scope
         return (bucket_name, key) in self._objects
 
+    def read_bytes_if_exists(
+        self, bucket_name: str, key: str, *, bucket_scope: str
+    ) -> bytes | None:
+        _ = bucket_scope
+        return self._object_bodies.get((bucket_name, key))
+
     def upload(self, plan: object) -> None:
         bucket_name = str(getattr(plan, "bucket_name"))
         key = str(getattr(plan, "key"))
         self._objects.add((bucket_name, key))
+        body_bytes = getattr(plan, "body_bytes", None)
+        self._object_bodies[(bucket_name, key)] = (
+            body_bytes if isinstance(body_bytes, bytes) else b""
+        )
         self.upload_calls += 1
 
 

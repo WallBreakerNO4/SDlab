@@ -1,53 +1,24 @@
 import { expect, test } from "@playwright/test";
 
-const hasSupabaseConfig = Boolean(
-  process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY,
-);
+import {
+  installModelViewMock,
+  MOCK_MODEL_VIEW_RUN_DIR,
+} from "./model-view-test-helpers";
 
-test.skip(
-  !hasSupabaseConfig,
-  "缺少 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY，跳过数据相关用例",
-);
+test("task 10: placeholder appears before image load", async ({ page }, testInfo) => {
+  await installModelViewMock(page, { thumbDelayMs: 2_000 });
+  await page.goto(`/models/${MOCK_MODEL_VIEW_RUN_DIR}`);
 
-test("task 10: placeholder appears before image load", async ({ page }) => {
-  // We need a runDir that has images. Let's use the API to find one or just mock it.
-  // Wait, we can just intercept the image request and delay it.
-  
-  // First, go to the home page to find a model entry
-  await page.goto("/")
-  
-  // Find the first model link
-  const modelLink = page.locator("a[href^='/models/']").first()
-  const modelUrl = await modelLink.getAttribute("href")
-  if (!modelUrl) throw new Error("No model URL found")
-  
-  // Intercept image requests and delay them
-  await page.route("**/api/comfyui/image/**", async (route) => {
-    // Delay the response by 2 seconds
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-    await route.continue()
-  })
-  
-  // Navigate to the model page
-  await page.goto(modelUrl)
-  
-  // Wait for the grid to load
-  await expect(page.getByTestId("run-grid")).toBeVisible()
-  
-  // Check that the blurhash canvas is visible
-  const blurhashCanvas = page.getByTestId("blurhash-canvas").first()
-  await expect(blurhashCanvas).toBeVisible()
-  
-  // Check that the image is initially invisible (opacity 0)
-  const image = page.getByTestId("run-grid-image").first()
-  await expect(image).toHaveClass(/opacity-0/)
-  
-  // Take a screenshot of the placeholder
-  await page.screenshot({ path: "test-results/task-10-placeholder.png" })
-  
-  // Wait for the image to load (opacity 100)
-  await expect(image).toHaveClass(/opacity-100/, { timeout: 5000 })
-  
-  // Check that the blurhash canvas is now invisible (opacity 0)
-  await expect(blurhashCanvas).toHaveClass(/opacity-0/)
-})
+  await expect(page.getByTestId("run-grid")).toBeVisible();
+
+  const blurhashCanvas = page.getByTestId("blurhash-canvas").first();
+  await expect(blurhashCanvas).toBeVisible();
+
+  const image = page.getByTestId("run-grid-image").first();
+  await expect(image).toHaveClass(/opacity-0/);
+
+  await page.screenshot({ path: testInfo.outputPath("task-10-placeholder.png") });
+
+  await expect(image).toHaveClass(/opacity-100/, { timeout: 5_000 });
+  await expect(blurhashCanvas).toHaveClass(/opacity-0/);
+});

@@ -131,7 +131,9 @@ DEFAULT_TEMPLATE = "{quality}{rating}{y}{gender}{characters}{series}{general}"
 DEFAULT_WORKFLOW_JSON = "data/comfyui-flow/api-json/CKNOOBRF.json"
 DEFAULT_BASE_URL = "http://127.0.0.1:8188"
 DEFAULT_REQUEST_TIMEOUT_S = 30.0
+DEFAULT_DOWNLOAD_READ_TIMEOUT_S = 60.0
 DEFAULT_JOB_TIMEOUT_S = 600.0
+DEFAULT_DOWNLOAD_CONCURRENCY = 4
 LOG = logging.getLogger(__name__)
 
 _DEPRECATED_BUSINESS_ENV_KEYS = (
@@ -202,6 +204,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=_env_float("COMFYUI_REQUEST_TIMEOUT_S", DEFAULT_REQUEST_TIMEOUT_S),
     )
     parser.add_argument(
+        "--download-read-timeout-s",
+        type=float,
+        default=_env_float(
+            "COMFYUI_DOWNLOAD_READ_TIMEOUT_S",
+            DEFAULT_DOWNLOAD_READ_TIMEOUT_S,
+        ),
+    )
+    parser.add_argument(
         "--job-timeout-s",
         type=float,
         default=_env_float("COMFYUI_JOB_TIMEOUT_S", DEFAULT_JOB_TIMEOUT_S),
@@ -210,6 +220,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--concurrency",
         type=int,
         default=_env_optional_int("COMFYUI_CONCURRENCY") or 8,
+    )
+    parser.add_argument(
+        "--download-concurrency",
+        type=int,
+        default=(
+            _env_optional_int("COMFYUI_DOWNLOAD_CONCURRENCY")
+            or DEFAULT_DOWNLOAD_CONCURRENCY
+        ),
     )
     parser.add_argument("--client-id")
 
@@ -288,6 +306,11 @@ def _apply_fresh_run_config(args: argparse.Namespace) -> None:
         config.workflow.download.path if config.workflow.download is not None else None
     )
     args.ksampler_node_id = config.workflow.ksampler_node_id
+    args.anima_artist_mixer = getattr(
+        config.workflow,
+        "anima_artist_mixer",
+        False,
+    )
 
     args.negative_prompt = config.generation.negative_prompt
     args.append_negative_prompt = config.generation.append_negative_prompt
@@ -339,6 +362,7 @@ def run(args: argparse.Namespace) -> int:
         args.y_json,
         artist_prefix="@" if model_family == "anima" else "",
         artist_weight_profile=_artist_weight_profile_from_model(model_obj),
+        anima_artist_mixer=getattr(args, "anima_artist_mixer", False),
     )
     x_descriptions = read_x_descriptions(args.x_json)
 
@@ -522,6 +546,7 @@ def run_retry(args: argparse.Namespace) -> int:
         args.y_json,
         artist_prefix="@" if model_family == "anima" else "",
         artist_weight_profile=artist_weight_profile,
+        anima_artist_mixer=getattr(args, "anima_artist_mixer", False),
     )
     x_descriptions = read_x_descriptions(args.x_json)
 
@@ -565,7 +590,7 @@ def run_retry(args: argparse.Namespace) -> int:
     )
 
     x_rows_by_index = {item.index: item.value for item in x_selected}
-    y_values_by_index = {item.index: item.value.get("y", "") for item in y_selected}
+    y_rows_by_index = {item.index: item.value for item in y_selected}
     if model_family == "newbie":
         def _render_fn(template, x_row, y_value):
             return assemble_newbie_prompt(
@@ -583,7 +608,7 @@ def run_retry(args: argparse.Namespace) -> int:
         target_cells=target_cells,
         latest_records=latest_records,
         x_rows_by_index=x_rows_by_index,
-        y_values_by_index=y_values_by_index,
+        y_rows_by_index=y_rows_by_index,
         template=args.template,
         base_seed=args.base_seed,
         workflow_hash=workflow_hash,
@@ -692,6 +717,8 @@ def _validate_args(args: argparse.Namespace) -> None:
 
     if args.request_timeout_s <= 0:
         raise ValueError("--request-timeout-s 必须 > 0")
+    if getattr(args, "download_read_timeout_s", 1.0) <= 0:
+        raise ValueError("--download-read-timeout-s 必须 > 0")
     if args.job_timeout_s <= 0:
         raise ValueError("--job-timeout-s 必须 > 0")
     x_limit = getattr(args, "x_limit", None)
@@ -703,6 +730,8 @@ def _validate_args(args: argparse.Namespace) -> None:
 
     if args.concurrency <= 0:
         raise ValueError("--concurrency 必须 > 0")
+    if getattr(args, "download_concurrency", 1) <= 0:
+        raise ValueError("--download-concurrency 必须 > 0")
 
     retry_error_codes = _parse_retry_error_codes(args.retry_error_code)
     if retry_error_codes is not None and not retry_mode:

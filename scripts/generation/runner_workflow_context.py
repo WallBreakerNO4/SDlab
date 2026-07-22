@@ -55,10 +55,18 @@ def _load_workflow_context(args: argparse.Namespace) -> WorkflowContext | None:
             negative_prompt=default_negative_prompt,
             overrides=WorkflowOverrides(seed=0),
             ksampler_node_id=selected_ksampler_id,
+            artist_chain=(
+                "" if getattr(args, "anima_artist_mixer", False) else None
+            ),
         )
     except Exception as exc:
+        injection_mode = (
+            "Anima Artist Mixer"
+            if getattr(args, "anima_artist_mixer", False)
+            else "CLIPTextEncode"
+        )
         raise ValueError(
-            "workflow 结构不符合 CLIPTextEncode 注入要求，请使用 CLIPTextEncode 版 workflow"
+            f"workflow 结构不符合 {injection_mode} 注入要求"
         ) from exc
 
     return WorkflowContext(

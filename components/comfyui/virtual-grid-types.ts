@@ -22,6 +22,7 @@ export type RowItem = {
   category: string | null;
   width: number | null;
   height: number | null;
+  blurhash: string | null;
   meta: RowMeta;
   thumb: VariantSources | null;
   display: VariantSources | null;
@@ -50,6 +51,12 @@ export type RunPrompt = {
   positive_prompt: string;
 };
 
+export type RunGridYPromptParts = {
+  yIndex: number;
+  artist: string | null;
+  commonPrompt: string | null;
+};
+
 export type BlurhashCell = {
   x_index: number;
   y_index: number;
@@ -64,6 +71,7 @@ export type RunGridIndexData = {
   x_columns: RunGridXColumn[];
   y_indexes: number[];
   y_labels?: string[];
+  y_prompt_parts?: RunGridYPromptParts[];
   prompts: RunPrompt[];
   blurhash_cells: BlurhashCell[];
 };

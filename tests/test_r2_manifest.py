@@ -49,7 +49,7 @@ def _sample_payload() -> dict[str, object]:
                 "prompt_hash": "p1",
                 "width": 1024,
                 "height": 1024,
-                "blurhash": "L6PZfSi_.AyE_3t7t7R**0o#DgR4",
+                "blurhash": "normal-blurhash",
                 "seed": "111",
                 "y_value": "cfg_7.0",
                 "thumb_webp_bucket": "public",
@@ -68,7 +68,7 @@ def _sample_payload() -> dict[str, object]:
                 "prompt_hash": "p2",
                 "width": 1024,
                 "height": 1024,
-                "blurhash": "L6PZfSi_.AyE_3t7t7R**0o#DgR4",
+                "blurhash": "advance-blurhash",
                 "seed": "222",
                 "y_value": "cfg_7.0",
                 "thumb_webp_bucket": "private",
@@ -87,7 +87,7 @@ def _sample_payload() -> dict[str, object]:
                 "prompt_hash": "p1",
                 "width": 1024,
                 "height": 1024,
-                "blurhash": "L6PZfSi_.AyE_3t7t7R**0o#DgR4",
+                "blurhash": "nsfw-blurhash",
                 "seed": "333",
                 "y_value": "cfg_7.0",
                 "thumb_webp_bucket": "private",
@@ -241,17 +241,32 @@ def test_auth_nsfw_row_has_all_categories() -> None:
     assert categories == {"normal", "advance", "nsfw"}
 
 
-def test_row_items_do_not_include_blurhash() -> None:
+def test_row_items_include_blurhash_without_leaking_inaccessible_categories() -> None:
     release = build_view_release(_sample_payload())
 
     row_manifests = cast(dict[str, object], release["row_manifests"])
-    for variant in ("public", "auth_sfw", "auth_nsfw"):
+    expected_by_variant = {
+        "public": {"normal": "normal-blurhash"},
+        "auth_sfw": {
+            "normal": "normal-blurhash",
+            "advance": "advance-blurhash",
+        },
+        "auth_nsfw": {
+            "normal": "normal-blurhash",
+            "advance": "advance-blurhash",
+            "nsfw": "nsfw-blurhash",
+        },
+    }
+    for variant, expected in expected_by_variant.items():
         rows = cast(dict[int, dict[str, object]], row_manifests[variant])
         row = rows[0]
         cells = cast(list[dict[str, object]], row["cells"])
-        for cell in cells:
-            for item in cast(list[dict[str, object]], cell["items"]):
-                assert "blurhash" not in item
+        actual = {
+            cast(str, item["category"]): item["blurhash"]
+            for cell in cells
+            for item in cast(list[dict[str, object]], cell["items"])
+        }
+        assert actual == expected
 
 
 def test_public_row_variant_sources_not_leaked() -> None:
@@ -441,6 +456,42 @@ def test_bootstrap_includes_y_labels() -> None:
         y_labels = cast(list[str], release[key]["yLabels"])
         assert len(y_labels) == 1
         assert y_labels[0] == "cfg_7.0"
+
+
+def test_bootstrap_includes_mixer_prompt_parts() -> None:
+    payload = _sample_payload()
+    images = cast(list[dict[str, object]], payload["images"])
+    for image in images:
+        image["artist_chain"] = "1.1::@artist-a"
+        image["y_common_prompt"] = "no lineart,"
+
+    release = build_view_release(payload)
+
+    for key in ("bootstrap_sfw", "bootstrap_nsfw"):
+        assert release[key]["yPromptParts"] == [
+            {
+                "yIndex": 0,
+                "artist": "1.1::@artist-a",
+                "commonPrompt": "no lineart,",
+            }
+        ]
+
+
+def test_bootstrap_omits_mixer_prompt_parts_for_legacy_run() -> None:
+    release = build_view_release(_sample_payload())
+
+    assert "yPromptParts" not in release["bootstrap_sfw"]
+    assert "yPromptParts" not in release["bootstrap_nsfw"]
+
+
+def test_mixer_prompt_parts_reject_inconsistent_y_row() -> None:
+    payload = _sample_payload()
+    images = cast(list[dict[str, object]], payload["images"])
+    images[0]["artist_chain"] = "@artist-a"
+    images[1]["artist_chain"] = "@artist-b"
+
+    with pytest.raises(ValueError, match="Mixer prompt 拆分不一致"):
+        build_view_release(payload)
 
 
 # ---- x_columns remap ----

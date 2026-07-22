@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-06-18 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-07-20 -->
 
 # lib/ - Node 侧共享边界(Supabase + R2 + 路径安全 + 类型)
 
@@ -14,7 +14,7 @@
 | 服务端 Supabase 客户端     | `supabase-auth.ts`    | `server-only` + cookie session + publishable key |
 | 浏览器端 Supabase 客户端   | `supabase-browser.ts` | `AuthProvider` 使用                              |
 | Supabase 相关类型          | `supabase-types.ts`   | run/image/variant 与 JSON 类型                   |
-| R2 URL 构建                | `r2-url.ts`           | `publicObjectUrl()` / `privateObjectUrl()`       |
+| R2 URL 构建                | `r2-url.ts`           | `publicObjectUrl()` / `privateObjectProxyUrl()`  |
 | runDir 共享工具 / 路径校验 | `comfyui-path.ts`     | allowlist、相对路径、防逃逸                      |
 | Web 领域类型               | `comfyui-types.ts`    | `RunSummary` / `RunDir` / type guard             |
 | className 合并             | `utils.ts`            | `cn()`                                           |
@@ -35,14 +35,17 @@
 | run 网格列可见性        | `run-grid-visibility.ts`  | `VisibleRunGridXColumn` / `VisibleRunGridColumns`;解析可见 X 列与允许的原始索引 |
 | run 媒体授权 token       | `run-media-grant.ts`      | `server-only` + `node:crypto`;`ViewerVariant` / `RunMediaGrantClaims`;HMAC 签发 + `timingSafeEqual` 校验,服务 `access` route |
 | 主题常量与解析          | `theme.ts`                | `THEME_STORAGE_KEY` / `THEME_COOKIE_NAME` / `THEME_COOKIE_MAX_AGE`;明暗色 oklch 值;`parseThemePreference()` / `ThemePreference` |
+| 画师串收藏数据层        | `style-favorites.ts`      | `StyleKey` / `StyleItem` / `StyleFavoriteEntry` 类型与 guard + `fetchStyleFavorites()` / `upsertStyleFavorite()` / `deleteStyleFavorite()` 薄函数 |
+| 模型对比共享合约        | `style-comparison.ts`     | 目录/详情/slice 类型与 guard、keyset cursor、上限解析、cache URL 与客户端纯函数 |
+| 已发布模型目录缓存      | `style-comparison-server.ts` | `server-only`；查询已发布 run + X columns，`unstable_cache` 5 分钟 |
 
 ## 约定(本目录特有)
 
 - ComfyUI API route 统一使用 `createSupabaseAuthClient()`;它依赖 `server-only` 与 `next/headers`。
 - 浏览器端认证统一使用 `createSupabaseBrowserClient()`;不要在客户端自己拼 Supabase SSR 初始化。
 - `middleware.ts` 是例外:因为运行在 Edge,不能 import `lib/supabase-auth.ts`,只能内联建 client。
-- `publicObjectUrl()` 和 `privateObjectUrl()` 是 Web 侧统一的 R2 URL 构建入口:既服务 run 详情页的展示页缩略图,也服务首页封面图/主页缩略图对应的变体 URL;不要在 route/组件里手拼对象 URL。
-- `privateObjectUrl()` 负责生成私有对象的短期签名 URL;签名的前置鉴权发生在 ComfyUI API 返回图片元数据时。
+- `publicObjectUrl()` 和 `privateObjectProxyUrl()` 是 Web 侧统一的 R2 URL 构建入口；两者都先验证 `runs/` key，不要在 route/组件里手拼对象 URL。
+- `privateObjectProxyUrl(r2Key, grant)` 构建 `/api/private-object?key=...&grant=...`；grant 由 run media access 链路签发和校验，客户端不持有 R2 凭证，也不生成私有对象签名 URL。
 - API 侧 `runDir` 形态判断当前主要走 `comfyui-types.ts:isValidRunDir()`;`comfyui-path.ts` 更偏共享路径安全与 allowlist 工具。
 - SEO metadata 统一走 `metadata-utils.ts:buildSeoMetadata()`;各页面 `generateMetadata` 调用本函数即可一致产出 OG / Twitter Card / canonical / hreflang 标签。
 - 模型详情页的 `og:image` 走 `model-metadata.ts:getModelMetadata()`;该函数带 1h 缓存,仅查询轻量字段。
@@ -50,6 +53,10 @@
 - Prompt 法典相关 lib 文件只服务 `/[locale]/prompts` 页面:`prompt-types.ts` 是与 PromptCodex schema 对齐的共享类型;`prompt-formatter.ts` 是唯一的目标模型文本格式化入口;`prompt-data-loader.ts` 只 fetch `public/data/prompts/*.json`(不读源 YAML);`prompt-model-context.tsx` / `prompt-choice-context.tsx` 是两个客户端 Context,不要在服务端组件里使用。
 - `run-list.ts` 用 `unstable_cache` 包裹首页 run 列表查询,缓存 5 分钟并以 `run-list` tag 标记;刷新 run 数据时通过 `revalidateTag("run-list")` 失效,不要在页面层自己加缓存。
 - `server-user-preferences.ts` 是 `server-only`,仅供 `app/api/viewer/**` 等 route 使用;浏览器端读取 NSFW 偏好只走 cookie(`viewer-nsfw-cookie.ts`),不要在客户端 import 本文件。
+- 收藏身份用 `style_key`（`{collection_id}:{item_index}`）,跨 run 匹配只比较 style_key,永不比较 prompt 字符串;`y_index` 一律 0-based,仅收藏页拼跳转 URL 时 `#{y_index + 1}`。
+- 模型对比目录默认/最大分页数均为 40；`parseStyleComparisonSliceBody()` 只接受 1–40 个 style keys 和 1–12 个 run dirs，所有 placement `y_index` 保持 0-based。
+- `getCachedPublishedRuns()` 缓存已发布模型目录 5 分钟，cache key/tag 为模型目录级，不按用户或收藏分页重复构建。
+- `buildPrivateObjectCacheUrl()` 仅生成去 grant、保留 `key` 的共享 edge cache URL；它不能代替授权，`app/api/private-object` 必须先执行 `verifyRunMediaGrant()` 与 key allowlist 校验，再做 cache lookup。
 
 ## 反模式
 

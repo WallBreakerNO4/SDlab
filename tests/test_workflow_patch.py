@@ -19,6 +19,9 @@ from scripts.generation.workflow_patch import (
 
 
 RF_WORKFLOW = ROOT / "data" / "models" / "example" / "api.json"
+ANIMA_MIXER_WORKFLOW = (
+    ROOT / "data" / "models" / "Anima-base-1.0-Artist-Mixer" / "api.json"
+)
 
 
 def _inputs(node: dict[str, object]) -> dict[str, object]:
@@ -88,6 +91,61 @@ def test_patch_workflow_reference_chasing_injects_main_with_tristate_none_unchan
     assert _inputs(patched["5"]).get("batch_size") == _inputs(original["5"]).get(
         "batch_size"
     )
+
+
+def test_patch_workflow_injects_anima_artist_mixer_pack_and_keeps_plugin_options():
+    workflow = load_workflow(ANIMA_MIXER_WORKFLOW)
+
+    patched = patch_workflow(
+        workflow,
+        positive_prompt="masterpiece, 1girl, year 2025, ",
+        negative_prompt="low quality,",
+        artist_chain="1.21::@wlop, @unit artist",
+        overrides=WorkflowOverrides(seed=123, width=832, height=1216),
+    )
+
+    assert _inputs(patched["46"])["base_prompt"] == (
+        "masterpiece, 1girl, year 2025, "
+    )
+    assert _inputs(patched["46"])["artist_chain"] == (
+        "1.21::@wlop, @unit artist"
+    )
+    assert _inputs(patched["12"])["text"] == "low quality,"
+    assert _inputs(patched["19"])["seed"] == 123
+    assert _inputs(patched["28"])["width"] == 832
+    assert _inputs(patched["28"])["height"] == 1216
+    assert _inputs(patched["47"])["combine_mode"] == "output_avg"
+    assert _inputs(patched["47"])["fusion_mode"] == "base_preserve"
+    assert _inputs(patched["47"])["strength"] == 1.8
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("different-model-node", "same AnimaArtistCrossAttn"),
+        ("disabled", "enabled=true"),
+        ("missing-pack-input", "missing required inputs"),
+    ],
+)
+def test_patch_workflow_rejects_invalid_anima_artist_mixer_chain(
+    mutation: str,
+    message: str,
+) -> None:
+    workflow = load_workflow(ANIMA_MIXER_WORKFLOW)
+    if mutation == "different-model-node":
+        _inputs(workflow["19"])["model"] = ["44", 0]
+    elif mutation == "disabled":
+        _inputs(workflow["47"])["enabled"] = False
+    else:
+        del _inputs(workflow["46"])["artist_chain"]
+
+    with pytest.raises(ValueError, match=message):
+        patch_workflow(
+            workflow,
+            positive_prompt="positive",
+            negative_prompt="negative",
+            artist_chain="@wlop",
+        )
 
 
 def test_patch_workflow_overrides_save_image_filename_prefix_when_requested():

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
@@ -11,7 +12,12 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from .r2_client import R2Client, UploadPlan
 from .supabase_writer import SupabaseWriter, estimate_upload_index_records
-from .upload_contracts import BucketScope, PlannedUpload, RunPlan
+from .upload_contracts import (
+    BucketScope,
+    PlannedUpload,
+    RunPlan,
+    UploadScriptError,
+)
 
 LOG = logging.getLogger(__name__)
 
@@ -30,6 +36,20 @@ def _upload_if_missing(
     ):
         return False
 
+    _upload_planned(
+        r2_client=r2_client,
+        bucket_name=bucket_name,
+        planned=planned,
+    )
+    return True
+
+
+def _upload_planned(
+    *,
+    r2_client: R2Client,
+    bucket_name: str,
+    planned: PlannedUpload,
+) -> None:
     r2_client.upload(
         UploadPlan(
             bucket_name=bucket_name,
@@ -41,7 +61,63 @@ def _upload_if_missing(
             local_path=planned.local_path,
         )
     )
-    return True
+
+
+def _current_manifest_upload(plan: RunPlan) -> PlannedUpload:
+    matches = [
+        upload for upload in plan.manifest_uploads if upload.variant == "view_current"
+    ]
+    if len(matches) != 1:
+        raise RuntimeError("run plan must contain exactly one view_current upload")
+    return matches[0]
+
+
+def _manifest_release_id(payload: bytes | None) -> str | None:
+    if payload is None:
+        return None
+    try:
+        parsed = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    release_id = parsed.get("release_id")
+    if not isinstance(release_id, str) or not release_id.strip():
+        return None
+    return release_id.strip()
+
+
+def _should_publish_current(
+    *,
+    plan: RunPlan,
+    current_upload: PlannedUpload,
+    r2_client: R2Client,
+    bucket_names: dict[BucketScope, str],
+    force_publish: bool,
+) -> bool:
+    planned_release_id = _manifest_release_id(current_upload.body_bytes)
+    if planned_release_id is None:
+        raise RuntimeError("planned current manifest is invalid")
+
+    bucket_name = bucket_names[current_upload.bucket_scope]
+    remote_payload = r2_client.read_bytes_if_exists(
+        bucket_name,
+        current_upload.key,
+        bucket_scope=current_upload.bucket_scope,
+    )
+    if remote_payload is None:
+        return True
+
+    remote_release_id = _manifest_release_id(remote_payload)
+    if remote_release_id == planned_release_id:
+        return False
+    if force_publish:
+        return True
+
+    raise UploadScriptError(
+        f"run_dir={plan.run_dir_name} 已发布不同 release；请使用 -F/--force-publish",
+        category="argument",
+    )
 
 
 def _upload_image_variants_for_plan(
@@ -85,7 +161,14 @@ def _upload_artifacts_for_plan(
 ) -> tuple[int, int]:
     artifact_uploaded = 0
     skipped_existing = 0
-    uploads = [*plan.artifact_uploads, *plan.manifest_uploads]
+    uploads = [
+        *plan.artifact_uploads,
+        *(
+            upload
+            for upload in plan.manifest_uploads
+            if upload.variant != "view_current"
+        ),
+    ]
     if not uploads:
         return artifact_uploaded, skipped_existing
 
@@ -116,6 +199,7 @@ def _execute(
     r2_client_factory: Callable[[], R2Client],
     supabase_writer_factory: Callable[[], SupabaseWriter],
     thread_pool_cls: type[ThreadPoolExecutor] = ThreadPoolExecutor,
+    force_publish: bool,
 ) -> dict[str, object]:
     r2_client = r2_client_factory()
     supabase_writer = supabase_writer_factory()
@@ -133,6 +217,19 @@ def _execute(
     total_db_records = 0
     for plan in plans:
         total_db_records += estimate_upload_index_records(plan.upload_index_payload)
+
+    publish_current_by_run: dict[str, bool] = {}
+    current_upload_by_run: dict[str, PlannedUpload] = {}
+    for plan in plans:
+        current_upload = _current_manifest_upload(plan)
+        current_upload_by_run[plan.run_dir_name] = current_upload
+        publish_current_by_run[plan.run_dir_name] = _should_publish_current(
+            plan=plan,
+            current_upload=current_upload,
+            r2_client=r2_client,
+            bucket_names=bucket_names,
+            force_publish=force_publish,
+        )
 
     LOG.info(
         "start upload execution: run_count=%s image_upload_count=%s artifact_upload_count=%s db_record_count=%s upload_concurrency=%s",
@@ -199,6 +296,20 @@ def _execute(
                             progress_callback=_tick_db_progress,
                         )
 
+                        current_upload = current_upload_by_run[plan.run_dir_name]
+                        if publish_current_by_run[plan.run_dir_name]:
+                            _upload_planned(
+                                r2_client=r2_client,
+                                bucket_name=bucket_names[
+                                    current_upload.bucket_scope
+                                ],
+                                planned=current_upload,
+                            )
+                            artifact_uploaded += 1
+                        else:
+                            skipped_existing += 1
+                        artifact_pbar.update(1)
+
                     image_pbar.set_postfix(
                         uploaded=uploaded,
                         skipped=skipped_existing,
@@ -220,4 +331,5 @@ def _execute(
         "uploaded_artifact_uploads": artifact_uploaded,
         "skipped_existing_uploads": skipped_existing,
         "db_run_upserts": len(plans),
+        "force_publish": force_publish,
     }

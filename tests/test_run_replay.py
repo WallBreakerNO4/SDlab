@@ -12,6 +12,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.generation.run_replay import load_run_replay_config
+from scripts.generation.prompt_grid import (
+    Y_ARTIST_CHAIN,
+    Y_POSITIVE_VALUE,
+    compute_prompt_hash,
+    derive_seed,
+)
+from scripts.generation.runner_retry import _validate_retry_failed_cells_consistency
 
 
 def _sha256_file(path: Path) -> str:
@@ -118,6 +125,106 @@ def test_load_run_replay_config_reads_optional_new_snapshot_fields(
     assert config.generation_overrides.negative_prompt == "bad,"
     assert config.generation_overrides.append_negative_prompt == "nsfw, nipples,"
     assert config.ksampler_node_id == "3"
+    assert config.anima_artist_mixer is False
+
+
+def test_load_run_replay_config_reads_anima_artist_mixer(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run-mixer"
+    run_dir.mkdir()
+    x_path = tmp_path / "x.json"
+    y_path = tmp_path / "y.json"
+    x_path.write_text('[{"x":1}]', encoding="utf-8")
+    y_path.write_text('[{"y":"style"}]', encoding="utf-8")
+    payload = _base_run_payload(x_path, y_path)
+    config_snapshot = payload["config_snapshot"]
+    assert isinstance(config_snapshot, dict)
+    workflow = config_snapshot["workflow"]
+    assert isinstance(workflow, dict)
+    workflow["anima_artist_mixer"] = True
+    (run_dir / "run.json").write_text(
+        json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+    )
+
+    config = load_run_replay_config(run_dir)
+
+    assert config.anima_artist_mixer is True
+
+
+def test_retry_strict_rejects_changed_anima_artist_chain() -> None:
+    x_row = {
+        "gender": "1girl, ",
+        "characters": "",
+        "series": "",
+        "rating": "safe, ",
+        "general": "solo, ",
+    }
+    y_row = {
+        "y": "(@wlop:1.2), year 2025, ",
+        Y_POSITIVE_VALUE: "year 2025, ",
+        Y_ARTIST_CHAIN: "1.2::@wlop",
+    }
+    positive_prompt = "safe, 1girl, year 2025, solo, "
+    record = {
+        "status": "failed",
+        "artist_chain": "0.8::@wlop",
+        "prompt_hash": compute_prompt_hash(positive_prompt, "1.2::@wlop"),
+        "seed": derive_seed(123, 0, 0),
+        "workflow_api_sha256": "workflow-hash",
+    }
+
+    with pytest.raises(ValueError, match="artist_chain"):
+        _validate_retry_failed_cells_consistency(
+            target_cells=[(0, 0)],
+            latest_records={(0, 0): record},
+            x_rows_by_index={0: x_row},
+            y_rows_by_index={0: y_row},
+            template="{rating}{gender}{y}{general}",
+            base_seed=123,
+            workflow_hash="workflow-hash",
+            render_prompt=lambda template, x_value, y_value: positive_prompt,
+            compute_prompt_hash=compute_prompt_hash,
+            derive_seed=derive_seed,
+            coerce_int_or_none=lambda value: value if isinstance(value, int) else None,
+        )
+
+
+def test_retry_strict_rejects_changed_anima_common_prompt() -> None:
+    x_row = {
+        "gender": "1girl, ",
+        "characters": "",
+        "series": "",
+        "rating": "safe, ",
+        "general": "solo, ",
+    }
+    y_row = {
+        "y": "@wlop, year 2025, ",
+        Y_POSITIVE_VALUE: "year 2025, ",
+        Y_ARTIST_CHAIN: "@wlop",
+    }
+    positive_prompt = "safe, 1girl, year 2025, solo, "
+    record = {
+        "status": "failed",
+        "artist_chain": "@wlop",
+        "y_common_prompt": "year 2024, ",
+        "prompt_hash": compute_prompt_hash(positive_prompt, "@wlop"),
+        "seed": derive_seed(123, 0, 0),
+        "workflow_api_sha256": "workflow-hash",
+    }
+
+    with pytest.raises(ValueError, match="y_common_prompt"):
+        _validate_retry_failed_cells_consistency(
+            target_cells=[(0, 0)],
+            latest_records={(0, 0): record},
+            x_rows_by_index={0: x_row},
+            y_rows_by_index={0: y_row},
+            template="{rating}{gender}{y}{general}",
+            base_seed=123,
+            workflow_hash="workflow-hash",
+            render_prompt=lambda template, x_value, y_value: positive_prompt,
+            compute_prompt_hash=compute_prompt_hash,
+            derive_seed=derive_seed,
+            coerce_int_or_none=lambda value: value if isinstance(value, int) else None,
+        )
 
 
 def test_load_run_replay_config_allows_missing_append_negative_prompt(

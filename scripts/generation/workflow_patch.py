@@ -51,6 +51,7 @@ def patch_workflow(
     overrides: WorkflowOverrides | None = None,
     ksampler_node_id: str | None = None,
     save_image_prefix: str | None = None,
+    artist_chain: str | None = None,
 ) -> WorkflowDict:
     patched = copy.deepcopy(workflow)
     active_overrides = overrides or WorkflowOverrides()
@@ -58,13 +59,9 @@ def patch_workflow(
     selected_ksampler_id = _select_ksampler_node_id(patched, ksampler_node_id)
     ksampler_node = patched[selected_ksampler_id]
 
-    positive_node_id = _extract_ref_node_id(ksampler_node, "positive")
     negative_node_id = _extract_ref_node_id(ksampler_node, "negative")
     latent_node_id = _extract_ref_node_id(ksampler_node, "latent_image")
 
-    positive_node = _require_class_type(
-        patched, positive_node_id, expected_class_type="CLIPTextEncode"
-    )
     negative_node = _require_class_type(
         patched, negative_node_id, expected_class_type="CLIPTextEncode"
     )
@@ -76,10 +73,23 @@ def patch_workflow(
     )
 
     negative_inputs = _ensure_inputs(negative_node)
-    negative_inputs["text"] = negative_prompt
 
-    positive_inputs = _ensure_inputs(positive_node)
-    positive_inputs["text"] = positive_prompt
+    if artist_chain is None:
+        positive_node_id = _extract_ref_node_id(ksampler_node, "positive")
+        positive_node = _require_class_type(
+            patched, positive_node_id, expected_class_type="CLIPTextEncode"
+        )
+        positive_inputs = _ensure_inputs(positive_node)
+        positive_inputs["text"] = positive_prompt
+    else:
+        _patch_anima_artist_mixer(
+            patched,
+            ksampler_node,
+            positive_prompt=positive_prompt,
+            artist_chain=artist_chain,
+        )
+
+    negative_inputs["text"] = negative_prompt
 
     _apply_if_provided(
         ksampler_node,
@@ -110,6 +120,58 @@ def patch_workflow(
             save_inputs["filename_prefix"] = save_image_prefix
 
     return patched
+
+
+def _patch_anima_artist_mixer(
+    workflow: WorkflowDict,
+    ksampler_node: WorkflowNode,
+    *,
+    positive_prompt: str,
+    artist_chain: str,
+) -> None:
+    positive_node_id, positive_output = _extract_ref(ksampler_node, "positive")
+    model_node_id, model_output = _extract_ref(ksampler_node, "model")
+    if positive_node_id != model_node_id:
+        raise ValueError(
+            "Anima Artist Mixer requires KSampler positive and model to reference "
+            "the same AnimaArtistCrossAttn node"
+        )
+    if positive_output != 1 or model_output != 0:
+        raise ValueError(
+            "AnimaArtistCrossAttn outputs must connect as model=0 and positive=1"
+        )
+
+    cross_attn_node = _require_class_type(
+        workflow,
+        positive_node_id,
+        expected_class_type="AnimaArtistCrossAttn",
+    )
+    cross_attn_inputs = _ensure_inputs(cross_attn_node)
+    if cross_attn_inputs.get("enabled") is not True:
+        raise ValueError("AnimaArtistCrossAttn node must have enabled=true")
+
+    artist_pack_node_id, artist_pack_output = _extract_ref(
+        cross_attn_node,
+        "artist_pack",
+    )
+    if artist_pack_output != 0:
+        raise ValueError("AnimaArtistPack artist_pack output must be index 0")
+    artist_pack_node = _require_class_type(
+        workflow,
+        artist_pack_node_id,
+        expected_class_type="AnimaArtistPack",
+    )
+    artist_pack_inputs = _ensure_inputs(artist_pack_node)
+    missing_inputs = [
+        key for key in ("base_prompt", "artist_chain") if key not in artist_pack_inputs
+    ]
+    if missing_inputs:
+        raise ValueError(
+            "AnimaArtistPack node missing required inputs: " + ", ".join(missing_inputs)
+        )
+
+    artist_pack_inputs["base_prompt"] = positive_prompt
+    artist_pack_inputs["artist_chain"] = artist_chain
 
 
 def _select_ksampler_node_id(
@@ -169,6 +231,27 @@ def _extract_ref_node_id(node: WorkflowNode, input_name: str) -> str:
             f"invalid reference node id type at inputs.{input_name}: {node_id_type}"
         )
     return reference_node_id
+
+
+def _extract_ref(node: WorkflowNode, input_name: str) -> tuple[str, int]:
+    inputs = _ensure_inputs(node)
+    value_obj = inputs.get(input_name)
+    if not isinstance(value_obj, list) or len(value_obj) < 2:
+        raise ValueError(f"invalid reference at inputs.{input_name}: {value_obj!r}")
+
+    reference_node_id = cast(object, value_obj[0])
+    output_index = cast(object, value_obj[1])
+    if not isinstance(reference_node_id, str):
+        node_id_type = type(reference_node_id).__name__
+        raise ValueError(
+            f"invalid reference node id type at inputs.{input_name}: {node_id_type}"
+        )
+    if isinstance(output_index, bool) or not isinstance(output_index, int):
+        output_type = type(output_index).__name__
+        raise ValueError(
+            f"invalid reference output index type at inputs.{input_name}: {output_type}"
+        )
+    return reference_node_id, output_index
 
 
 def _require_class_type(

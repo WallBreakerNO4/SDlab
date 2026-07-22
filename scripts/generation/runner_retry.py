@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from typing import Callable
 
+from scripts.generation.prompt_grid import Y_ARTIST_CHAIN, Y_POSITIVE_VALUE
 from scripts.generation.run_replay import RunReplayConfig
 
 
@@ -17,6 +18,7 @@ def _apply_replay_config_to_args(
     args.base_seed = replay.base_seed
     args.workflow_json = replay.workflow_api_path
     args.ksampler_node_id = replay.ksampler_node_id
+    args.anima_artist_mixer = replay.anima_artist_mixer
 
     args.negative_prompt = replay.generation_overrides.negative_prompt
     args.append_negative_prompt = replay.generation_overrides.append_negative_prompt
@@ -104,12 +106,12 @@ def _validate_retry_failed_cells_consistency(
     target_cells: list[tuple[int, int]],
     latest_records: dict[tuple[int, int], dict[str, object]],
     x_rows_by_index: dict[int, dict[str, str]],
-    y_values_by_index: dict[int, str],
+    y_rows_by_index: dict[int, dict[str, str]],
     template: str,
     base_seed: int,
     workflow_hash: str,
     render_prompt: Callable[[str, dict[str, str], str], str],
-    compute_prompt_hash: Callable[[str], str],
+    compute_prompt_hash: Callable[[str, str | None], str],
     derive_seed: Callable[[int, int, int], int],
     coerce_int_or_none: Callable[[object], int | None],
 ) -> None:
@@ -119,13 +121,32 @@ def _validate_retry_failed_cells_consistency(
             continue
 
         x_row = x_rows_by_index.get(x_index)
-        y_value = y_values_by_index.get(y_index)
-        if x_row is None or y_value is None:
+        y_row = y_rows_by_index.get(y_index)
+        if x_row is None or y_row is None:
             raise ValueError(f"retry cell 不在回放选择范围内: x={x_index} y={y_index}")
 
-        expected_prompt = render_prompt(template, x_row, y_value)
-        expected_prompt_hash = compute_prompt_hash(expected_prompt)
+        y_value = y_row.get("y", "")
+        positive_y_value = y_row.get(Y_POSITIVE_VALUE, y_value)
+        artist_chain_obj = y_row.get(Y_ARTIST_CHAIN)
+        artist_chain = (
+            artist_chain_obj if isinstance(artist_chain_obj, str) else None
+        )
+        expected_prompt = render_prompt(template, x_row, positive_y_value)
+        expected_prompt_hash = compute_prompt_hash(expected_prompt, artist_chain)
         expected_seed = derive_seed(base_seed, x_index, y_index)
+
+        if record.get("artist_chain") != artist_chain:
+            raise ValueError(
+                f"retry strict 校验失败(artist_chain): x={x_index} y={y_index}"
+            )
+
+        if (
+            "y_common_prompt" in record
+            and record.get("y_common_prompt") != positive_y_value
+        ):
+            raise ValueError(
+                f"retry strict 校验失败(y_common_prompt): x={x_index} y={y_index}"
+            )
 
         actual_prompt_hash = record.get("prompt_hash")
         if actual_prompt_hash != expected_prompt_hash:

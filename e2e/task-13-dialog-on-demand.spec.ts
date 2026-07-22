@@ -1,15 +1,13 @@
 import { expect, test } from "@playwright/test";
 
-const hasSupabaseConfig = Boolean(
-  process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY,
-);
+import {
+  DISPLAY_VARIANT_URL_PATTERN,
+  installModelViewMock,
+  MOCK_MODEL_VIEW_RUN_DIR,
+  PUBLIC_ROW_URL_PATTERN,
+} from "./model-view-test-helpers";
 
 test.describe("task 13: dialog display image loads on demand", () => {
-  test.skip(
-    !hasSupabaseConfig,
-    "缺少 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY，跳过数据相关用例",
-  );
-
   test("grid scrolling should not request display URLs before opening the dialog", async ({
     page,
   }) => {
@@ -18,22 +16,17 @@ test.describe("task 13: dialog display image loads on demand", () => {
 
     page.on("request", (request) => {
       const url = request.url();
-      if (!url.includes("/api/comfyui/run/")) return;
-
-      if (url.includes("/row?")) {
+      if (PUBLIC_ROW_URL_PATTERN.test(url)) {
         rowRequestCount += 1;
       }
 
-      if (url.includes("/display?")) {
+      if (DISPLAY_VARIANT_URL_PATTERN.test(url)) {
         displayRequestCount += 1;
       }
     });
 
-    await page.goto("/");
-
-    const modelLink = page.locator("a[href^='/models/']").first();
-    await expect(modelLink).toBeVisible();
-    await modelLink.click();
+    await installModelViewMock(page);
+    await page.goto(`/models/${MOCK_MODEL_VIEW_RUN_DIR}`);
 
     await expect(page).toHaveURL(/\/models\//);
     await expect(page.getByTestId("run-grid")).toBeVisible();
@@ -61,20 +54,15 @@ test.describe("task 13: dialog display image loads on demand", () => {
   test("dialog should use the loaded preview image until the display image finishes loading", async ({
     page,
   }) => {
-    let releaseDisplayRequest: (() => void) | null = null;
-
-    await page.route("**/api/comfyui/run/*/display?*", async (route) => {
-      await new Promise<void>((resolve) => {
-        releaseDisplayRequest = resolve;
-      });
-      await route.continue();
+    let releaseDisplayRequest = () => {};
+    const displayRequestReleased = new Promise<void>((resolve) => {
+      releaseDisplayRequest = resolve;
     });
 
-    await page.goto("/");
-
-    const modelLink = page.locator("a[href^='/models/']").first();
-    await expect(modelLink).toBeVisible();
-    await modelLink.click();
+    await installModelViewMock(page, {
+      beforeDisplayFulfill: () => displayRequestReleased,
+    });
+    await page.goto(`/models/${MOCK_MODEL_VIEW_RUN_DIR}`);
 
     await expect(page).toHaveURL(/\/models\//);
     await expect(page.getByTestId("run-grid")).toBeVisible();
@@ -95,9 +83,7 @@ test.describe("task 13: dialog display image loads on demand", () => {
       /opacity-0/,
     );
 
-    if (releaseDisplayRequest) {
-      (releaseDisplayRequest as () => void)();
-    }
+    releaseDisplayRequest();
 
     await expect(dialog.getByTestId("cell-dialog-display-image")).toHaveClass(
       /opacity-100/,

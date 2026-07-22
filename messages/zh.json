@@ -86,8 +86,8 @@
     "collapseTools": "收起工具面板",
     "loadFailed": "加载失败",
     "clickToCopy": "点击复制",
-    "searchPrompt": "搜索画师串",
-    "searchPlaceholder": "搜索画师...",
+    "searchPrompt": "搜索行 Prompt",
+    "searchPlaceholder": "搜索 Artist 或 Common Prompt...",
     "clearSearch": "清空搜索",
     "prevMatch": "上一个匹配",
     "nextMatch": "下一个匹配",
@@ -101,6 +101,12 @@
     "selectNone": "全不选",
     "columnLabel": "列 {index}",
     "copiedPrompt": "已复制画师串",
+    "artistLabel": "Artist",
+    "commonPromptLabel": "Common Prompt",
+    "copyArtist": "复制 Artist",
+    "copyCommonPrompt": "复制 Common Prompt",
+    "copiedArtist": "已复制 Artist",
+    "copiedCommonPrompt": "已复制 Common Prompt",
     "copyFailed": "复制失败",
     "rowRangeError": "行号必须在 1 到 {max} 之间",
     "searchShortcut": "按 / 搜索",
@@ -151,5 +157,42 @@
     "loginGateTitle": "登录以浏览提示词法典",
     "loginGateDescription": "登录后可浏览结构化提示词标签，选择并复制用于 NovelAI 和 ComfyUI 图像生成。",
     "loginGateButton": "登录 / 注册"
+  },
+  "styleFavorites": {
+    "navEntry": "收藏",
+    "toggleFailed": "收藏操作失败，请稍后重试。",
+    "add": "收藏该画师串",
+    "remove": "取消收藏",
+    "panelTitle": "收藏的画师串",
+    "panelEmpty": "暂无收藏。点击行标签上的星标即可收藏画师串。",
+    "title": "画师串收藏 — SD Style Lab",
+    "description": "查看你收藏的画师提示词串，并跳转到各模型中的对应行。",
+    "loginGateTitle": "登录以查看收藏",
+    "loginGateDescription": "登录后可查看你收藏的画师串，并快速跳转到各模型中的对应行。",
+    "loginGateButton": "登录 / 注册",
+    "loading": "加载中...",
+    "empty": "暂无收藏。在模型详情页点击行标签上的星标即可收藏画师串。",
+    "favoritedAt": "收藏于 {time}",
+    "availableModels": "可用模型",
+    "noAvailableModels": "暂无可用模型"
+    ,"comparisonTitle": "模型对比"
+    ,"comparisonDetailTitle": "提示词模型对比"
+    ,"comparisonDescription": "比较同一画师提示词在不同模型下的生成结果。"
+    ,"visibleModels": "显示 {count} 个模型"
+    ,"favoriteLabel": "收藏提示词"
+    ,"comparisonScene": "测试场景"
+    ,"modelSelector": "选择模型"
+    ,"loadMore": "加载更多"
+    ,"noImage": "暂无图片"
+    ,"backToFavorites": "返回收藏"
+    ,"previousModels": "上一组模型"
+    ,"nextModels": "下一组模型"
+    ,"loadFailed": "收藏加载失败，请刷新重试。"
+    ,"syncMode": "同步切换"
+    ,"syncModeCell": "单张"
+    ,"syncModeColumn": "整列"
+    ,"syncModeAll": "全部"
+    ,"syncModeHelpTitle": "同步切换"
+    ,"syncModeHelpDescription": "点击图片两侧的箭头时的联动方式：单张只切换当前这一张；整列会同步切换该模型下所有收藏的图片；全部会同步切换矩阵中的所有图片。整列和全部模式下，列表头的场景描述会跟随当前图片一起更新。"
   }
 }

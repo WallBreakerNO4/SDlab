@@ -1,11 +1,11 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-05-30 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-07-20 -->
 
 # app/ — Next.js 展示网站（App Router）
 
 ## 概览
 
-- 页面层负责首页模型目录 / 模型详情 / about / privacy / auth callback 展示与全站 layout 装配；数据从 Supabase API 读取，图片从 R2 公开 URL 或私有签名 URL 读取。
+- 页面层负责首页模型目录 / 模型详情 / 收藏模型对比 / about / privacy / auth callback 展示与全站 layout 装配；数据从 Supabase API 与 R2 view JSON 读取，公开图片直连 R2，私有对象经 grant 代理读取。
 - I18N 改造后：所有面向用户的页面迁入 `app/[locale]/` 动态路由段；`app/layout.tsx` 变为纯透传壳；`app/models/[runDir]/` 保留为纯组件模块，由 `app/[locale]/models/[runDir]/page.tsx` 消费。
 - 术语约定：run 详情页网格里消费的 `display_*` / `thumb_*` 变体叫“展示页缩略图”；run 级 `image.*` 属于封面图，同级 `images/*` 属于主页缩略图集合。当前网页首页已经通过 `/api/comfyui/runs` 消费封面图与主页缩略图字段。
 
@@ -17,6 +17,8 @@
 | 首页客户端组件       | `app/home-page-client.tsx`                       | `useTranslations("home")` 驱动多语言 Hero/Models 区域          |
 | 模型详情页（入口）   | `app/[locale]/models/[runDir]/page.tsx`          | locale 校验 + runDir 校验 → 委托 `ModelDetailClientPage`      |
 | 模型详情页（组件）   | `app/models/[runDir]/model-detail-client.tsx`    | 拉取 view bootstrap JSON + 虚拟网格 + workflow 下载           |
+| 收藏模型对比页       | `app/[locale]/favorites/page.tsx`                | 登录门控 + 收藏行 × 已发布模型列矩阵；noindex                 |
+| 单收藏对比详情       | `app/[locale]/favorites/[styleKey]/page.tsx`     | 同一 `style_key` 的跨模型详情；委托 `FavoriteComparisonDetail` |
 | Auth 回调页         | `app/auth/callback/route.ts`                     | OAuth 回跳处理                                                |
 | Auth 局部约定       | `app/auth/AGENTS.md`                             | PKCE session 交换特例                                         |
 | API 总约定          | `app/api/AGENTS.md`                              | `runtime` / 错误响应 / 鉴权边界                               |
@@ -32,6 +34,7 @@
 | robots.txt            | `app/robots.ts`                                  | 爬虫规则 + sitemap 引用；通过 `SITE_ORIGIN` 构建完整 URL      |
 | sitemap.xml           | `app/sitemap.ts`                                 | 多语言 sitemap + hreflang alternates；动态注入模型详情页     |
 | API 局部约定        | `app/api/comfyui/AGENTS.md`                      | 当前已落地的 route 细则                                       |
+| Viewer API 局部约定 | `app/api/viewer/AGENTS.md`                       | NSFW 偏好、收藏 CRUD、模型对比目录/详情/slice                 |
 | I18N 页面层约定      | `app/[locale]/AGENTS.md`                         | locale 校验 + 导航 + 翻译约定                                  |
 | 模型详情页组件约定   | `app/models/[runDir]/AGENTS.md`                  | 数据流、type guard、hook 设计                                 |
 
@@ -39,7 +42,7 @@
 
 - App Router API 保持 `export const runtime = "nodejs"`。
 - ComfyUI API 统一经 `createSupabaseAuthClient()`；`auth/callback` 为 PKCE 特例，直接用 `createServerClient()` 交换 session。
-- `app/api/` 负责 route 级共性约束；当前已落地的细分子域是 `app/api/comfyui/`。
+- `app/api/` 负责 route 级共性约束；`app/api/comfyui/` 与 `app/api/viewer/` 分别承载 run 数据和登录浏览者状态。
 - Next 16 / React 19：本目录的动态页面与 route handler 普遍使用 `params: Promise<...>` 形态；客户端页面可 `use(params)`，route 中则 `await context.params`。
 - I18N：`app/layout.tsx` 现在是纯透传壳，不挂任何 Provider 或字体；全站 Layout 在 `app/[locale]/layout.tsx`。
 - I18N：所有带 locale 的页面入口必须先 `hasLocale(routing.locales, locale)` + `setRequestLocale(locale)`。
@@ -50,7 +53,8 @@
 - 首页当前使用独立的封面图/主页缩略图字段；不要把 run 详情页的展示页缩略图语义直接挪作首页卡片素材。
 - SEO：`sitemap.ts` 为每个页面生成两个 locale 的条目并添加 hreflang alternates；`robots.ts` 允许所有爬虫爬取页面但禁止 `/api/` 和 `/auth/`。二者均引用 `lib/site-origin.ts` 的 `SITE_ORIGIN`。
 - 页面 fetch 后先做 type guard，再进入渲染状态机；错误态与 not-found 分开处理。
-- 图片路径/对象 key 不在页面层手拼；公开变体走 `publicObjectUrl()`，私有对象走 `privateObjectUrl()` 返回的短期签名 URL。
+- 图片路径/对象 key 不在页面层手拼；公开变体走 `publicObjectUrl()`，私有对象走 `privateObjectProxyUrl(key, grant)` 构建的 `/api/private-object` URL。
+- `/api/private-object` 必须先验证 media grant 与对象 key 范围，再访问边缘 cache；共享 cache URL 归一化为仅保留 `key` 参数，因此会去掉 `grant` 及其他 query 参数。
 - 本目录当前不维护本地文件流降级 route；Web 侧以 Supabase + R2 为准。
 
 ## 反模式
