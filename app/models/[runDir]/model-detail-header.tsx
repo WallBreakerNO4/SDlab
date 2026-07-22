@@ -5,6 +5,7 @@ import type { User } from "@supabase/supabase-js";
 import { FileIcon, LinkSquare02Icon } from "@hugeicons/core-free-icons";
 
 import type { ModelDetailResponse } from "./model-detail-types";
+import { ModelDescriptionMarkdown } from "./model-description-markdown";
 
 type ModelDetailHeaderProps = {
   detailData: ModelDetailResponse;
@@ -110,11 +111,14 @@ export function ModelDetailHeader({
       </div>
 
       {modelDesc ? (
-        <div className="group relative">
-          <p className="text-muted-foreground/80 text-xs leading-relaxed line-clamp-1 group-hover:line-clamp-none transition-all duration-300">
-            {modelDesc}
-          </p>
-        </div>
+        <ModelDescriptionMarkdown
+          key={`${locale}:${modelDesc}`}
+          expandLabel={t("expandDescription")}
+          collapseLabel={t("collapseDescription")}
+          contentLabel={t("descriptionRegionLabel")}
+        >
+          {modelDesc}
+        </ModelDescriptionMarkdown>
       ) : null}
     </div>
   );

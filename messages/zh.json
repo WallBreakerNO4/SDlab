@@ -77,7 +77,10 @@
     "homepage": "官网",
     "huggingface": "Hugging Face 链接",
     "civitai": "Civitai 链接",
-    "downloadWorkflow": "下载 Comfy UI 工作流"
+    "downloadWorkflow": "下载 Comfy UI 工作流",
+    "expandDescription": "展开模型简介",
+    "collapseDescription": "收起模型简介",
+    "descriptionRegionLabel": "模型简介全文"
   },
   "virtualGrid": {
     "toolsLabel": "工具",

@@ -77,7 +77,10 @@
     "homepage": "Homepage",
     "huggingface": "Hugging Face",
     "civitai": "Civitai",
-    "downloadWorkflow": "Download ComfyUI Workflow"
+    "downloadWorkflow": "Download ComfyUI Workflow",
+    "expandDescription": "Expand model description",
+    "collapseDescription": "Collapse model description",
+    "descriptionRegionLabel": "Full model description"
   },
   "virtualGrid": {
     "toolsLabel": "Tools",

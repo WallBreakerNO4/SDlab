@@ -19,6 +19,10 @@ type InstallModelViewMockOptions = {
   runDir?: string;
   rowCount?: number;
   thumbDelayMs?: number;
+  description?: {
+    zh: string;
+    en?: string;
+  };
   beforeDisplayFulfill?: () => Promise<void>;
 };
 
@@ -27,7 +31,11 @@ const MOCK_IMAGE_BODY = [
   ' viewBox="0 0 16 24"><rect width="16" height="24" fill="#7c8799"/></svg>',
 ].join("");
 
-function buildBootstrap(runDir: string, rowCount: number) {
+function buildBootstrap(
+  runDir: string,
+  rowCount: number,
+  description: { zh: string; en?: string },
+) {
   const xColumns = Array.from({ length: 2 }, (_, index) => ({
     type: "normal",
     description: { zh: `列 ${index + 1}`, en: `Column ${index + 1}` },
@@ -42,10 +50,7 @@ function buildBootstrap(runDir: string, rowCount: number) {
       selection: { total_cells: xColumns.length * yIndexes.length },
       model: {
         name: "Mock Model View Run",
-        description: {
-          zh: "用于详情页 E2E 的确定性数据。",
-          en: "Deterministic model detail E2E data.",
-        },
+        description,
       },
       workflow: null,
     },
@@ -115,10 +120,14 @@ export async function installModelViewMock(
     runDir = MOCK_MODEL_VIEW_RUN_DIR,
     rowCount = 80,
     thumbDelayMs = 0,
+    description = {
+      zh: "用于详情页 E2E 的确定性数据。",
+      en: "Deterministic model detail E2E data.",
+    },
     beforeDisplayFulfill,
   }: InstallModelViewMockOptions = {},
 ) {
-  const bootstrap = buildBootstrap(runDir, rowCount);
+  const bootstrap = buildBootstrap(runDir, rowCount, description);
   const releaseBase = `runs/${runDir}/view/v2/${MOCK_MODEL_VIEW_RELEASE_ID}`;
 
   await page.route(
