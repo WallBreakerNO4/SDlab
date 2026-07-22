@@ -83,23 +83,71 @@ function waitFavoritesLoaded(page: Page): Promise<PlaywrightResponse> {
   );
 }
 
-async function mockComparisonSliceBlurhashFallback(page: Page): Promise<void> {
+interface ComparisonSliceCapture {
+  runDirs: string[];
+  placements: Array<{ run_dir: string; y_index: number }>;
+}
+
+async function mockComparisonSliceBlurhashFallback(
+  page: Page,
+  captureStyleKey?: string,
+): Promise<{ capture: Promise<ComparisonSliceCapture> | null }> {
+  let resolveCapture: ((value: ComparisonSliceCapture) => void) | null = null;
+  const capture = captureStyleKey
+    ? new Promise<ComparisonSliceCapture>((resolve) => {
+        resolveCapture = resolve;
+      })
+    : null;
+
   await page.route("**/api/viewer/style-comparison/slice", async (route) => {
     const response = await route.fetch();
     const payload = (await response.json()) as {
       placements?: Record<
         string,
         Array<{
+          run_dir: string;
+          y_index: number;
           blurhashes?: Array<[number, number, string]>;
         }>
       >;
     };
+    if (captureStyleKey && resolveCapture) {
+      const request = route.request().postDataJSON() as {
+        run_dirs?: unknown;
+      };
+      const runDirs = Array.isArray(request.run_dirs)
+        ? request.run_dirs.filter(
+            (runDir): runDir is string => typeof runDir === "string",
+          )
+        : [];
+      const placements = payload.placements?.[captureStyleKey] ?? [];
+      const placedRunDirs = [...new Set(placements.map((item) => item.run_dir))];
+      const protectedRunDirs = new Set(placedRunDirs.slice(0, 2));
+      const missingRunDir = runDirs.find(
+        (runDir) => !protectedRunDirs.has(runDir),
+      );
+      const capturedPlacements = missingRunDir
+        ? placements.filter((item) => item.run_dir !== missingRunDir)
+        : placements;
+      if (payload.placements) {
+        payload.placements[captureStyleKey] = capturedPlacements;
+      }
+      resolveCapture({
+        runDirs,
+        placements: capturedPlacements.map(({ run_dir, y_index }) => ({
+          run_dir,
+          y_index,
+        })),
+      });
+      resolveCapture = null;
+    }
     for (const placements of Object.values(payload.placements ?? {})) {
       for (const placement of placements) {
-        placement.blurhashes = Array.from(
-          { length: 20 },
-          (_, xIndex) => [xIndex, 0, GUEST_BLURHASH],
-        );
+        placement.blurhashes = Array.from({ length: 20 }, (_, xIndex) => [
+          xIndex,
+          0,
+          GUEST_BLURHASH,
+        ]);
       }
     }
     await new Promise((resolve) => setTimeout(resolve, 1_000));
@@ -128,6 +176,8 @@ async function mockComparisonSliceBlurhashFallback(page: Page): Promise<void> {
     }
     await route.fulfill({ response, json: payload });
   });
+
+  return { capture };
 }
 
 /** 点击星标并等待对应 mutation 响应落库，避免乐观更新与后续断言竞争 */
@@ -487,12 +537,61 @@ test.describe("task 14: style favorites signed-in flows", () => {
     await putFavorite(page, styleKey, "e2e 横向模型矩阵验证收藏");
 
     try {
-      await mockComparisonSliceBlurhashFallback(page);
+      const { capture } = await mockComparisonSliceBlurhashFallback(
+        page,
+        styleKey,
+      );
+      expect(capture).not.toBeNull();
       await page.goto("/zh/favorites");
+      const capturedSlice = await capture!;
       const matrix = page.getByTestId("comparison-matrix-scroll");
-      const frame = page.getByTestId("comparison-image-frame").first();
+      const frames = page.getByTestId("comparison-image-frame");
+      const placementByRunDir = new Map(
+        capturedSlice.placements.map((placement) => [
+          placement.run_dir,
+          placement,
+        ]),
+      );
+      expect(new Set(placementByRunDir.keys()).size).toBeGreaterThanOrEqual(2);
+      expect(
+        capturedSlice.runDirs.filter(
+          (runDir) => !placementByRunDir.has(runDir),
+        ).length,
+      ).toBeGreaterThanOrEqual(1);
       await expect(matrix).toBeVisible({ timeout: 15_000 });
+      await expect(frames).toHaveCount(capturedSlice.runDirs.length);
+
+      for (const [index, runDir] of capturedSlice.runDirs.entries()) {
+        const placement = placementByRunDir.get(runDir);
+        const links = frames
+          .nth(index)
+          .locator('a[href*="/models/"][href*="#"]');
+        if (!placement) {
+          await expect(links).toHaveCount(0);
+          continue;
+        }
+        const localizedHref = `/zh/models/${encodeURIComponent(runDir)}#${placement.y_index + 1}`;
+        await expect(links).toHaveCount(1);
+        await expect(links).toHaveAttribute("href", localizedHref);
+        await expect(links).toHaveAttribute(
+          "aria-label",
+          new RegExp(`第 ${placement.y_index + 1} 行$`),
+        );
+        await expect(links).toHaveAttribute(
+          "title",
+          new RegExp(`第 ${placement.y_index + 1} 行$`),
+        );
+      }
+
+      const jumpTarget = capturedSlice.placements[0];
+      const jumpTargetIndex = capturedSlice.runDirs.indexOf(jumpTarget.run_dir);
+      expect(jumpTargetIndex).toBeGreaterThanOrEqual(0);
+      const frame = frames.nth(jumpTargetIndex);
       await expect(frame).toBeVisible({ timeout: 15_000 });
+      const rowJumpLink = frame.locator(
+        `a[href="/zh/models/${encodeURIComponent(jumpTarget.run_dir)}#${jumpTarget.y_index + 1}"]`,
+      );
+      await expect(rowJumpLink).toBeVisible({ timeout: 15_000 });
       await expect(
         page.getByTestId("comparison-image-skeleton").first(),
       ).toBeVisible();
@@ -536,6 +635,12 @@ test.describe("task 14: style favorites signed-in flows", () => {
 
       const frameBox = await frame.boundingBox();
       expect(frameBox).not.toBeNull();
+      const rowJumpLinkBox = await rowJumpLink.boundingBox();
+      expect(rowJumpLinkBox).not.toBeNull();
+      expect(rowJumpLinkBox!.x + rowJumpLinkBox!.width).toBeGreaterThan(
+        frameBox!.x + frameBox!.width - 40,
+      );
+      expect(rowJumpLinkBox!.y).toBeLessThan(frameBox!.y + 40);
       // 图片框应撑满单元格内容区：列宽 216 - 2.5 内边距 ×2,行高 312 - 内边距 20 - 下边框 1
       expect(frameBox!.width).toBeCloseTo(196, 0);
       expect(frameBox!.height).toBeCloseTo(291, 0);
@@ -550,6 +655,15 @@ test.describe("task 14: style favorites signed-in flows", () => {
       await page.screenshot({
         path: "test-results/comparison-matrix-ui.png",
         fullPage: false,
+      });
+
+      await rowJumpLink.click();
+      await expect(page).toHaveURL((url) => {
+        return (
+          url.pathname ===
+            `/zh/models/${encodeURIComponent(jumpTarget.run_dir)}` &&
+          url.hash === `#${jumpTarget.y_index + 1}`
+        );
       });
     } finally {
       await deleteFavoriteQuiet(page, styleKey);
