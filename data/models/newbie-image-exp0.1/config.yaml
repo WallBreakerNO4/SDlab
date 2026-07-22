@@ -26,7 +26,7 @@ prompts:
   # reader 走 read_x_rows_newbie()，渲染器走 render_positive_prompt_xml()。
   x_path: data/prompts/X/newbie_prompts.yaml
   # Y 轴复用现有 artist 风格表；read_y_rows 输出的逗号串由 XML 渲染器注入 <artists> 子标签。
-  y_path: data/prompts/Y/300_NAI_Styles_Table-test.yaml
+  y_path: data/prompts/Y/300_NAI_Styles_Table.yaml
 
 # ComfyUI workflow 模板配置。
 # api.json 已含 ModelSamplingAuraFlow(shift=6)、DualCLIPLoader(newbie)、EmptySD3LatentImage、
