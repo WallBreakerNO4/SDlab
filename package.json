@@ -4,7 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "guides:build": "tsx loaders/model-guide-data-builder.ts",
+    "predev": "pnpm guides:build",
     "build": "next build",
+    "prebuild": "pnpm guides:build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",

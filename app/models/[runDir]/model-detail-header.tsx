@@ -9,12 +9,14 @@ import { ModelDescriptionMarkdown } from "./model-description-markdown";
 
 type ModelDetailHeaderProps = {
   detailData: ModelDetailResponse;
+  guideHref: string | null;
   user: User | null;
   onRequireLogin: () => void;
 };
 
 export function ModelDetailHeader({
   detailData,
+  guideHref,
   user,
   onRequireLogin,
 }: ModelDetailHeaderProps) {
@@ -84,6 +86,19 @@ export function ModelDetailHeader({
                 </a>
               ) : null}
             </div>
+          ) : null}
+          {guideHref ? (
+            <a
+              href={guideHref}
+              className="hover:bg-primary/10 hover:text-primary text-muted-foreground inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/50 px-2 py-1 font-medium transition-colors backdrop-blur-sm"
+            >
+              <HugeiconsIcon
+                icon={LinkSquare02Icon}
+                className="size-3"
+                strokeWidth={2}
+              />
+              {t("guide")}
+            </a>
           ) : null}
 
           {workflow?.download_url ? (

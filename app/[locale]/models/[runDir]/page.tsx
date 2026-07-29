@@ -8,6 +8,8 @@ import { routing } from "@/i18n/routing";
 import { ModelDetailClientPage } from "@/app/models/[runDir]/model-detail-client";
 import { getModelMetadata } from "@/lib/model-metadata";
 import { buildSeoMetadata } from "@/lib/metadata-utils";
+import { modelGuides } from "@/lib/generated/model-guides";
+import { buildGuideIndex, resolveGuidePath } from "@/lib/model-guides";
 
 // ISR: 每 120 秒重新验证页面缓存（模型数据变化频率低于首页）
 export const revalidate = 120;
@@ -17,7 +19,7 @@ function readRunDir(value: string | string[] | undefined): string {
     return "";
   }
 
-  return Array.isArray(value) ? value[0] ?? "" : value;
+  return Array.isArray(value) ? (value[0] ?? "") : value;
 }
 
 export async function generateMetadata({
@@ -33,7 +35,10 @@ export async function generateMetadata({
     return {};
   }
 
-  const t = await getTranslations({ locale, namespace: "metadata.modelDetail" });
+  const t = await getTranslations({
+    locale,
+    namespace: "metadata.modelDetail",
+  });
   const meta = await getModelMetadata(runDir);
 
   const modelName = meta?.name ?? runDir;
@@ -69,5 +74,10 @@ export default async function ModelDetailPage({
     notFound();
   }
 
-  return <ModelDetailClientPage runDir={runDir} />;
+  const guideHref = resolveGuidePath(
+    buildGuideIndex(modelGuides),
+    runDir,
+    locale as "zh" | "en",
+  );
+  return <ModelDetailClientPage runDir={runDir} guideHref={guideHref} />;
 }

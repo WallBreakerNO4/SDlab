@@ -1,6 +1,8 @@
 import type { MetadataRoute } from "next";
 
 import { isValidRunDir } from "@/lib/comfyui-types";
+import { modelGuides } from "@/lib/generated/model-guides";
+import { buildGuideSitemapEntries } from "@/lib/model-guides-sitemap";
 import { listRunSummaries } from "@/lib/run-list";
 import { SITE_ORIGIN } from "@/lib/site-origin";
 import { routing } from "@/i18n/routing";
@@ -39,6 +41,8 @@ function makeLocaleEntries(params: {
     alternates: { languages },
   }));
 }
+
+export { buildGuideSitemapEntries } from "@/lib/model-guides-sitemap";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   let models: Awaited<ReturnType<typeof listRunSummaries>> = [];
@@ -115,6 +119,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       }),
     );
   }
+
+  entries.push(...buildGuideSitemapEntries(modelGuides));
 
   return entries;
 }

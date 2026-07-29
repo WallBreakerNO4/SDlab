@@ -80,7 +80,8 @@
     "downloadWorkflow": "下载 Comfy UI 工作流",
     "expandDescription": "展开模型简介",
     "collapseDescription": "收起模型简介",
-    "descriptionRegionLabel": "模型简介全文"
+    "descriptionRegionLabel": "模型简介全文",
+    "guide": "使用指南"
   },
   "virtualGrid": {
     "toolsLabel": "工具",

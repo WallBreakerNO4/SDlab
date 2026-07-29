@@ -31,7 +31,13 @@ import { useModelDetailData } from "./use-model-detail-data";
 import { Link } from "@/i18n/navigation";
 import { SITE_ORIGIN } from "@/lib/site-origin";
 
-export function ModelDetailClientPage({ runDir }: { runDir: string }) {
+export function ModelDetailClientPage({
+  runDir,
+  guideHref,
+}: {
+  runDir: string;
+  guideHref: string | null;
+}) {
   const t = useTranslations("modelDetail");
   const locale = useLocale();
   const { user } = useAuth();
@@ -123,6 +129,7 @@ export function ModelDetailClientPage({ runDir }: { runDir: string }) {
       {isDetailReady ? (
         <ModelDetailHeader
           detailData={detailData}
+          guideHref={guideHref}
           user={user}
           onRequireLogin={() => setLoginDialogOpen(true)}
         />

@@ -80,7 +80,8 @@
     "downloadWorkflow": "Download ComfyUI Workflow",
     "expandDescription": "Expand model description",
     "collapseDescription": "Collapse model description",
-    "descriptionRegionLabel": "Full model description"
+    "descriptionRegionLabel": "Full model description",
+    "guide": "Usage guide"
   },
   "virtualGrid": {
     "toolsLabel": "Tools",

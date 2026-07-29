@@ -18,7 +18,7 @@ const markdownLoaderPath = path.join(
   "loaders",
   "markdown-source-loader.cjs",
 );
-const contentPageMarkdownPattern = /(^|[\\/])data[\\/].*-page(?:\.en)?\.md$/i;
+const markdownPattern = /(^|[\\/])data[\\/](?:.*-page(?:\.en)?|model-guides[\\/].+)\.md$/i;
 
 const nextConfig: NextConfig = {
   // 显式关闭浏览器端 source map，避免源码泄露与扫描流量
@@ -36,7 +36,7 @@ const nextConfig: NextConfig = {
   },
   webpack(config) {
     config.module.rules.push({
-      test: contentPageMarkdownPattern,
+      test: markdownPattern,
       use: [markdownLoaderPath],
     });
 
@@ -46,7 +46,7 @@ const nextConfig: NextConfig = {
     rules: {
       "*.md": {
         condition: {
-          path: contentPageMarkdownPattern,
+          path: markdownPattern,
         },
         loaders: [markdownLoaderPath],
         as: "*.js",

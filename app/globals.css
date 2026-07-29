@@ -173,6 +173,25 @@
   .prose-custom pre code {
     @apply bg-transparent p-0 text-[0.85em];
   }
+  .prose-custom img {
+    @apply block h-auto max-w-full rounded-lg border border-border/70;
+  }
+  .prose-custom table {
+    @apply mb-4 block w-full overflow-x-auto border-collapse text-left text-sm;
+  }
+  .prose-custom th {
+    @apply border border-border bg-muted/50 px-3 py-2 font-semibold whitespace-nowrap;
+  }
+  .prose-custom td {
+    @apply border border-border px-3 py-2 align-top;
+  }
+  .prose-custom code {
+    overflow-wrap: anywhere;
+  }
+  .prose-custom pre {
+    white-space: pre;
+    word-break: normal;
+  }
 }
 
 /* ── Custom Animations ── */
