@@ -1,0 +1,83 @@
+# Runner 配置 schema 版本；当前实现只接受 image-run-config/v1。
+schema_version: image-run-config/v1
+
+# 模型元信息：主要用于记录这次 run 绑定的模型身份与说明，便于后续展示/追踪。
+model:
+  # 机器可读的稳定 key；建议保持短且唯一。
+  key: anima-aesthetic-1-arist-mixer
+  # 给人看的展示名。
+  name: Anima Aesthetic 1.1 Artist Mixer
+  # 模型家族/大类，例如 stable-diffusion-xl、novelai 等。
+  family: anima
+  # Anima 的画师权重实验 profile；square 会将 Y 轴 artists 权重做平方变换。
+  artist_weight_profile: identity
+  # 可选外链；没有就填 null。
+  links:
+    homepage: null
+    huggingface: https://huggingface.co/circlestone-labs/Anima
+    civitai: https://civitai.com/models/2458426/anima?modelVersionId=3126581
+  # 多语言描述；当前 schema 要求同时提供 zh / en。
+  description:
+    zh: |
+      Anima Aesthetic 1.1 是 Anima 的美学精调版本。Anima 是由 CircleStone Labs 与 Comfy Org 联合开发的20亿参数文本转图像模型，主要面向动漫概念、角色、风格及其他非写实内容。Aesthetic 版本在保留这些能力的基础上，进一步提升了生成一致性和默认美术风格的质量。
+      Aesthetic 版本仅使用高质量图像进行精调，并从训练描述中移除了质量标签，因此无需依赖质量词也能获得高质量结果。提示词可以保留 `masterpiece, best quality`，但官方建议不要在正向或负向提示词中使用 `score_*` 标签，以免对画面风格施加过强影响。
+      这个表格使用了 [Anima-Artist-Mixer](https://github.com/An1X3R/Anima-Artist-Mixer) 这个插件来进行画师权重混合。
+    en: |
+      Anima Aesthetic 1.1 is the aesthetically fine-tuned edition of Anima, a 2 billion parameter text-to-image model developed by CircleStone Labs and Comfy Org. It retains Anima's focus on anime concepts, characters, styles, and other non-photorealistic content while improving generation consistency and the quality of its default art style.
+      The Aesthetic edition was fine-tuned exclusively on high-quality images, with quality labels removed from the training captions. It can therefore produce high-quality results without relying on quality tags. `masterpiece, best quality` may be retained, but the official guidance recommends avoiding `score_*` tags in both positive and negative prompts because they can push the aesthetic too strongly.
+      This table uses the [Anima-Artist-Mixer](https://github.com/An1X3R/Anima-Artist-Mixer) plugin for artist weight mixing.
+# Prompt 资产路径：X 轴通常是角色等结构化 prompt 表，Y 轴通常是风格/artist 等单列 prompt 表。
+# 这里的路径必须是仓库相对路径，且文件必须实际存在；支持 .yaml/.yml/.json。
+prompts:
+  # X 轴 prompt 表路径。
+  x_path: data/prompts/X/common_prompts.yaml
+  # Y 轴 prompt 表路径。
+  y_path: data/prompts/Y/300_NAI_Styles_Table.yaml
+
+# ComfyUI workflow 模板配置。
+workflow:
+  # 要注入参数的 KSampler 节点 ID；如果 workflow 里有多个 KSampler，通常需要显式指定。
+  ksampler_node_id: null
+  # 将 artists 标签注入 Anima Artist Pack，正向提示词仅保留 general 标签。
+  anima_artist_mixer: true
+
+# 生成参数：template/base_seed 为必填；其余项用于覆盖 workflow 内默认值。
+# 如果某个字段填 null，就尽量回退到 workflow 里的默认参数。
+generation:
+  # 正向 prompt 拼装模板；只支持 {quality} / {gender} / {characters} / {series} / {rating} / {y} / {general} 这些占位符。
+  template: "{quality}{rating}{gender}{characters}{series}{y}{general}"
+  quality_prompt: "masterpiece, best quality,"
+  # 基础种子；每个网格单元会基于 base_seed + x/y 索引派生稳定 seed。
+  base_seed: 123
+  # 基础负面提示词；设为 null 时优先使用 workflow 中自带的 negative prompt。
+  negative_prompt: worst quality, low quality, artist name, blurry, jpeg artifacts, chromatic aberration,
+  # 追加到基础负面提示词后面的内容；常用于统一补一段安全/质量相关负面词。
+  append_negative_prompt: "nsfw, nipples, pussy, nude,"
+  # 输出宽度；覆盖 workflow 的 latent width。
+  width: 832
+  # 输出高度；覆盖 workflow 的 latent height。
+  height: 1216
+  # 单次生成张数；覆盖 workflow 的 batch_size。
+  batch_size: 1
+  # 采样步数；覆盖 KSampler.steps。
+  steps: 30
+  # CFG / guidance scale；覆盖 KSampler.cfg。
+  cfg: 4
+  # 去噪强度；覆盖 KSampler.denoise。
+  denoise: 1.0
+  # 采样器名称；覆盖 KSampler.sampler_name。
+  sampler_name: er_sde
+  # 调度器名称；覆盖 KSampler.scheduler。
+  scheduler: simple
+
+# 选择要跑的网格子集；都为 null 时表示跑完整个 X × Y 网格。
+# 若同时设置 indexes 和 limit，会先按 indexes 选，再按 limit 截断。
+selection:
+  # 只取前 N 个 X 行；null 表示不限制。
+  x_limit: null
+  # 只取前 N 个 Y 行；null 表示不限制。
+  y_limit: null
+  # 显式指定要跑的 X 索引列表（从 0 开始）；null 表示不指定。
+  x_indexes: null
+  # 显式指定要跑的 Y 索引列表（从 0 开始）；null 表示不指定。
+  y_indexes: null
