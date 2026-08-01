@@ -11,6 +11,10 @@ export type ModelGuide = {
   sourcePath: string;
 };
 
+export type ModelGuideSource = ModelGuide & {
+  draft: boolean;
+};
+
 export type ModelGuideIndex = Readonly<
   Record<string, Readonly<Partial<Record<ModelGuideLocale, ModelGuide>>>>
 >;
@@ -58,7 +62,7 @@ function parseFrontmatter(
 export function parseModelGuide(
   source: string,
   sourcePath: string,
-): ModelGuide {
+): ModelGuideSource {
   const { metadata, content } = parseFrontmatter(source, sourcePath);
   return parseModelGuideFromMetadata(metadata, content, sourcePath);
 }
@@ -67,10 +71,10 @@ export function parseModelGuideFromMetadata(
   metadata: unknown,
   content: string,
   sourcePath: string,
-): ModelGuide {
+): ModelGuideSource {
   if (!isRecord(metadata))
     throw new Error(`${sourcePath}: frontmatter must be a mapping`);
-  const allowed = new Set(["model_key", "locale", "title"]);
+  const allowed = new Set(["model_key", "locale", "title", "draft"]);
   for (const key of Object.keys(metadata)) {
     if (!allowed.has(key))
       throw new Error(`${sourcePath}: unknown frontmatter field '${key}'`);
@@ -83,10 +87,15 @@ export function parseModelGuideFromMetadata(
     );
   }
   const title = nonEmptyString(metadata.title, "title", sourcePath);
+  const draft = metadata.draft === undefined ? false : metadata.draft;
+  if (typeof draft !== "boolean") {
+    throw new Error(`${sourcePath}: draft must be a boolean`);
+  }
   return {
     modelKey,
     locale: locale as ModelGuideLocale,
     title,
+    draft,
     content,
     sourcePath,
   };

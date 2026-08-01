@@ -2,6 +2,7 @@
 model_key: anima-base-1
 locale: zh
 title: 模型使用指南（测试文章）
+draft: true
 ---
 
 这是一篇用于预览模型指南页面渲染效果的测试文章，不代表正式的模型使用建议。

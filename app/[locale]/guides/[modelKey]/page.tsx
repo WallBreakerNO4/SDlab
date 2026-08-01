@@ -18,6 +18,8 @@ import { modelGuides } from "@/lib/generated/model-guides";
 const guideIndex = buildGuideIndex(modelGuides);
 const guideMarkdownComponents: Components = { h1: "h2" };
 
+export const dynamicParams = false;
+
 function readModelKey(value: string | string[] | undefined): string {
   const raw = Array.isArray(value) ? value[0] : value;
   if (!raw) return "";

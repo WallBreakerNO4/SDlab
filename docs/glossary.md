@@ -6,7 +6,13 @@
 
 与一个 `model_key` 绑定的 Markdown 使用经验文章。它描述模型本身的使用方式，不绑定某次生图运行或 release。每个模型可以没有指南，也可以分别拥有可选的中文和英文版本。
 
-公开路由为 `/[locale]/guides/[modelKey]`。文件存在并通过构建校验即视为已发布，不存在草稿状态。
+公开路由为 `/[locale]/guides/[modelKey]`。文件通过构建校验且 frontmatter 未设置 `draft: true` 时视为已发布；草稿不会进入公开指南索引。
+
+## Guide Draft（指南草稿）
+
+指南 Markdown frontmatter 的可选布尔字段 `draft`。仅 `draft: true` 表示草稿；缺省或 `false` 表示发布。草稿仍接受完整的内容契约校验，但不会生成模型页入口、指南页面静态参数、SEO metadata 或 sitemap 条目。
+
+该字段只是 Git/Markdown 构建期发布开关，不提供草稿预览、鉴权、审批或 CMS 工作流。
 
 ## `model_key`
 
@@ -34,6 +40,6 @@ Markdown frontmatter 的 `locale` 字段，表示该文章正文的实际语言�
 
 ## Guide Index（指南索引）
 
-构建时扫描 Markdown frontmatter 后自动生成的服务端派生数据。索引按 `(model_key, locale)` 定位文章正文与标题，并用于按钮解析、指南路由、静态参数和 SEO 输出。
+构建时扫描并校验全部 Markdown frontmatter、过滤草稿后自动生成的服务端派生数据。索引按 `(model_key, locale)` 定位已发布文章的正文与标题，并用于按钮解析、指南路由、静态参数和 SEO 输出。
 
 Guide Index 不是需要人工维护的注册表。删除后可以根据 Git 中的 Markdown 内容重新生成；新增或修改指南也只需要重新运行网站构建。

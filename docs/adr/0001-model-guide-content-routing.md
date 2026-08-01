@@ -20,25 +20,27 @@ Accepted
 
 ### 1. 内容契约
 
-模型指南使用仓库内的 Markdown 文件。每个文件的 frontmatter 必须恰好包含以下三个字段：
+模型指南使用仓库内的 Markdown 文件。每个文件的 frontmatter 必须包含三个必填字段，并可选声明 `draft`：
 
 ```yaml
 ---
 model_key: anima-base-1
 locale: zh
 title: Anima Base 1.0 使用指南
+draft: false
 ---
 ```
 
 - `model_key`：文章对应的稳定模型身份。
 - `locale`：文章正文的语言，当前只允许 `zh` 或 `en`。
 - `title`：文章的显示标题，同时作为页面 H1 和 SEO 标题的内容来源。
+- `draft`：可选布尔值。仅 `true` 表示草稿；缺省或 `false` 表示发布。
 - Markdown 正文从二级标题开始；渲染器会将正文中的一级标题降为二级标题，确保页面只有 frontmatter `title` 生成的一个 H1。
-- 不允许额外 frontmatter 字段，避免把文章系统逐步扩张成隐式 CMS。
+- 不允许上述四项以外的 frontmatter 字段，避免把文章系统逐步扩张成隐式 CMS。
 - 文件名和目录只用于组织内容，不承担模型身份或语言身份。
 - 同一个 `(model_key, locale)` 最多只能存在一篇文章；重复时构建失败。
 - 文章、中文版本和英文版本均为可选。一个模型可以没有指南、只有一个语言版本，或同时拥有两个语言版本。
-- 不提供 `draft` 状态。Markdown 文件存在并通过构建校验，即视为已发布；删除文件即撤下该语言版本。
+- 草稿仍执行完整 frontmatter、模型身份与重复文章校验，但不会进入服务端指南索引。将 `draft` 改为 `false` 或删除该字段并重新构建即可发布；改为 `true` 即可撤下该语言版本。
 
 Markdown 正文负责普通文章内容和图片引用。SEO description 复用对应模型的本地化描述；描述缺失时使用站点的本地化固定回退文案，不增加 `description` frontmatter。
 
@@ -54,7 +56,7 @@ Markdown 正文负责普通文章内容和图片引用。SEO description 复用�
 
 ### 3. 服务端指南索引
 
-构建过程扫描指南 Markdown，校验 frontmatter，并自动生成仅供服务端使用的指南索引。索引按 `model_key` 和 `locale` 查找文章及其元数据。
+构建过程扫描指南 Markdown，校验所有文章的 frontmatter，并自动生成仅供服务端使用的已发布指南索引。索引在排除 `draft: true` 的文章后，按 `model_key` 和 `locale` 查找文章及其元数据。
 
 不维护手工注册表、`run_dir -> model_key` 映射表或文章路径清单。Markdown frontmatter 是文章归属的唯一内容来源，服务端索引只是自动生成的派生数据。
 
@@ -82,7 +84,7 @@ Markdown 正文负责普通文章内容和图片引用。SEO description 复用�
 
 ### 5. 搜索引擎与 sitemap
 
-已发布的指南允许搜索引擎索引。
+已发布的指南允许搜索引擎索引；草稿不生成页面静态参数、metadata 或 sitemap 条目。
 
 - sitemap 只列出真实存在的语言文章。
 - canonical 指向当前实际渲染文章的 URL。
@@ -127,7 +129,7 @@ Markdown 正文负责普通文章内容和图片引用。SEO description 复用�
 
 ### 使用 MDX、CMS 或数据库存储文章
 
-拒绝。当前需求只需要 Markdown 写作和仓库内图片。MDX、在线编辑、CMS 权限、草稿发布流和文章数据库都会扩大实现与维护范围。
+拒绝。当前需求只需要 Markdown 写作、仓库内图片和一个构建期草稿开关。MDX、在线编辑、CMS 权限、草稿预览/审批流和文章数据库都会扩大实现与维护范围。
 
 ### 强制中英文成对发布
 
@@ -135,7 +137,7 @@ Markdown 正文负责普通文章内容和图片引用。SEO description 复用�
 
 ## 后果
 
-- 作者只需新增带三个 frontmatter 字段的 Markdown，并将图片放入 `public`，重新部署网站即可发布。
+- 作者只需新增带必填 frontmatter 字段的 Markdown，并将图片放入 `public`，重新部署网站即可发布；写作期间可用 `draft: true` 阻止发布。
 - 内容变更与撤下需要重新部署网站。
 - 模型详情页使用当前 `runDir === model_key` 约定解析文章入口。
 - 指南发布与 Python、Supabase、R2 以及模型 release 完全独立。
@@ -144,7 +146,7 @@ Markdown 正文负责普通文章内容和图片引用。SEO description 复用�
 
 ## 不做事项
 
-- 不实现草稿、预览鉴权或发布审批。
+- 不实现草稿预览、预览鉴权或发布审批；`draft` 仅控制构建期是否进入发布索引。
 - 不实现文章目录页、标签、作者、评论、上一篇/下一篇或相关文章。
 - 不实现 CMS、在线编辑、数据库文章正文或远程内容服务。
 - 不实现 MDX 组件或文章内交互式控件。
