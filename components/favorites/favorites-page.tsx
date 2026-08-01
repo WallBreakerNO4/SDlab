@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import {
+  ArrowUpRight,
   ChevronLeft,
   ChevronRight,
   Info,
@@ -38,6 +39,12 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Link } from "@/i18n/navigation";
 import { useUserPreferences } from "@/components/user-preferences-provider";
 import { deleteStyleFavorite } from "@/lib/style-favorites";
@@ -690,6 +697,7 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
     visibleModels.length * MODEL_COLUMN_WIDTH;
 
   return (
+    <TooltipProvider delayDuration={300}>
     <main className="flex h-full min-h-0 flex-col overflow-hidden px-3 py-4 sm:px-5 sm:py-5 lg:px-6">
       <div className="flex w-full min-h-0 flex-1 flex-col gap-4">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b pb-4">
@@ -948,6 +956,13 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
                           placement.y_index,
                         )
                     : null;
+                  const modelName = model.name ?? model.run_dir;
+                  const rowJumpLabel = placement
+                    ? t("jumpToModelRow", {
+                        model: modelName,
+                        row: placement.y_index + 1,
+                      })
+                    : null;
                   return (
                     <div
                       key={key}
@@ -964,10 +979,37 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
                           access={access}
                           userId={userId}
                           onRefresh={async () => access}
-                          alt={`${favorite.label} × ${model.name ?? model.run_dir}`}
+                          alt={`${favorite.label} × ${modelName}`}
                           onClick={() => setDialog({ key, index })}
                           blurhash={blurhash}
                         />
+                        {placement && rowJumpLabel ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                asChild
+                                size="icon-sm"
+                                variant="secondary"
+                                className="absolute top-1.5 right-1.5 z-10 rounded-full bg-background/80 shadow-sm backdrop-blur-sm"
+                              >
+                                <Link
+                                  href={`/models/${encodeURIComponent(model.run_dir)}#${placement.y_index + 1}`}
+                                  prefetch={false}
+                                  aria-label={rowJumpLabel}
+                                  title={rowJumpLabel}
+                                >
+                                  <ArrowUpRight
+                                    className="size-3.5"
+                                    aria-hidden="true"
+                                  />
+                                </Link>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="left">
+                              {rowJumpLabel}
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : null}
                         {slides.length ? (
                           <>
                             <Button
@@ -1057,5 +1099,6 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
         ) : null}
       </div>
     </main>
+    </TooltipProvider>
   );
 }

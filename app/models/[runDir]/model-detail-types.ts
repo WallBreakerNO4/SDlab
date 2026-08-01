@@ -68,6 +68,24 @@ function isStringArray(value: unknown): value is string[] {
   );
 }
 
+function isNullableString(value: unknown): value is string | null | undefined {
+  return value === undefined || value === null || typeof value === "string";
+}
+
+function hasValidModelDescription(run: Record<string, unknown>): boolean {
+  const model = run.model;
+  if (model === undefined || model === null) return true;
+  if (!isRecord(model)) return false;
+
+  const description = model.description;
+  if (description === undefined || description === null) return true;
+  return (
+    isRecord(description) &&
+    isNullableString(description.zh) &&
+    isNullableString(description.en)
+  );
+}
+
 function isRunGridYPromptPartsArray(
   value: unknown,
 ): value is RunGridYPromptParts[] {
@@ -117,7 +135,8 @@ export function isModelDetailResponse(
     typeof run.run_id === "string" &&
     typeof run.created_at === "string" &&
     typeof run.run_dir === "string" &&
-    typeof selection.total_cells === "number"
+    typeof selection.total_cells === "number" &&
+    hasValidModelDescription(run)
   );
 }
 

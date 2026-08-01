@@ -77,7 +77,11 @@
     "homepage": "官网",
     "huggingface": "Hugging Face 链接",
     "civitai": "Civitai 链接",
-    "downloadWorkflow": "下载 Comfy UI 工作流"
+    "downloadWorkflow": "下载 Comfy UI 工作流",
+    "expandDescription": "展开模型简介",
+    "collapseDescription": "收起模型简介",
+    "descriptionRegionLabel": "模型简介全文",
+    "guide": "使用指南"
   },
   "virtualGrid": {
     "toolsLabel": "工具",
@@ -194,5 +198,6 @@
     ,"syncModeAll": "全部"
     ,"syncModeHelpTitle": "同步切换"
     ,"syncModeHelpDescription": "点击图片两侧的箭头时的联动方式：单张只切换当前这一张；整列会同步切换该模型下所有收藏的图片；全部会同步切换矩阵中的所有图片。整列和全部模式下，列表头的场景描述会跟随当前图片一起更新。"
+    ,"jumpToModelRow": "跳转到 {model} 的第 {row} 行"
   }
 }
