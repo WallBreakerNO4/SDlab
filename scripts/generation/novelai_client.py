@@ -186,7 +186,13 @@ class NovelAIAPIClient:
             sampler=sampler,
             seed=seed,
             n_samples=n_samples,
-            quality=True,
+            # 质量词与 UC 预设改由 config.yaml 全量提供（quality_prompt /
+            # negative_prompt），关闭 SDK 注入以保证「配置即发送」。
+            # 注意：SDK 0.12.0 的 bug——用户级 "none" 会映射为 ucPreset=4，
+            # 但底层请求模型限制 le=3，直接传 "none" 必然 ValidationError；
+            # 因此用 "light" 占位并传 qualityToggle=False，服务端以开关
+            # 为准不追加任何预设文本，负面内容完全由我们传入的字符串决定。
+            quality=False,
             uc_preset="light",
         )
 

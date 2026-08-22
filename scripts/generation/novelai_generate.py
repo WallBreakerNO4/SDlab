@@ -1,4 +1,4 @@
-# pyright: basic, reportUnusedCallResult=false, reportImplicitStringConcatenation=false
+# pyright: basic, reportPrivateUsage=false, reportUnusedCallResult=false, reportImplicitStringConcatenation=false
 
 from __future__ import annotations
 
@@ -426,7 +426,7 @@ def _novelai_generation_fingerprint(
         "schema": "novelai-generation-fingerprint/v1",
         "backend": BACKEND_NOVELAI,
         "model": model,
-        "quality": True,
+        "quality": False,
         "uc_preset": "light",
         "generation": {
             "negative_prompt": args.negative_prompt,
