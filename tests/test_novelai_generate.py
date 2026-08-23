@@ -90,6 +90,35 @@ def test_normalize_model_rejects_unknown_model() -> None:
         novelai_client._normalize_model("some-new-model")
 
 
+@pytest.mark.parametrize(
+    "model_key",
+    ["nai-diffusion-5-full", "nai-diffusion-5-curated"],
+)
+def test_v5_config_dry_run_prints_totals_and_example_prompt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    model_key: str,
+) -> None:
+    # load_runner_config 以 cwd 为 repo root，先固定回仓库根目录。
+    monkeypatch.chdir(ROOT)
+
+    exit_code = novelai_generate.main(
+        [
+            "--config",
+            f"data/models/{model_key}/config.yaml",
+            "--dry-run",
+            "--run-dir",
+            str(tmp_path / "run"),
+        ]
+    )
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "组合总数:" in out
+    assert "示例正向提示词:" in out
+
+
 def test_novelai_client_passes_request_timeout_to_sdk(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
