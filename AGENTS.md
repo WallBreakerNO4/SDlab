@@ -257,3 +257,17 @@ pnpm dlx supabase migration new <name>
 - `scripts/AGENTS.md`、`scripts/generation/AGENTS.md`、`scripts/r2_upload/AGENTS.md`、`scripts/cli/AGENTS.md`、`scripts/other/AGENTS.md`：Python 主代码域与子系统边界。
 - `tests/AGENTS.md`、`e2e/AGENTS.md`、`supabase/AGENTS.md`、`data/AGENTS.md`、`hooks/AGENTS.md`、`types/AGENTS.md`、`public/AGENTS.md`：测试、迁移、资产、hooks、生成类型、静态资源的局部规则。
 - `docs/AGENTS.md`、`DBbackup/AGENTS.md`：设计决策记录（ADR）与术语表的维护约定；本地数据库备份说明（git 忽略）。
+
+## Agent skills
+
+### Issue tracker
+
+Issue 与 spec 统一追踪在本仓库的 GitHub Issues，操作走 `gh` CLI。详见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+五个标准分诊角色使用中文标签：`待分诊` / `待补充信息` / `可交Agent处理` / `需人工处理` / `不予修复`。详见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+single-context 布局：根目录 `CONTEXT.md` + `docs/adr/`。详见 `docs/agents/domain.md`。
