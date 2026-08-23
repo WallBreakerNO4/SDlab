@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-07-16 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-08-23 -->
 
 # scripts/generation/ — 核心生图实现
 
@@ -30,7 +30,7 @@
 | run 级静态资产识别      | `runner_config.py`           | 识别封面图 `image.*` 与主页缩略图目录 `images/*`      |
 | 重试失败项筛选          | `retry_failed_selection.py`  | 从 metadata.jsonl 筛选 failed 项                      |
 | 重试执行                | `retry.py`                   | 重试入口与流程控制                                    |
-| 运行回放                | `run_replay.py`              | 从 `run.json` 恢复 workflow 快照；旧快照缺 Mixer 字段时默认 false |
+| 运行回放                | `run_replay.py`              | 从 `run.json` 恢复 workflow 快照；快照缺 Mixer 字段时按未启用处理 |
 | NovelAI API 客户端      | `novelai_client.py`         | 基于 `novelai` SDK;认证/网络错误处理,服务 NovelAI 直接生图链路 |
 | NovelAI 生图入口        | `novelai_generate.py`       | 独立于 ComfyUI 的生图链路;argparse + metadata 落盘 |
 
@@ -59,11 +59,11 @@ output_packager.py → 最终打包
 - pyright：用文件级 `# pyright:` 指令做最小必要的规则调整；局部忽略只在外部库类型不完整处使用
 - 结构化错误：`context` 里不要放敏感信息/超大对象；必要时只存 key 列表/摘要
 - I/O 统一用 `pathlib.Path`；产物写入后必须 `flush + fsync`
-- fresh-run 默认通过 `--config` 驱动；prompt/workflow/model 元数据从 `RunnerConfig` 进入后续模块，不再靠零散 CLI 旗标拼装
+- fresh-run 默认通过 `--config` 驱动；prompt/workflow/model 元数据从 `RunnerConfig` 进入后续模块。
 - `RunnerConfig` 除 prompts/workflow/model 外，也负责携带 run 级封面图/主页缩略图资产元信息；这些资产由上传链路继续写入 R2 + Supabase，而不是由 Web 直接读本地目录
 - `workflow.anima_artist_mixer` 默认 `false`，仅允许 `backend=comfyui` 且 `model.family=anima`；开启时不能把 positive 链当普通 `CLIPTextEncode` 处理
 - Mixer workflow 要求 KSampler 的 model/positive 引用同一个启用的 `AnimaArtistCrossAttn`（输出 0/1），并向其 `AnimaArtistPack` 写入 `base_prompt` / `artist_chain`
-- `compute_prompt_hash(prompt, artist_chain)` 只在 artist chain 非 `None` 时启用复合 JSON hash；`None` 必须保持旧 prompt-only hash 合约
+- `compute_prompt_hash(prompt, artist_chain)` 只在 artist chain 非 `None` 时启用复合 JSON hash；`None` 时使用 prompt-only hash
 - runner\_\* 模块间通过参数传递状态，不使用全局变量
 
 ## 反模式
@@ -71,5 +71,5 @@ output_packager.py → 最终打包
 - 不要把 ComfyUI 的整段响应对象塞进异常 message/context（体积与可序列化都会踩坑）
 - 不要在 tqdm 循环里 `print()`；用 `logging` 并保持与 tqdm 的输出兼容
 - 不要把生成参数复制到 `scripts/cli/` 层；菜单层只做分发
-- 不要把 runner\_\* 模块合并回 `comfyui_part1_generate.py`；拆分是为了可测试性
+- 不要把 runner\_\* 模块合并回 `comfyui_part1_generate.py`。
 - 不要在 retry 中只比较正向 prompt；Mixer 运行的 `artist_chain` 也是 strict 一致性的必须部分

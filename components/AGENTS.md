@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-07-20 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-08-23 -->
 
 # components/ — 前端组件（业务 + 基础 UI）
 
@@ -43,7 +43,7 @@
 - 图片源：公开对象使用 `publicObjectUrl()`；私有对象使用 `privateObjectProxyUrl(key, grant)` 访问代理 route，不在组件中生成签名 URL
 - 性能：大网格依赖虚拟化（`@tanstack/react-virtual`），避免一次性渲染全部 cell
 - Blurhash：图片加载前展示 blurhash 占位（`blurhash-canvas.tsx`），提升感知加载速度
-- JSON-LD：结构化数据组件（`json-ld.tsx`）是客户端组件，通过 `dangerouslySetInnerHTML` 注入 `<script type="application/ld+json">`；这样做避免在 Cloudflare Worker 侧执行 React 渲染，不消耗 Worker CPU
+- JSON-LD：结构化数据组件（`json-ld.tsx`）是客户端组件，通过 `dangerouslySetInnerHTML` 注入 `<script type="application/ld+json">` 标签
 - 主题切换通过 `next-themes`；按钮类组件需处理 mounted 前后的 hydration 差异
 - 多语言：客户端组件使用 `useTranslations("namespace")` 获取翻译文案；导航链接使用 `@/i18n/navigation` 的 `Link` 而非 `next/link`
 - 收藏对比：目录分页与 slice 必须分别遵守 40 条、40 style keys / 12 run dirs 上限；placement 的 `y_index` 保持 0-based。

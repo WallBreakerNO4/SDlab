@@ -1,11 +1,11 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-06-17 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-08-23 -->
 
 # hooks/ — 前端复用 hooks
 
 ## 概览
 
-- 本目录只放“跨组件可复用行为”，当前以 `use-mobile.ts` 与 `use-prompts-scroll-restore.ts` 为主。
+- 本目录只放“跨组件可复用行为”，以 `use-mobile.ts` 与 `use-prompts-scroll-restore.ts` 为主。
 
 ## 去哪儿看
 

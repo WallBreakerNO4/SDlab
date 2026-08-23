@@ -1,11 +1,11 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-04-25 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-08-23 -->
 
 # app/api/comfyui/ — ComfyUI 数据查询 API（Node runtime）
 
 ## 概览
 
-- 当前 ComfyUI API 有四个核心 route：`runs`（首页列表）、`access`（媒体授权）、`workflow`（下载）、`style-items`（收藏 style_key 映射）。run 详情与 grid 数据不再通过独立 API route 返回，而是由前端直接拉取 R2 上的 view bootstrap JSON（`view/current.json` → `view/v2/{release_id}/bootstrap.*.json`）。
+- ComfyUI API 有四个核心 route：`runs`（首页列表）、`access`（媒体授权）、`workflow`（下载）、`style-items`（收藏 style_key 映射）。run 详情与 grid 数据由前端直接拉取 R2 上的 view bootstrap JSON（`view/current.json` → `view/v2/{release_id}/bootstrap.*.json`），不通过独立 API route 返回。
 - 术语约定：展示页缩略图（`display_*` / `thumb_*`）出现在 view bootstrap JSON 中；首页封面图与主页缩略图则在 `runs` 列表的 `assets.cover` / `assets.homepage_cards` 字段中。
 
 ## 去哪儿看
@@ -24,7 +24,7 @@
 - 每个 `route.ts` 保持 `export const runtime = "nodejs"`。
 - 服务端查询统一走 `createSupabaseAuthClient()`；使用 publishable key + cookie session，受 RLS 约束。
 - 动态 route 统一采用 `context.params: Promise<{ runDir: string }>` 形态；进入 handler 后先 `await context.params`，再做 `isValidRunDir()` 校验。
-- `runs/route.ts` 当前除基础字段外，还会返回首页列表所需的 `model`、`assets.cover` 与 `assets.homepage_cards`；这些字段用于首页封面图和主页缩略图展示。
+- `runs/route.ts` 除基础字段外，还返回首页列表所需的 `model`、`assets.cover` 与 `assets.homepage_cards`；这些字段用于首页封面图和主页缩略图展示。
 - `access/route.ts` 负责分发 SFW/NSFW 视图的临时 grant token，供前端构造私有对象 URL。
 - `workflow/route.ts` 先从 `runs.workflow_download_r2_key` 取 key，验证后通过 `getCloudflareContext().env.R2_PUBLIC_BUCKET` 回源。
 - `catch` 分支只返回固定短文案，避免暴露数据库、路径、环境细节。

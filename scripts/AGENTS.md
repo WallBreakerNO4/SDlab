@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-07-16 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-08-23 -->
 
 # scripts/ — 核心实现（生图 + R2 上传）
 
@@ -19,7 +19,7 @@
 | prompt 组合/hash/seed      | `scripts/generation/prompt_grid.py`                        | general/artists 拆分；hash 可包含 `artist_chain` |
 | 重试失败项                 | `scripts/generation/retry_failed_selection.py`、`retry.py` | 筛选 + 重跑                                   |
 | 菜单交互与入口注册         | `scripts/cli/menu.py`、`scripts/cli/registry.py`           | 交互菜单、入口动态加载                        |
-| CSV / prompt 资产转换      | `scripts/other/convert_*.py`                               | 文件名遗留 `json`，实际输出 YAML              |
+| CSV / prompt 资产转换      | `scripts/other/convert_*.py`                               | 文件名保留 `json` 后缀，实际输出 YAML              |
 | R2 上传主入口              | `scripts/r2_upload/upload_images_to_r2.py`                 | 编码变体 + 并发上传 + Supabase 写入           |
 | R2 客户端                  | `scripts/r2_upload/r2_client.py`                           | boto3 S3 兼容 + 重试                          |
 | Supabase 批量写入          | `scripts/r2_upload/supabase_writer.py`                     | PostgREST upsert + 分批                       |
@@ -34,7 +34,7 @@
 - `scripts/other/`：离线资产转换工具；规则见 `scripts/other/AGENTS.md`
 - `scripts/r2_upload/`：R2 上传 + Supabase 写入 + run 删除；不把凭证细节扩散到其他目录
 
-- 当前 fresh-run 主链路：`main.py` / 菜单 → `comfyui_part1_generate.py --config ...` → `runner_config.py` → runner\_\* 模块
+- fresh-run 主链路：`main.py` / 菜单 → `comfyui_part1_generate.py --config ...` → `runner_config.py` → runner\_\* 模块
 
 ## 约定（本目录特有）
 
