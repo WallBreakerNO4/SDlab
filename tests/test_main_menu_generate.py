@@ -154,3 +154,108 @@ def test_generate_advanced_flow_maps_original_cli_args(
         ]
     ]
     assert "生图完成，退出码: 7" in outputs
+
+
+def test_generate_novelai_advanced_flow_maps_retry_flags(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str] | None] = []
+
+    def _fake_novelai_main(argv: list[str] | None = None) -> int:
+        calls.append(argv)
+        return 0
+
+    monkeypatch.setattr(
+        "scripts.generation.novelai_generate.main",
+        _fake_novelai_main,
+    )
+    fake_questionary = _FakeQuestionary(
+        selects=[
+            "generate_novelai",
+            "data/models/nai-diffusion-5-full/config.yaml",
+            "__exit__",
+        ],
+        texts=[
+            "outputs/hard-stopped-run",
+            "",
+            "",
+            "",
+        ],
+        confirms=[
+            True,  # 开启高级参数
+            False,  # dry-run
+            True,  # --retry-failed
+            False,  # --retry-incomplete
+            True,  # 确认执行
+        ],
+    )
+    monkeypatch.setattr("scripts.cli.menu._load_questionary", lambda: fake_questionary)
+
+    outputs: list[str] = []
+    exit_code = run_menu(_build_menu_io(outputs))
+
+    assert exit_code == 0
+    assert calls == [
+        [
+            "--config",
+            "data/models/nai-diffusion-5-full/config.yaml",
+            "--run-dir",
+            "outputs/hard-stopped-run",
+            "--retry-failed",
+        ]
+    ]
+    assert "NovelAI 生图完成，退出码: 0" in outputs
+
+
+def test_generate_novelai_advanced_flow_maps_retry_error_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str] | None] = []
+
+    def _fake_novelai_main(argv: list[str] | None = None) -> int:
+        calls.append(argv)
+        return 0
+
+    monkeypatch.setattr(
+        "scripts.generation.novelai_generate.main",
+        _fake_novelai_main,
+    )
+    fake_questionary = _FakeQuestionary(
+        selects=[
+            "generate_novelai",
+            "data/models/nai-diffusion-5-curated/config.yaml",
+            "__exit__",
+        ],
+        texts=[
+            "my-run",
+            "anlas_battery_low,anlas_billing_detected",
+            "",
+            "",
+        ],
+        confirms=[
+            True,  # 开启高级参数
+            True,  # dry-run
+            True,  # --retry-failed
+            True,  # --retry-incomplete
+            True,  # 确认执行
+        ],
+    )
+    monkeypatch.setattr("scripts.cli.menu._load_questionary", lambda: fake_questionary)
+
+    outputs: list[str] = []
+    exit_code = run_menu(_build_menu_io(outputs))
+
+    assert exit_code == 0
+    assert calls == [
+        [
+            "--config",
+            "data/models/nai-diffusion-5-curated/config.yaml",
+            "--dry-run",
+            "--run-dir",
+            "my-run",
+            "--retry-failed",
+            "--retry-incomplete",
+            "--retry-error-code",
+            "anlas_battery_low,anlas_billing_detected",
+        ]
+    ]

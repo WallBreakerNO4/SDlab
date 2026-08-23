@@ -32,7 +32,7 @@
 | 重试执行                | `retry.py`                   | 重试入口与流程控制                                    |
 | 运行回放                | `run_replay.py`              | 从 `run.json` 恢复 workflow 快照；快照缺 Mixer 字段时按未启用处理 |
 | NovelAI API 客户端      | `novelai_client.py`         | 基于 `novelai` SDK;认证/网络错误处理,服务 NovelAI 直接生图链路 |
-| NovelAI 生图入口        | `novelai_generate.py`       | 独立于 ComfyUI 的生图链路;argparse + metadata 落盘 |
+| NovelAI 生图入口        | `novelai_generate.py`       | 独立于 ComfyUI 的生图链路;argparse + metadata 落盘 + retry 回放恢复（模型 key 从 run.json 快照恢复） |
 
 ## 模块拆分结构
 

@@ -578,6 +578,15 @@ def _prompt_generate_novelai_advanced_args(
     if run_dir:
         argv.extend(["--run-dir", run_dir])
 
+    # 恢复选项：与 ComfyUI 生图菜单同模式；硬停后从菜单即可恢复。
+    if backend.confirm("开启 --retry-failed？", default=False):
+        argv.append("--retry-failed")
+    if backend.confirm("开启 --retry-incomplete？", default=False):
+        argv.append("--retry-incomplete")
+    retry_error_code = backend.text("设置 --retry-error-code（逗号分隔，留空跳过）")
+    if retry_error_code:
+        argv.extend(["--retry-error-code", retry_error_code])
+
     concurrency = backend.text("覆盖 --concurrency（留空使用默认值 2）")
     if concurrency:
         argv.extend(["--concurrency", concurrency])
