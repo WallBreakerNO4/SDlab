@@ -345,6 +345,29 @@ def test_v5_battery_above_threshold_allows_generation(
     assert len(image_api.calls) == 1
 
 
+def test_v5_logs_remaining_battery_after_generation(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    image_api = _FakeImageAPI(images=["img"])
+    user_api = _FakeUserAPI(
+        [
+            _subscription(usage={"percent": 60, "isNegative": False}),
+            _subscription(usage={"percent": 42, "isNegative": False}),
+        ]
+    )
+    client = _make_client(
+        monkeypatch,
+        image_api=image_api,
+        user_api=user_api,
+    )
+    caplog.set_level("INFO", logger=novelai_client.__name__)
+
+    client.generate(**_generate_kwargs(model="nai-diffusion-5-full"))
+
+    assert "NovelAI V5 电池剩余：42.0%" in caplog.messages
+
+
 # --- Anlas 余额核对 ---
 
 

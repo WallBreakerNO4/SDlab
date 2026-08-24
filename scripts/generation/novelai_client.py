@@ -283,7 +283,7 @@ class NovelAIAPIClient:
 
         # Anlas 守卫第三层：生成后核对余额，减少即视为已发生计费。
         # 刻意放在重试机制之外：订阅查询的瞬时失败绝不能触发生图请求重发。
-        self._verify_no_billing()
+        self._verify_no_billing(model=model)
 
         wait_s = max(0.0, self._min_interval + random.uniform(-self._jitter, self._jitter))
         if wait_s > 0:
@@ -404,10 +404,15 @@ class NovelAIAPIClient:
                 context=context,
             )
 
-    def _verify_no_billing(self) -> None:
+    def _verify_no_billing(self, *, model: str) -> None:
         with self._baseline_lock:
             baseline = self._anlas_baseline
-        current = _extract_anlas_balance(self._fetch_subscription())
+        subscription = self._fetch_subscription()
+        if model in _V5_MODEL_NAMES:
+            battery_percent = _extract_usage_percent(subscription)
+            if battery_percent is not None:
+                LOG.info("NovelAI V5 电池剩余：%.1f%%", battery_percent)
+        current = _extract_anlas_balance(subscription)
         if current is None:
             # 余额不可读即无法核对计费状态；按守卫核心承诺 fail-closed 硬停，
             # 不带任何不确定状态继续发起后续请求。
