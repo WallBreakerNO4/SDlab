@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-07-19 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-08-23 -->
 
 # e2e/ — Playwright 端到端测试
 
@@ -20,7 +20,11 @@
 | hash 跳转 | `task-13-hash-jump.spec.ts` | URL hash 定位到特定 cell |
 | 滚动恢复 | `task-13-scroll-restore.spec.ts` | 弹窗关闭后恢复滚动位置 |
 | Mixer prompt parts 渲染 | `task-13-mixer-prompt-parts.spec.ts` | Mixer 的 y_prompt_parts（Artist/Common Prompt）前端分栏渲染 |
-| 画师串收藏 | `task-14-style-favorites.spec.ts` | 未登录弹登录框/收藏页门控 + 已登录 toggle/面板跳转/收藏页 + 对比页历史 BlurHash 回退 |
+| 画师串收藏 | `task-14-style-favorites.spec.ts` | 未登录弹登录框/收藏页门控 + 已登录 toggle/面板跳转/收藏页 + 对比页 BlurHash 回退 |
+| 模型详情顶栏 Markdown | `model-detail-markdown.spec.ts` | mock 模式下渲染允许的 Markdown，并验证链接安全属性（外链新窗口/禁图等） |
+| model view 合约 | `model-view-test-helpers.spec.ts` | 校验 mock helper 的 URL 契约（公开/私有变体 pattern） |
+| model view mock 工具 | `model-view-test-helpers.ts` | `MOCK_MODEL_VIEW_RUN_DIR` 等 mock run 常量与 URL pattern，供无数据依赖的 spec 复用 |
+| no-env blocker 验证 | `no-env-blocker.spec.ts` | 验证 no-env 配置下 worker 预加载了环境文件阻断器（配合 `no-env-node-options.ts` / `env-file-path.cjs`） |
 | 已登录态机制 | `global-setup.ts` / `global-teardown.ts` / `e2e-auth-state.ts` | service role admin 链路建 session 写 storageState；teardown 清空测试用户收藏 |
 
 ## 运行
@@ -40,9 +44,8 @@ E2E_SERVER=start pnpm test:e2e
 ## 约定（本目录特有）
 
 - `baseURL` 由 `E2E_PORT` 影响（默认 3000）；webServer 命令根据 `E2E_SERVER` 选择 `dev` 或 `build+start`
-- baseURL 用 `localhost` 不用 `127.0.0.1`：R2 CORS 只放行 `http://localhost:3000` 与生产域名，`127.0.0.1` 会被 CORS 拒且 dev 模式不 hydrate；start 模式必须用默认 3000 端口
+- baseURL 用 `localhost` 不用 `127.0.0.1`（R2 CORS 只放行 `http://localhost:3000` 与生产域名）；start 模式必须用默认 3000 端口
 - 证据：测试可写 `test-results/`（`mkdirSync(..., { recursive: true })`），已被根 `.gitignore` 的 `/test-results/` 忽略
-- 旧 spec 已清理：task-11 ~ task-16（旧安全/性能/虚拟滚动等）已移除；当前 spec 聚焦 Supabase + R2 流程
 - 新增 spec 时命名建议：`task-{N}-{描述}.spec.ts`
 - 已登录用例：global setup 用 `SUPABASE_SERVICE_ROLE_KEY` 经 admin API（generate_link + 手工截 fragment tokens + @supabase/ssr cookie 编码）把测试用户 session 写入 `test-results/e2e-auth-state.json`，用例侧 `test.use({ storageState })` 复用；缺环境变量（`.env` 由 `process.loadEnvFile` 加载）时 setup 不写 state、已登录用例 skip；global teardown 清空该测试用户的 `user_style_favorites`
 - 无密钥入口：`playwright.no-env.config.ts` 不注册 global setup/teardown，先构建再启动 3100 端口；`e2e/block-env-file-access.cjs` 同时阻断测试进程与 Next 子进程读取 `.env*`，清除继承的 service-role 变量，测试产物只写 `/tmp/sdlab-playwright-no-env/`

@@ -1,0 +1,82 @@
+schema_version: image-run-config/v2
+backend: novelai
+
+model:
+  key: nai-diffusion-5-curated
+  name: "NovelAI Diffusion V5 Curated"
+  family: novelai
+  links:
+    homepage: https://novelai.net/
+    huggingface: null
+    civitai: null
+  description:
+    zh: |
+      NovelAI 官方自研 Diffusion V5 Curated 模型，闭源，V5 代际的精选版。
+
+      与 V5 Full 同架构，但训练集更小、更干净、更聚焦，对敏感内容的倾向显著更低。
+      Opus 订阅下正常分辨率与步数内的生成消耗可回充的"电池"额度而非 Anlas；
+      耗尽后请求会静默转 Anlas 计费，本仓库生图链路已在客户端层加装 Anlas 守卫，
+      确保绝不发起计费请求。
+
+      核心特性：
+      - 全新 32 通道 VAE，细节还原与色彩表现进一步提升
+      - 自然语言与多语言提示词：除英文标签外可直接用自然语言描述画面内容
+      - 透明背景输出：原生支持 RGBA 透明通道，便于后期合成
+      - 多角色生成：单场景多个独立角色与复杂互动构图
+      - 漫画页生成：支持整页分镜式漫画构图
+      - 动作标签与角色定位（source# / target# / mutual#）、画面文字集成、
+        负数强调语法（如 -1::hat ::）
+
+      注意：V5 专属 quality tags 与 UC 预设官方尚未发布，配置沿用 V4.5 基线。
+    en: |
+      NovelAI's in-house Diffusion V5 Curated model, closed-source — the
+      curated edition of the V5 generation.
+
+      Shares the V5 architecture with Full but trains on a smaller, cleaner and
+      more focused dataset with a notably lower tendency toward sensitive
+      content. Under an Opus subscription, generations at normal resolution and
+      step counts draw from a rechargeable free allowance ("battery") instead
+      of Anlas; once the battery runs out, requests silently switch to Anlas
+      billing. This repository's generation pipeline enforces an Anlas guard at
+      the client layer so that billed requests are never sent.
+
+      Key Features:
+      - New 32-channel VAE with improved detail fidelity and color rendition
+      - Natural language & multilingual prompts: describe scenes directly in
+        natural language beyond tag-based prompting
+      - Transparent background output with native RGBA alpha support
+      - Multi-character generation with complex scene composition
+      - Comic page generation for full-page panel layouts
+      - Action tags & character positioning (source# / target# / mutual#),
+        in-image text rendering, negative emphasis (e.g., -1::hat ::)
+
+      Note: official V5-specific quality tags and UC presets have not been
+      published yet; configuration follows the V4.5 baseline.
+
+prompts:
+  x_path: data/prompts/X/common_prompts.yaml
+  y_path: data/prompts/Y/300_NAI_Styles_Table.yaml
+
+workflow:
+  ksampler_node_id: null
+
+generation:
+  template: "{gender}{characters}{series}{y}{rating}{general}{quality}"
+  quality_prompt: "year 2025, very aesthetic, masterpiece, no text,"
+  base_seed: 123
+  negative_prompt: "lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page, film grain, chromatic aberration, dithering, halftone, screentone, logo,"
+  append_negative_prompt: "nsfw,nipples,pussy,nude,"
+  width: 832
+  height: 1216
+  batch_size: 1
+  steps: 28
+  cfg: 5.0
+  denoise: null
+  sampler_name: k_euler_ancestral
+  scheduler: null
+
+selection:
+  x_limit: null
+  y_limit: null
+  x_indexes: null
+  y_indexes: null

@@ -1,11 +1,11 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-07-20 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-08-23 -->
 
 # tests/ — pytest + Node node:test 约定
 
 ## 概览
 
-- Python 测试使用 pytest，覆盖 generation runner、YAML 配置、R2 上传、CLI、资产转换和重试；TypeScript 测试使用 Node `node:test` + `tsx`，当前覆盖收藏 label 校验与模型对比的部分边界/guard。整体偏“可观测输出”：验证文件生成、YAML/JSON 字段合约、结构化错误与边界上限。
+- Python 测试使用 pytest，覆盖 generation runner、YAML 配置、R2 上传、CLI、资产转换和重试；TypeScript 测试使用 Node `node:test` + `tsx`，覆盖收藏 label 校验与模型对比的部分边界/guard。整体偏“可观测输出”：验证文件生成、YAML/JSON 字段合约、结构化错误与边界上限。
 
 ## 去哪儿看
 
@@ -51,10 +51,10 @@
 - 断言优先围绕合约：`run.json` 字段、`metadata.jsonl` 逐行 JSON、状态码与错误码
 - mock 方式：优先 `monkeypatch.setattr(...)` 替换网络/WS；避免引入额外 mock 依赖
 - pyright：测试文件可用文件级 `# pyright:` 放宽 unknown 类型（因 fake/mocks）
-- 固定样例资产放在 `tests/fixtures/`；当前更多共享 setup 直接写在测试文件 helper 中，本仓库目前没有顶层 `conftest.py`
+- 固定样例资产放在 `tests/fixtures/`；共享 setup 写在测试文件 helper 中，没有顶层 `conftest.py`
 - TypeScript 测试使用 `node:assert/strict` + `node:test`，通过 `pnpm test` 执行 `node --import tsx --test tests/*.test.ts`；不要混入 Playwright 浏览器断言。
-- 当前模型对比单测未覆盖 slice response guard，也未覆盖 `mergeComparisonFavorites()`、`getVisibleModels()`、`reconcileHiddenRunDirs()`、`flattenRowSlides()`；修改这些逻辑时应补对应测试。
-- 修改 placement / row 逻辑时，应增加或保持对 0-based `y_index` 结构的测试；现有 `style-comparison.test.ts` 不能作为该行为已覆盖的证据。这些单测也不等同于 E2E。
+- 模型对比单测未覆盖 slice response guard，也未覆盖 `mergeComparisonFavorites()`、`getVisibleModels()`、`reconcileHiddenRunDirs()`、`flattenRowSlides()`；修改这些逻辑时应补对应测试。
+- 修改 placement / row 逻辑时，应增加或保持对 0-based `y_index` 结构的测试；单测不等同于 E2E。
 
 ## 运行
 

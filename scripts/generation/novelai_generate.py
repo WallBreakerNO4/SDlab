@@ -1,4 +1,4 @@
-# pyright: basic, reportUnusedCallResult=false, reportImplicitStringConcatenation=false
+# pyright: basic, reportPrivateUsage=false, reportUnusedCallResult=false, reportImplicitStringConcatenation=false
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import sys
 import uuid
 from pathlib import Path
 from time import monotonic
-from typing import Any
+from typing import Any, cast
 
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
@@ -39,6 +39,7 @@ from scripts.generation.runner_selection import (
     SelectedRow,
     _extract_x_info_type,
     _select_rows,
+    _select_rows_by_fixed_indexes,
 )
 from scripts.generation.runner_prompt_template import (
     ALLOWED_TEMPLATE_KEYS,
@@ -53,6 +54,18 @@ from scripts.generation.runner_records import (
     _next_attempt,
     _should_resume_skip,
 )
+from scripts.generation.retry_failed_selection import (
+    _coerce_int_or_none,
+    select_failed_and_incomplete_cells,
+)
+from scripts.generation.run_replay import load_run_replay_config
+from scripts.generation.runner_retry import (
+    _apply_replay_config_to_args,
+    _build_retry_target_cells,
+    _filter_retry_failed_cells,
+    _parse_retry_error_codes,
+    _validate_retry_failed_cells_consistency,
+)
 from scripts.generation.runner_payload import (
     _build_run_payload,
     _now_iso,
@@ -61,7 +74,9 @@ from scripts.generation.output_packager import (
     RunArtifacts,
     _MetadataWriter,
     _load_latest_metadata_records,
+    _load_latest_metadata_records_strict,
     _metadata_writer,
+    _prepare_existing_run_artifacts,
     _prepare_run_artifacts,
 )
 from scripts.generation.runner_coordinator import (
@@ -96,8 +111,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--config",
-        required=True,
-        help="Runner YAML 配置文件路径 (image-run-config/v2, backend=novelai)。",
+        help="Runner YAML 配置文件路径 (image-run-config/v2, backend=novelai)。"
+        "retry 模式从 run.json 回放，可省略。",
     )
     parser.add_argument("--run-dir")
     parser.add_argument("--dry-run", action="store_true", default=False)
@@ -130,6 +145,8 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         _validate_args(args)
+        if _is_retry_mode(args):
+            return run_retry(args)
         return run(args)
     except ValueError as exc:
         print(f"参数错误: {exc}", file=sys.stderr)
@@ -139,9 +156,31 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
 
+def _is_retry_mode(args: argparse.Namespace) -> bool:
+    return bool(args.retry_failed or args.retry_incomplete)
+
+
 def _validate_args(args: argparse.Namespace) -> None:
+    retry_mode = _is_retry_mode(args)
+
     if args.concurrency <= 0:
         raise ValueError("--concurrency 必须 > 0")
+
+    retry_error_codes = _parse_retry_error_codes(args.retry_error_code)
+    if retry_error_codes is not None and not retry_mode:
+        raise ValueError(
+            "--retry-error-code 仅可与 --retry-failed/--retry-incomplete 一起使用"
+        )
+
+    if retry_mode:
+        if not args.run_dir:
+            raise ValueError("retry 模式必须提供 --run-dir，且指向已有 run 目录")
+        run_dir = Path(args.run_dir)
+        if not run_dir.exists() or not run_dir.is_dir():
+            raise ValueError(f"retry 模式 --run-dir 不存在或不是目录: {run_dir}")
+    elif not args.config:
+        raise ValueError("fresh-run 模式必须提供 --config")
+
     if not args.client_id:
         args.client_id = str(uuid.uuid4())
 
@@ -230,6 +269,12 @@ def run(args: argparse.Namespace) -> int:
         if client._api_key is None:
             print("错误: 未设置 NOVELAI_API_KEY 环境变量", file=sys.stderr)
             return 2
+        # Anlas 守卫启动预检：非 Opus key 直接中止；V5 run 顺带检查电池电量。
+        try:
+            client.preflight(model=model_name)
+        except Exception as exc:
+            print(f"Anlas 守卫预检失败: {exc}", file=sys.stderr)
+            return 2
 
     worker_fn = novelai_worker(client=client, model=model_name)
 
@@ -300,6 +345,216 @@ def run(args: argparse.Namespace) -> int:
     )
 
     return 1 if has_failed else 0
+
+
+def run_retry(args: argparse.Namespace) -> int:
+    _configure_logging()
+
+    run_artifacts = _prepare_existing_run_artifacts(args.run_dir)
+    run_artifacts.images_dir.mkdir(parents=True, exist_ok=True)
+
+    # 目标 run 必须由 NovelAI 后端产出；模型 key 从 run.json 快照恢复并过白名单。
+    model_name = _load_novelai_retry_model_key(run_artifacts.run_json_path)
+
+    replay = load_run_replay_config(run_artifacts.run_dir, strict_sha256=True)
+    _apply_replay_config_to_args(args, replay)
+    novelai_fingerprint = _novelai_generation_fingerprint(args, model=model_name)
+
+    x_rows = read_x_rows(args.x_json)
+    y_rows = read_y_rows_for_novelai(args.y_json)
+    x_descriptions = read_x_descriptions(args.x_json)
+
+    x_selected = _select_rows_by_fixed_indexes(
+        rows=x_rows,
+        indexes=replay.selection.x_indexes,
+        axis_name="x",
+    )
+    y_selected = _select_rows_by_fixed_indexes(
+        rows=y_rows,
+        indexes=replay.selection.y_indexes,
+        axis_name="y",
+    )
+
+    expected_cells = {
+        (x_item.index, y_item.index) for x_item in x_selected for y_item in y_selected
+    }
+    selection = select_failed_and_incomplete_cells(
+        metadata_path=run_artifacts.metadata_path,
+        run_dir=run_artifacts.run_dir,
+        expected_cells=expected_cells,
+    )
+    latest_records = _load_latest_metadata_records_strict(run_artifacts.metadata_path)
+
+    retry_error_codes = _parse_retry_error_codes(args.retry_error_code)
+    failed_cells = _filter_retry_failed_cells(
+        failed_cells=selection.failed_cells,
+        latest_records=latest_records,
+        retry_error_codes=retry_error_codes,
+    )
+    target_cells = _build_retry_target_cells(
+        retry_failed=args.retry_failed,
+        retry_incomplete=args.retry_incomplete,
+        failed_cells=failed_cells,
+        incomplete_cells=selection.incomplete_cells,
+    )
+
+    # strict 一致性：失败格的 prompt hash / seed / fingerprint 与当前回放输入
+    # 不一致时直接拒绝，防止恢复运行产出与原 run 不一致的结果。
+    _validate_retry_failed_cells_consistency(
+        target_cells=target_cells,
+        latest_records=latest_records,
+        x_rows_by_index={item.index: item.value for item in x_selected},
+        y_rows_by_index={item.index: item.value for item in y_selected},
+        template=args.template,
+        base_seed=args.base_seed,
+        workflow_hash=novelai_fingerprint,
+        render_prompt=lambda template, x_row, y_value: (
+            _prompt_render_prompt_by_template(
+                template,
+                x_row,
+                y_value,
+                default_template="{quality}{rating}{y}{gender}{characters}{series}{general}",
+                quality_prompt=getattr(args, "quality_prompt", None),
+            )
+        ),
+        compute_prompt_hash=compute_prompt_hash,
+        derive_seed=derive_seed,
+        coerce_int_or_none=_coerce_int_or_none,
+    )
+
+    total_cells = len(target_cells)
+    stats = RunStats()
+
+    x_by_index = {item.index: item for item in x_selected}
+    y_by_index = {item.index: item for item in y_selected}
+    cell_pairs = [
+        (x_by_index[x_index], y_by_index[y_index]) for x_index, y_index in target_cells
+    ]
+
+    LOG.info(
+        "重试运行: retry_failed=%s retry_incomplete=%s total_cells=%s run_dir=%s",
+        args.retry_failed,
+        args.retry_incomplete,
+        total_cells,
+        run_artifacts.run_dir,
+    )
+
+    client = NovelAIAPIClient(api_key="dry-run" if args.dry_run else None)
+    if not args.dry_run:
+        if client._api_key is None:
+            print("错误: 未设置 NOVELAI_API_KEY 环境变量", file=sys.stderr)
+            return 2
+        # Anlas 守卫启动预检：非 Opus key 直接中止；V5 run 顺带检查电池电量。
+        try:
+            client.preflight(model=model_name)
+        except Exception as exc:
+            print(f"Anlas 守卫预检失败: {exc}", file=sys.stderr)
+            return 2
+
+    worker_fn = novelai_worker(client=client, model=model_name)
+
+    with logging_redirect_tqdm():
+        with tqdm(
+            total=total_cells,
+            desc="重试进度",
+            unit="cell",
+            dynamic_ncols=True,
+        ) as pbar:
+            with _metadata_writer(run_artifacts.metadata_path) as writer:
+                has_failed = run_generation(
+                    args=args,
+                    x_selected=x_selected,
+                    y_selected=y_selected,
+                    x_descriptions=x_descriptions,
+                    latest_records=latest_records,
+                    run_dir=run_artifacts.run_dir,
+                    run_id=run_artifacts.run_dir.name,
+                    workflow_context=None,
+                    workflow_hash=novelai_fingerprint,
+                    stats=stats,
+                    pbar=pbar,
+                    writer=writer,
+                    render_prompt=lambda template, x_row, y_value: (
+                        _prompt_render_prompt_by_template(
+                            template,
+                            x_row,
+                            y_value,
+                            default_template="{quality}{rating}{y}{gender}{characters}{series}{general}",
+                            quality_prompt=getattr(args, "quality_prompt", None),
+                        )
+                    ),
+                    compute_prompt_hash=compute_prompt_hash,
+                    derive_seed=derive_seed,
+                    effective_generation_params=_novelai_effective_params,
+                    next_attempt=lambda prev, increment: _next_attempt(
+                        prev,
+                        increment=increment,
+                    ),
+                    # retry 模式目标 cell 已经过筛选与一致性校验，不再做断点续跑跳过。
+                    should_resume_skip=lambda existing, expected_prompt_hash, expected_seed, expected_workflow_hash: (
+                        False
+                    ),
+                    build_base_metadata_record=_build_base_metadata_record,
+                    extract_local_image_path=_extract_local_image_path,
+                    extract_local_image_paths=_extract_local_image_paths,
+                    now_iso=_now_iso,
+                    patch_workflow=lambda *args, **kwargs: None,
+                    workflow_overrides_factory=lambda **kwargs: None,
+                    final_negative_prompt_for_x_row=_novelai_final_negative,
+                    submit_prompt=lambda *args, **kwargs: "",
+                    wait_prompt_done_with_fallback=lambda *args, **kwargs: None,
+                    get_history_item=lambda *args, **kwargs: {},
+                    download_image_to_path=lambda *args, **kwargs: Path("."),
+                    cell_pairs=cell_pairs,
+                    worker_fn=worker_fn,
+                )
+
+    print(
+        "结果统计: "
+        f"success={stats.success}, skipped={stats.skipped}, "
+        f"failed={stats.failed}, resume_hit={stats.resume_hit}"
+    )
+
+    return 1 if has_failed else 0
+
+
+def _load_novelai_retry_model_key(run_json_path: Path) -> str:
+    """从 run.json 提取模型 key 并校验该 run 由 NovelAI 后端产出。
+
+    retry 不读 --config：生成输入以 run.json 快照 + sha256 校验为准，
+    模型 key 也必须来自原 run，保证 fingerprint 与原记录一致。
+    """
+    if not run_json_path.exists():
+        raise ValueError(f"run.json 不存在: {run_json_path}")
+
+    try:
+        raw = run_json_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"run.json 读取失败: {run_json_path}") from exc
+
+    try:
+        payload = cast(object, json.loads(raw))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"run.json 不是合法 JSON: {exc}") from exc
+
+    if not isinstance(payload, dict):
+        raise ValueError("run.json 顶层必须为对象")
+
+    backend = payload.get("backend", "comfyui")
+    if backend != BACKEND_NOVELAI:
+        raise ValueError(
+            f"retry 目标 run 不是 NovelAI 运行（backend={backend}），"
+            "请改用对应后端的 retry 入口"
+        )
+
+    model_obj = payload.get("model")
+    if not isinstance(model_obj, dict):
+        raise ValueError("run.json 缺少 model 快照，无法恢复 NovelAI run")
+    model_key = model_obj.get("key")
+    if not isinstance(model_key, str) or not model_key.strip():
+        raise ValueError("run.json 的 model.key 缺失或为空，无法恢复 NovelAI run")
+
+    return _normalize_model(model_key)
 
 
 def _apply_config_to_args(args: argparse.Namespace, config: Any) -> None:
@@ -426,7 +681,7 @@ def _novelai_generation_fingerprint(
         "schema": "novelai-generation-fingerprint/v1",
         "backend": BACKEND_NOVELAI,
         "model": model,
-        "quality": True,
+        "quality": False,
         "uc_preset": "light",
         "generation": {
             "negative_prompt": args.negative_prompt,

@@ -1,11 +1,11 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-05-30 | Updated: 2026-07-20 -->
+<!-- Generated: 2026-05-30 | Updated: 2026-08-23 -->
 
 # messages/ — 翻译消息 JSON
 
 ## 概览
 
-- 存放 `next-intl` 的翻译消息文件。当前支持 `zh`（简体中文）和 `en`（英语）。每个 JSON 文件按 namespace 组织：`metadata`、`header`、`home`、`footer`、`auth`、`modelDetail`、`virtualGrid`、`cellDialog`、`modelCard`、`prompts`、`styleFavorites`。
+- 存放 `next-intl` 的翻译消息文件。支持 `zh`（简体中文）和 `en`（英语）。每个 JSON 文件按 namespace 组织：`metadata`、`header`、`home`、`footer`、`auth`、`modelDetail`、`virtualGrid`、`cellDialog`、`modelCard`、`prompts`、`styleFavorites`。
 
 ## Key Files
 

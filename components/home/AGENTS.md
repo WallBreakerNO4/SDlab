@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-25 | Updated: 2026-07-19 -->
+<!-- Generated: 2026-04-25 | Updated: 2026-08-23 -->
 
 # components/home/ — 首页模型卡片组件
 
@@ -12,7 +12,7 @@
 | 场景             | 位置                     | 备注                                                                                |
 | ---------------- | ------------------------ | ----------------------------------------------------------------------------------- |
 | 模型卡片         | `model-card.tsx`         | 封面图（cover）+ 描述展开收起 + 主页缩略图水平卷轴（HorizontalScrollList）          |
-| 预览大图弹窗     | `preview-dialog.tsx`     | 主页缩略图大图预览（基于 `components/ui/dialog.tsx`）；封面图已不再点击放大，仅主页缩略图点击触发           |
+| 预览大图弹窗     | `preview-dialog.tsx`     | 主页缩略图大图预览（基于 `components/ui/dialog.tsx`）；仅主页缩略图点击触发           |
 | 封面图/主页缩略图 | `API: /api/comfyui/runs` | 首页 runs 列表返回 `assets.cover` 与 `assets.homepage_cards`                        |
 | 图片源构建       | `lib/r2-url.ts`          | R2 公开 URL 生成                                                                    |
 | Blurhash 占位    | `components/comfyui/blurhash-canvas.tsx` | 用于封面图/缩略图加载占位                                            |

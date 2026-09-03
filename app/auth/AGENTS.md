@@ -1,11 +1,11 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-04-25 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-08-23 -->
 
 # app/auth/ — Supabase Auth 回调特例
 
 ## 概览
 
-- 当前目录只承载 OAuth / PKCE callback；它是 `app/` 里少数直接用 `@supabase/ssr` `createServerClient()` 的特例。
+- 本目录只承载 OAuth / PKCE callback；它是 `app/` 里少数直接用 `@supabase/ssr` `createServerClient()` 的特例。
 
 ## 去哪儿看
 

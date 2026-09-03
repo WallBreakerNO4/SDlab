@@ -1,5 +1,5 @@
 <!-- Parent: ../../AGENTS.md -->
-<!-- Generated: 2026-04-25 | Updated: 2026-07-16 -->
+<!-- Generated: 2026-04-25 | Updated: 2026-08-23 -->
 
 # app/models/[runDir]/ — 模型详情页共享组件
 
@@ -29,7 +29,7 @@
 - bootstrap 只包含 detail + grid 索引/占位数据；实际 row manifest 由 `components/comfyui/use-virtual-grid-rows.ts` 根据可见行按需加载。
 - SFW 场景 bootstrap 通过 `publicObjectUrl()`；NSFW 场景通过 `privateObjectProxyUrl()` + grant token。
 - bootstrap JSON 的 `yLabels` / `yPromptParts`（camelCase）会被归一化为 `y_labels` / `y_prompt_parts`（snake_case）以匹配网格组件预期。
-- current 缓存与登录态 access grant 的 `release_id` 不一致时，数据 hook 会带 release cache-buster 绕过缓存重拉一次 current，避免发布窗口内的私有 bootstrap 403。
+- current 缓存与登录态 access grant 的 `release_id` 不一致时，数据 hook 会带 release cache-buster 绕过缓存重拉一次 current。
 - 所有 fetch 通过 `AbortController` 管理，组件卸载时自动取消。
 - `model-detail-types.ts` 中包含多层 type guard（`isModelDetailResponse` / `isRunGridIndexData` / `isCurrentRunView` / `isRunViewAccess`），服务端返回数据必须经过校验才进入渲染态。
 - 认证入口统一走 `AuthProvider` + `useAuth()`；workflow 下载需要登录态。
@@ -38,7 +38,7 @@
 ## 反模式
 
 - 不要绕过 type guard 直接消费 API 返回值；所有 fetch 结果都经 `is*` 守卫校验。
-- 不要在本目录中创建新的 `page.tsx` 作为路由入口；页面入口已迁至 `app/[locale]/models/[runDir]/page.tsx`。
+- 不要在本目录中创建新的 `page.tsx` 作为路由入口；页面入口位于 `app/[locale]/models/[runDir]/page.tsx`。
 - 不要手动拼接 bootstrap URL 或 R2 路径；使用 `publicObjectUrl()` / `privateObjectProxyUrl()`。
 - 不要把展示页缩略图语义用于此页面的首页卡片展示。
 - 不要在这里引入 `server-only` 的 Supabase auth client。

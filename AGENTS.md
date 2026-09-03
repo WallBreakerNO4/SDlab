@@ -1,5 +1,4 @@
-<!-- Generated: 2026-04-06 | Updated: 2026-07-20 -->
-<!-- Commit: Style Comparison（模型对比收藏） | 分支: dev -->
+<!-- Generated: 2026-04-06 | Updated: 2026-08-23 -->
 
 # Agent Guide (sd-style-lab/images-script)
 
@@ -8,18 +7,19 @@
 ## 概览
 
 - 仓库分两条主线：Next.js 站点负责展示 runs / grid / 图片；Python 脚本负责生图、上传 R2、写入 Supabase。
-- 当前网站数据链路以 Supabase + R2 为准；不要假设 Web 侧仍有本地文件降级读取。
-- 术语约定：当前已接入、由上传脚本生成的 `display_*` / `thumb_*` 变体统一称为“展示页缩略图”；run 级 `image.*` 统一称为“封面图”，同级 `images/*` 统一称为“主页缩略图”。三者不是同一套资源，讨论与实现时必须明确区分。
-- 现状约定：脚本侧已经识别并上传封面图/主页缩略图资产；网页首页当前通过 `/api/comfyui/runs` 消费 `assets.cover` / `assets.homepage_cards`，run 详情页通过 view bootstrap JSON 消费展示页缩略图。
+- 网站数据链路以 Supabase + R2 为准；Web 侧没有本地文件降级读取。
+- 术语约定：由上传脚本生成的 `display_*` / `thumb_*` 变体统一称为“展示页缩略图”；run 级 `image.*` 统一称为“封面图”，同级 `images/*` 统一称为“主页缩略图”。三者不是同一套资源，讨论与实现时必须明确区分。
+- 脚本侧识别并上传封面图/主页缩略图资产；网页首页通过 `/api/comfyui/runs` 消费 `assets.cover` / `assets.homepage_cards`，run 详情页通过 view bootstrap JSON 消费展示页缩略图。
 - Next 16 / React 19 约定：本仓库的动态页面与 route handler 普遍使用 `params: Promise<...>` 形态；客户端页面侧常见 `use(params)`，服务端 route 侧常见 `await context.params`。
 - 认证链路走 Supabase SSR：浏览器端 `lib/supabase-browser.ts`，服务端 `lib/supabase-auth.ts`，会话刷新在 `middleware.ts`。
 - Web 部署目标是 OpenNext + Cloudflare：本地 `next dev` 会启 Miniflare，部分服务端能力通过 Workers bindings 读取。
-- 当前分层知识文件已经覆盖主要强边界目录；像 `app/api/comfyui/run/[runDir]/` 这类 leaf route 继续继承父级规则，不再单开 `AGENTS.md`。
-- Prompt 法典浏览器（路由 `/[locale]/prompts`）是新增的面向用户功能：客户端从 `public/data/prompts/*.json` 加载结构化 Prompt，渲染 Tag/Choice/多角色卡片并按目标模型格式化复制；源资产在 `data/prompt-codex/*.yaml`，运行时不直接读源 YAML。
-- ComfyUI 生图链路已支持 Anima Artist Mixer：`workflow.anima_artist_mixer` 会把 Y 轴 general 标签留在正向 prompt，artists 标签单独写入 `artist_chain`；hash、回放与 strict retry 都把两者视为同一份生图输入。
+- 分层知识文件覆盖主要强边界目录；像 `app/api/comfyui/run/[runDir]/` 这类 leaf route 继承父级规则，不单开 `AGENTS.md`。
+- Prompt 法典浏览器（路由 `/[locale]/prompts`）是面向用户的功能：客户端从 `public/data/prompts/*.json` 加载结构化 Prompt，渲染 Tag/Choice/多角色卡片并按目标模型格式化复制；源资产在 `data/prompt-codex/*.yaml`，运行时不直接读源 YAML。
+- ComfyUI 生图链路支持 Anima Artist Mixer：`workflow.anima_artist_mixer` 会把 Y 轴 general 标签留在正向 prompt，artists 标签单独写入 `artist_chain`；hash、回放与 strict retry 都把两者视为同一份生图输入。
 - Mixer metadata 会额外持久化 `y_common_prompt`；展示页 bootstrap 通过可选 `yPromptParts` 向前端提供 Artist/Common Prompt 拆分，首列分别复制，缺失部分不渲染。
 - 画师提示词收藏（Style Favorites）：登录用户可在详情页收藏 Y 轴画师串、在 `/[locale]/favorites` 查看并跨模型跳转；收藏身份用 `style_key`（`{collection_id}:{item_index}`），跨 run 匹配只比较 style_key，永不比较 prompt 字符串；`y_index` 一律 0-based，仅收藏页拼跳转 URL 时 `#{y_index + 1}`。
 - Style Comparison（模型对比收藏）：`/[locale]/favorites` 以收藏画师串为行、已发布模型为列展示同风格结果，`/[locale]/favorites/[styleKey]` 提供单收藏详情；目录 API 使用 keyset cursor 且每页最多 40 条，slice 每次最多 40 个 style key / 12 个 run，模型目录缓存 5 分钟。
+- Model Guide（模型使用指南）：与 `model_key` 绑定的 Markdown 使用经验文章，路由 `/[locale]/guides/[modelKey]`；源资产 `data/model-guides/*.md`（含 `.en.md` 变体），构建期经 `loaders/model-guide-data-builder.ts`（`pnpm guides:build`）编译为 `lib/generated/model-guides.ts`；frontmatter `draft: true` 的草稿不进入公开索引、页面、SEO metadata 与 sitemap。
 
 ## 结构
 
@@ -43,7 +43,8 @@
 ├── i18n/                   # next-intl 国际化配置（路由/请求/导航）
 ├── messages/               # 翻译消息 JSON（zh.json / en.json）
 ├── lib/                    # Supabase/R2/路径安全/共享类型
-│   └── env/                # 环境变量集中读取
+│   ├── env/                # 环境变量集中读取
+│   └── generated/          # 构建期生成模块（model-guides 等）
 ├── scripts/                # Python 生图、上传、CLI、辅助转换
 │   ├── generation/         # 核心 runner + ComfyUI 客户端
 │   ├── r2_upload/          # R2 上传 + Supabase 写入
@@ -52,12 +53,15 @@
 ├── tests/                  # pytest + Node node:test（合约与可观测输出）
 ├── e2e/                    # Playwright 端到端
 ├── supabase/               # 本地配置与迁移
+├── docs/                   # ADR 与项目术语表（见 docs/AGENTS.md）
+├── DBbackup/               # 本地数据库备份 SQL（git 忽略，见 DBbackup/AGENTS.md）
 ├── data/                   # 只读输入资产
 │   ├── models/             # 模型配置（config.yaml + api.json + workflow.json）
 │   ├── prompts/            # X/Y prompt 资产（YAML + CSV）
-│   └── prompt-codex/       # Prompt 法典源 YAML（所长 NovelAI 个人法典）
+│   ├── prompt-codex/       # Prompt 法典源 YAML（所长 NovelAI 个人法典）
+│   └── model-guides/       # 模型引导文章 Markdown（含 .en.md 变体）
 ├── hooks/                  # 共享前端行为
-├── loaders/                # 自定义 Webpack loader（见 loaders/AGENTS.md）
+├── loaders/                # 自定义 Webpack loader + 数据构建脚本（见 loaders/AGENTS.md）
 ├── public/                 # 静态资源（favicon + data/prompts 法典 JSON 产物）
 ├── types/                  # Next 生成类型（只读）
 ├── middleware.ts           # I18N 路由 + Supabase session refresh
@@ -77,10 +81,13 @@
 | ComfyUI 通信          | `scripts/generation/comfyui_client.py`                                                               | HTTP / WS / 错误码                                                                |
 | R2 上传入口           | `scripts/r2_upload/upload_images_to_r2.py`                                                           | 编码、上传、写 Supabase                                                           |
 | 上传规划              | `scripts/r2_upload/upload_planner.py`                                                                | 多变体规划 + 并发编码；也处理 run 级静态图片资产上传                              |
-| 资产转换脚本          | `scripts/other/convert_*.py`                                                                         | 文件名遗留 `json`，实际输出 YAML 资产                                             |
+| 资产转换脚本          | `scripts/other/convert_*.py`                                                                         | 文件名保留 `json` 后缀，实际输出 YAML 资产                            |
 | run 配置示例          | `data/models/example/config.yaml`                                                                    | `image-run-config/v1` 示例                                                        |
 | 网站首页              | `app/[locale]/page.tsx`                                                                              | 读取 `/api/comfyui/runs`；消费 `assets.cover` / `assets.homepage_cards`           |
 | 模型详情页            | `app/[locale]/models/[runDir]/page.tsx`                                                              | 拉取 view bootstrap JSON + 虚拟网格 + workflow 下载                               |
+| 模型指南页            | `app/[locale]/guides/[modelKey]/page.tsx`                                                            | 构建期索引 + Markdown 渲染；draft 草稿不发布；locale 缺失时重定向/404                |
+| 指南数据层            | `lib/model-guides.ts`、`lib/model-guides-sitemap.ts`、`lib/generated/model-guides.ts`                | frontmatter 契约校验、`buildGuideIndex()` / `resolveGuideLocale()` / sitemap 条目    |
+| 指南源资产            | `data/model-guides/`                                                                                 | 只读 Markdown（含 `.en.md` 变体）；修改后需 `pnpm guides:build` 重建产物             |
 | App API 总约定        | `app/api/AGENTS.md`                                                                                  | `app/api/**/route.ts` 共享约束                                                    |
 | ComfyUI API           | `app/api/comfyui/**/route.ts`                                                                        | runs 列表 / access 授权 / workflow 下载                                           |
 | Auth 回调特例         | `app/auth/AGENTS.md`                                                                                 | PKCE callback 直接交换 session                                                    |
@@ -100,7 +107,7 @@
 | 站点根 URL            | `lib/site-origin.ts`                                                                                 | `SITE_ORIGIN` 常量，供 sitemap/robots/metadata 共享                               |
 | JSON-LD 结构化数据    | `components/json-ld.tsx`                                                                             | `JsonLdWebsite` + `JsonLdBreadcrumbList` 客户端组件                               |
 | robots.txt            | `app/robots.ts`                                                                                      | 爬虫规则 + sitemap 引用                                                           |
-| sitemap.xml           | `app/sitemap.ts`                                                                                     | 多语言 sitemap + hreflang alternates，动态包含模型详情页                          |
+| sitemap.xml           | `app/sitemap.ts`                                                                                     | 多语言 sitemap + hreflang alternates，动态包含模型详情页与模型指南页                 |
 | 错误页                | `app/[locale]/error.tsx`                                                                             | 客户端错误页 + i18n + 重试/回首页                                                 |
 | 404 页                | `app/[locale]/not-found.tsx`                                                                         | 客户端 404 页 + i18n + 回首页链接                                                 |
 | Prompt 法典浏览器     | `app/[locale]/prompts/page.tsx` + `components/prompt/`                                               | 登录门控 + ModelProvider/ChoiceProvider + 客户端加载 `public/data/prompts/*.json` |
@@ -148,6 +155,8 @@
 | `parseStyleComparisonSliceBody`   | function  | `lib/style-comparison.ts`                        | 对比 slice 请求校验（40 style keys / 12 run dirs）                 |
 | `getCachedPublishedRuns`          | function  | `lib/style-comparison-server.ts`                 | 已发布模型目录查询与 5 分钟缓存                                    |
 | `buildPrivateObjectCacheUrl`      | function  | `lib/style-comparison.ts`                        | 私有对象边缘 cache URL 去除 grant、保留 key                        |
+| `buildGuideIndex`                 | function  | `lib/model-guides.ts`                            | 由构建产物构建 `modelKey → locale → guide` 索引                  |
+| `buildGuideSitemapEntries`        | function  | `lib/model-guides-sitemap.ts`                    | 仅为实际存在的指南语言生成 sitemap 条目与 hreflang               |
 
 ## 约定（项目特有）
 
@@ -162,16 +171,16 @@
 - Cloudflare：本地 `next dev` 通过 `initOpenNextCloudflareForDev()` 提供 Miniflare 绑定；服务端访问 R2 bucket 走 `getCloudflareContext()`。
 - 路径与 URL：API 入口的 `runDir` 先用 `lib/comfyui-types.ts:isValidRunDir()` 判形态；共享路径处理再走 `lib/comfyui-path.ts`；R2 URL 统一走 `lib/r2-url.ts`。
 - 前端：大网格必须虚拟化；图片优先消费 R2 display/thumb 变体并配合 blurhash 占位，这套变体统一称为“展示页缩略图”。
-- 前端首页：`/api/comfyui/runs` 当前会输出封面图/主页缩略图字段；不要把 run 详情页的展示页缩略图直接挪作首页卡片素材。
+- 前端首页：`/api/comfyui/runs` 输出封面图/主页缩略图字段；不要把 run 详情页的展示页缩略图直接挪作首页卡片素材。
 - 模型对比：收藏目录分页上限固定为 40；slice 请求最多 40 个 `style_key`、12 个 `run_dir`；`run_style_items.y_index` 与所有前端 placement 均保持 0-based。
 - 模型对比缓存：`getCachedPublishedRuns()` 通过 `unstable_cache` 缓存已发布模型目录 5 分钟；私有对象 route 必须先验证 grant 和 key 范围，再查询去 grant 的共享边缘 cache，cache URL 必须保留对象 `key`。
 - Prompt 法典浏览器：运行时只消费 `public/data/prompts/*.json` 构建产物；源 YAML `data/prompt-codex/*.yaml` 是只读输入资产，不要在 Web 侧直接读取。目标模型/权重模式/Choice 选择的状态边界分别在 `lib/prompt-model-context.tsx` 与 `lib/prompt-choice-context.tsx`，格式化文本统一走 `lib/prompt-formatter.ts:formatPrompt()`。
 - SEO：所有页面 `generateMetadata` 统一使用 `lib/metadata-utils.ts:buildSeoMetadata()` 构建 OG/Twitter Card/canonical/hreflang 标签，不要手写重复模板。模型详情页的 `og:image` 通过 `lib/model-metadata.ts:getModelMetadata()` 从 Supabase 查询封面图 URL。JSON-LD 结构化数据使用 `components/json-ld.tsx` 的客户端组件注入，不消耗 Worker CPU。
-- E2E 已登录态：global setup 用 `SUPABASE_SERVICE_ROLE_KEY` 经 admin generate_link + 手工截 fragment token + `@supabase/ssr` cookie 编码生成 storageState；缺 Supabase 环境变量时已登录用例自动 skip（详见 `e2e/AGENTS.md` 与 spec 决策 13）。
-- E2E baseURL 固定 `http://localhost`：R2 CORS 只放行 `http://localhost:3000` 与生产域名，`127.0.0.1` 会被 CORS 拒且 dev 模式不 hydrate；start 模式 e2e 必须用默认 3000 端口。
+- E2E 已登录态：global setup 用 `SUPABASE_SERVICE_ROLE_KEY` 经 admin generate_link + 手工截 fragment token + `@supabase/ssr` cookie 编码生成 storageState；缺 Supabase 环境变量时已登录用例自动 skip（详见 `e2e/AGENTS.md`）。
+- E2E baseURL 固定 `http://localhost`（R2 CORS 只放行 `http://localhost:3000` 与生产域名）；start 模式 e2e 必须用默认 3000 端口。
 - 工具链：Python 用 `uv` + `pytest`（>=3.13）；Web 用 `pnpm` + Next 16 + React 19；E2E 用 Playwright。
 - Supabase CLI：本仓库统一使用 `pnpm dlx supabase ...` 运行 Supabase 命令。
-- CI 现状：当前仓库没有 `.github/workflows/`；变更后的验证依赖本地 `uv` / `pnpm` 命令串联完成。
+- CI：仓库没有 `.github/workflows/`；变更后的验证依赖本地 `uv` / `pnpm` 命令串联完成。
 - 协作文档与 git commit message 默认使用中文；涉及环境变量示例时优先更新 `.env.example`，不要直接读取/修改真实 `.env`。
 
 ## 分支与合并策略
@@ -192,20 +201,6 @@
 - 禁止对 `main` 直接推送非合并提交；`main` 上的所有内容都应来自 `dev` 的 `--no-ff` 合并。
 - 禁止用 fast-forward 合并 `dev` 到 `main`，否则会丢失合并节点，无法回溯发布边界。
 - 禁止 agent 未经用户指示自行执行 `dev` → `main` 合并或同步回 `dev` 的操作；上述流程仅作为用户发起合并时的执行规范。
-
-### 当前 `dev` 分支开发进展
-
-以下为 `dev` 分支近期承载的主要开发主线（截至 2026-07-20，`dev` 已包含尚未发布到 `main` 的生图链路变更）：
-
-- **Style Favorites（画师提示词收藏）**：新增 `user_style_favorites` + `run_style_items` 两表与 RLS；收藏身份用 `style_key` 跨 run 匹配；详情页行标签星标 + 工具栏收藏面板 + 收藏页 `/[locale]/favorites` 跨模型跳转；新 run 上传顺带写 `run_style_items`，历史 run 由 `scripts/other/backfill_run_style_items.py` 确定性重放回填（生产已执行 6 run × 432）；e2e 已登录态走 service-role admin 链路。
-- **Style Comparison（模型对比收藏）**：收藏页升级为同画师串跨模型矩阵，并新增 `favorites/[styleKey]` 详情页；viewer API 提供 keyset 分页、模型目录与有界 slice，私有 row/图片通过 media grant 访问并复用去 grant 的边缘 cache；数据库增加收藏分页和 style/run placement 索引。当前仅有 Node 单元测试，不宣称已有对比专项 E2E。
-- **Anima Artist Mixer**：新增 `data/models/Anima-base-1.0-Artist-Mixer/` 可执行配置；生图 runner 支持 general/artists 双通道注入，并将 `artist_chain` 纳入 metadata、prompt hash、run 回放和 strict retry 校验。
-- **虚拟网格稳定性**：工具栏展开/收起时立即提交目标 viewport 宽度；私有图片 object URL 在 cell 重挂载间复用，由 `VirtualGrid` 卸载时统一释放。
-- **Prompt 法典浏览器**：新增 `/[locale]/prompts` 浏览功能，含登录门禁、搜索匹配导航（从当前浏览位置跳转）、权重模式支持（Anima 模式，对所有标签统一平方处理）、ComfyUI 多角色提示词格式化（换行 + `Character N:` 前缀分隔角色）、Prompt 条目列表滚动对齐修复。
-- **SEO 优化**：多语言 sitemap + hreflang alternates、隐私政策页上线、`buildSeoMetadata()` 统一 OG/Twitter Card/canonical、模型详情页 `og:image` 从 Supabase 查询封面图、JSON-LD 结构化数据（WebSite / BreadcrumbList）、构建元数据缺失标题与描述修复。
-- **性能优化**：优化 Worker CPU 与边缘缓存复用以消除 503、优化缓存策略以减少 SSR 负载与响应延迟。
-- **i18n hotfix**：将 I18N 中间件路由匹配从黑名单改为白名单机制。
-- **基础设施维护**：依赖版本多次升级、`wrangler.jsonc` 配置修正、Supabase 远端 migration 同步并移除空 `seed.sql`、E2E 测试产物目录迁移到 `test-results/`、skills 更新、分层 `AGENTS.md` 文档校验与补全。
 
 ## 反模式
 
@@ -242,6 +237,9 @@ pnpm start
 pnpm lint
 pnpm test
 
+# 模型指南构建产物（predev / prebuild 会自动执行）
+pnpm guides:build
+
 # E2E / Supabase
 pnpm test:e2e
 E2E_SERVER=start pnpm test:e2e -- -g "task 13"
@@ -258,3 +256,18 @@ pnpm dlx supabase migration new <name>
 - `lib/AGENTS.md`、`lib/env/AGENTS.md`：Supabase/R2/路径安全/共享类型边界与环境变量读取。
 - `scripts/AGENTS.md`、`scripts/generation/AGENTS.md`、`scripts/r2_upload/AGENTS.md`、`scripts/cli/AGENTS.md`、`scripts/other/AGENTS.md`：Python 主代码域与子系统边界。
 - `tests/AGENTS.md`、`e2e/AGENTS.md`、`supabase/AGENTS.md`、`data/AGENTS.md`、`hooks/AGENTS.md`、`types/AGENTS.md`、`public/AGENTS.md`：测试、迁移、资产、hooks、生成类型、静态资源的局部规则。
+- `docs/AGENTS.md`、`DBbackup/AGENTS.md`：设计决策记录（ADR）与术语表的维护约定；本地数据库备份说明（git 忽略）。
+
+## Agent skills
+
+### Issue tracker
+
+Issue 与 spec 统一追踪在本仓库的 GitHub Issues，操作走 `gh` CLI。详见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+五个标准分诊角色使用中文标签：`待分诊` / `待补充信息` / `可交Agent处理` / `需人工处理` / `不予修复`。详见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+single-context 布局：根目录 `CONTEXT.md` + `docs/adr/`。详见 `docs/agents/domain.md`。

@@ -1,0 +1,59 @@
+schema_version: image-run-config/v2
+backend: novelai
+
+model:
+  key: nai-diffusion-4-5-curated
+  name: "NovelAI Diffusion V4.5 Curated"
+  family: novelai
+  links:
+    homepage: https://novelai.net/
+    huggingface: null
+    civitai: null
+  description:
+    zh: |
+      NovelAI 官方自研 Diffusion V4.5 Curated 模型，闭源，2025 年 5 月发布。
+
+      与 Full 版本同架构，但训练集更小、更干净、更聚焦，对敏感内容的倾向显著更低，
+      是日常创作与直播等公开场合的稳妥之选。
+
+      核心特性：精选数据集、多角色生成（单场景最多 6 人）、自然语言理解、动作标签与角色定位
+      （source# / target# / mutual#）、画面文字集成、负数强调语法（如 -1::hat ::）。
+    en: |
+      NovelAI's in-house Diffusion V4.5 Curated model, closed-source, released May 2025.
+
+      Shares the V4.5 architecture with Full but trains on a smaller, cleaner and more
+      focused dataset with a notably lower tendency toward sensitive content — the safe
+      choice for everyday creation and public settings like streaming.
+
+      Key Features: curated dataset, multi-character generation (up to 6 per scene),
+      natural language understanding, action tags & character positioning
+      (source# / target# / mutual#), in-image text rendering, negative emphasis
+      (e.g., -1::hat ::).
+
+prompts:
+  x_path: data/prompts/X/common_prompts.yaml
+  y_path: data/prompts/Y/300_NAI_Styles_Table.yaml
+
+workflow:
+  ksampler_node_id: null
+
+generation:
+  template: "{gender}{characters}{series}{y}{rating}{general}{quality}"
+  quality_prompt: "year 2025, very aesthetic, masterpiece, no text,"
+  base_seed: 123
+  negative_prompt: "lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page, film grain, chromatic aberration, dithering, halftone, screentone, logo,"
+  append_negative_prompt: "nsfw,nipples,pussy,nude,"
+  width: 832
+  height: 1216
+  batch_size: 1
+  steps: 28
+  cfg: 5.0
+  denoise: null
+  sampler_name: k_euler_ancestral
+  scheduler: null
+
+selection:
+  x_limit: null
+  y_limit: null
+  x_indexes: null
+  y_indexes: null

@@ -809,3 +809,64 @@ def test_load_runner_config_accepts_run_directory_and_reads_config_yaml(
     config = module.load_runner_config("data/models/example", repo_root=tmp_path)
 
     assert config.config_path == "data/models/example/config.yaml"
+
+
+def test_target_novelai_v4_5_configs_pass_validation() -> None:
+    module = _import_runner_config_module()
+
+    for model_key in ("nai-diffusion-4-5-full", "nai-diffusion-4-5-curated"):
+        config = module.load_runner_config(
+            f"data/models/{model_key}/config.yaml",
+            repo_root=ROOT,
+        )
+        assert config.schema_version == "image-run-config/v2"
+        assert config.backend == "novelai"
+        assert config.model.key == model_key
+        assert config.model.family == "novelai"
+
+
+@pytest.mark.parametrize(
+    "model_key",
+    ["nai-diffusion-5-full", "nai-diffusion-5-curated"],
+)
+def test_load_runner_config_accepts_v5_model_configs(model_key: str) -> None:
+    module = _import_runner_config_module()
+
+    config = module.load_runner_config(
+        f"data/models/{model_key}/config.yaml",
+        repo_root=ROOT,
+    )
+
+    assert config.schema_version == "image-run-config/v2"
+    assert config.backend == "novelai"
+    assert config.model.key == model_key
+
+
+def test_v5_generation_params_align_with_v4_5_curated_baseline() -> None:
+    module = _import_runner_config_module()
+
+    baseline = module.load_runner_config(
+        "data/models/nai-diffusion-4-5-curated/config.yaml",
+        repo_root=ROOT,
+    )
+
+    for model_key in ("nai-diffusion-5-full", "nai-diffusion-5-curated"):
+        v5 = module.load_runner_config(
+            f"data/models/{model_key}/config.yaml",
+            repo_root=ROOT,
+        )
+        assert v5.model.family == baseline.model.family
+        assert v5.generation.template == baseline.generation.template
+        assert v5.generation.quality_prompt == baseline.generation.quality_prompt
+        assert v5.generation.base_seed == baseline.generation.base_seed
+        assert v5.generation.negative_prompt == baseline.generation.negative_prompt
+        assert (
+            v5.generation.append_negative_prompt
+            == baseline.generation.append_negative_prompt
+        )
+        assert v5.generation.width == baseline.generation.width
+        assert v5.generation.height == baseline.generation.height
+        assert v5.generation.batch_size == baseline.generation.batch_size
+        assert v5.generation.steps == baseline.generation.steps
+        assert v5.generation.cfg == baseline.generation.cfg
+        assert v5.generation.sampler_name == baseline.generation.sampler_name

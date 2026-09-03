@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-07-20 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-08-23 -->
 
 # lib/ - Node 侧共享边界(Supabase + R2 + 路径安全 + 类型)
 
@@ -20,6 +20,9 @@
 | className 合并             | `utils.ts`            | `cn()`                                           |
 | SEO metadata 构建          | `metadata-utils.ts`   | `buildSeoMetadata()`:统一生成 OG/Twitter Card/canonical/hreflang |
 | 模型 SEO 元数据查询        | `model-metadata.ts`   | `getModelMetadata()`:从 Supabase 查 name/description/cover,1h cache |
+| 模型指南数据层        | `model-guides.ts`       | `ModelGuide` / `ModelGuideIndex` 类型;frontmatter 契约校验;`buildGuideIndex()` / `getModelGuide()` / `resolveGuideLocale()`;消费 `lib/generated/model-guides.ts` 构建产物 |
+| 模型指南 sitemap      | `model-guides-sitemap.ts` | `buildGuideSitemapEntries()`:仅为实际存在的指南语言生成 sitemap 条目与 hreflang;被 `app/sitemap.ts` 消费 |
+| 构建期生成模块        | `generated/`（子目录）    | `model-guides.ts`:`pnpm guides:build` 由 `loaders/model-guide-data-builder.ts` 生成,提交到仓库;含元数据与正文,服务端使用,不要在客户端直接 import |
 | 站点根 URL 常量            | `site-origin.ts`      | `SITE_ORIGIN`:`https://sdlab.wall-breaker-no4.xyz` |
 | 首页 run 列表查询          | `run-list.ts`         | `listRunSummaries()`:`unstable_cache` 5min + tag `run-list`,查 `run_list_items` 视图并拼装 `assets.cover` / `assets.homepage_cards` |
 | 浏览者偏好鉴权与写入       | `server-user-preferences.ts` | `server-only`;`requireViewerForPreferenceWrite()` + `setViewerShowNsfwPreference()` |
@@ -46,7 +49,7 @@
 - `middleware.ts` 是例外:因为运行在 Edge,不能 import `lib/supabase-auth.ts`,只能内联建 client。
 - `publicObjectUrl()` 和 `privateObjectProxyUrl()` 是 Web 侧统一的 R2 URL 构建入口；两者都先验证 `runs/` key，不要在 route/组件里手拼对象 URL。
 - `privateObjectProxyUrl(r2Key, grant)` 构建 `/api/private-object?key=...&grant=...`；grant 由 run media access 链路签发和校验，客户端不持有 R2 凭证，也不生成私有对象签名 URL。
-- API 侧 `runDir` 形态判断当前主要走 `comfyui-types.ts:isValidRunDir()`;`comfyui-path.ts` 更偏共享路径安全与 allowlist 工具。
+- API 侧 `runDir` 形态判断走 `comfyui-types.ts:isValidRunDir()`;`comfyui-path.ts` 更偏共享路径安全与 allowlist 工具。
 - SEO metadata 统一走 `metadata-utils.ts:buildSeoMetadata()`;各页面 `generateMetadata` 调用本函数即可一致产出 OG / Twitter Card / canonical / hreflang 标签。
 - 模型详情页的 `og:image` 走 `model-metadata.ts:getModelMetadata()`;该函数带 1h 缓存,仅查询轻量字段。
 - `site-origin.ts` 是 `SITE_ORIGIN` 的唯一定义点;sitemap / robots / metadata 均引用它,不要在各个文件中硬编码域名。
