@@ -15,16 +15,13 @@ if str(ROOT) not in sys.path:
 
 from novelai.exceptions import (
     AuthenticationError,
-    NetworkError,
     RateLimitError,
 )
 from novelai.types import Subscription
 
 from scripts.generation import novelai_client
 from scripts.generation.novelai_client import (
-    _GUARD_CODE_BALANCE_UNVERIFIABLE,
     _GUARD_CODE_BATTERY_LOW,
-    _GUARD_CODE_BILLING_DETECTED,
     _GUARD_CODE_PARAM_VIOLATION,
     NovelAIAnlasGuardError,
 )
@@ -69,10 +66,9 @@ class _FakeUserAPI:
 def _subscription(
     *,
     tier: int = 3,
-    anlas: int = 26,
     usage: object = None,
 ) -> argparse.Namespace:
-    return argparse.Namespace(tier=tier, anlas=anlas, usage=usage)
+    return argparse.Namespace(tier=tier, usage=usage)
 
 
 def _make_client(
@@ -205,8 +201,8 @@ def test_compliant_v45_generation_passes_guard(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     image_api = _FakeImageAPI(images=["img"])
-    # 预检记录基线一次；V4.5 无电池政策，生成后核对余额一次。
-    user_api = _FakeUserAPI([_subscription(anlas=26), _subscription(anlas=26)])
+    # 仅 preflight 查一次订阅（tier 确认）；V4.5 无电池政策，生成不再查订阅。
+    user_api = _FakeUserAPI([_subscription()])
     client = _make_client(monkeypatch, image_api=image_api, user_api=user_api)
     client.preflight()
 
@@ -214,7 +210,7 @@ def test_compliant_v45_generation_passes_guard(
 
     assert images == ["img"]
     assert len(image_api.calls) == 1
-    assert user_api.calls == 2
+    assert user_api.calls == 1
 
 
 # --- V5 电量检查 ---
@@ -282,13 +278,8 @@ def test_v45_skips_battery_check_entirely(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     image_api = _FakeImageAPI(images=["img"])
-    # V4.5 不在电池政策内：即使 usage 不可读也照常生成（仅核对余额）。
-    user_api = _FakeUserAPI(
-        [
-            _subscription(anlas=26),
-            _subscription(anlas=26, usage="not-a-mapping"),
-        ]
-    )
+    # V4.5 不在电池政策内：即使 usage 不可读也照常生成，且生成不再查订阅。
+    user_api = _FakeUserAPI([_subscription(usage="not-a-mapping")])
     client = _make_client(monkeypatch, image_api=image_api, user_api=user_api)
     client.preflight()
 
@@ -296,6 +287,7 @@ def test_v45_skips_battery_check_entirely(
 
     assert images == ["img"]
     assert len(image_api.calls) == 1
+    assert user_api.calls == 1
 
 
 def test_default_battery_threshold_is_five_percent() -> None:
@@ -326,12 +318,9 @@ def test_v5_battery_above_threshold_allows_generation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     image_api = _FakeImageAPI(images=["img"])
-    # percent=6 高于默认阈值 5：放行；生成前记录基线，生成后核对余额。
+    # percent=6 高于默认阈值 5：放行；仅生成前一次电量检查。
     user_api = _FakeUserAPI(
-        [
-            _subscription(usage={"percent": 6, "isNegative": False}),
-            _subscription(anlas=26),
-        ]
+        [_subscription(usage={"percent": 6, "isNegative": False})]
     )
     client = _make_client(
         monkeypatch,
@@ -343,126 +332,61 @@ def test_v5_battery_above_threshold_allows_generation(
 
     assert images == ["img"]
     assert len(image_api.calls) == 1
+    assert user_api.calls == 1
 
 
-def test_v5_logs_remaining_battery_after_generation(
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    image_api = _FakeImageAPI(images=["img"])
-    user_api = _FakeUserAPI(
-        [
-            _subscription(usage={"percent": 60, "isNegative": False}),
-            _subscription(usage={"percent": 42, "isNegative": False}),
-        ]
-    )
-    client = _make_client(
-        monkeypatch,
-        image_api=image_api,
-        user_api=user_api,
-    )
-    caplog.set_level("INFO", logger=novelai_client.__name__)
-
-    client.generate(**_generate_kwargs(model="nai-diffusion-5-full"))
-
-    assert "NovelAI V5 电池剩余：42.0%" in caplog.messages
-
-
-# --- Anlas 余额核对 ---
-
-
-def test_billing_detected_when_balance_decreases_after_generation(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    image_api = _FakeImageAPI(images=["img"])
-    user_api = _FakeUserAPI([_subscription(anlas=26), _subscription(anlas=0)])
-    client = _make_client(monkeypatch, image_api=image_api, user_api=user_api)
-    client.preflight()
-
-    with pytest.raises(NovelAIAnlasGuardError) as exc_info:
-        client.generate(**_generate_kwargs())
-
-    metadata = exc_info.value.as_metadata()
-    assert exc_info.value.code == _GUARD_CODE_BILLING_DETECTED
-    assert metadata["type"] == "anlas_guard"
-    assert metadata["context"] == {"baseline": 26, "current": 0}
-
-
-def test_baseline_lazily_recorded_without_preflight(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    image_api = _FakeImageAPI(images=["img"])
-    # 未调用 preflight 时：首次订阅查询在请求前懒记录基线，第二次在生成后核对。
-    user_api = _FakeUserAPI([_subscription(anlas=10), _subscription(anlas=10)])
-    client = _make_client(monkeypatch, image_api=image_api, user_api=user_api)
-
-    images = client.generate(**_generate_kwargs())
-
-    assert images == ["img"]
-    assert user_api.calls == 2
-
-
-def test_unreadable_balance_after_generation_hard_stops(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    image_api = _FakeImageAPI(images=["img"])
-    user_api = _FakeUserAPI(
-        [_subscription(anlas=26), _subscription(anlas="unreadable")]
-    )
-    client = _make_client(monkeypatch, image_api=image_api, user_api=user_api)
-    client.preflight()
-
-    with pytest.raises(NovelAIAnlasGuardError) as exc_info:
-        client.generate(**_generate_kwargs())
-
-    metadata = exc_info.value.as_metadata()
-    assert exc_info.value.code == _GUARD_CODE_BALANCE_UNVERIFIABLE
-    assert metadata["context"] == {"baseline": 26}
-
-
-def test_post_generation_query_failure_does_not_regenerate_image(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    image_api = _FakeImageAPI(images=["img"])
-    # preflight(1) → 生成成功 → 余额核对查询遇瞬时网络错误：
-    # 核对在重试机制之外，绝不允许触发整次生图请求的重发。
-    user_api = _FakeUserAPI([_subscription(anlas=26), NetworkError("timeout")])
-    client = _make_client(monkeypatch, image_api=image_api, user_api=user_api)
-    client.preflight()
-
-    with pytest.raises(NetworkError):
-        client.generate(**_generate_kwargs())
-
-    assert len(image_api.calls) == 1
-
-
-# --- 非 Opus key 启动预检 ---
+# --- 启动预检 ---
 
 
 def test_preflight_aborts_non_opus_key(monkeypatch: pytest.MonkeyPatch) -> None:
     client = _make_client(
         monkeypatch,
         image_api=_FakeImageAPI(),
-        user_api=_FakeUserAPI([_subscription(tier=2, anlas=100)]),
+        user_api=_FakeUserAPI([_subscription(tier=2)]),
     )
 
     with pytest.raises(RuntimeError, match="非 Opus"):
         client.preflight()
 
-    assert client._anlas_baseline is None
 
-
-def test_preflight_records_anlas_baseline_for_opus(
+def test_preflight_passes_for_opus_and_returns_none(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client = _make_client(
         monkeypatch,
         image_api=_FakeImageAPI(),
-        user_api=_FakeUserAPI([_subscription(anlas=26)]),
+        user_api=_FakeUserAPI([_subscription()]),
     )
 
-    assert client.preflight() == 26
-    assert client._anlas_baseline == 26
+    assert client.preflight() is None
+
+
+def test_preflight_checks_battery_for_v5_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _make_client(
+        monkeypatch,
+        image_api=_FakeImageAPI(),
+        user_api=_FakeUserAPI([_subscription(usage={"percent": 0, "isNegative": False})]),
+    )
+
+    with pytest.raises(NovelAIAnlasGuardError) as exc_info:
+        client.preflight(model="nai-diffusion-5-full")
+
+    assert exc_info.value.code == _GUARD_CODE_BATTERY_LOW
+
+
+def test_preflight_skips_battery_check_for_v45_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # V4.5 不在电池政策内：usage 不可读也照常通过预检。
+    client = _make_client(
+        monkeypatch,
+        image_api=_FakeImageAPI(),
+        user_api=_FakeUserAPI([_subscription(usage="not-a-mapping")]),
+    )
+
+    assert client.preflight(model="nai-diffusion-4-5-full") is None
 
 
 # --- 402 认证错误不再重试 ---
@@ -479,7 +403,7 @@ def test_authentication_error_is_not_retried(
             AuthenticationError("Insufficient credits or subscription required"),
         ]
     )
-    user_api = _FakeUserAPI([_subscription(anlas=26)])
+    user_api = _FakeUserAPI([_subscription()])
     client = _make_client(monkeypatch, image_api=image_api, user_api=user_api)
     client.preflight()
 
@@ -496,12 +420,8 @@ def test_rate_limit_error_still_retries_and_succeeds(
     image_api = _FakeImageAPI(
         errors=[RateLimitError("Rate limit exceeded"), RateLimitError("Rate limit exceeded")]
     )
-    user_api = _FakeUserAPI([_subscription(anlas=26), _subscription(anlas=26), _subscription(anlas=26)])
-    client = _make_client(
-        monkeypatch,
-        image_api=image_api,
-        user_api=user_api,
-    )
+    user_api = _FakeUserAPI([_subscription()])
+    client = _make_client(monkeypatch, image_api=image_api, user_api=user_api)
     # 429 走既有重试路径：冷却置零避免测试真实睡眠。
     client._rate_limit_cooldown = 0.0
     client.preflight()
@@ -576,7 +496,9 @@ def test_guard_error_as_metadata_contract() -> None:
     }
 
 
-def test_worker_records_guard_code_in_failed_record(tmp_path: Path) -> None:
+def test_worker_battery_low_records_failure_and_requests_abort(
+    tmp_path: Path,
+) -> None:
     class _GuardClient:
         def generate(self, **kwargs: Any) -> list[object]:
             _ = kwargs
@@ -600,6 +522,28 @@ def test_worker_records_guard_code_in_failed_record(tmp_path: Path) -> None:
     assert error["type"] == "anlas_guard"
     assert error["code"] == _GUARD_CODE_BATTERY_LOW
     assert isinstance(error["message"], str)
+    # 电量耗尽是运行级硬停信号：除记录失败外，还要求协调器停止提交后续格子。
+    assert outcome.abort is True
+
+
+def test_worker_param_violation_does_not_request_abort(tmp_path: Path) -> None:
+    class _ParamGuardClient:
+        def generate(self, **kwargs: Any) -> list[object]:
+            _ = kwargs
+            raise NovelAIAnlasGuardError(
+                "免费资格参数不合规：steps=30",
+                code=_GUARD_CODE_PARAM_VIOLATION,
+            )
+
+    worker = novelai_client.novelai_worker(
+        client=_ParamGuardClient(), model="nai-diffusion-4-5-full"
+    )
+    outcome = _run_worker_once(worker, tmp_path, _make_worker_plan())
+
+    # 参数不合规是逐格失败，不是运行级硬停。
+    assert outcome.abort is False
+    assert outcome.record is not None
+    assert outcome.record["status"] == "failed"
 
 
 def test_worker_keeps_sdk_error_payload_shape_for_non_guard_errors(
@@ -631,6 +575,7 @@ def test_worker_keeps_sdk_error_payload_shape_for_non_guard_errors(
     error = record["error"]
     assert isinstance(error, dict)
     assert error["type"] == "api_error"
+    assert outcome.abort is False
 
 
 # --- 真实 SDK 模型的 usage 提取（pydantic extra 字段路径）---
@@ -657,4 +602,3 @@ def test_usage_extraction_supports_real_sdk_subscription_model() -> None:
 
     assert novelai_client._extract_usage_percent(subscription) == 42.0
     assert novelai_client._extract_usage_is_negative(subscription) is False
-    assert novelai_client._extract_anlas_balance(subscription) == 26

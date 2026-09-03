@@ -22,6 +22,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.generation import novelai_generate
+from scripts.generation.novelai_client import NovelAIAnlasGuardError
 from scripts.generation.prompt_grid import compute_prompt_hash, derive_seed, read_y_rows_for_novelai
 from scripts.generation.runner_prompt_template import (
     _render_prompt_by_template as render_prompt,
@@ -624,8 +625,9 @@ class _FakeGuardClient:
         self._api_key = api_key or "fake-key"
         self.calls: list[dict[str, object]] = []
 
-    def preflight(self) -> int:
-        return 26
+    def preflight(self, *, model: str | None = None) -> None:
+        _ = model
+        return None
 
     def generate(self, **kwargs: Any) -> list[_FakeImage]:
         self.calls.append(kwargs)
@@ -672,3 +674,83 @@ def test_retry_failed_runs_worker_and_writes_rgba_artifacts(
     assert recovered["status"] == "success"
     assert recovered["attempt"] == 2
     assert recovered["workflow_api_sha256"] == _expected_fingerprint()
+
+
+def test_retry_battery_low_hard_stop_leaves_remaining_cells_incomplete(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """电量耗尽触发真中止：停止提交剩余格子，未提交格子保持 incomplete。"""
+    failed_first = _metadata_record(
+        tmp_path,
+        status="failed",
+        x_index=0,
+        y_index=1,
+        error_code=GUARD_CODE_BATTERY_LOW,
+    )
+    failed_second = _metadata_record(
+        tmp_path,
+        status="failed",
+        x_index=0,
+        y_index=2,
+        error_code=GUARD_CODE_BATTERY_LOW,
+    )
+    run_dir = _prepare_run_dir(
+        tmp_path,
+        [failed_first, failed_second],
+        y_indexes=[0, 1, 2],
+    )
+
+    class _BatteryDrainedClient:
+        def __init__(self, *, api_key: str | None = None, **kwargs: Any) -> None:
+            self._api_key = api_key or "fake-key"
+            self.calls: list[dict[str, object]] = []
+
+        def preflight(self, *, model: str | None = None) -> None:
+            _ = model
+            return None
+
+        def generate(self, **kwargs: Any) -> list[_FakeImage]:
+            self.calls.append(kwargs)
+            raise NovelAIAnlasGuardError(
+                "V5 电量耗尽：usage.isNegative=true",
+                code=GUARD_CODE_BATTERY_LOW,
+            )
+
+    created: list[_BatteryDrainedClient] = []
+
+    def fake_client_factory(*args: Any, **kwargs: Any) -> _BatteryDrainedClient:
+        client = _BatteryDrainedClient(*args, **kwargs)
+        created.append(client)
+        return client
+
+    monkeypatch.setattr(novelai_generate, "NovelAIAPIClient", fake_client_factory)
+
+    # 并发固定为 1，保证第二格在首格中止后才被调度（可确定性断言未提交）。
+    exit_code = novelai_generate.main(
+        ["--retry-failed", "--concurrency", "1", "--run-dir", str(run_dir)]
+    )
+
+    assert exit_code == 1
+    # 首格电量检查即失败并触发中止：第二格从未提交。
+    assert len(created) == 1
+    assert len(created[0].calls) == 1
+
+    rows = _read_jsonl(run_dir / "metadata.jsonl")
+    counts: dict[tuple[int, int], list[dict[str, object]]] = {}
+    for row in rows:
+        key = (int(row["x_index"]), int(row["y_index"]))  # type: ignore[arg-type]
+        counts.setdefault(key, []).append(row)
+
+    # 首格：新增一条 battery_low 失败记录（attempt 2）。
+    assert len(counts[(0, 1)]) == 2
+    new_record = counts[(0, 1)][-1]
+    assert new_record["status"] == "failed"
+    error = new_record["error"]
+    assert isinstance(error, dict)
+    assert error["code"] == GUARD_CODE_BATTERY_LOW
+    assert new_record["attempt"] == 2
+
+    # 第二格：中止后未提交，没有新记录，保持 incomplete（仅剩 fixture 原记录）。
+    assert len(counts[(0, 2)]) == 1
+    assert counts[(0, 2)][0]["attempt"] == 1

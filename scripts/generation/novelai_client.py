@@ -4,7 +4,6 @@ import logging
 import os
 import random
 import re
-import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -56,10 +55,10 @@ _V5_MODEL_NAMES = frozenset(
 
 # Anlas 守卫错误码：写入 metadata.jsonl 的 error.code，
 # 供 --retry-error-code 精准捞回硬停的网格单元。
+# 历史 run 里的 anlas_billing_detected / anlas_balance_unverifiable
+# 记录仍按原码捞回；余额核对相关决策见 docs/adr/0002。
 _GUARD_CODE_PARAM_VIOLATION = "anlas_param_violation"
 _GUARD_CODE_BATTERY_LOW = "anlas_battery_low"
-_GUARD_CODE_BILLING_DETECTED = "anlas_billing_detected"
-_GUARD_CODE_BALANCE_UNVERIFIABLE = "anlas_balance_unverifiable"
 
 # Opus 订阅免费资格参数上限（超出即可能转 Anlas 计费）。
 _FREE_TIER_MAX_AREA_PX = 1024 * 1024
@@ -138,7 +137,7 @@ def _env_int(name: str, default: int) -> int:
 
 
 class NovelAIAnlasGuardError(Exception):
-    """Anlas 守卫触发：拒绝发起可能消耗 Anlas 的请求，或检测到已发生计费。
+    """Anlas 守卫触发：拒绝发起不满足免费资格的请求，或请求电量耗尽中止运行。
 
     实现 as_metadata() 契约（type/code/message），经错误序列化写入
     metadata.jsonl 的 error 字段；code 为守卫专属错误码，
@@ -214,10 +213,6 @@ class NovelAIAPIClient:
             if battery_min_percent is not None
             else _env_float(_ENV_BATTERY_MIN_PERCENT, _DEFAULT_BATTERY_MIN_PERCENT)
         )
-        # 运行前 Anlas 余额基线：由 preflight() 记录；未预检时在首次生成前懒记录。
-        # 任何一次生成后余额低于基线都视为已发生 Anlas 计费。
-        self._anlas_baseline: int | None = None
-        self._baseline_lock = threading.Lock()
         self._sdk = NovelAI(
             api_key=self._api_key or "dry-run",
             timeout=self._request_timeout,
@@ -249,12 +244,10 @@ class NovelAIAPIClient:
             n_samples=n_samples,
         )
 
-        # Anlas 守卫第二层：V5 生成前电量检查 + Anlas 余额基线记录。
-        if model in _V5_MODEL_NAMES or self._anlas_baseline is None:
+        # Anlas 守卫第二层：V5 生成前电量检查。
+        if model in _V5_MODEL_NAMES:
             subscription = self._fetch_subscription()
-            self._record_anlas_baseline(subscription)
-            if model in _V5_MODEL_NAMES:
-                self._raise_if_battery_low(subscription)
+            self._raise_if_battery_low(subscription)
 
         params = GenerateImageParams(
             prompt=prompt,
@@ -280,10 +273,6 @@ class NovelAIAPIClient:
         _ensure_pure_text_to_image(params)
 
         images = self._generate_with_retries(params)
-
-        # Anlas 守卫第三层：生成后核对余额，减少即视为已发生计费。
-        # 刻意放在重试机制之外：订阅查询的瞬时失败绝不能触发生图请求重发。
-        self._verify_no_billing(model=model)
 
         wait_s = max(0.0, self._min_interval + random.uniform(-self._jitter, self._jitter))
         if wait_s > 0:
@@ -339,11 +328,12 @@ class NovelAIAPIClient:
 
         raise RuntimeError("unreachable: max retries exceeded")
 
-    def preflight(self) -> int:
-        """启动预检：确认 Opus 订阅并记录运行前 Anlas 余额基线。
+    def preflight(self, *, model: str | None = None) -> None:
+        """启动预检：确认 Opus 订阅；model 为 V5 时顺带检查电池电量。
 
         非 Opus（tier != 3）订阅不存在免费生图档，任何请求都可能计费，
-        直接中止运行。返回记录的余额基线。
+        直接中止运行。V5 电量耗尽（含 retry 运行）同样中止，
+        等待电量回充后由人工择机重跑。
         """
         subscription = self._fetch_subscription()
         tier = getattr(subscription, "tier", None)
@@ -352,28 +342,13 @@ class NovelAIAPIClient:
                 f"Anlas 守卫预检失败：API key 非 Opus 订阅（tier={tier}），"
                 "免费生图档不存在，已中止运行"
             )
-        self._record_anlas_baseline(subscription)
-        baseline = self._anlas_baseline
-        if baseline is None:
-            raise RuntimeError(
-                "Anlas 守卫预检失败：订阅接口未返回可读的 Anlas 余额"
-            )
-        LOG.info(
-            "Anlas 守卫预检通过：Opus 订阅，运行前 Anlas 余额=%s", baseline
-        )
-        return baseline
+        if model is not None and model in _V5_MODEL_NAMES:
+            self._raise_if_battery_low(subscription)
+        LOG.info("Anlas 守卫预检通过：Opus 订阅")
 
     def _fetch_subscription(self) -> Any:
         """查询订阅接口（GET /user/subscription）。测试经 monkeypatch 此方法打桩。"""
         return self._sdk.user.get_subscription()
-
-    def _record_anlas_baseline(self, subscription: Any) -> None:
-        with self._baseline_lock:
-            if self._anlas_baseline is not None:
-                return
-            anlas = _extract_anlas_balance(subscription)
-            if anlas is not None:
-                self._anlas_baseline = anlas
 
     def _raise_if_battery_low(self, subscription: Any) -> None:
         usage_percent = _extract_usage_percent(subscription)
@@ -402,30 +377,6 @@ class NovelAIAPIClient:
                 f"低于阈值 {self._battery_min_percent}",
                 code=_GUARD_CODE_BATTERY_LOW,
                 context=context,
-            )
-
-    def _verify_no_billing(self, *, model: str) -> None:
-        with self._baseline_lock:
-            baseline = self._anlas_baseline
-        subscription = self._fetch_subscription()
-        if model in _V5_MODEL_NAMES:
-            battery_percent = _extract_usage_percent(subscription)
-            if battery_percent is not None:
-                LOG.info("NovelAI V5 电池剩余：%.1f%%", battery_percent)
-        current = _extract_anlas_balance(subscription)
-        if current is None:
-            # 余额不可读即无法核对计费状态；按守卫核心承诺 fail-closed 硬停，
-            # 不带任何不确定状态继续发起后续请求。
-            raise NovelAIAnlasGuardError(
-                "Anlas 守卫：生成后余额不可读，无法核对计费状态，已硬停",
-                code=_GUARD_CODE_BALANCE_UNVERIFIABLE,
-                context={"baseline": baseline},
-            )
-        if baseline is not None and current < baseline:
-            raise NovelAIAnlasGuardError(
-                f"检测到 Anlas 计费：余额 {baseline} → {current}，已硬停",
-                code=_GUARD_CODE_BILLING_DETECTED,
-                context={"baseline": baseline, "current": current},
             )
 
     def has_key(self) -> bool:
@@ -534,13 +485,6 @@ def _extract_usage_is_negative(subscription: Any) -> bool | None:
     if not isinstance(raw, bool):
         return None
     return raw
-
-
-def _extract_anlas_balance(subscription: Any) -> int | None:
-    raw = getattr(subscription, "anlas", None)
-    if isinstance(raw, bool) or not isinstance(raw, int | float):
-        return None
-    return int(raw)
 
 
 def _build_error_payload(exc: Exception) -> dict[str, object]:
@@ -683,7 +627,13 @@ def novelai_worker(
             record["finished_at"] = finished_at
             record["elapsed_ms"] = elapsed_ms
             record["error"] = _build_error_payload(exc)
-            return _GenOutcome(record=record, download=None)
+            # V5 电量耗尽是运行级硬停信号：除记录失败外，还要求协调器
+            # 停止提交剩余网格单元；参数不合规等逐格错误不置位。
+            abort = (
+                isinstance(exc, NovelAIAnlasGuardError)
+                and exc.code == _GUARD_CODE_BATTERY_LOW
+            )
+            return _GenOutcome(record=record, download=None, abort=abort)
 
     return _worker
 

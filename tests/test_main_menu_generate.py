@@ -228,7 +228,7 @@ def test_generate_novelai_advanced_flow_maps_retry_error_code(
         ],
         texts=[
             "my-run",
-            "anlas_battery_low,anlas_billing_detected",
+            "anlas_battery_low,anlas_param_violation",
             "",
             "",
         ],
@@ -256,6 +256,6 @@ def test_generate_novelai_advanced_flow_maps_retry_error_code(
             "--retry-failed",
             "--retry-incomplete",
             "--retry-error-code",
-            "anlas_battery_low,anlas_billing_detected",
+            "anlas_battery_low,anlas_param_violation",
         ]
     ]

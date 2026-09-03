@@ -269,9 +269,9 @@ def run(args: argparse.Namespace) -> int:
         if client._api_key is None:
             print("错误: 未设置 NOVELAI_API_KEY 环境变量", file=sys.stderr)
             return 2
-        # Anlas 守卫启动预检：非 Opus key 直接中止，并记录运行前余额基线。
+        # Anlas 守卫启动预检：非 Opus key 直接中止；V5 run 顺带检查电池电量。
         try:
-            client.preflight()
+            client.preflight(model=model_name)
         except Exception as exc:
             print(f"Anlas 守卫预检失败: {exc}", file=sys.stderr)
             return 2
@@ -444,9 +444,9 @@ def run_retry(args: argparse.Namespace) -> int:
         if client._api_key is None:
             print("错误: 未设置 NOVELAI_API_KEY 环境变量", file=sys.stderr)
             return 2
-        # Anlas 守卫启动预检：非 Opus key 直接中止，并记录运行前余额基线。
+        # Anlas 守卫启动预检：非 Opus key 直接中止；V5 run 顺带检查电池电量。
         try:
-            client.preflight()
+            client.preflight(model=model_name)
         except Exception as exc:
             print(f"Anlas 守卫预检失败: {exc}", file=sys.stderr)
             return 2

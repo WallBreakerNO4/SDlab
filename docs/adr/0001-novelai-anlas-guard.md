@@ -1,5 +1,7 @@
 # NovelAI 后端一律拒绝 Anlas 计费请求（Anlas 守卫）
 
+> 状态：部分被 [ADR 0002](0002-novelai-guard-drops-anlas-balance-check.md) 取代——"生成后核对 Anlas 余额"已移除；参数合规校验与 V5 电量检查仍然有效。
+
 NovelAI Diffusion V5 为 Opus 订阅引入了会耗尽的可回充免费额度（电池），耗尽后请求不报错、直接静默转 Anlas 计费；而本仓库使用的账户 Anlas 余额极小（约一张 normal 档计费图的价格），一次误扣即清零。因此决定：NovelAI 生图链路在任何情况下都不发起会消耗 Anlas 的请求——参数合规校验（面积 ≤ 1024×1024、步数 ≤ 28、单张、纯 t2i）在客户端层对所有模型强制执行，V5 额外在每格生成前轮询 `/user/subscription` 的 `usage` 电量并在生成后核对 Anlas 余额。守卫触发时硬停（未完成网格单元记为带专属错误码的失败，不做任何等待或付费重试），由人工择机用 `--retry-failed --retry-error-code` 恢复。
 
 ## Considered Options

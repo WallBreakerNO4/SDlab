@@ -64,6 +64,8 @@ class _DownloadRequest:
 class _GenOutcome:
     record: dict[str, object] | None
     download: _DownloadRequest | None
+    # 守卫硬停信号：置位后协调器停止提交剩余网格单元，已提交单元自然完成。
+    abort: bool = False
 
 
 class GenerationCoordinator:
@@ -149,6 +151,7 @@ class GenerationCoordinator:
             self.cell_iter = iter(cell_pairs)
         self.save_image_prefix_builder = save_image_prefix_builder
         self.exhausted = False
+        self.abort_submission = False
         self.gen_futures: set[Future[Any]] = set()
         self.dl_futures: set[Future[Any]] = set()
         self.has_failed = False
@@ -169,6 +172,8 @@ class GenerationCoordinator:
                         break
 
                     if not self.gen_futures and not self.dl_futures:
+                        if self.abort_submission:
+                            break
                         continue
 
                     done, _ = wait(
@@ -182,6 +187,8 @@ class GenerationCoordinator:
                             outcome = cast(_GenOutcome, fut.result())
                             if outcome.record is not None:
                                 self._write_record(outcome.record)
+                                if outcome.abort:
+                                    self._request_abort_submission()
                                 continue
                             if outcome.download is not None:
                                 dl_future = dl_pool.submit(
@@ -210,6 +217,16 @@ class GenerationCoordinator:
 
         return self.has_failed
 
+    def _request_abort_submission(self) -> None:
+        """守卫硬停：停止提交剩余网格单元，已提交单元自然完成后收尾。"""
+        if self.abort_submission:
+            return
+        self.abort_submission = True
+        LOG.warning(
+            "守卫硬停：停止提交剩余网格单元；未提交格子保持 incomplete，"
+            "可用 --retry-incomplete 恢复"
+        )
+
     def _schedule_until_full(
         self,
         gen_pool: ThreadPoolExecutor,
@@ -219,6 +236,7 @@ class GenerationCoordinator:
     ) -> None:
         while (
             not self.exhausted
+            and not self.abort_submission
             and len(self.gen_futures) < self.args.concurrency
             and len(self.gen_futures) + len(self.dl_futures) < max_pending_futures
         ):
