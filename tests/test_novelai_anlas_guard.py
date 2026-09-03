@@ -335,6 +335,42 @@ def test_v5_battery_above_threshold_allows_generation(
     assert user_api.calls == 1
 
 
+def test_v5_logs_remaining_battery_before_generation(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    image_api = _FakeImageAPI(images=["img"])
+    user_api = _FakeUserAPI(
+        [_subscription(usage={"percent": 60, "isNegative": False})]
+    )
+    client = _make_client(
+        monkeypatch,
+        image_api=image_api,
+        user_api=user_api,
+    )
+    caplog.set_level("INFO", logger=novelai_client.__name__)
+
+    client.generate(**_generate_kwargs(model="nai-diffusion-5-full"))
+
+    # 电量日志由生成前检查打印（复用同一次订阅响应，不额外查询）。
+    assert "NovelAI V5 电池剩余：60.0%" in caplog.messages
+
+
+def test_v45_generation_does_not_log_battery(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    image_api = _FakeImageAPI(images=["img"])
+    user_api = _FakeUserAPI([_subscription(usage={"percent": 60})])
+    client = _make_client(monkeypatch, image_api=image_api, user_api=user_api)
+    caplog.set_level("INFO", logger=novelai_client.__name__)
+    client.preflight()
+
+    client.generate(**_generate_kwargs())
+
+    assert not any("电池剩余" in msg for msg in caplog.messages)
+
+
 # --- 启动预检 ---
 
 

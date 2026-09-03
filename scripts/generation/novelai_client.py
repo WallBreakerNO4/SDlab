@@ -244,9 +244,10 @@ class NovelAIAPIClient:
             n_samples=n_samples,
         )
 
-        # Anlas 守卫第二层：V5 生成前电量检查。
+        # Anlas 守卫第二层：V5 生成前电量检查（顺带打印剩余电量）。
         if model in _V5_MODEL_NAMES:
             subscription = self._fetch_subscription()
+            self._log_battery_if_readable(subscription)
             self._raise_if_battery_low(subscription)
 
         params = GenerateImageParams(
@@ -343,8 +344,15 @@ class NovelAIAPIClient:
                 "免费生图档不存在，已中止运行"
             )
         if model is not None and model in _V5_MODEL_NAMES:
+            self._log_battery_if_readable(subscription)
             self._raise_if_battery_low(subscription)
         LOG.info("Anlas 守卫预检通过：Opus 订阅")
+
+    def _log_battery_if_readable(self, subscription: Any) -> None:
+        """电量可读时打印剩余百分比；供 preflight 与每格生成前共用。"""
+        battery_percent = _extract_usage_percent(subscription)
+        if battery_percent is not None:
+            LOG.info("NovelAI V5 电池剩余：%.1f%%", battery_percent)
 
     def _fetch_subscription(self) -> Any:
         """查询订阅接口（GET /user/subscription）。测试经 monkeypatch 此方法打桩。"""

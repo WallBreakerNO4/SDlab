@@ -13,6 +13,6 @@
 ## Consequences
 
 - 守卫不再承诺"杜绝一切 Anlas 扣费"：自身参数与电量守卫仍在，但生成后发生的静默计费不再被检测（这是接受拼车共享 key 的代价）。
-- 每格订阅查询减半；生成后的"电池剩余"日志随之消失，电量以下一格（或 preflight）的检查日志为准。
+- 每格订阅查询减半；"电池剩余"日志改由生成前电量检查打印（preflight 与每格生成前各一次），不再依赖生成后查询。
 - 错误码 `anlas_billing_detected` / `anlas_balance_unverifiable` 不再产生；历史 metadata.jsonl 中的记录仍可被 `--retry-error-code` 按原码捞回。
 - 电量耗尽导致的中止依赖协调器的 abort 语义：中止前已提交的格子照常成功/失败，只有未提交格子保持 incomplete。
