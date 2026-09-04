@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-08-23 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-09-04 -->
 
 # data/ — 输入资产（只读）
 
@@ -16,6 +16,7 @@
   - `image.*`：封面图源文件
   - `images/*`：主页缩略图源资产；与展示页 `display_*` / `thumb_*` 变体不是同一类资源
   - `Anima-base-1.0-Artist-Mixer/config.yaml`：启用 `workflow.anima_artist_mixer`，把 general prompt 与 artists chain 分别注入 `AnimaArtistPack`
+  - `nai-diffusion-4-5-*` / `nai-diffusion-5-*`：NovelAI 后端模型目录；无 `api.json` / `workflow.json`（直连 API 生图），`nai-diffusion-5-*` 目前仅含 `config.yaml`，V5 描述写明电池政策与 Anlas 守卫
 
 - `data/prompts/X/common_prompts.*`
   - X 轴结构化 prompt 资产（YAML + CSV）；主链路直接消费 YAML
@@ -39,6 +40,7 @@
 
 - `data/models/*/config.yaml`、`data/prompts/**/*.yaml` 都是主链路直接消费的资产；改 schema 前先检查 `runner_config.py`、`prompt_grid.py` 和测试契约。
 - `workflow.anima_artist_mixer: true` 仅适用于 `backend=comfyui` + `model.family=anima`；目标 `api.json` 必须包含符合 runner 校验的 `AnimaArtistCrossAttn` / `AnimaArtistPack` 引用链。
+- NovelAI 模型目录（`backend=novelai`）无需 workflow/api.json；`model.key` 必须落在 `scripts/generation/novelai_client.py` 的模型白名单内，V5 机型自动触发生成前电量预检。
 - `data/prompt-codex/*.yaml` 是 Prompt 法典浏览器的源资产，但 Web 侧运行时不直接读取；改 schema 需要同步更新 `lib/prompt-types.ts` 与生成 `public/data/prompts/*.json` 的离线流程。
 - CSV 更像"源材料"，YAML 更像"已编译资产"；默认优先更新转换脚本，再决定是否重生成 YAML。
 

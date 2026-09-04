@@ -1,11 +1,11 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-08-23 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-09-04 -->
 
 # tests/ — pytest + Node node:test 约定
 
 ## 概览
 
-- Python 测试使用 pytest，覆盖 generation runner、YAML 配置、R2 上传、CLI、资产转换和重试；TypeScript 测试使用 Node `node:test` + `tsx`，覆盖收藏 label 校验与模型对比的部分边界/guard。整体偏“可观测输出”：验证文件生成、YAML/JSON 字段合约、结构化错误与边界上限。
+- Python 测试使用 pytest，覆盖 generation runner、NovelAI 链路、YAML 配置、R2 上传、CLI、资产转换和重试；TypeScript 测试使用 Node `node:test` + `tsx`，覆盖收藏 label、模型指南数据层、sitemap 条目与模型对比的边界/guard。整体偏“可观测输出”：验证文件生成、YAML/JSON 字段合约、结构化错误与边界上限。
 
 ## 去哪儿看
 
@@ -41,10 +41,17 @@
 | negative prompt               | `test_negative_prompt_append.py`                                   | 负面提示词拼接                                      |
 | 重试失败项幂等性        | `test_idempotent_retry_failed.py`                         | 验证重复重试不重复生成 |
 | NovelAI 生图入口        | `test_novelai_generate.py`                                | NovelAI 生图 argparse + 流程测试 |
+| NovelAI Anlas 守卫      | `test_novelai_anlas_guard.py`                             | 免费资格参数校验、V5 电量预检、守卫错误码与 SDK 占位参数 |
+| NovelAI 重试            | `test_novelai_retry.py`                                   | retry / retry-incomplete 回放与守卫码捞回 |
 | 历史 run 回填           | `test_backfill_run_style_items.py`                        | Y 资产 sha256 重放/git stub、集合校验、幂等 upsert、dry-run |
 | 画师串收藏 label        | `style-favorites.test.ts`                                 | 仅覆盖 `isStyleFavoriteLabel()` 的空白、1000 字符上限 |
 | 模型对比部分合约        | `style-comparison.test.ts`、`comparison-matrix-utils.test.ts` | cursor、limit、slice body 边界、目录/详情 guard、viewer cookie、cache URL、BlurHash lookup |
 | 无环境文件测试入口      | `env-file-path.test.ts`、`no-env-node-options.test.ts`     | Node 测试入口的路径与参数防护 |
+| 模型指南数据层          | `model-guides.test.ts`                                    | `parseModelGuide()` frontmatter 契约、`buildGuideIndex()` / `resolveGuideLocale()` / `resolveGuidePath()` |
+| 指南 sitemap 条目       | `sitemap.test.ts`                                         | `buildGuideSitemapEntries()` 只含实际存在语言 + hreflang alternates |
+| 模型详情 response guard | `model-detail-types.test.ts`                              | `isModelDetailResponse()` 本地化描述字段校验 |
+| 模型描述 Markdown URL   | `model-description-markdown.test.ts`                      | `transformModelDescriptionUrl()` 拒绝斜杠网络路径引用 |
+| 对比 RPC 迁移防回归     | `style-comparison-rpc-migration.test.ts`                  | security-invoker RPC、grants、BlurHash RPC、EXPLAIN 验收脚本、模型缓存 300s 约束 |
 
 ## 约定（本目录特有）
 
@@ -61,3 +68,4 @@
 - Python：`uv run pytest -q`（支持单文件 / `::` / `-k`）
 - TypeScript：`pnpm test`
 - Artist Mixer 定向回归：`uv run pytest -q tests/test_prompt_grid.py tests/test_run_replay.py tests/test_runner_config.py tests/test_runner_dry_run.py tests/test_workflow_patch.py`
+- NovelAI 定向回归：`uv run pytest -q tests/test_novelai_generate.py tests/test_novelai_anlas_guard.py tests/test_novelai_retry.py`

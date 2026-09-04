@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-06 | Updated: 2026-08-23 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-09-04 -->
 
 # Agent Guide (sd-style-lab/images-script)
 
@@ -6,7 +6,7 @@
 
 ## 概览
 
-- 仓库分两条主线：Next.js 站点负责展示 runs / grid / 图片；Python 脚本负责生图、上传 R2、写入 Supabase。
+- 仓库分两条主线：Next.js 站点负责展示 runs / grid / 图片；Python 脚本负责生图（ComfyUI workflow 注入 + NovelAI 直连）、上传 R2、写入 Supabase。
 - 网站数据链路以 Supabase + R2 为准；Web 侧没有本地文件降级读取。
 - 术语约定：由上传脚本生成的 `display_*` / `thumb_*` 变体统一称为“展示页缩略图”；run 级 `image.*` 统一称为“封面图”，同级 `images/*` 统一称为“主页缩略图”。三者不是同一套资源，讨论与实现时必须明确区分。
 - 脚本侧识别并上传封面图/主页缩略图资产；网页首页通过 `/api/comfyui/runs` 消费 `assets.cover` / `assets.homepage_cards`，run 详情页通过 view bootstrap JSON 消费展示页缩略图。
@@ -17,6 +17,7 @@
 - Prompt 法典浏览器（路由 `/[locale]/prompts`）是面向用户的功能：客户端从 `public/data/prompts/*.json` 加载结构化 Prompt，渲染 Tag/Choice/多角色卡片并按目标模型格式化复制；源资产在 `data/prompt-codex/*.yaml`，运行时不直接读源 YAML。
 - ComfyUI 生图链路支持 Anima Artist Mixer：`workflow.anima_artist_mixer` 会把 Y 轴 general 标签留在正向 prompt，artists 标签单独写入 `artist_chain`；hash、回放与 strict retry 都把两者视为同一份生图输入。
 - Mixer metadata 会额外持久化 `y_common_prompt`；展示页 bootstrap 通过可选 `yPromptParts` 向前端提供 Artist/Common Prompt 拆分，首列分别复制，缺失部分不渲染。
+- NovelAI 生图链路（config v2 + `backend=novelai`）独立于 ComfyUI：`novelai_generate.py` 复用 runner 的网格/metadata/重试/协调模块，`novelai_client.py` 封装 SDK 与 Anlas 守卫；守卫决策见 `docs/adr/0001`、`docs/adr/0002`。
 - 画师提示词收藏（Style Favorites）：登录用户可在详情页收藏 Y 轴画师串、在 `/[locale]/favorites` 查看并跨模型跳转；收藏身份用 `style_key`（`{collection_id}:{item_index}`），跨 run 匹配只比较 style_key，永不比较 prompt 字符串；`y_index` 一律 0-based，仅收藏页拼跳转 URL 时 `#{y_index + 1}`。
 - Style Comparison（模型对比收藏）：`/[locale]/favorites` 以收藏画师串为行、已发布模型为列展示同风格结果，`/[locale]/favorites/[styleKey]` 提供单收藏详情；目录 API 使用 keyset cursor 且每页最多 40 条，slice 每次最多 40 个 style key / 12 个 run，模型目录缓存 5 分钟。
 - Model Guide（模型使用指南）：与 `model_key` 绑定的 Markdown 使用经验文章，路由 `/[locale]/guides/[modelKey]`；源资产 `data/model-guides/*.md`（含 `.en.md` 变体），构建期经 `loaders/model-guide-data-builder.ts`（`pnpm guides:build`）编译为 `lib/generated/model-guides.ts`；frontmatter `draft: true` 的草稿不进入公开索引、页面、SEO metadata 与 sitemap。
@@ -26,7 +27,7 @@
 ```text
 ./
 ├── app/                    # App Router 页面与 API route
-│   ├── [locale]/           # 区域化页面入口（layout + 首页 + info + privacy-policy + models + prompts + favorites）
+│   ├── [locale]/           # 区域化页面入口（layout + 首页 + info + privacy-policy + models + prompts + favorites + guides）
 │   ├── api/comfyui/        # runs/access/workflow/style-items
 │   ├── api/viewer/         # 浏览者偏好 + 画师串收藏 + 模型对比目录/切片
 │   ├── api/private-object/ # 使用 media grant 读取私有 R2 对象
@@ -46,17 +47,17 @@
 │   ├── env/                # 环境变量集中读取
 │   └── generated/          # 构建期生成模块（model-guides 等）
 ├── scripts/                # Python 生图、上传、CLI、辅助转换
-│   ├── generation/         # 核心 runner + ComfyUI 客户端
+│   ├── generation/         # 核心 runner + ComfyUI/NovelAI 客户端
 │   ├── r2_upload/          # R2 上传 + Supabase 写入
 │   ├── cli/                # 交互菜单与入口注册
 │   └── other/              # CSV/YAML 资产转换工具
 ├── tests/                  # pytest + Node node:test（合约与可观测输出）
 ├── e2e/                    # Playwright 端到端
 ├── supabase/               # 本地配置与迁移
-├── docs/                   # ADR 与项目术语表（见 docs/AGENTS.md）
+├── docs/                   # 设计决策记录（ADR）+ agent 协作文档（见 docs/AGENTS.md）
 ├── DBbackup/               # 本地数据库备份 SQL（git 忽略，见 DBbackup/AGENTS.md）
 ├── data/                   # 只读输入资产
-│   ├── models/             # 模型配置（config.yaml + api.json + workflow.json）
+│   ├── models/             # 模型配置（config.yaml；ComfyUI 另含 api.json + workflow.json）
 │   ├── prompts/            # X/Y prompt 资产（YAML + CSV）
 │   ├── prompt-codex/       # Prompt 法典源 YAML（所长 NovelAI 个人法典）
 │   └── model-guides/       # 模型引导文章 Markdown（含 .en.md 变体）
@@ -65,6 +66,7 @@
 ├── public/                 # 静态资源（favicon + data/prompts 法典 JSON 产物）
 ├── types/                  # Next 生成类型（只读）
 ├── middleware.ts           # I18N 路由 + Supabase session refresh
+├── CONTEXT.md              # 领域术语表（domain 文档，与 docs/adr/ 配套）
 └── main.py                 # Python 顶层入口（委托到 scripts）
 ```
 
@@ -78,6 +80,7 @@
 | Prompt 网格/画师链    | `scripts/generation/prompt_grid.py`                                                                  | Y 轴 general/artists 拆分、权重 profile、prompt + artist chain hash               |
 | Workflow 参数注入     | `scripts/generation/workflow_patch.py`                                                               | 标准 CLIPTextEncode 与 AnimaArtistPack 两种注入拓扑                               |
 | 并发 runner           | `scripts/generation/runner_coordinator.py`                                                           | ThreadPoolExecutor 双池                                                           |
+| NovelAI 生图链路      | `scripts/generation/novelai_generate.py`、`novelai_client.py`                                        | `backend=novelai` 直连生图 + Anlas 守卫；决策见 `docs/adr/0001`/`0002`            |
 | ComfyUI 通信          | `scripts/generation/comfyui_client.py`                                                               | HTTP / WS / 错误码                                                                |
 | R2 上传入口           | `scripts/r2_upload/upload_images_to_r2.py`                                                           | 编码、上传、写 Supabase                                                           |
 | 上传规划              | `scripts/r2_upload/upload_planner.py`                                                                | 多变体规划 + 并发编码；也处理 run 级静态图片资产上传                              |
@@ -132,6 +135,7 @@
 | `main`                            | function  | `main.py`                                        | Python CLI 总入口                                                  |
 | `run`                             | function  | `scripts/generation/comfyui_part1_generate.py`   | 生图主流程                                                         |
 | `run_retry`                       | function  | `scripts/generation/comfyui_part1_generate.py`   | retry / replay 入口                                                |
+| `novelai_worker`                  | function  | `scripts/generation/novelai_client.py`           | NovelAI 单格生成：守卫校验 + V5 电量预检 + SDK 调用                |
 | `GET`                             | function  | `app/api/comfyui/runs/route.ts`                  | runs 列表 API                                                      |
 | `GET`                             | function  | `app/api/comfyui/run/[runDir]/access/route.ts`   | 媒体授权 API                                                       |
 | `GET`                             | function  | `app/api/comfyui/run/[runDir]/workflow/route.ts` | workflow 下载 API                                                  |
@@ -164,6 +168,7 @@
 - Python：I/O 统一 `pathlib.Path`；生图产物固定为 `run.json` + `metadata.jsonl` + `images/`；写盘后保持 flush/fsync 语义。
 - Python 运行资产：`scripts/generation/runner_config.py` 会把 run 目录下的 `image.*` 识别为封面图、`images/*` 识别为主页缩略图源资产；上传链路会继续把这些 run 级资产写入 R2 + Supabase。
 - Anima Artist Mixer：`workflow.anima_artist_mixer: true` 仅允许 `backend=comfyui` 且 `model.family=anima`；workflow 必须是 KSampler 的 model/positive 同时连到启用的 `AnimaArtistCrossAttn`，再由 `AnimaArtistPack` 接收 `base_prompt` 与 `artist_chain`。
+- NovelAI 链路：`backend=novelai` 不消费 workflow/api.json；Anlas 守卫只做免费资格参数校验（面积 ≤ 1024×1024、步数 ≤ 28、单张）与 V5 电量预检，绝不依据 Anlas 余额推断计费（ADR 0002）；V5 电量耗尽 → 真中止，未提交格子保持 incomplete，用 `--retry-incomplete` 恢复。
 - 重发已发布 run 使用上传 CLI 的 `-F/--force-publish`；普通模式遇到不同 `release_id` 会拒绝。强制发布仍复用内容寻址资源，并在 Supabase 写入完成后最后覆盖 `view/current.json`。
 - API：`app/api/**/route.ts` 保持 `runtime = "nodejs"`；错误响应返回固定短文案，不透出绝对路径、stack、凭证。
 - Supabase：ComfyUI API 统一用 `createSupabaseAuthClient()`；浏览器端认证统一用 `createSupabaseBrowserClient()`；`app/auth/callback/route.ts` 为 PKCE 交换 session 的例外。
@@ -223,8 +228,11 @@ uv run python main.py --help
 uv run python main.py --config data/models/example/config.yaml
 uv run python main.py --config data/models/example/config.yaml --dry-run
 uv run python main.py --config data/models/Anima-base-1.0-Artist-Mixer/config.yaml --dry-run
+uv run python main.py --config data/models/nai-diffusion-5-full/config.yaml --dry-run
 uv run pytest -q
 uv run pytest -q tests/test_prompt_grid.py
+# NovelAI 定向回归
+uv run pytest -q tests/test_novelai_generate.py tests/test_novelai_anlas_guard.py tests/test_novelai_retry.py
 
 # R2 上传
 uv run python -m scripts.r2_upload.upload_images_to_r2 --help
@@ -256,7 +264,7 @@ pnpm dlx supabase migration new <name>
 - `lib/AGENTS.md`、`lib/env/AGENTS.md`：Supabase/R2/路径安全/共享类型边界与环境变量读取。
 - `scripts/AGENTS.md`、`scripts/generation/AGENTS.md`、`scripts/r2_upload/AGENTS.md`、`scripts/cli/AGENTS.md`、`scripts/other/AGENTS.md`：Python 主代码域与子系统边界。
 - `tests/AGENTS.md`、`e2e/AGENTS.md`、`supabase/AGENTS.md`、`data/AGENTS.md`、`hooks/AGENTS.md`、`types/AGENTS.md`、`public/AGENTS.md`：测试、迁移、资产、hooks、生成类型、静态资源的局部规则。
-- `docs/AGENTS.md`、`DBbackup/AGENTS.md`：设计决策记录（ADR）与术语表的维护约定；本地数据库备份说明（git 忽略）。
+- `docs/AGENTS.md`、`DBbackup/AGENTS.md`：设计决策记录（`docs/adr/`）与 agent 协作文档（`docs/agents/`）的维护约定，领域术语表在根目录 `CONTEXT.md`；本地数据库备份说明（git 忽略）。
 
 ## Agent skills
 
