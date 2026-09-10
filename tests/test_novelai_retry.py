@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import json
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -620,6 +621,9 @@ class _FakeImage:
 
 
 class _FakeGuardClient:
+    # 入口会把该事件转交协调器；fake 客户端同样要满足这份合约。
+    battery_wait_stop = threading.Event()
+
     def __init__(self, *, api_key: str | None = None, **kwargs: Any) -> None:
         # 模拟环境变量已提供 key 的场景，让入口通过 key 存在性检查。
         self._api_key = api_key or "fake-key"
@@ -702,6 +706,9 @@ def test_retry_battery_low_hard_stop_leaves_remaining_cells_incomplete(
     )
 
     class _BatteryDrainedClient:
+        # 入口会把该事件转交协调器；fake 客户端同样要满足这份合约。
+        battery_wait_stop = threading.Event()
+
         def __init__(self, *, api_key: str | None = None, **kwargs: Any) -> None:
             self._api_key = api_key or "fake-key"
             self.calls: list[dict[str, object]] = []

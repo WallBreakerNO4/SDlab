@@ -32,7 +32,7 @@
 | 重试失败项筛选          | `retry_failed_selection.py`  | 从 metadata.jsonl 筛选 failed 项                      |
 | 重试执行                | `retry.py`                   | 重试入口与流程控制                                    |
 | 运行回放                | `run_replay.py`              | 从 `run.json` 恢复 workflow 快照；快照缺 Mixer 字段时按未启用处理 |
-| NovelAI API 客户端      | `novelai_client.py`         | `novelai` SDK 封装；限速/重试、`NOVELAI_*` 环境变量、Anlas 守卫（免费资格校验 + V5 电量预检）与专属错误码 |
+| NovelAI API 客户端      | `novelai_client.py`         | `novelai` SDK 封装；限速/重试、`NOVELAI_*` 环境变量、Anlas 守卫（免费资格校验 + V5 电量守卫：低电量等待回充/硬停）与专属错误码 |
 | NovelAI 生图入口        | `novelai_generate.py`       | `backend=novelai` 链路；argparse + metadata 落盘 + retry / retry-incomplete 回放（模型 key 从 run.json 快照恢复） |
 
 ## 模块拆分结构
@@ -76,7 +76,8 @@ output_packager.py → 最终打包（与 ComfyUI 共用）
 - Mixer workflow 要求 KSampler 的 model/positive 引用同一个启用的 `AnimaArtistCrossAttn`（输出 0/1），并向其 `AnimaArtistPack` 写入 `base_prompt` / `artist_chain`
 - `compute_prompt_hash(prompt, artist_chain)` 只在 artist chain 非 `None` 时启用复合 JSON hash；`None` 时使用 prompt-only hash
 - NovelAI 守卫判定只依据免费资格参数（面积 ≤ 1024×1024、步数 ≤ 28、单张）与 V5 生成前电量（默认阈值 5%，`NOVELAI_BATTERY_MIN_PERCENT` 可调），不读取 Anlas 余额（ADR 0002）；触发码 `anlas_param_violation` / `anlas_battery_low` 写入 metadata 的 `error.code`
-- V5 电量耗尽 → 真中止：worker 置 abort 标记，协调器停止提交剩余格子；未提交格子保持 incomplete，由 `--retry-incomplete` 恢复
+- V5 电量守卫默认低电量暂停生成、按 `NOVELAI_BATTERY_POLL_INTERVAL_S`（默认 300s）轮询等待回充，`NOVELAI_BATTERY_WAIT_TIMEOUT_S`（默认 24h，0 = 不限时）超时后回退硬停；`--battery-hard-stop` 恢复 ADR 0002 真中止，电量不可读一律立即硬停（ADR 0003）
+- V5 电量硬停（硬停模式、等待超时回退或等待被 Ctrl+C 中断）：worker 置 abort 标记，协调器停止提交剩余格子；未提交格子保持 incomplete，由 `--retry-incomplete` 恢复
 - `(tag:weight)` → NAI `weight::tag ::` 的权重转换只在提交前进行；metadata 保持原始 prompt 格式
 - quality tags 与 UC 预设由 config.yaml 全量提供；SDK 侧 `quality=False` + `uc_preset="light"` 占位，保证「配置即发送」
 - runner\_\* 模块间通过参数传递状态，不使用全局变量

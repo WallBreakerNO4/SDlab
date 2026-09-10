@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from itertools import product
 import logging
 from pathlib import Path
+import threading
 from time import monotonic, sleep
 from typing import Any, Callable, cast
 import uuid
@@ -113,6 +114,7 @@ class GenerationCoordinator:
             Callable[[str, int, int, int, str], str] | None
         ) = None,
         worker_fn: Callable[..., Any] | None = None,
+        interrupt_event: threading.Event | None = None,
     ):
         self.args = args
         self.x_descriptions = x_descriptions
@@ -144,6 +146,8 @@ class GenerationCoordinator:
         self.get_history_item = get_history_item
         self.download_image_to_path = download_image_to_path
         self.worker_fn = worker_fn if worker_fn is not None else _worker_submit_and_wait
+        # Ctrl+C 协作事件：置位后电量等待中的 worker 放弃等待并按守卫错误落盘。
+        self.interrupt_event = interrupt_event
 
         if cell_pairs is None:
             self.cell_iter = product(x_selected, y_selected)
@@ -161,59 +165,66 @@ class GenerationCoordinator:
         max_pending_futures = self.args.concurrency + download_concurrency
         with ThreadPoolExecutor(max_workers=self.args.concurrency) as gen_pool:
             with ThreadPoolExecutor(max_workers=download_concurrency) as dl_pool:
-                while True:
-                    self._schedule_until_full(
-                        gen_pool,
-                        dl_pool,
-                        max_pending_futures=max_pending_futures,
-                    )
+                try:
+                    while True:
+                        self._schedule_until_full(
+                            gen_pool,
+                            dl_pool,
+                            max_pending_futures=max_pending_futures,
+                        )
 
-                    if self.exhausted and not self.gen_futures and not self.dl_futures:
-                        break
-
-                    if not self.gen_futures and not self.dl_futures:
-                        if self.abort_submission:
+                        if self.exhausted and not self.gen_futures and not self.dl_futures:
                             break
-                        continue
 
-                    done, _ = wait(
-                        self.gen_futures | self.dl_futures,
-                        return_when=FIRST_COMPLETED,
-                    )
-
-                    for fut in done:
-                        if fut in self.gen_futures:
-                            self.gen_futures.remove(fut)
-                            outcome = cast(_GenOutcome, fut.result())
-                            if outcome.record is not None:
-                                self._write_record(outcome.record)
-                                if outcome.abort:
-                                    self._request_abort_submission()
-                                continue
-                            if outcome.download is not None:
-                                dl_future = dl_pool.submit(
-                                    _worker_fetch_and_download,
-                                    self.args,
-                                    self.run_dir,
-                                    outcome.download,
-                                    self.get_history_item,
-                                    self.download_image_to_path,
-                                    self.build_base_metadata_record,
-                                    self.now_iso,
-                                )
-                                self.dl_futures.add(cast(Future[Any], dl_future))
-                                continue
-                            raise RuntimeError(
-                                "internal error: gen outcome missing record and download"
-                            )
-
-                        if fut in self.dl_futures:
-                            self.dl_futures.remove(fut)
-                            record = cast(dict[str, object], fut.result())
-                            self._write_record(record)
+                        if not self.gen_futures and not self.dl_futures:
+                            if self.abort_submission:
+                                break
                             continue
 
-                        raise RuntimeError("internal error: future not tracked")
+                        done, _ = wait(
+                            self.gen_futures | self.dl_futures,
+                            return_when=FIRST_COMPLETED,
+                        )
+
+                        for fut in done:
+                            if fut in self.gen_futures:
+                                self.gen_futures.remove(fut)
+                                outcome = cast(_GenOutcome, fut.result())
+                                if outcome.record is not None:
+                                    self._write_record(outcome.record)
+                                    if outcome.abort:
+                                        self._request_abort_submission()
+                                    continue
+                                if outcome.download is not None:
+                                    dl_future = dl_pool.submit(
+                                        _worker_fetch_and_download,
+                                        self.args,
+                                        self.run_dir,
+                                        outcome.download,
+                                        self.get_history_item,
+                                        self.download_image_to_path,
+                                        self.build_base_metadata_record,
+                                        self.now_iso,
+                                    )
+                                    self.dl_futures.add(cast(Future[Any], dl_future))
+                                    continue
+                                raise RuntimeError(
+                                    "internal error: gen outcome missing record and download"
+                                )
+
+                            if fut in self.dl_futures:
+                                self.dl_futures.remove(fut)
+                                record = cast(dict[str, object], fut.result())
+                                self._write_record(record)
+                                continue
+
+                            raise RuntimeError("internal error: future not tracked")
+                except KeyboardInterrupt:
+                    # Ctrl+C：先置位协作事件，让电量等待中的 worker 放弃等待并按
+                    # 守卫错误落盘，再交给 with 块收尾，避免关池被剩余等待挂住。
+                    if self.interrupt_event is not None:
+                        self.interrupt_event.set()
+                    raise
 
         return self.has_failed
 
@@ -491,6 +502,7 @@ def run_generation(
     cell_pairs: Iterable[tuple[Any, Any]] | None = None,
     save_image_prefix_builder: (Callable[[str, int, int, int, str], str] | None) = None,
     worker_fn: Callable[..., Any] | None = None,
+    interrupt_event: threading.Event | None = None,
 ) -> bool:
     return GenerationCoordinator(
         args=args,
@@ -525,6 +537,7 @@ def run_generation(
         cell_pairs=cell_pairs,
         save_image_prefix_builder=save_image_prefix_builder,
         worker_fn=worker_fn,
+        interrupt_event=interrupt_event,
     ).run()
 
 

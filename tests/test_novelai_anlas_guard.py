@@ -15,6 +15,7 @@ if str(ROOT) not in sys.path:
 
 from novelai.exceptions import (
     AuthenticationError,
+    NetworkError,
     RateLimitError,
 )
 from novelai.types import Subscription
@@ -77,6 +78,9 @@ def _make_client(
     image_api: _FakeImageAPI,
     user_api: _FakeUserAPI,
     battery_min_percent: float | None = 5.0,
+    battery_poll_interval_s: float | None = None,
+    battery_wait_timeout_s: float | None = None,
+    battery_hard_stop: bool = False,
 ) -> novelai_client.NovelAIAPIClient:
     captured: dict[str, object] = {}
 
@@ -86,11 +90,57 @@ def _make_client(
 
     monkeypatch.setattr(novelai_client, "NovelAI", _factory)
 
-    kwargs: dict[str, object] = {"api_key": "test-key", "min_interval_s": 0.0}
+    kwargs: dict[str, object] = {
+        "api_key": "test-key",
+        "min_interval_s": 0.0,
+        # 先跑过的 main() 测试会经 _autoload_dotenv 把真实 .env 灌进进程环境，
+        # 这里显式钉死抖动，避免成功 generate 后的 min_interval 睡眠随机化时钟断言。
+        "interval_jitter_s": 0.0,
+        "battery_hard_stop": battery_hard_stop,
+    }
     # battery_min_percent=None 表示走环境变量/默认值路径，供阈值环境变量测试使用。
     if battery_min_percent is not None:
         kwargs["battery_min_percent"] = battery_min_percent
+    if battery_poll_interval_s is not None:
+        kwargs["battery_poll_interval_s"] = battery_poll_interval_s
+    if battery_wait_timeout_s is not None:
+        kwargs["battery_wait_timeout_s"] = battery_wait_timeout_s
     return novelai_client.NovelAIAPIClient(**kwargs)  # type: ignore[arg-type]
+
+
+class _FakeClock:
+    """替代 novelai_client.time：可控单调时钟 + 睡眠记录，测试零真实等待。"""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.sleeps: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+
+def _wait_client(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    image_api: _FakeImageAPI,
+    clock: _FakeClock,
+    responses: list[object],
+    battery_wait_timeout_s: float | None = None,
+    battery_poll_interval_s: float | None = 300.0,
+) -> novelai_client.NovelAIAPIClient:
+    # 等待循环的睡眠/超时全部走可控假时钟。
+    monkeypatch.setattr(novelai_client, "time", clock)
+    return _make_client(
+        monkeypatch,
+        image_api=image_api,
+        user_api=_FakeUserAPI(responses),
+        battery_wait_timeout_s=battery_wait_timeout_s,
+        battery_poll_interval_s=battery_poll_interval_s,
+    )
 
 
 def _generate_kwargs(**overrides: object) -> dict[str, object]:
@@ -213,10 +263,10 @@ def test_compliant_v45_generation_passes_guard(
     assert user_api.calls == 1
 
 
-# --- V5 电量检查 ---
+# --- V5 电量检查（--battery-hard-stop 旧工作模式，ADR 0002 真中止）---
 
 
-def test_v5_battery_below_threshold_hard_stops(
+def test_v5_battery_hard_stop_mode_below_threshold_stops(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     image_api = _FakeImageAPI(images=[object()])
@@ -225,6 +275,7 @@ def test_v5_battery_below_threshold_hard_stops(
         monkeypatch,
         image_api=image_api,
         user_api=_FakeUserAPI([sub]),
+        battery_hard_stop=True,
     )
 
     with pytest.raises(NovelAIAnlasGuardError) as exc_info:
@@ -235,7 +286,7 @@ def test_v5_battery_below_threshold_hard_stops(
     assert image_api.calls == []
 
 
-def test_v5_battery_negative_hard_stops_even_with_high_percent(
+def test_v5_battery_hard_stop_mode_negative_stops_even_with_high_percent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     image_api = _FakeImageAPI(images=[object()])
@@ -244,6 +295,7 @@ def test_v5_battery_negative_hard_stops_even_with_high_percent(
         monkeypatch,
         image_api=image_api,
         user_api=_FakeUserAPI([sub]),
+        battery_hard_stop=True,
     )
 
     with pytest.raises(NovelAIAnlasGuardError) as exc_info:
@@ -305,6 +357,7 @@ def test_battery_threshold_env_var_raises_effective_threshold(
         image_api=image_api,
         user_api=_FakeUserAPI([sub]),
         battery_min_percent=None,
+        battery_hard_stop=True,
     )
 
     with pytest.raises(NovelAIAnlasGuardError) as exc_info:
@@ -312,6 +365,253 @@ def test_battery_threshold_env_var_raises_effective_threshold(
 
     assert exc_info.value.code == _GUARD_CODE_BATTERY_LOW
     assert exc_info.value.context["threshold_percent"] == 80.0
+
+
+# --- V5 电量等待回充（默认模式，ADR 0003）---
+
+
+def test_v5_battery_low_waits_and_resumes_generation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    image_api = _FakeImageAPI(images=["img"])
+    clock = _FakeClock()
+    client = _wait_client(
+        monkeypatch,
+        image_api=image_api,
+        clock=clock,
+        responses=[
+            _subscription(usage={"percent": 3, "isNegative": False}),
+            _subscription(usage={"percent": 4, "isNegative": False}),
+            _subscription(usage={"percent": 6, "isNegative": False}),
+        ],
+    )
+
+    images = client.generate(**_generate_kwargs(model="nai-diffusion-5-full"))
+
+    assert images == ["img"]
+    assert len(image_api.calls) == 1
+    # 两轮轮询各睡满一个 300s 间隔（30s 分片），真实睡眠被假时钟替换。
+    assert clock.now == 600.0
+    assert set(clock.sleeps) == {30.0}
+
+
+def test_v5_battery_wait_repeats_across_consecutive_generations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 第一格等回充后生成，消耗后再次跌破阈值 → 下一格重复等待（ADR 0003 循环语义）。
+    image_api = _FakeImageAPI(images=["img1", "img2"])
+    clock = _FakeClock()
+    client = _wait_client(
+        monkeypatch,
+        image_api=image_api,
+        clock=clock,
+        responses=[
+            _subscription(usage={"percent": 3, "isNegative": False}),
+            _subscription(usage={"percent": 6, "isNegative": False}),
+            _subscription(usage={"percent": 4, "isNegative": False}),
+            _subscription(usage={"percent": 7, "isNegative": False}),
+        ],
+    )
+
+    # _FakeImageAPI 每次调用返回全部图片；这里只关心两次生成都各自经历了一轮等待。
+    assert client.generate(**_generate_kwargs(model="nai-diffusion-5-full")) == [
+        "img1",
+        "img2",
+    ]
+    assert client.generate(**_generate_kwargs(model="nai-diffusion-5-full")) == [
+        "img1",
+        "img2",
+    ]
+    assert len(image_api.calls) == 2
+    assert clock.now == 600.0
+
+
+def test_v5_battery_negative_waits_for_recovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    image_api = _FakeImageAPI(images=["img"])
+    clock = _FakeClock()
+    client = _wait_client(
+        monkeypatch,
+        image_api=image_api,
+        clock=clock,
+        responses=[
+            _subscription(usage={"percent": 90, "isNegative": True}),
+            _subscription(usage={"percent": 6, "isNegative": False}),
+        ],
+    )
+
+    assert client.generate(**_generate_kwargs(model="nai-diffusion-5-full")) == ["img"]
+    assert clock.now == 300.0
+
+
+def test_v5_battery_wait_timeout_falls_back_to_hard_stop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    image_api = _FakeImageAPI(images=[object()])
+    clock = _FakeClock()
+    low = _subscription(usage={"percent": 3, "isNegative": False})
+    client = _wait_client(
+        monkeypatch,
+        image_api=image_api,
+        clock=clock,
+        responses=[low, low, low],
+        battery_wait_timeout_s=120.0,
+        battery_poll_interval_s=100.0,
+    )
+
+    with pytest.raises(NovelAIAnlasGuardError) as exc_info:
+        client.generate(**_generate_kwargs(model="nai-diffusion-5-full"))
+
+    assert exc_info.value.code == _GUARD_CODE_BATTERY_LOW
+    assert exc_info.value.context["wait_timeout_s"] == 120.0
+    assert image_api.calls == []
+    # 一轮轮询后仍未恢复，第二轮循环顶部触发超时。
+    assert clock.now == 200.0
+
+
+def test_v5_battery_unreadable_during_wait_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    image_api = _FakeImageAPI(images=[object()])
+    clock = _FakeClock()
+    client = _wait_client(
+        monkeypatch,
+        image_api=image_api,
+        clock=clock,
+        responses=[
+            _subscription(usage={"percent": 3, "isNegative": False}),
+            _subscription(usage=None),
+        ],
+    )
+
+    with pytest.raises(NovelAIAnlasGuardError) as exc_info:
+        client.generate(**_generate_kwargs(model="nai-diffusion-5-full"))
+
+    assert exc_info.value.code == _GUARD_CODE_BATTERY_LOW
+    assert image_api.calls == []
+    # 契约变更不等待：一轮轮询发现不可读后立即硬停。
+    assert clock.now == 300.0
+
+
+def test_v5_battery_wait_ignores_transient_poll_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    image_api = _FakeImageAPI(images=["img"])
+    clock = _FakeClock()
+    client = _wait_client(
+        monkeypatch,
+        image_api=image_api,
+        clock=clock,
+        responses=[
+            _subscription(usage={"percent": 3, "isNegative": False}),
+            NetworkError("boom"),
+            _subscription(usage={"percent": 6, "isNegative": False}),
+        ],
+    )
+
+    assert client.generate(**_generate_kwargs(model="nai-diffusion-5-full")) == ["img"]
+    # 瞬时传输错误只记日志，下一轮轮询继续。
+    assert clock.now == 600.0
+
+
+def test_v5_battery_wait_interrupted_by_stop_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    image_api = _FakeImageAPI(images=[object()])
+    clock = _FakeClock()
+    client = _wait_client(
+        monkeypatch,
+        image_api=image_api,
+        clock=clock,
+        responses=[_subscription(usage={"percent": 3, "isNegative": False})],
+    )
+    client.battery_wait_stop.set()
+
+    with pytest.raises(NovelAIAnlasGuardError) as exc_info:
+        client.generate(**_generate_kwargs(model="nai-diffusion-5-full"))
+
+    assert exc_info.value.code == _GUARD_CODE_BATTERY_LOW
+    assert exc_info.value.context["interrupted"] is True
+    assert image_api.calls == []
+    # 停止信号置位后等待立即放弃，不进入睡眠。
+    assert clock.sleeps == []
+
+
+def test_v5_battery_wait_poll_interval_sleeps_in_chunks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    image_api = _FakeImageAPI(images=["img"])
+    clock = _FakeClock()
+    client = _wait_client(
+        monkeypatch,
+        image_api=image_api,
+        clock=clock,
+        responses=[
+            _subscription(usage={"percent": 3, "isNegative": False}),
+            _subscription(usage={"percent": 6, "isNegative": False}),
+        ],
+        battery_poll_interval_s=75.0,
+    )
+
+    client.generate(**_generate_kwargs(model="nai-diffusion-5-full"))
+
+    # 75s 间隔按 30s 分片切分，等待中断最迟一个分片生效。
+    assert clock.sleeps == [30.0, 30.0, 15.0]
+
+
+def test_preflight_waits_for_battery_recovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = _FakeClock()
+    client = _wait_client(
+        monkeypatch,
+        image_api=_FakeImageAPI(),
+        clock=clock,
+        responses=[
+            _subscription(usage={"percent": 3, "isNegative": False}),
+            _subscription(usage={"percent": 6, "isNegative": False}),
+        ],
+    )
+
+    assert client.preflight(model="nai-diffusion-5-full") is None
+
+
+def test_battery_wait_env_timeout_falls_back_to_hard_stop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("NOVELAI_BATTERY_WAIT_TIMEOUT_S", "0.01")
+    image_api = _FakeImageAPI(images=[object()])
+    clock = _FakeClock()
+    low = _subscription(usage={"percent": 3, "isNegative": False})
+    client = _wait_client(
+        monkeypatch,
+        image_api=image_api,
+        clock=clock,
+        responses=[low, low],
+    )
+
+    with pytest.raises(NovelAIAnlasGuardError):
+        client.generate(**_generate_kwargs(model="nai-diffusion-5-full"))
+
+    assert image_api.calls == []
+
+
+def test_battery_wait_default_constants() -> None:
+    assert novelai_client._DEFAULT_BATTERY_POLL_INTERVAL_S == 300.0
+    assert novelai_client._DEFAULT_BATTERY_WAIT_TIMEOUT_S == 86400.0
+
+
+def test_battery_poll_interval_must_be_positive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with pytest.raises(ValueError, match="NOVELAI_BATTERY_POLL_INTERVAL_S"):
+        _make_client(
+            monkeypatch,
+            image_api=_FakeImageAPI(),
+            user_api=_FakeUserAPI([]),
+            battery_poll_interval_s=0.0,
+        )
 
 
 def test_v5_battery_above_threshold_allows_generation(
@@ -397,13 +697,14 @@ def test_preflight_passes_for_opus_and_returns_none(
     assert client.preflight() is None
 
 
-def test_preflight_checks_battery_for_v5_model(
+def test_preflight_hard_stop_mode_checks_battery_for_v5_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client = _make_client(
         monkeypatch,
         image_api=_FakeImageAPI(),
         user_api=_FakeUserAPI([_subscription(usage={"percent": 0, "isNegative": False})]),
+        battery_hard_stop=True,
     )
 
     with pytest.raises(NovelAIAnlasGuardError) as exc_info:

@@ -119,6 +119,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--retry-failed", action="store_true", default=False)
     parser.add_argument("--retry-incomplete", action="store_true", default=False)
     parser.add_argument("--retry-error-code", default=None)
+    parser.add_argument(
+        "--battery-hard-stop",
+        action="store_true",
+        default=False,
+        help="V5 电量低于阈值时立即硬停（ADR 0002 旧行为），"
+        "而非默认的暂停等待回充自动继续",
+    )
 
     parser.add_argument(
         "--concurrency",
@@ -264,7 +271,10 @@ def run(args: argparse.Namespace) -> int:
         run_artifacts.run_dir,
     )
 
-    client = NovelAIAPIClient(api_key="dry-run" if args.dry_run else None)
+    client = NovelAIAPIClient(
+        api_key="dry-run" if args.dry_run else None,
+        battery_hard_stop=args.battery_hard_stop,
+    )
     if not args.dry_run:
         if client._api_key is None:
             print("错误: 未设置 NOVELAI_API_KEY 环境变量", file=sys.stderr)
@@ -336,6 +346,7 @@ def run(args: argparse.Namespace) -> int:
                     get_history_item=lambda *args, **kwargs: {},
                     download_image_to_path=lambda *args, **kwargs: Path("."),
                     worker_fn=worker_fn,
+                    interrupt_event=client.battery_wait_stop,
                 )
 
     print(
@@ -439,7 +450,10 @@ def run_retry(args: argparse.Namespace) -> int:
         run_artifacts.run_dir,
     )
 
-    client = NovelAIAPIClient(api_key="dry-run" if args.dry_run else None)
+    client = NovelAIAPIClient(
+        api_key="dry-run" if args.dry_run else None,
+        battery_hard_stop=args.battery_hard_stop,
+    )
     if not args.dry_run:
         if client._api_key is None:
             print("错误: 未设置 NOVELAI_API_KEY 环境变量", file=sys.stderr)
@@ -507,6 +521,7 @@ def run_retry(args: argparse.Namespace) -> int:
                     download_image_to_path=lambda *args, **kwargs: Path("."),
                     cell_pairs=cell_pairs,
                     worker_fn=worker_fn,
+                    interrupt_event=client.battery_wait_stop,
                 )
 
     print(

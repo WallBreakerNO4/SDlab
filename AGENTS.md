@@ -17,7 +17,7 @@
 - Prompt 法典浏览器（路由 `/[locale]/prompts`）是面向用户的功能：客户端从 `public/data/prompts/*.json` 加载结构化 Prompt，渲染 Tag/Choice/多角色卡片并按目标模型格式化复制；源资产在 `data/prompt-codex/*.yaml`，运行时不直接读源 YAML。
 - ComfyUI 生图链路支持 Anima Artist Mixer：`workflow.anima_artist_mixer` 会把 Y 轴 general 标签留在正向 prompt，artists 标签单独写入 `artist_chain`；hash、回放与 strict retry 都把两者视为同一份生图输入。
 - Mixer metadata 会额外持久化 `y_common_prompt`；展示页 bootstrap 通过可选 `yPromptParts` 向前端提供 Artist/Common Prompt 拆分，首列分别复制，缺失部分不渲染。
-- NovelAI 生图链路（config v2 + `backend=novelai`）独立于 ComfyUI：`novelai_generate.py` 复用 runner 的网格/metadata/重试/协调模块，`novelai_client.py` 封装 SDK 与 Anlas 守卫；守卫决策见 `docs/adr/0001`、`docs/adr/0002`。
+- NovelAI 生图链路（config v2 + `backend=novelai`）独立于 ComfyUI：`novelai_generate.py` 复用 runner 的网格/metadata/重试/协调模块，`novelai_client.py` 封装 SDK 与 Anlas 守卫；守卫决策见 `docs/adr/0001`、`docs/adr/0002`、`docs/adr/0003`。
 - 画师提示词收藏（Style Favorites）：登录用户可在详情页收藏 Y 轴画师串、在 `/[locale]/favorites` 查看并跨模型跳转；收藏身份用 `style_key`（`{collection_id}:{item_index}`），跨 run 匹配只比较 style_key，永不比较 prompt 字符串；`y_index` 一律 0-based，仅收藏页拼跳转 URL 时 `#{y_index + 1}`。
 - Style Comparison（模型对比收藏）：`/[locale]/favorites` 以收藏画师串为行、已发布模型为列展示同风格结果，`/[locale]/favorites/[styleKey]` 提供单收藏详情；目录 API 使用 keyset cursor 且每页最多 40 条，slice 每次最多 40 个 style key / 12 个 run，模型目录缓存 5 分钟。
 - Model Guide（模型使用指南）：与 `model_key` 绑定的 Markdown 使用经验文章，路由 `/[locale]/guides/[modelKey]`；源资产 `data/model-guides/*.md`（含 `.en.md` 变体），构建期经 `loaders/model-guide-data-builder.ts`（`pnpm guides:build`）编译为 `lib/generated/model-guides.ts`；frontmatter `draft: true` 的草稿不进入公开索引、页面、SEO metadata 与 sitemap。
@@ -80,7 +80,7 @@
 | Prompt 网格/画师链    | `scripts/generation/prompt_grid.py`                                                                  | Y 轴 general/artists 拆分、权重 profile、prompt + artist chain hash               |
 | Workflow 参数注入     | `scripts/generation/workflow_patch.py`                                                               | 标准 CLIPTextEncode 与 AnimaArtistPack 两种注入拓扑                               |
 | 并发 runner           | `scripts/generation/runner_coordinator.py`                                                           | ThreadPoolExecutor 双池                                                           |
-| NovelAI 生图链路      | `scripts/generation/novelai_generate.py`、`novelai_client.py`                                        | `backend=novelai` 直连生图 + Anlas 守卫；决策见 `docs/adr/0001`/`0002`            |
+| NovelAI 生图链路      | `scripts/generation/novelai_generate.py`、`novelai_client.py`                                        | `backend=novelai` 直连生图 + Anlas 守卫；决策见 `docs/adr/0001`/`0002`/`0003`      |
 | ComfyUI 通信          | `scripts/generation/comfyui_client.py`                                                               | HTTP / WS / 错误码                                                                |
 | R2 上传入口           | `scripts/r2_upload/upload_images_to_r2.py`                                                           | 编码、上传、写 Supabase                                                           |
 | 上传规划              | `scripts/r2_upload/upload_planner.py`                                                                | 多变体规划 + 并发编码；也处理 run 级静态图片资产上传                              |
@@ -135,7 +135,7 @@
 | `main`                            | function  | `main.py`                                        | Python CLI 总入口                                                  |
 | `run`                             | function  | `scripts/generation/comfyui_part1_generate.py`   | 生图主流程                                                         |
 | `run_retry`                       | function  | `scripts/generation/comfyui_part1_generate.py`   | retry / replay 入口                                                |
-| `novelai_worker`                  | function  | `scripts/generation/novelai_client.py`           | NovelAI 单格生成：守卫校验 + V5 电量预检 + SDK 调用                |
+| `novelai_worker`                  | function  | `scripts/generation/novelai_client.py`           | NovelAI 单格生成：守卫校验 + V5 电量守卫（等待回充/硬停）+ SDK 调用   |
 | `GET`                             | function  | `app/api/comfyui/runs/route.ts`                  | runs 列表 API                                                      |
 | `GET`                             | function  | `app/api/comfyui/run/[runDir]/access/route.ts`   | 媒体授权 API                                                       |
 | `GET`                             | function  | `app/api/comfyui/run/[runDir]/workflow/route.ts` | workflow 下载 API                                                  |
@@ -168,7 +168,7 @@
 - Python：I/O 统一 `pathlib.Path`；生图产物固定为 `run.json` + `metadata.jsonl` + `images/`；写盘后保持 flush/fsync 语义。
 - Python 运行资产：`scripts/generation/runner_config.py` 会把 run 目录下的 `image.*` 识别为封面图、`images/*` 识别为主页缩略图源资产；上传链路会继续把这些 run 级资产写入 R2 + Supabase。
 - Anima Artist Mixer：`workflow.anima_artist_mixer: true` 仅允许 `backend=comfyui` 且 `model.family=anima`；workflow 必须是 KSampler 的 model/positive 同时连到启用的 `AnimaArtistCrossAttn`，再由 `AnimaArtistPack` 接收 `base_prompt` 与 `artist_chain`。
-- NovelAI 链路：`backend=novelai` 不消费 workflow/api.json；Anlas 守卫只做免费资格参数校验（面积 ≤ 1024×1024、步数 ≤ 28、单张）与 V5 电量预检，绝不依据 Anlas 余额推断计费（ADR 0002）；V5 电量耗尽 → 真中止，未提交格子保持 incomplete，用 `--retry-incomplete` 恢复。
+- NovelAI 链路：`backend=novelai` 不消费 workflow/api.json；Anlas 守卫只做免费资格参数校验（面积 ≤ 1024×1024、步数 ≤ 28、单张）与 V5 电量守卫，绝不依据 Anlas 余额推断计费（ADR 0002）；V5 电量低于阈值默认暂停生成、轮询等待回充后自动继续（默认等待上限 24h，超时回退真中止），`--battery-hard-stop` 显式启用旧真中止模式；硬停时未提交格子保持 incomplete，用 `--retry-incomplete` 恢复（ADR 0003）。
 - 重发已发布 run 使用上传 CLI 的 `-F/--force-publish`；普通模式遇到不同 `release_id` 会拒绝。强制发布仍复用内容寻址资源，并在 Supabase 写入完成后最后覆盖 `view/current.json`。
 - API：`app/api/**/route.ts` 保持 `runtime = "nodejs"`；错误响应返回固定短文案，不透出绝对路径、stack、凭证。
 - Supabase：ComfyUI API 统一用 `createSupabaseAuthClient()`；浏览器端认证统一用 `createSupabaseBrowserClient()`；`app/auth/callback/route.ts` 为 PKCE 交换 session 的例外。

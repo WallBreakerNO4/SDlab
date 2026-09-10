@@ -4,6 +4,7 @@ import logging
 import os
 import random
 import re
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -106,6 +107,8 @@ _ENV_INTERVAL_JITTER = "NOVELAI_INTERVAL_JITTER_S"
 _ENV_RATE_LIMIT_COOLDOWN = "NOVELAI_RATE_LIMIT_COOLDOWN_S"
 _ENV_RATE_LIMIT_JITTER = "NOVELAI_RATE_LIMIT_JITTER_S"
 _ENV_BATTERY_MIN_PERCENT = "NOVELAI_BATTERY_MIN_PERCENT"
+_ENV_BATTERY_POLL_INTERVAL_S = "NOVELAI_BATTERY_POLL_INTERVAL_S"
+_ENV_BATTERY_WAIT_TIMEOUT_S = "NOVELAI_BATTERY_WAIT_TIMEOUT_S"
 
 _DEFAULT_MIN_INTERVAL = 5.0
 _DEFAULT_MAX_RETRIES = 3
@@ -114,6 +117,12 @@ _DEFAULT_INTERVAL_JITTER = 0.0
 _DEFAULT_RATE_LIMIT_COOLDOWN = 30.0
 _DEFAULT_RATE_LIMIT_JITTER = 0.0
 _DEFAULT_BATTERY_MIN_PERCENT = 5.0
+_DEFAULT_BATTERY_POLL_INTERVAL_S = 300.0
+# 默认等待上限 24h：官方口径电池约 0.5%/小时回充，从 0 回到默认阈值约 10 小时，
+# 24h 留有充分余量；0 或负数表示不限时等待。
+_DEFAULT_BATTERY_WAIT_TIMEOUT_S = 86400.0
+# 电量等待循环的分片睡眠粒度：Ctrl+C 等停止信号最迟一个分片后生效。
+_BATTERY_WAIT_SLEEP_CHUNK_S = 30.0
 
 
 def _env_float(name: str, default: float) -> float:
@@ -137,8 +146,9 @@ def _env_int(name: str, default: int) -> int:
 
 
 class NovelAIAnlasGuardError(Exception):
-    """Anlas 守卫触发：拒绝发起不满足免费资格的请求，或请求电量耗尽中止运行。
+    """Anlas 守卫触发：拒绝发起不满足免费资格的请求，或 V5 电量不足中止运行。
 
+    电量中止仅产生于硬停模式、等待超时回退与等待被中断三种场景（ADR 0003）。
     实现 as_metadata() 契约（type/code/message），经错误序列化写入
     metadata.jsonl 的 error 字段；code 为守卫专属错误码，
     供 --retry-error-code 精准恢复硬停的网格单元。
@@ -176,6 +186,9 @@ class NovelAIAPIClient:
         rate_limit_cooldown_s: float | None = None,
         rate_limit_jitter_s: float | None = None,
         battery_min_percent: float | None = None,
+        battery_poll_interval_s: float | None = None,
+        battery_wait_timeout_s: float | None = None,
+        battery_hard_stop: bool = False,
     ) -> None:
         self._api_key = api_key or _resolve_api_key()
         self._min_interval = (
@@ -213,6 +226,28 @@ class NovelAIAPIClient:
             if battery_min_percent is not None
             else _env_float(_ENV_BATTERY_MIN_PERCENT, _DEFAULT_BATTERY_MIN_PERCENT)
         )
+        self._battery_poll_interval_s = (
+            battery_poll_interval_s
+            if battery_poll_interval_s is not None
+            else _env_float(
+                _ENV_BATTERY_POLL_INTERVAL_S, _DEFAULT_BATTERY_POLL_INTERVAL_S
+            )
+        )
+        if self._battery_poll_interval_s <= 0:
+            raise ValueError(
+                "电量轮询间隔必须 > 0（NOVELAI_BATTERY_POLL_INTERVAL_S）"
+            )
+        self._battery_wait_timeout_s = (
+            battery_wait_timeout_s
+            if battery_wait_timeout_s is not None
+            else _env_float(
+                _ENV_BATTERY_WAIT_TIMEOUT_S, _DEFAULT_BATTERY_WAIT_TIMEOUT_S
+            )
+        )
+        # 旧工作模式（ADR 0002 真中止）开关：默认 False = 电量不足时等待回充自动继续。
+        self._battery_hard_stop = battery_hard_stop
+        # 外部中断（Ctrl+C）协作事件：置位后电量等待在下一个分片边界放弃。
+        self._battery_wait_stop = threading.Event()
         self._sdk = NovelAI(
             api_key=self._api_key or "dry-run",
             timeout=self._request_timeout,
@@ -244,11 +279,11 @@ class NovelAIAPIClient:
             n_samples=n_samples,
         )
 
-        # Anlas 守卫第二层：V5 生成前电量检查（顺带打印剩余电量）。
+        # Anlas 守卫第二层：V5 生成前电量检查（低电量默认等待回充，硬停模式立即中止）。
         if model in _V5_MODEL_NAMES:
             subscription = self._fetch_subscription()
             self._log_battery_if_readable(subscription)
-            self._raise_if_battery_low(subscription)
+            self._enforce_battery_policy(subscription)
 
         params = GenerateImageParams(
             prompt=prompt,
@@ -315,12 +350,14 @@ class NovelAIAPIClient:
                 )
                 time.sleep(delay)
                 continue
-            except (ServerError, NovelAIError):
+            except (ServerError, NovelAIError) as exc:
                 if attempt >= self._max_retries:
                     raise
                 delay = min(max_delay, 10.0 * (2**attempt) + random.uniform(0, 3))
                 LOG.warning(
-                    "NovelAI 服务端错误，第 %s 次重试，等待 %.1f 秒",
+                    "NovelAI 服务端错误（%s: %s），第 %s 次重试，等待 %.1f 秒",
+                    type(exc).__name__,
+                    exc,
                     attempt + 1,
                     delay,
                 )
@@ -333,8 +370,8 @@ class NovelAIAPIClient:
         """启动预检：确认 Opus 订阅；model 为 V5 时顺带检查电池电量。
 
         非 Opus（tier != 3）订阅不存在免费生图档，任何请求都可能计费，
-        直接中止运行。V5 电量耗尽（含 retry 运行）同样中止，
-        等待电量回充后由人工择机重跑。
+        直接中止运行。V5 电量不足时默认等待回充后继续（含 retry 运行，
+        ADR 0003）；硬停模式下立即中止，由人工择机重跑。
         """
         subscription = self._fetch_subscription()
         tier = getattr(subscription, "tier", None)
@@ -345,7 +382,7 @@ class NovelAIAPIClient:
             )
         if model is not None and model in _V5_MODEL_NAMES:
             self._log_battery_if_readable(subscription)
-            self._raise_if_battery_low(subscription)
+            self._enforce_battery_policy(subscription)
         LOG.info("Anlas 守卫预检通过：Opus 订阅")
 
     def _log_battery_if_readable(self, subscription: Any) -> None:
@@ -358,37 +395,157 @@ class NovelAIAPIClient:
         """查询订阅接口（GET /user/subscription）。测试经 monkeypatch 此方法打桩。"""
         return self._sdk.user.get_subscription()
 
+    def _enforce_battery_policy(self, subscription: Any) -> None:
+        """按运行模式执行电量守卫：默认等待回充自动继续，硬停模式立即中止。"""
+        if self._battery_hard_stop:
+            self._raise_if_battery_low(subscription)
+            return
+        self._wait_for_battery_recovery(subscription)
+
     def _raise_if_battery_low(self, subscription: Any) -> None:
+        """硬停模式（ADR 0002 真中止）：电量耗尽立即中止运行，不做任何等待。"""
         usage_percent = _extract_usage_percent(subscription)
         is_negative = _extract_usage_is_negative(subscription)
-        context: dict[str, object] = {
-            "threshold_percent": self._battery_min_percent,
-            "usage_percent": usage_percent,
-            "is_negative": is_negative,
-        }
         if is_negative is True:
             raise NovelAIAnlasGuardError(
                 "V5 电量已耗尽（usage.isNegative=true），继续生成将转 Anlas 计费",
                 code=_GUARD_CODE_BATTERY_LOW,
-                context=context,
+                context=self._battery_guard_context(usage_percent, is_negative),
             )
         if usage_percent is None:
-            # 电量不可读时按耗尽处理：宁可硬停也不冒静默计费的风险。
-            raise NovelAIAnlasGuardError(
-                "V5 电量不可读：订阅接口未返回有效 usage.percent，按耗尽处理",
-                code=_GUARD_CODE_BATTERY_LOW,
-                context=context,
-            )
+            # 电量不可读按契约变更处理：宁可硬停也不冒静默计费的风险。
+            raise self._battery_unreadable_error(usage_percent, is_negative)
         if usage_percent < self._battery_min_percent:
             raise NovelAIAnlasGuardError(
                 f"V5 电量不足：usage.percent={usage_percent} "
                 f"低于阈值 {self._battery_min_percent}",
                 code=_GUARD_CODE_BATTERY_LOW,
-                context=context,
+                context=self._battery_guard_context(usage_percent, is_negative),
             )
+
+    def _wait_for_battery_recovery(self, subscription: Any) -> None:
+        """默认模式（ADR 0003）：电量不足时暂停生成并轮询回充，恢复后继续。
+
+        - 等待上限（0 或负数 = 不限）超时后回退 ADR 0002 真中止语义；
+        - 电量不可读视为订阅接口契约变更，立即硬停交由人工修复；
+        - 等待期间的瞬时传输错误不牺牲格子，记日志后继续轮询，
+          持续故障最终由等待上限兜底。
+        """
+        usage_percent = _extract_usage_percent(subscription)
+        is_negative = _extract_usage_is_negative(subscription)
+        if usage_percent is None:
+            raise self._battery_unreadable_error(usage_percent, is_negative)
+        if is_negative is not True and usage_percent >= self._battery_min_percent:
+            return
+
+        deadline = (
+            None
+            if self._battery_wait_timeout_s <= 0
+            else time.monotonic() + self._battery_wait_timeout_s
+        )
+        LOG.warning(
+            "V5 电量不足（usage.percent=%s，阈值 %.1f%%），"
+            "暂停生成并每 %.0f 秒轮询回充（等待上限 %s）",
+            "耗尽（isNegative=true）"
+            if is_negative is True
+            else f"{usage_percent:.1f}%",
+            self._battery_min_percent,
+            self._battery_poll_interval_s,
+            "不限" if deadline is None else f"{self._battery_wait_timeout_s:.0f} 秒",
+        )
+        polls = 0
+        waited_since = time.monotonic()
+        while True:
+            if self._battery_wait_stop.is_set():
+                raise NovelAIAnlasGuardError(
+                    "V5 电量等待被中断（收到停止信号），按硬停处理",
+                    code=_GUARD_CODE_BATTERY_LOW,
+                    context=self._battery_guard_context(
+                        usage_percent, is_negative, interrupted=True
+                    ),
+                )
+            if deadline is not None and time.monotonic() >= deadline:
+                raise NovelAIAnlasGuardError(
+                    f"V5 电量等待超时：{self._battery_wait_timeout_s:.0f} 秒内"
+                    f"未回充到阈值 {self._battery_min_percent:.1f}% 以上，回退硬停",
+                    code=_GUARD_CODE_BATTERY_LOW,
+                    context=self._battery_guard_context(
+                        usage_percent,
+                        is_negative,
+                        wait_timeout_s=self._battery_wait_timeout_s,
+                    ),
+                )
+            self._sleep_in_chunks(self._battery_poll_interval_s)
+            polls += 1
+            try:
+                subscription = self._fetch_subscription()
+            except (NetworkError, ServerError, RateLimitError) as exc:
+                LOG.warning("V5 电量轮询请求失败（%s），下轮继续", type(exc).__name__)
+                continue
+            usage_percent = _extract_usage_percent(subscription)
+            is_negative = _extract_usage_is_negative(subscription)
+            if usage_percent is None:
+                raise self._battery_unreadable_error(usage_percent, is_negative)
+            LOG.info(
+                "V5 电量轮询 #%d：%.1f%%（阈值 %.1f%%）",
+                polls,
+                usage_percent,
+                self._battery_min_percent,
+            )
+            if is_negative is not True and usage_percent >= self._battery_min_percent:
+                LOG.info(
+                    "V5 电量已回充至 %.1f%%，恢复生成（本次暂停 %.1f 分钟）",
+                    usage_percent,
+                    (time.monotonic() - waited_since) / 60.0,
+                )
+                return
+
+    def _sleep_in_chunks(self, total_s: float) -> None:
+        """分片睡眠：每个分片边界让位给停止信号检查，等待中断最迟一个分片生效。"""
+        remaining = max(0.0, total_s)
+        while remaining > 0:
+            if self._battery_wait_stop.is_set():
+                return
+            chunk = min(remaining, _BATTERY_WAIT_SLEEP_CHUNK_S)
+            time.sleep(chunk)
+            remaining -= chunk
+
+    def _battery_guard_context(
+        self,
+        usage_percent: float | None,
+        is_negative: bool | None,
+        **extra: object,
+    ) -> dict[str, object]:
+        context: dict[str, object] = {
+            "threshold_percent": self._battery_min_percent,
+            "usage_percent": usage_percent,
+            "is_negative": is_negative,
+        }
+        context.update(extra)
+        return context
+
+    def _battery_unreadable_error(
+        self,
+        usage_percent: float | None,
+        is_negative: bool | None,
+    ) -> NovelAIAnlasGuardError:
+        return NovelAIAnlasGuardError(
+            "V5 电量不可读：订阅接口未返回有效 usage.percent，按契约变更处理并硬停",
+            code=_GUARD_CODE_BATTERY_LOW,
+            context=self._battery_guard_context(usage_percent, is_negative),
+        )
 
     def has_key(self) -> bool:
         return self._api_key is not None
+
+    @property
+    def battery_wait_stop(self) -> threading.Event:
+        """电量等待中断协作事件：置位后等待中的 worker 在下一个分片边界放弃等待。
+
+        供入口层接到 Ctrl+C 后转交协调器（interrupt_event），使关池收尾
+        不被剩余的电量等待挂住。
+        """
+        return self._battery_wait_stop
 
 
 def _resolve_api_key() -> str | None:

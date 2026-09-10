@@ -41,7 +41,7 @@
 | negative prompt               | `test_negative_prompt_append.py`                                   | 负面提示词拼接                                      |
 | 重试失败项幂等性        | `test_idempotent_retry_failed.py`                         | 验证重复重试不重复生成 |
 | NovelAI 生图入口        | `test_novelai_generate.py`                                | NovelAI 生图 argparse + 流程测试 |
-| NovelAI Anlas 守卫      | `test_novelai_anlas_guard.py`                             | 免费资格参数校验、V5 电量预检、守卫错误码与 SDK 占位参数 |
+| NovelAI Anlas 守卫      | `test_novelai_anlas_guard.py`                             | 免费资格参数校验、V5 电量守卫（低电量等待回充 / `--battery-hard-stop` 硬停 / 等待超时与 Ctrl+C 中断）、守卫错误码与 SDK 占位参数 |
 | NovelAI 重试            | `test_novelai_retry.py`                                   | retry / retry-incomplete 回放与守卫码捞回 |
 | 历史 run 回填           | `test_backfill_run_style_items.py`                        | Y 资产 sha256 重放/git stub、集合校验、幂等 upsert、dry-run |
 | 画师串收藏 label        | `style-favorites.test.ts`                                 | 仅覆盖 `isStyleFavoriteLabel()` 的空白、1000 字符上限 |
