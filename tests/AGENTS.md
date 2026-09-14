@@ -26,7 +26,8 @@
 | R2 变体/编码                  | `test_r2_variants.py`/`test_r2_encoding_params.py`                 | 变体规划 + 编码参数                                 |
 | R2 keys/路径安全              | `test_r2_keys.py`/`test_r2_path_safety.py`                         | key 生成 + 路径校验                                 |
 | R2 manifest                   | `test_r2_manifest.py`                                              | 上传清单生成                                        |
-| R2 上传 CLI                   | `test_r2_upload_cli_contract.py`/`test_r2_upload_cli_dry_run.py`   | CLI 合约 + dry-run                                  |
+| R2 上传 CLI                   | `test_r2_upload_cli_contract.py`/`test_r2_upload_cli_dry_run.py`   | CLI 合约 + dry-run（含发布时资产扫描）              |
+| run 资产扫描契约              | `test_r2_upload_run_assets.py`                                      | 上传端与生图侧 `_load_assets` 的接受/拒绝一致性    |
 | R2 幂等性                     | `test_r2_upload_idempotency.py`                                    | 重复上传幂等                                        |
 | R2 本地 Supabase 集成         | `test_r2_upload_integration_local_supabase.py`                     | 需本地 Supabase                                     |
 | Supabase writer               | `test_supabase_writer.py`/`test_supabase_writer_postgrest_http.py` | upsert + HTTP mock                                  |

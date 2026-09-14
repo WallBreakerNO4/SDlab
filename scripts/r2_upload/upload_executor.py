@@ -11,6 +11,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from .r2_client import R2Client, UploadPlan
+from .run_assets import asset_scan_report
 from .supabase_writer import SupabaseWriter, estimate_upload_index_records
 from .upload_contracts import (
     BucketScope,
@@ -326,6 +327,9 @@ def _execute(
         "mode": "execute",
         "run_count": len(plans),
         "run_dirs": [plan.run_dir_name for plan in plans],
+        "asset_scans": [
+            asset_scan_report(plan.run_dir_name, plan.asset_scan) for plan in plans
+        ],
         "processed_grid_images": processed_images,
         "uploaded_variant_uploads": uploaded,
         "uploaded_artifact_uploads": artifact_uploaded,

@@ -6,7 +6,7 @@
 ## 概览
 
 - 完整的图片上传管线：从本地 run 产物读取 → 多变体编码（webp/avif）→ R2 上传 → Supabase 索引写入；同目录也提供 run 数据删除工具。
-- 术语约定：本目录生成的 `display_*` / `thumb_*` 变体统一称为“展示页缩略图”；run 级 `image.*` 属于封面图，`images/*` 属于主页缩略图集合。两类首页图片资产会随 run 级静态资源一起上传，Web 侧首页通过 `/api/comfyui/runs` 返回的 `assets.cover` / `assets.homepage_cards` 消费它们。
+- 术语约定：本目录生成的 `display_*` / `thumb_*` 变体统一称为“展示页缩略图”；run 级 `image.*` 属于封面图，`images/*` 属于主页缩略图集合。两类首页图片资产在发布时从 run 目录现场扫描后随发布上传，Web 侧首页通过 `/api/comfyui/runs` 返回的 `assets.cover` / `assets.homepage_cards` 消费它们。
 
 ## 去哪儿改
 
@@ -25,7 +25,8 @@
 | 上传发现                  | `upload_discovery.py`    | 从 metadata.jsonl 发现待上传图片                                                     |
 | 上传运行时                | `upload_runtime.py`      | 运行时环境初始化                                                                     |
 | manifest 生成             | `manifest.py`            | JSON manifest 构建（公开/私有）；row `items[]` 携带可选图片级 BlurHash                |
-| run 级静态资产上传        | `upload_planner.py`      | 识别并规划封面图/主页缩略图资产的上传与 DB 字段                                      |
+| run 级静态资产扫描        | `run_assets.py`          | 发布时扫描 `run.json` `config_path` 指向的资产目录：单个 `image.*` 为封面图、`images/*` 为主页缩略图；多个 `image.*` 报错；识别规则与生图侧 `runner_config._load_assets` 由契约测试对齐 |
+| run 级静态资产上传        | `upload_planner.py`      | 规划封面图/主页缩略图资产的上传与 DB 字段；扫描结果写入持久化 run.json 快照 |
 | 路径安全                  | `path_safety.py`         | R2 key 路径校验                                                                      |
 | PostgREST HTTP            | `postgrest_http.py`      | Supabase PostgREST HTTP 客户端封装                                                   |
 | Supabase 环境             | `supabase_env.py`        | 环境变量读取（URL/key）                                                              |
@@ -62,7 +63,8 @@ supabase_writer.py → 批量 upsert 到 Supabase（runs + snapshots + projectio
 - 上传逻辑与生图逻辑分层：不要反向耦合到 `scripts/generation/` 内部流程
 - 凭证输入优先走环境变量（`R2_*`/`SUPABASE_*`），不在仓库内落盘明文配置
 - 变体命名：`display_webp`/`display_avif`/`thumb_webp`/`thumb_avif`，文档中统称“展示页缩略图”
-- `run/image.*` 与同级 `images/*` 这类 run 级静态资源进入上传与 Supabase 写入链路；在 Web 侧作为独立的封面图/主页缩略图字段建模，不要与展示页缩略图混用。
+- `image.*`（封面图，单个）与 `images/*`（主页缩略图集合）在发布时从 run.json `config_path` 指向的资产目录现场扫描，随发布进入 R2 + Supabase 写入链路；生图写入的 assets 快照不再作为资产来源，持久化 run.json 快照的 assets 以本次扫描结果为准；存在多个 `image.*` 时报错；在 Web 侧作为独立的封面图/主页缩略图字段建模，不要与展示页缩略图混用。
+- dry-run 与执行结果报告包含 `asset_scans`（每个 run 的封面图 / 主页缩略图 repo-relative 路径），发布前可用它确认现场扫描结果。
 - bucket 分配：normal category → public bucket；advance/nsfw → private bucket
 - 上传支持可配置并发（`--upload-workers`）和 dry-run 模式
 - 普通上传允许首次发布与相同 `release_id` 的幂等恢复；不同 release 必须显式使用 `-F/--force-publish`，且仅支持单个 `--run-dir`

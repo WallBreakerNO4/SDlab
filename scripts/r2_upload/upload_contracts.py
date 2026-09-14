@@ -8,6 +8,8 @@ from typing import Literal
 
 from scripts.run_naming import RUN_KEY_RE
 
+from .run_assets import RunAssetsScan
+
 Category = Literal["normal", "advance", "nsfw"]
 BucketScope = Literal["public", "private"]
 
@@ -83,6 +85,7 @@ class RunPlan:
     image_uploads: list[PlannedUpload]
     artifact_uploads: list[PlannedUpload]
     manifest_uploads: list[PlannedUpload]
+    asset_scan: RunAssetsScan
 
 
 @dataclass(frozen=True)

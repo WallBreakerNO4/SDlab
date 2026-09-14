@@ -15,6 +15,15 @@ sys.path.insert(0, str(ROOT))
 from scripts.r2_upload.upload_images_to_r2 import build_parser, main
 
 
+@pytest.fixture(autouse=True)
+def _isolated_repo_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts.r2_upload import upload_planner as upload_planner_module
+
+    monkeypatch.setattr(upload_planner_module, "_REPO_ROOT", tmp_path)
+
+
 def test_build_parser_uses_comfyui_out_dir_as_run_root_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

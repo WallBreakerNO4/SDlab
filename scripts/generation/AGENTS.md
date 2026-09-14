@@ -6,7 +6,7 @@
 ## 概览
 
 - 本目录是生图逻辑的“心脏”：CLI runner、`runner_config.py`、多个 `runner_*` 模块、ComfyUI HTTP/WS 客户端、workflow patch、prompt grid、重试、输出打包都在这里。
-- run 级静态资产识别也从这里起步：`runner_config.py` 会把 run 目录下的 `image.*` 识别为封面图、`images/*` 识别为主页缩略图源资产，并把这些元信息写进后续产物供上传链路消费。
+- run 级静态资产识别也从这里起步：`runner_config.py` 会把 run 目录下的 `image.*` 识别为封面图、`images/*` 识别为主页缩略图源资产，并把这些元信息写进生图快照；上传端在发布时按同一规则现场重新扫描（见 `scripts/r2_upload/AGENTS.md`），生图快照只作参考。
 - Anima Artist Mixer 是 ComfyUI 的特殊注入模式：Y 轴 general 标签进入正向 prompt 并作为 `y_common_prompt` 持久化，artists 标签生成 `artist_chain`，两者共同参与 metadata、回放和 strict retry；prompt hash 仍由 positive prompt + artist chain 覆盖完整输入。
 - NovelAI 直连链路（config v2 + `backend=novelai`）与 ComfyUI runner 共用网格选择、metadata 落盘、重试与并发协调；独立入口 `novelai_generate.py`，SDK 与守卫封装在 `novelai_client.py`。
 

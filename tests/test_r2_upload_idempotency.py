@@ -442,6 +442,62 @@ def test_execute_uploads_workflow_artifact_before_db_upsert(
     assert fake_writer.calls == 1
 
 
+def test_execute_reports_scanned_run_assets(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from scripts.r2_upload import upload_planner as upload_planner_module
+
+    monkeypatch.setattr(upload_planner_module, "_REPO_ROOT", tmp_path)
+    model_dir = tmp_path / "data/models/example"
+    cover_path = model_dir / "image.jpg"
+    homepage_path = model_dir / "images/card.jpg"
+    cover_path.parent.mkdir(parents=True, exist_ok=True)
+    homepage_path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (8, 6), (1, 2, 3)).save(cover_path, format="JPEG")
+    Image.new("RGB", (8, 6), (4, 5, 6)).save(homepage_path, format="JPEG")
+
+    run_dir = _write_run_fixture(tmp_path, run_name="execute-assets-run")
+    run_json_path = run_dir / "run.json"
+    run_payload = json.loads(run_json_path.read_text(encoding="utf-8"))
+    assert isinstance(run_payload, dict)
+    run_payload["config_path"] = "data/models/example/config.yaml"
+    run_json_path.write_text(
+        json.dumps(run_payload, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("R2_PUBLIC_BUCKET", "dummy-public")
+    monkeypatch.setenv("R2_PRIVATE_BUCKET", "dummy-private")
+    fake_r2 = _FakeR2Client()
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.R2Client.from_env",
+        classmethod(lambda cls, dry_run, **kwargs: fake_r2),
+    )
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.SupabaseWriter.from_env",
+        classmethod(lambda cls, dry_run, **kwargs: _NoopSupabaseWriter()),
+    )
+
+    exit_code = main(["--run-dir", str(run_dir)])
+    payload = _read_stdout_json(capsys)
+
+    assert exit_code == 0
+    assert payload.get("mode") == "execute"
+    assert payload.get("asset_scans") == [
+        {
+            "run_dir": "execute-assets-run",
+            "cover_image": "data/models/example/image.jpg",
+            "homepage_images": ["data/models/example/images/card.jpg"],
+        }
+    ]
+
+    uploaded_keys = [key for _, key in fake_r2.uploaded_keys]
+    assert any(_sha256_file(cover_path) in key for key in uploaded_keys)
+    assert any(_sha256_file(homepage_path) in key for key in uploaded_keys)
+
+
 def test_execute_rejects_invalid_r2_upload_concurrency_env(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

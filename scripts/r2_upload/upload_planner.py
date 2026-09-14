@@ -29,6 +29,7 @@ from .r2_keys import (
     object_key,
     workflow_object_key,
 )
+from .run_assets import RunAssetsScan, asset_scan_report, scan_run_assets
 from .upload_contracts import (
     BucketScope,
     Category,
@@ -501,10 +502,6 @@ def _build_image_variant_db_fields(
     return fields
 
 
-def _assets_from_run_json(run_json: dict[str, object]) -> dict[str, object] | None:
-    return _json_object(run_json.get("assets"))
-
-
 def _resolve_run_asset_source_path(asset: dict[str, object]) -> Path:
     direct_path = _non_empty_str(asset.get("path"))
     if direct_path is not None:
@@ -541,6 +538,8 @@ def _validate_run_asset_sha256(asset: dict[str, object], *, actual_sha256: str) 
 
 def _sanitize_run_json_for_persistence(
     run_json: dict[str, object],
+    *,
+    asset_scan: RunAssetsScan,
 ) -> dict[str, object]:
     persisted: dict[str, object] = {}
     for key in (
@@ -570,9 +569,7 @@ def _sanitize_run_json_for_persistence(
         if value is not None:
             persisted[key] = copy.deepcopy(value)
 
-    assets = _assets_from_run_json(run_json)
-    if assets is not None:
-        persisted["assets"] = _sanitize_asset_snapshot(assets)
+    persisted["assets"] = _sanitize_asset_snapshot(asset_scan.assets_payload())
 
     return persisted
 
@@ -1131,7 +1128,7 @@ def _build_run_asset_payload(
 
 def _build_run_asset_payloads(
     *,
-    run_json: dict[str, object],
+    assets: RunAssetsScan,
     run_dir_name: str,
     run_intermediate_dir: Path,
     resolve_asset_category: Callable[[Path], Category],
@@ -1142,21 +1139,17 @@ def _build_run_asset_payloads(
         [Path], dict[str, object]
     ] = inspect_image_metadata,
 ) -> tuple[list[dict[str, object]], list[PlannedUpload]]:
-    assets = _assets_from_run_json(run_json)
-    if assets is None:
-        return [], []
-
     asset_rows: list[dict[str, object]] = []
     uploads: list[PlannedUpload] = []
     batch_index = 1_000_000
 
-    cover_image = _json_object(assets.get("cover_image"))
-    if cover_image is not None:
-        cover_source_path = _resolve_run_asset_source_path(cover_image)
+    if assets.cover_image is not None:
+        cover_asset = assets.cover_image.to_payload()
+        cover_source_path = _resolve_run_asset_source_path(cover_asset)
         cover_payload, cover_uploads = _build_run_asset_payload(
             run_dir_name=run_dir_name,
             run_intermediate_dir=run_intermediate_dir,
-            asset=cover_image,
+            asset=cover_asset,
             asset_role="cover",
             asset_index=0,
             batch_index=batch_index,
@@ -1168,14 +1161,13 @@ def _build_run_asset_payloads(
         uploads.extend(cover_uploads)
         batch_index += 1
 
-    for asset_index, homepage_asset in enumerate(
-        _json_object_list(assets.get("homepage_images"))
-    ):
-        homepage_source_path = _resolve_run_asset_source_path(homepage_asset)
+    for asset_index, homepage_asset in enumerate(assets.homepage_images):
+        homepage_asset_payload = homepage_asset.to_payload()
+        homepage_source_path = _resolve_run_asset_source_path(homepage_asset_payload)
         homepage_payload, homepage_uploads = _build_run_asset_payload(
             run_dir_name=run_dir_name,
             run_intermediate_dir=run_intermediate_dir,
-            asset=homepage_asset,
+            asset=homepage_asset_payload,
             asset_role="homepage_card",
             asset_index=asset_index,
             batch_index=batch_index,
@@ -1628,6 +1620,10 @@ def _build_run_plan(
 ) -> RunPlan:
     normalized_run_dir = normalize_run_dir(run_dir)
     run_json = _load_run_json(normalized_run_dir)
+    asset_scan = scan_run_assets(
+        run_json=run_json,
+        repo_root=_REPO_ROOT.resolve(),
+    )
     run_dir_name = _resolve_run_dir_name(normalized_run_dir, run_json)
     metadata_records = _load_metadata_records(normalized_run_dir)
     metadata_records = _enrich_legacy_mixer_prompt_parts(
@@ -1709,7 +1705,7 @@ def _build_run_plan(
 
     resolve_asset_category = _build_run_asset_category_resolver(image_tasks)
     run_assets_rows, run_asset_uploads = _build_run_asset_payloads(
-        run_json=run_json,
+        assets=asset_scan,
         run_dir_name=run_dir_name,
         run_intermediate_dir=run_intermediate_dir,
         resolve_asset_category=resolve_asset_category,
@@ -1718,7 +1714,10 @@ def _build_run_plan(
     )
     image_uploads.extend(run_asset_uploads)
 
-    persisted_run_json = _sanitize_run_json_for_persistence(run_json)
+    persisted_run_json = _sanitize_run_json_for_persistence(
+        run_json,
+        asset_scan=asset_scan,
+    )
 
     db_payload: dict[str, object] = {
         "run_dir": run_dir_name,
@@ -1849,6 +1848,7 @@ def _build_run_plan(
         image_uploads=image_uploads,
         artifact_uploads=[workflow_upload] if workflow_upload is not None else [],
         manifest_uploads=manifest_uploads,
+        asset_scan=asset_scan,
     )
 
 
@@ -1961,6 +1961,9 @@ def _dry_run_summary(plans: list[RunPlan]) -> dict[str, object]:
         "run_count": len(plans),
         "run_dirs": [plan.run_dir_name for plan in plans],
         "intermediate_dirs": [str(plan.intermediate_dir) for plan in plans],
+        "asset_scans": [
+            asset_scan_report(plan.run_dir_name, plan.asset_scan) for plan in plans
+        ],
         "processed_grid_images": processed_grid_images,
         "planned_grid_image_variant_uploads": planned_grid_image_variant_uploads,
         "planned_run_asset_variant_uploads": planned_run_asset_variant_uploads,

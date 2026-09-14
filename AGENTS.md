@@ -143,6 +143,7 @@
 | `privateObjectProxyUrl`           | function  | `lib/r2-url.ts`                                  | 使用媒体 grant 构建私有对象代理 URL                                |
 | `isValidRunDir`                   | function  | `lib/comfyui-types.ts`                           | runDir 形态校验                                                    |
 | `assertSafeRelativeImagePath`     | function  | `lib/comfyui-path.ts`                            | 相对图片路径校验                                                   |
+| `scan_run_assets`                 | function  | `scripts/r2_upload/run_assets.py`                | 发布时现场扫描封面图/主页缩略图，与生图侧规则契约对齐              |
 | `buildSeoMetadata`                | function  | `lib/metadata-utils.ts`                          | SEO metadata 构建                                                  |
 | `getModelMetadata`                | function  | `lib/model-metadata.ts`                          | 模型 SEO metadata                                                  |
 | `JsonLdWebsite`                   | component | `components/json-ld.tsx`                         | WebSite schema                                                     |
@@ -166,7 +167,7 @@
 
 - 语言边界：Node/Next 不直接调用 Python；网站只消费 Supabase + R2，不读取 Python 内部实现。
 - Python：I/O 统一 `pathlib.Path`；生图产物固定为 `run.json` + `metadata.jsonl` + `images/`；写盘后保持 flush/fsync 语义。
-- Python 运行资产：`scripts/generation/runner_config.py` 会把 run 目录下的 `image.*` 识别为封面图、`images/*` 识别为主页缩略图源资产；上传链路会继续把这些 run 级资产写入 R2 + Supabase。
+- Python 运行资产：`scripts/generation/runner_config.py` 会把 run 目录下的 `image.*` 识别为封面图、`images/*` 识别为主页缩略图源资产并写进生图快照；上传链路不再消费该快照，而是在发布时按同一识别规则现场扫描 `run.json` `config_path` 指向的资产目录（多个 `image.*` 报错），把扫描结果写入 R2 + Supabase 快照。
 - Anima Artist Mixer：`workflow.anima_artist_mixer: true` 仅允许 `backend=comfyui` 且 `model.family=anima`；workflow 必须是 KSampler 的 model/positive 同时连到启用的 `AnimaArtistCrossAttn`，再由 `AnimaArtistPack` 接收 `base_prompt` 与 `artist_chain`。
 - NovelAI 链路：`backend=novelai` 不消费 workflow/api.json；Anlas 守卫只做免费资格参数校验（面积 ≤ 1024×1024、步数 ≤ 28、单张）与 V5 电量守卫，绝不依据 Anlas 余额推断计费（ADR 0002）；V5 电量低于阈值默认暂停生成、轮询等待回充后自动继续（默认等待上限 24h，超时回退真中止），`--battery-hard-stop` 显式启用旧真中止模式；硬停时未提交格子保持 incomplete，用 `--retry-incomplete` 恢复（ADR 0003）。
 - 重发已发布 run 使用上传 CLI 的 `-F/--force-publish`；普通模式遇到不同 `release_id` 会拒绝。强制发布仍复用内容寻址资源，并在 Supabase 写入完成后最后覆盖 `view/current.json`。
