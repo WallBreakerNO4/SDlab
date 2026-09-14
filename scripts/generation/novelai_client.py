@@ -55,8 +55,8 @@ _V5_MODEL_NAMES = frozenset(
 )
 
 # Anlas 守卫错误码：写入 metadata.jsonl 的 error.code，
-# 供 --retry-error-code 精准捞回硬停的网格单元。
-# 历史 run 里的 anlas_billing_detected / anlas_balance_unverifiable
+# 供 --retry-error-code 精准捞回硬停的单元格。
+# 历史评测里的 anlas_billing_detected / anlas_balance_unverifiable
 # 记录仍按原码捞回；余额核对相关决策见 docs/adr/0002。
 _GUARD_CODE_PARAM_VIOLATION = "anlas_param_violation"
 _GUARD_CODE_BATTERY_LOW = "anlas_battery_low"
@@ -151,7 +151,7 @@ class NovelAIAnlasGuardError(Exception):
     电量中止仅产生于硬停模式、等待超时回退与等待被中断三种场景（ADR 0003）。
     实现 as_metadata() 契约（type/code/message），经错误序列化写入
     metadata.jsonl 的 error 字段；code 为守卫专属错误码，
-    供 --retry-error-code 精准恢复硬停的网格单元。
+    供 --retry-error-code 精准恢复硬停的单元格。
     """
 
     def __init__(
@@ -428,7 +428,7 @@ class NovelAIAPIClient:
 
         - 等待上限（0 或负数 = 不限）超时后回退 ADR 0002 真中止语义；
         - 电量不可读视为订阅接口契约变更，立即硬停交由人工修复；
-        - 等待期间的瞬时传输错误不牺牲格子，记日志后继续轮询，
+        - 等待期间的瞬时传输错误不牺牲单元格，记日志后继续轮询，
           持续故障最终由等待上限兜底。
         """
         usage_percent = _extract_usage_percent(subscription)
@@ -793,7 +793,7 @@ def novelai_worker(
             record["elapsed_ms"] = elapsed_ms
             record["error"] = _build_error_payload(exc)
             # V5 电量耗尽是运行级硬停信号：除记录失败外，还要求协调器
-            # 停止提交剩余网格单元；参数不合规等逐格错误不置位。
+            # 停止提交剩余单元格；参数不合规等逐格错误不置位。
             abort = (
                 isinstance(exc, NovelAIAnlasGuardError)
                 and exc.code == _GUARD_CODE_BATTERY_LOW

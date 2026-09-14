@@ -88,7 +88,7 @@ export async function GET(): Promise<Response> {
       return Response.json(empty);
     }
 
-    // 按 style_key 集反查 run_style_items，得到每个收藏在哪些 run 中可用
+    // 按 style_key 集反查 run_style_items，得到每个收藏在哪些评测中可用
     const styleKeys = [...new Set(favorites.map((row) => row.style_key))];
     const { data: runItemData, error: runItemsError } = await supabase
       .from("run_style_items")

@@ -65,7 +65,7 @@ class _DownloadRequest:
 class _GenOutcome:
     record: dict[str, object] | None
     download: _DownloadRequest | None
-    # 守卫硬停信号：置位后协调器停止提交剩余网格单元，已提交单元自然完成。
+    # 守卫硬停信号：置位后协调器停止提交剩余单元格，已提交单元格自然完成。
     abort: bool = False
 
 
@@ -229,7 +229,7 @@ class GenerationCoordinator:
         return self.has_failed
 
     def _request_abort_submission(self) -> None:
-        """守卫硬停：停止提交剩余网格单元，已提交单元自然完成后收尾。"""
+        """守卫硬停：停止提交剩余单元格，已提交单元格自然完成后收尾。"""
         if self.abort_submission:
             return
         self.abort_submission = True

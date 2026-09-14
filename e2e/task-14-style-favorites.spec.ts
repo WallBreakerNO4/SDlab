@@ -10,7 +10,7 @@ import { E2E_AUTH_STATE_PATH, hasE2EAuthEnv } from "./e2e-auth-state";
 
 const hasAuthEnv = hasE2EAuthEnv();
 
-// 生产数据（run_style_items 各 432 行）：Mixer / Legacy 两形态各取一个 run
+// 生产数据（run_style_items 各 432 行）：Mixer / Legacy 两形态各取一个评测
 const MIXER_RUN_DIR = "anima-base-1-arist-mixer";
 const LEGACY_RUN_DIR = "nai-diffusion-4-5-full";
 const GUEST_RELEASE_ID = "guest-style-favorite-release";
@@ -408,7 +408,7 @@ test.describe("task 14: style favorites signed-in flows", () => {
       await page.goto(`/zh/models/${MIXER_RUN_DIR}`);
       await favoritesLoaded;
 
-      // 面板项 = 行号 + 当前 run 行标签（结构断言，不写死文案）
+      // 面板项 = 行号 + 当前评测的网格行标签（结构断言，不写死文案）
       const panelItem = page.locator(
         `[data-testid="run-grid-favorites-item"][data-line-number="${lineNumber}"]`,
       );
@@ -495,7 +495,7 @@ test.describe("task 14: style favorites signed-in flows", () => {
       await expect(entryA).toContainText(favA.label);
       await expect(entryB).toContainText(favB.label);
 
-      // 可用模型列表（结构断言：含 mixer run 跳转链接，hash 为 1-based 行号）
+      // 可用模型列表（结构断言：含 mixer 评测跳转链接，hash 为 1-based 行号）
       const jumpLink = entryB.locator(
         `a[href$="/models/${MIXER_RUN_DIR}#${favB.yIndex + 1}"]`,
       );

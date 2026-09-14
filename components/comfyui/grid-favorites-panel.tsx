@@ -14,13 +14,13 @@ import type { StyleKey } from "@/lib/style-favorites";
 
 /**
  * 收藏面板行数据：收藏经 style-items 客户端 join + 防御性过滤后的结果。
- * label 取当前 run 网格行标签（不用收藏快照），见 virtual-grid.tsx 的 join 逻辑。
+ * label 取当前评测的网格行标签（不用收藏快照），见 virtual-grid.tsx 的 join 逻辑。
  */
 export type GridFavoritesPanelRow = {
   styleKey: StyleKey;
   /** 1-based 网格行号（scrollToLineNumber / hash 直接消费） */
   lineNumber: number;
-  /** 当前 run 网格行标签摘要 */
+  /** 当前评测的网格行标签摘要 */
   label: string;
 };
 

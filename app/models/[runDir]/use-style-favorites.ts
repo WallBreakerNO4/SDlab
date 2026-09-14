@@ -81,7 +81,7 @@ export function useStyleFavorites() {
         return;
       }
 
-      // 未收藏 → 乐观加入；runs 反查由下次拉取补齐（网格侧不消费 runs）
+      // 未收藏 → 乐观加入；可用评测反查由下次拉取补齐（网格侧不消费 runs 字段）
       const optimisticEntry: StyleFavoriteEntry = {
         style_key: styleKey,
         label,

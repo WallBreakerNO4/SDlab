@@ -279,7 +279,7 @@ def run(args: argparse.Namespace) -> int:
         if client._api_key is None:
             print("错误: 未设置 NOVELAI_API_KEY 环境变量", file=sys.stderr)
             return 2
-        # Anlas 守卫启动预检：非 Opus key 直接中止；V5 run 顺带检查电池电量。
+        # Anlas 守卫启动预检：非 Opus key 直接中止；V5 评测顺带检查电池电量。
         try:
             client.preflight(model=model_name)
         except Exception as exc:
@@ -364,7 +364,7 @@ def run_retry(args: argparse.Namespace) -> int:
     run_artifacts = _prepare_existing_run_artifacts(args.run_dir)
     run_artifacts.images_dir.mkdir(parents=True, exist_ok=True)
 
-    # 目标 run 必须由 NovelAI 后端产出；模型 key 从 run.json 快照恢复并过白名单。
+    # 目标评测必须由 NovelAI 后端产出；模型 key 从 run.json 快照恢复并过白名单。
     model_name = _load_novelai_retry_model_key(run_artifacts.run_json_path)
 
     replay = load_run_replay_config(run_artifacts.run_dir, strict_sha256=True)
@@ -410,7 +410,7 @@ def run_retry(args: argparse.Namespace) -> int:
     )
 
     # strict 一致性：失败格的 prompt hash / seed / fingerprint 与当前回放输入
-    # 不一致时直接拒绝，防止恢复运行产出与原 run 不一致的结果。
+    # 不一致时直接拒绝，防止恢复运行产出与原评测不一致的结果。
     _validate_retry_failed_cells_consistency(
         target_cells=target_cells,
         latest_records=latest_records,
@@ -458,7 +458,7 @@ def run_retry(args: argparse.Namespace) -> int:
         if client._api_key is None:
             print("错误: 未设置 NOVELAI_API_KEY 环境变量", file=sys.stderr)
             return 2
-        # Anlas 守卫启动预检：非 Opus key 直接中止；V5 run 顺带检查电池电量。
+        # Anlas 守卫启动预检：非 Opus key 直接中止；V5 评测顺带检查电池电量。
         try:
             client.preflight(model=model_name)
         except Exception as exc:
@@ -534,10 +534,10 @@ def run_retry(args: argparse.Namespace) -> int:
 
 
 def _load_novelai_retry_model_key(run_json_path: Path) -> str:
-    """从 run.json 提取模型 key 并校验该 run 由 NovelAI 后端产出。
+    """从 run.json 提取模型 key 并校验该评测由 NovelAI 后端产出。
 
     retry 不读 --config：生成输入以 run.json 快照 + sha256 校验为准，
-    模型 key 也必须来自原 run，保证 fingerprint 与原记录一致。
+    模型 key 也必须来自原评测，保证 fingerprint 与原记录一致。
     """
     if not run_json_path.exists():
         raise ValueError(f"run.json 不存在: {run_json_path}")

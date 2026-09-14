@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""删除指定 run 的所有数据：Supabase 数据库记录 + R2 存储对象。
+"""删除指定评测的所有数据：Supabase 数据库记录 + R2 存储对象。
 
 基本用法:
   uv run python -m scripts.r2_upload.delete_run --run-dir run-xxx
@@ -66,7 +66,7 @@ def _build_supabase_client() -> _PostgrestHTTPClient:
 
 
 def list_remote_runs() -> list[str]:
-    """查询 Supabase runs 表，返回所有 run_dir 名称列表。"""
+    """查询 Supabase runs 表，返回所有评测的 run_dir 名称列表。"""
     _autoload_dotenv()
     client = _build_supabase_client()
     data = client.request_json(

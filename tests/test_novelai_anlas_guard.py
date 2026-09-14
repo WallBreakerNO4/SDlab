@@ -859,7 +859,7 @@ def test_worker_battery_low_records_failure_and_requests_abort(
     assert error["type"] == "anlas_guard"
     assert error["code"] == _GUARD_CODE_BATTERY_LOW
     assert isinstance(error["message"], str)
-    # 电量耗尽是运行级硬停信号：除记录失败外，还要求协调器停止提交后续格子。
+    # 电量耗尽是运行级硬停信号：除记录失败外，还要求协调器停止提交后续单元格。
     assert outcome.abort is True
 
 

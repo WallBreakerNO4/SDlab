@@ -769,7 +769,7 @@ def test_upsert_upload_index_skips_style_items_without_style_key() -> None:
     client = _InMemorySupabaseClient(return_upsert_rows=True)
     writer = SupabaseWriter(client=client, dry_run=False)
 
-    # 老 run 的 payload 没有 y_style_key，静默跳过、不阻断上传
+    # 旧评测的 payload 没有 y_style_key，静默跳过、不阻断上传
     writer.upsert_upload_index(_sample_payload())
 
     assert client.row_count("runs") == 1

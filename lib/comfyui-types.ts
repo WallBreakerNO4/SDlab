@@ -1,4 +1,4 @@
-// ComfyUI run and grid types for the viewer
+// ComfyUI evaluation and grid types for the viewer
 
 export type CellStatus = "success" | "failed" | "skipped" | "missing";
 

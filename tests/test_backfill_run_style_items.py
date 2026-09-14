@@ -282,7 +282,7 @@ def test_build_backfill_plans_marks_coverage_matrix(tmp_path: Path) -> None:
     ok_path.mkdir(parents=True)
     (ok_path / "run.json").write_text("{}", encoding="utf-8")
     (ok_path / "metadata.jsonl").write_text("", encoding="utf-8")
-    # `_old` 目录不参与：没有同名 DB run，精确匹配天然忽略
+    # `_old` 目录不参与：没有同名 DB 评测，精确匹配天然忽略
     (run_root / "run-a_old").mkdir()
     (run_root / "run-b").mkdir()  # 缺 run.json / metadata.jsonl
 
@@ -306,7 +306,7 @@ def test_build_backfill_plans_marks_coverage_matrix(tmp_path: Path) -> None:
 def _make_git_recovered_run(
     tmp_path: Path,
 ) -> tuple[Path, RunBackfillPlan, bytes, bytes]:
-    """构造一个 run：run.json 记录 v2 资产 sha，当前文件已是 v3，需从 git 找回。"""
+    """构造一个评测：run.json 记录 v2 资产 sha，当前文件已是 v3，需从 git 找回。"""
     repo_root = tmp_path / "repo"
     v2_content = _yaml_bytes(
         [9, 3, 0], schema="prompt-y-table/v2", with_info_type=True
@@ -515,7 +515,7 @@ def test_main_continues_after_failed_run_and_exit_code_reflects_failure(
     )
 
     assert exit_code == 1
-    # 单 run 失败不中断：run-a 已写入，run-b 报错跳过
+    # 单个评测失败不中断：run-a 已写入，run-b 报错跳过
     assert len(client.style_item_rows()) == 3
     out = capsys.readouterr().out
     assert "run-a: 已写入 3 行" in out

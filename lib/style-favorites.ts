@@ -3,7 +3,7 @@
  *
  * 身份与匹配约定：
  * - 收藏身份只用 style_key（`{collection_id}:{item_index}`，如 `300-nai-styles-table:9`），
- *   跨 run 匹配只比较 style_key，永不比较 prompt 字符串 / label。
+ *   跨评测匹配只比较 style_key，永不比较 prompt 字符串 / label。
  * - y_index 一律 0-based（= Y 资产 items 原始索引）；所有模型共用同一 Y 资产全量
  *   432 项，故 y_index + 1 恒等于网格行号，hash 跳转直接消费。
  * - label 仅是显示快照，不参与匹配。
@@ -46,14 +46,14 @@ export function isStyleFavoriteLabel(value: unknown): value is string {
   );
 }
 
-/** run 内 Y 轴条目映射：style-items API 返回项，网格行收藏态 / 跳转用 */
+/** 评测内 Y 轴条目映射：style-items API 返回项，网格行收藏态 / 跳转用 */
 export interface StyleItem {
   /** 0-based，等于 Y 资产 items 原始索引；y_index + 1 恒等于网格行号 */
   y_index: number;
   style_key: StyleKey;
 }
 
-/** 收藏在某个 run 中的可用性引用（收藏页「可用模型」列表项） */
+/** 收藏在某个评测中的可用性引用（收藏页「可用模型」列表项） */
 export interface StyleFavoriteRunRef {
   run_dir: string;
   /** 模型显示名（run_list_items.model_name），可能为空 */
@@ -69,7 +69,7 @@ export interface StyleFavorite {
   created_at: string;
 }
 
-/** 收藏列表项：收藏快照 + 反查到的可用 run 列表 */
+/** 收藏列表项：收藏快照 + 反查到的可用评测列表 */
 export interface StyleFavoriteEntry extends StyleFavorite {
   runs: StyleFavoriteRunRef[];
 }

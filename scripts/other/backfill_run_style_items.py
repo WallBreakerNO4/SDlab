@@ -1,6 +1,6 @@
 # pyright: basic, reportPrivateUsage=false
 
-"""历史 run 的 run_style_items 一次性回填脚本（确定性重放）。
+"""历史评测的 run_style_items 一次性回填脚本（确定性重放）。
 
 按 run.json 记录的 y_json_path / y_json_sha256 解析当时版本的 Y 资产
 （当前文件 hash 不符时从 git 历史找回），重建 y_index → style_key 映射并
@@ -45,7 +45,7 @@ _MISSING_ENV_MESSAGE = "missing required Supabase configuration"
 
 
 class BackfillError(RuntimeError):
-    """单个 run 回填失败；message 只含可公开的固定短原因。"""
+    """单个评测回填失败；message 只含可公开的固定短原因。"""
 
 
 class SupabaseResponseLike(Protocol):
@@ -358,7 +358,7 @@ def upsert_run_style_items(
 def build_backfill_plans(
     db_runs: Sequence[DbRun], *, run_root: Path
 ) -> list[RunBackfillPlan]:
-    """pre-flight 覆盖矩阵：DB run × 本地 outputs 精确匹配（`_old` 目录不参与）。"""
+    """pre-flight 覆盖矩阵：DB 评测 × 本地 outputs 精确匹配（`_old` 目录不参与）。"""
     plans: list[RunBackfillPlan] = []
     for run in db_runs:
         run_path = run_root / run.run_dir
@@ -399,7 +399,7 @@ def backfill_run(
     git_log_commits: GitLogCommitsFn | None = None,
     git_show_file: GitShowFileFn | None = None,
 ) -> int:
-    """回填单个 run，返回写入（或计划写入）行数。"""
+    """回填单个评测，返回写入（或计划写入）行数。"""
     if plan.run_path is None:
         raise BackfillError("本地无产物目录")
     artifacts = load_run_artifacts(plan.run_path, repo_root=repo_root)

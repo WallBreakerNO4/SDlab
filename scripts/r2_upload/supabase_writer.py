@@ -693,8 +693,8 @@ class SupabaseWriter:
         run_dir: str,
         images: list[Mapping[str, object]],
     ) -> list[dict[str, object]]:
-        # y_style_key 仅存在于新 run 的 image payload；老 run 缺该字段时静默跳过，
-        # 不阻断上传流程，历史 run 的 style 映射由回填脚本补齐。
+        # y_style_key 仅存在于新评测的 image payload；旧评测缺该字段时静默跳过，
+        # 不阻断上传流程，历史评测的 style 映射由回填脚本补齐。
         rows_by_style_key: dict[str, dict[str, object]] = {}
         for image in images:
             style_key = _optional_required_string(image.get("y_style_key"))

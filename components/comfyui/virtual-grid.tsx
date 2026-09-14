@@ -274,9 +274,9 @@ function VirtualGridContent({
   }, [grid.y_prompt_parts]);
 
   // 收藏面板数据：收藏 × style-items 客户端 join（favorites.style_key →
-  // style-items Map → y_index → 网格行），label 取当前 run 网格行标签
+  // style-items Map → y_index → 网格行），label 取当前评测的网格行标签
   // （与行标签星标快照同一拼接规则），不用收藏快照。
-  // 防御性过滤：style_key 不在当前 run style-items / 网格行内的项跳过。
+  // 防御性过滤：style_key 不在当前评测的 style-items / 网格行内的项跳过。
   const favoritePanelRows = useMemo<GridFavoritesPanelRow[]>(() => {
     if (!styleKeyByYIndex || styleFavorites.length === 0) return [];
     const yIndexByStyleKey = new Map<StyleKey, number>();
