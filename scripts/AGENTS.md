@@ -1,11 +1,11 @@
 <!-- Parent: ../AGENTS.md -->
 <!-- Generated: 2026-04-06 | Updated: 2026-09-04 -->
 
-# scripts/ — 核心实现（生图 + R2 上传）
+# scripts/ — 内部生图生产线（生图 + R2 上传；非用户面）
 
 ## 概览
 
-- 主"代码域"：生图 runner（generation/）、R2 上传（r2_upload/）、交互菜单（cli/）、辅助转换（other/）。顶层 `main.py` 只做委托。
+- 内部工具代码域（非用户面，仅为网站产出内容）：生图 runner（generation/）、R2 上传（r2_upload/）、交互菜单（cli/）、辅助转换（other/）。顶层 `main.py` 只做委托。
 
 ## 去哪儿改
 
@@ -51,3 +51,7 @@
 - 不要把 ComfyUI 的整段响应对象塞进异常 message/context
 - 不要在 tqdm 循环里 `print()`；用 `logging`
 - 不要在 `scripts/cli/` 里复制 `scripts/generation/` 或 `scripts/r2_upload/` 的业务参数解析
+
+<!-- MANUAL: 以下为手工维护内容，deepinit 重生成时原样保留 -->
+
+本目录是作者自用的**内部生图生产线**，不是产品组成：不要为它引入或讨论用户界面、用户体系、i18n、SEO 等产品能力，也不要把它当作产品的一部分来描述。

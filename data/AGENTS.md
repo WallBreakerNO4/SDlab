@@ -48,3 +48,19 @@
 
 - 不要把运行输出（`run.json`/`metadata.jsonl`/图片）写进 `data/`；默认输出根目录是 `outputs/`，也可通过 `--run-dir` 指定
 - 不要把模型配置目录当临时草稿；它们属于可执行配置，不是随手记事本
+
+<!-- MANUAL: 以下为手工维护内容，deepinit 重生成时原样保留 -->
+
+## 产权分账（产品 / 生产线）
+
+`data/` 是两侧资产的相邻存放区；没有任何文件被两侧同时读取，产权按子目录一分为二：
+
+| 路径 | 归属 | 消费者 |
+| --- | --- | --- |
+| `models/` | 生图流水线 | 仅 Python 生图链路 |
+| `prompts/` | 生图流水线 | 仅 Python 生图链路（X/Y prompt 资产） |
+| `prompt-codex/` | 网站 | 仅 Web 构建（→ `public/data/prompts/*.json`） |
+| `model-guides/` | 网站 | 仅 Web 构建（→ `lib/generated/model-guides.ts`） |
+| `info-page*.md`、`privacy-policy-page*.md` | 网站 | 仅 Web 页面渲染 |
+
+新增资产时先声明归属：生图输入进流水线侧，网站内容进网站侧。

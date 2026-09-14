@@ -6,7 +6,7 @@
 
 ## 概览
 
-- 仓库分两条主线：Next.js 站点负责展示 runs / grid / 图片；Python 脚本负责生图（ComfyUI workflow 注入 + NovelAI 直连）、上传 R2、写入 Supabase。
+- **项目身份（先读）**：本仓库托管一个产品与其内部生产线——产品是面向用户的网站（Next.js 站点，负责展示 runs / grid / 图片）；Python 脚本（`main.py`、`scripts/`，ComfyUI / NovelAI 生图、上传 R2、写入 Supabase）是作者自用的内部工具，不是用户可见功能。介绍或修改本仓库时，主体永远是网站；完整边界见文末「项目身份与受众」。
 - 网站数据链路以 Supabase + R2 为准；Web 侧没有本地文件降级读取。
 - 术语约定：由上传脚本生成的 `display_*` / `thumb_*` 变体统一称为“展示页缩略图”；run 级 `image.*` 统一称为“封面图”，同级 `images/*` 统一称为“主页缩略图”。三者不是同一套资源，讨论与实现时必须明确区分。
 - 脚本侧识别并上传封面图/主页缩略图资产；网页首页通过 `/api/comfyui/runs` 消费 `assets.cover` / `assets.homepage_cards`，run 详情页通过 view bootstrap JSON 消费展示页缩略图。
@@ -262,7 +262,7 @@ pnpm dlx supabase migration new <name>
 - `components/AGENTS.md`、`components/ui/AGENTS.md`、`components/comfyui/AGENTS.md`、`components/favorites/AGENTS.md`、`components/home/AGENTS.md`、`components/prompt/AGENTS.md`：业务组件、UI primitives、虚拟网格/图片渲染、收藏对比与 Prompt 法典浏览器约定。
 - `i18n/AGENTS.md`、`messages/AGENTS.md`：国际化路由配置与翻译消息约定。
 - `lib/AGENTS.md`、`lib/env/AGENTS.md`：Supabase/R2/路径安全/共享类型边界与环境变量读取。
-- `scripts/AGENTS.md`、`scripts/generation/AGENTS.md`、`scripts/r2_upload/AGENTS.md`、`scripts/cli/AGENTS.md`、`scripts/other/AGENTS.md`：Python 主代码域与子系统边界。
+- `scripts/AGENTS.md`、`scripts/generation/AGENTS.md`、`scripts/r2_upload/AGENTS.md`、`scripts/cli/AGENTS.md`、`scripts/other/AGENTS.md`：Python 内部工具代码域与子系统边界。
 - `tests/AGENTS.md`、`e2e/AGENTS.md`、`supabase/AGENTS.md`、`data/AGENTS.md`、`hooks/AGENTS.md`、`types/AGENTS.md`、`public/AGENTS.md`：测试、迁移、资产、hooks、生成类型、静态资源的局部规则。
 - `docs/AGENTS.md`、`DBbackup/AGENTS.md`：设计决策记录（`docs/adr/`）与 agent 协作文档（`docs/agents/`）的维护约定，领域术语表在根目录 `CONTEXT.md`；本地数据库备份说明（git 忽略）。
 
@@ -279,3 +279,17 @@ Issue 与 spec 统一追踪在本仓库的 GitHub Issues，操作走 `gh` CLI。
 ### Domain docs
 
 single-context 布局：根目录 `CONTEXT.md` + `docs/adr/`。详见 `docs/agents/domain.md`。
+
+<!-- MANUAL: 以下为手工维护内容，deepinit 重生成时原样保留 -->
+
+## 项目身份与受众（agent 必读）
+
+本仓库同时托管**一个产品**与其**内部生产线**：
+
+| 区域 | 身份 | 受众 | agent 行为准则 |
+| --- | --- | --- | --- |
+| 网站（`app/`、`components/`、`lib/`、`i18n/`、`messages/`、`public/` 等） | 产品主体 | 最终用户 | 一切关于产品 / 功能 / 展示的表述以网站为准；改动面向用户体验 |
+| 生图流水线（`main.py`、`scripts/`） | 内部工具 | 仅作者本人 | 不描述为用户可见功能；不为其设计 UI、用户体系、i18n、SEO 等产品能力 |
+| 契约区（`supabase/`、`data/` 分账、`docs/`、`CONTEXT.md`） | 两侧共用 | — | 变更按接口变更处理，两侧一起过；`data/` 产权分账见 `data/AGENTS.md` |
+
+**硬规则**：介绍本仓库或为网站做改动时，主体永远是网站；生图脚本只作为内容的来源提及，不得当作产品的一部分。
