@@ -52,6 +52,7 @@
 | 模型详情 response guard | `model-detail-types.test.ts`                              | `isModelDetailResponse()` 本地化描述字段校验 |
 | 模型描述 Markdown URL   | `model-description-markdown.test.ts`                      | `transformModelDescriptionUrl()` 拒绝斜杠网络路径引用 |
 | 对比 RPC 迁移防回归     | `style-comparison-rpc-migration.test.ts`                  | security-invoker RPC、grants、BlurHash RPC、EXPLAIN 验收脚本、模型缓存 300s 约束 |
+| 跨语言契约常量一致性     | `test_contract_constants.py`、`contract-constants.test.ts` | run key / style_key / y_index 与上限常量在 Python、TS、SQL 三侧镜像的共享样本、文本范式与 SQL CHECK/上限守卫；样本在 `tests/fixtures/contract-constants.json` |
 
 ## 约定（本目录特有）
 
@@ -62,6 +63,7 @@
 - TypeScript 测试使用 `node:assert/strict` + `node:test`，通过 `pnpm test` 执行 `node --import tsx --test tests/*.test.ts`；不要混入 Playwright 浏览器断言。
 - 模型对比单测未覆盖 slice response guard，也未覆盖 `mergeComparisonFavorites()`、`getVisibleModels()`、`reconcileHiddenRunDirs()`、`flattenRowSlides()`；修改这些逻辑时应补对应测试。
 - 修改 placement / row 逻辑时，应增加或保持对 0-based `y_index` 结构的测试；单测不等同于 E2E。
+- 修改 run key / style_key / y_index 及其上限常量（含 SQL migration 内的 CHECK 与 RPC 边界）时，必须同步所有镜像并通过 `test_contract_constants.py` + `contract-constants.test.ts` 的守卫；接受/拒绝行为样本统一维护在 `tests/fixtures/contract-constants.json`，不要在守卫里另抄一份样本。`collectionIdNormalization` 样本仅由 Python 侧消费。
 
 ## 运行
 

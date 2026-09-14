@@ -1,0 +1,21 @@
+{
+  "$comment": "跨语言契约的共享行为样本：runKey / styleKey 的接受与拒绝样本由 tests/test_contract_constants.py 与 tests/contract-constants.test.ts 共同消费；collectionIdNormalization 由 Python 侧消费。scripts/run_naming.py、lib/comfyui-types.ts、lib/style-favorites.ts 与 supabase/migrations/*.sql 的镜像实现都必须与这里的期望一致。",
+  "runKey": {
+    "valid": ["a", "0", "abc", "a1", "a-b", "a-b-c", "run-2026-01", "9z", "a1b2c3"],
+    "invalid": ["", "A", "a_B", "-a", "a-", "a--b", "a b", "a.b", "a/b", "a:b", "Ünïcode", "a--", "a-1-"]
+  },
+  "styleKey": {
+    "valid": ["a:0", "300-nai-styles-table:9", "collection.with-dots:1", "a_b:01", "コレクション:1"],
+    "invalid": ["", "no-colon", ":1", "a:", "a:-1", "a:1.5", "a:b", "a: 1", "a:1:2", "a:+1", "a:１２"]
+  },
+  "collectionIdNormalization": [
+    { "input": "300_NAI_Styles_Table", "normalized": "300-nai-styles-table" },
+    { "input": "  Foo--Bar  ", "normalized": "foo-bar" },
+    { "input": "foo_bar.baz", "normalized": "foo-bar-baz" },
+    { "input": "a  b", "normalized": "a-b" },
+    { "input": "Ünïcode Name", "normalized": "n-code-name" },
+    { "input": "!!!---", "normalized": "" },
+    { "input": "", "normalized": "" },
+    { "input": "y-prompts", "normalized": "y-prompts" }
+  ]
+}

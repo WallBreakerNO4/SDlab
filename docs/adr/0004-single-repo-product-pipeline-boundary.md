@@ -13,5 +13,5 @@
 ## Consequences
 
 - 边界依靠文档与约定维持（`README.md`、根 `AGENTS.md`、`scripts/AGENTS.md`、`data/AGENTS.md`），没有物理隔离。
-- 契约区（`supabase/`、`data/` 分账、`docs/`、`CONTEXT.md`）是两侧共享面，变更须两侧一起过；契约常量的镜像漂移风险另见 #6。
+- 契约区（`supabase/`、`data/` 分账、`docs/`、`CONTEXT.md`）是两侧共享面，变更须两侧一起过；契约常量的镜像漂移风险另见 #6，守卫决策见 [ADR 0005](0005-contract-constant-consistency-guards.md)。
 - 出现以下信号时重新评估拆仓：需要把网站单独作为作品展示或开源（当前整仓已公开）、脚本需要私有化、出现仓外使用者、两侧出现真正的独立发布或权限 / 密钥隔离需求、仓库规模增长导致 agent 导航困难。
