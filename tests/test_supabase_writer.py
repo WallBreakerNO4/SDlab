@@ -501,6 +501,37 @@ def test_upsert_upload_index_extracts_structured_columns() -> None:
     assert image_row["display_avif_cache_key"] is None
 
 
+def test_upsert_upload_index_persists_snapshot_status_fields() -> None:
+    client = _InMemorySupabaseClient(return_upsert_rows=True)
+    writer = SupabaseWriter(client=client, dry_run=False)
+    payload = _sample_payload()
+    payload["status"] = "in_progress"
+    payload["generated_cells"] = 1
+
+    writer.upsert_upload_index(cast(dict[str, object], payload))
+
+    row = next(iter(client._tables["run_list_items"].values()))
+    assert row["status"] == "in_progress"
+    assert row["generated_cells"] == 1
+    published_at = row["published_at"]
+    assert isinstance(published_at, str) and published_at
+
+
+def test_upsert_upload_index_defaults_missing_status_to_complete() -> None:
+    client = _InMemorySupabaseClient(return_upsert_rows=True)
+    writer = SupabaseWriter(client=client, dry_run=False)
+    payload = _sample_payload()
+    payload["total_cells"] = 3
+
+    writer.upsert_upload_index(cast(dict[str, object], payload))
+
+    row = next(iter(client._tables["run_list_items"].values()))
+    assert row["status"] == "complete"
+    assert row["generated_cells"] == 3
+    published_at = row["published_at"]
+    assert isinstance(published_at, str) and published_at
+
+
 def test_upsert_upload_index_persists_run_assets() -> None:
     client = _InMemorySupabaseClient(return_upsert_rows=True)
     writer = SupabaseWriter(client=client, dry_run=False)

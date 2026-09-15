@@ -15,6 +15,7 @@
 | 数据库迁移            | `migrations/`                                                 | 时间戳命名的 SQL 迁移文件                          |
 | ComfyUI schema 初始化 | `migrations/20260311075715_init_comfyui_schema_and_views.sql` | 初始 schema 与视图；后续变更以新迁移为准 |
 | Style Favorites 表与 RLS | `migrations/20260717202836_add_style_favorites.sql`         | 两表、字段约束/基础索引、RLS policies 与角色 grants |
+| 首页评测状态列        | `migrations/20260915095701_add_run_list_items_status_and_published_at.sql` | `run_list_items` 新增 `status` / `generated_cells` / `published_at`；历史行回填为已完结 / `total_cells` / `created_at`，并建 `published_at desc` 索引 |
 | 模型对比查询索引      | `migrations/20260720120000_add_style_comparison_indexes.sql` | 收藏 keyset 分页索引 + style/run placement 覆盖索引 |
 | 模型对比 RPC           | `migrations/20260720130000_add_style_comparison_rpcs.sql` | authenticated slice 聚合 + 公共模型目录聚合；均为 `SECURITY INVOKER` |
 | 对比 BlurHash RPC      | `migrations/20260720140000_add_style_comparison_slice_blurhash.sql` | 三参数 slice RPC；materialized 有界集合关联 `run_grid_items`，按 NSFW 偏好返回紧凑 BlurHash tuple |

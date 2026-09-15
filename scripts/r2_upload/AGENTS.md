@@ -7,14 +7,15 @@
 
 - 完整的图片上传管线：从本地 run 产物读取 → 多变体编码（webp/avif）→ R2 上传 → Supabase 索引写入；同目录也提供 run 数据删除工具。
 - 术语约定：本目录生成的 `display_*` / `thumb_*` 变体统一称为“展示页缩略图”；run 级 `image.*` 属于封面图，`images/*` 属于主页缩略图集合。两类首页图片资产在发布时从 run 目录现场扫描后随发布上传，Web 侧首页通过 `/api/comfyui/runs` 返回的 `assets.cover` / `assets.homepage_cards` 消费它们。
+- 发布时按发布快照内容判定评测状态：计划的单元格全部有图 → `complete`，否则 `in_progress`；`--complete` 可人工收口；已完结状态单调不回退（含历史快照缺状态字段按已完结处理）。状态与已产出格数写入 `view/current.json` 当前指针与 `run_list_items`。
 
 ## 去哪儿改
 
 | 任务                      | 位置                     | 备注                                                                                 |
 | ------------------------- | ------------------------ | ------------------------------------------------------------------------------------ |
-| 上传主入口与 CLI          | `upload_images_to_r2.py` | `build_parser()`；`-F/--force-publish`；编排编码/上传/写入；4 条 tqdm 进度条          |
+| 上传主入口与 CLI          | `upload_images_to_r2.py` | `build_parser()`；`-F/--force-publish`；`--complete` 人工收口状态；编排编码/上传/写入；4 条 tqdm 进度条          |
 | R2 存储客户端             | `r2_client.py`           | boto3 S3 兼容；`R2Client` + 重试 + 结构化错误（`R2ClientError` 含 retryable 标志）   |
-| Supabase 批量写入         | `supabase_writer.py`     | `SupabaseWriter.upsert_upload_index()`；分批 upsert + 并发写入；含 `_build_run_style_item_rows()` 从 image payload 的 `y_style_key` upsert `run_style_items`（on_conflict=`run_id,style_key`） |
+| Supabase 批量写入         | `supabase_writer.py`     | `SupabaseWriter.upsert_upload_index()`；分批 upsert + 并发写入；含 `_build_run_style_item_rows()` 从 image payload 的 `y_style_key` upsert `run_style_items`（on_conflict=`run_id,style_key`）；`run_list_items` 写入 `status` / `generated_cells` / `published_at`（缺失状态按已完结、格数回退 `total_cells`） |
 | 上传规划与变体            | `upload_planner.py`      | `_build_run_plan()`；多变体规划 + ThreadPoolExecutor 并发编码；把 `y_style_key` 写入 grid_items 字段并规划 `run_style_items` 行；Mixer metadata 缺 `y_common_prompt` 时按 run 快照中的 Y YAML SHA256 严格回填 |
 | R2 key 生成与 bucket 映射 | `r2_keys.py`             | key 格式：`runs/{run_dir}/{variant}_{filename}`；normal→public, advance/nsfw→private |
 | 图片编码参数              | `encoding_params.py`     | webp/avif 质量/尺寸参数；展示页缩略图中的 thumb 尺寸为 display 一半（向下取整，≥1）  |
@@ -65,6 +66,9 @@ supabase_writer.py → 批量 upsert 到 Supabase（runs + snapshots + projectio
 - 变体命名：`display_webp`/`display_avif`/`thumb_webp`/`thumb_avif`，文档中统称“展示页缩略图”
 - `image.*`（封面图，单个）与 `images/*`（主页缩略图集合）在发布时从 run.json `config_path` 指向的资产目录现场扫描，随发布进入 R2 + Supabase 写入链路；生图写入的 assets 快照不再作为资产来源，持久化 run.json 快照的 assets 以本次扫描结果为准；存在多个 `image.*` 时报错；在 Web 侧作为独立的封面图/主页缩略图字段建模，不要与展示页缩略图混用。
 - dry-run 与执行结果报告包含 `asset_scans`（每个 run 的封面图 / 主页缩略图 repo-relative 路径），发布前可用它确认现场扫描结果。
+- dry-run 与执行结果报告包含 `snapshot_stats`（每个 run 的 `status` / `generated_cells` / `planned_cells`）：计划单元格全部有图 → `complete`，否则 `in_progress`；`--complete` 强制收口。
+- `metadata.jsonl` 坏行与无法读取 / 解码的图片跳过并警告；被跳过的单元格按“未产出”计入状态。
+- 评测状态写入 `view/current.json` 当前指针的 `status` / `generated_cells`；同一 `release_id` 下状态收口（如 `--complete`）也会刷新当前指针；已完结状态单调不回退，缺状态字段的历史快照按已完结处理。
 - bucket 分配：normal category → public bucket；advance/nsfw → private bucket
 - 上传支持可配置并发（`--upload-workers`）和 dry-run 模式
 - 普通上传允许首次发布与相同 `release_id` 的幂等恢复；不同 release 必须显式使用 `-F/--force-publish`，且仅支持单个 `--run-dir`

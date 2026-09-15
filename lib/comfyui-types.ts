@@ -2,6 +2,8 @@
 
 export type CellStatus = "success" | "failed" | "skipped" | "missing";
 
+export type EvaluationStatus = "in_progress" | "complete";
+
 export type RunDir = string;
 
 export interface GenerationParams {
@@ -140,6 +142,7 @@ export interface RunSummary {
   x_count: number;
   y_count: number;
   total_cells: number;
+  status: EvaluationStatus;
   model?: ModelMetadata | null;
   assets?: RunHomepageAssets | null;
 }
@@ -156,6 +159,13 @@ export const RUN_DIR_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export function isValidRunDir(runDir: string): runDir is RunDir {
   return RUN_DIR_REGEX.test(runDir);
+}
+
+/** 缺失状态字段的历史发布数据统一视为已完结。 */
+export function normalizeEvaluationStatus(
+  value: unknown,
+): EvaluationStatus {
+  return value === "in_progress" ? "in_progress" : "complete";
 }
 
 export function isCellStatus(status: string): status is CellStatus {

@@ -58,6 +58,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Republish an existing run and replace its current view pointer.",
     )
     _ = parser.add_argument(
+        "--complete",
+        action="store_true",
+        help="Force this snapshot to be marked complete (for permanently failed cells).",
+    )
+    _ = parser.add_argument(
         "--category",
         choices=["normal", "advance", "nsfw"],
         help="Optional category override.",

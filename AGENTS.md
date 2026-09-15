@@ -150,7 +150,7 @@
 | `JsonLdBreadcrumbList`            | component | `components/json-ld.tsx`                         | BreadcrumbList schema                                              |
 | `SITE_ORIGIN`                     | const     | `lib/site-origin.ts`                             | 站点根 URL                                                         |
 | `formatPrompt`                    | function  | `lib/prompt-formatter.ts`                        | 结构化 Prompt → 目标模型文本（novelai / comfyui + anima 权重模式） |
-| `listRunSummaries`                | function  | `lib/run-list.ts`                                | 首页 run 列表查询，`unstable_cache` 5min + tag `run-list`          |
+| `listRunSummaries`                | function  | `lib/run-list.ts`                                | 首页 run 列表查询，`unstable_cache` 5min + tag `run-list`，按 `published_at` 降序并归一化 `status` |
 | `requireViewerForPreferenceWrite` | function  | `lib/server-user-preferences.ts`                 | 浏览者偏好写入的前置鉴权                                           |
 | `PromptBrowserPage`               | component | `components/prompt/prompt-browser-page.tsx`      | 法典浏览器页面骨架                                                 |
 | `patch_workflow`                  | function  | `scripts/generation/workflow_patch.py`           | 注入标准 prompt 或 Anima Artist Mixer 参数                         |
@@ -171,6 +171,7 @@
 - Anima Artist Mixer：`workflow.anima_artist_mixer: true` 仅允许 `backend=comfyui` 且 `model.family=anima`；workflow 必须是 KSampler 的 model/positive 同时连到启用的 `AnimaArtistCrossAttn`，再由 `AnimaArtistPack` 接收 `base_prompt` 与 `artist_chain`。
 - NovelAI 链路：`backend=novelai` 不消费 workflow/api.json；Anlas 守卫只做免费资格参数校验（面积 ≤ 1024×1024、步数 ≤ 28、单张）与 V5 电量守卫，绝不依据 Anlas 余额推断计费（ADR 0002）；V5 电量低于阈值默认暂停生成、轮询等待回充后自动继续（默认等待上限 24h，超时回退真中止），`--battery-hard-stop` 显式启用旧真中止模式；硬停时未提交格子保持 incomplete，用 `--retry-incomplete` 恢复（ADR 0003）。
 - 重发已发布 run 使用上传 CLI 的 `-F/--force-publish`；普通模式遇到不同 `release_id` 会拒绝。强制发布仍复用内容寻址资源，并在 Supabase 写入完成后最后覆盖 `view/current.json`。
+- 发布时按快照内容自动判定评测状态：计划单元格全部有图 → `complete`，否则 `in_progress`；`--complete` 人工收口，已完结状态不回退（含历史快照缺状态字段按已完结处理）。状态与 `generated_cells` 写入 `view/current.json` 与 `run_list_items`；首页按 `published_at` 降序并为进行中评测显示「评测中」徽章。
 - API：`app/api/**/route.ts` 保持 `runtime = "nodejs"`；错误响应返回固定短文案，不透出绝对路径、stack、凭证。
 - Supabase：ComfyUI API 统一用 `createSupabaseAuthClient()`；浏览器端认证统一用 `createSupabaseBrowserClient()`；`app/auth/callback/route.ts` 为 PKCE 交换 session 的例外。
 - Middleware 例外：`middleware.ts` 不能 import `lib/supabase-auth.ts`，因为后者依赖 `server-only` + `next/headers`。

@@ -5,6 +5,7 @@ import hashlib
 import json
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from collections.abc import Callable, Mapping
+from datetime import datetime, timezone
 from typing import Protocol, cast
 
 from .postgrest_http import (
@@ -39,6 +40,7 @@ from .supabase_normalize import (
     required_json_object,
     required_str,
 )
+from .upload_contracts import EVALUATION_STATUSES
 
 _MISSING_ENV_MESSAGE = "missing required Supabase configuration"
 
@@ -486,6 +488,17 @@ class SupabaseWriter:
         y_count = required_int(payload, "y_count")
         total_cells = required_int(payload, "total_cells")
 
+        status = _optional_required_string(payload.get("status")) or "complete"
+        if status not in EVALUATION_STATUSES:
+            raise PayloadValidationError(
+                "payload field must be a known evaluation status",
+                field="status",
+                expected="in_progress | complete",
+            )
+        generated_cells = _optional_int_field(payload, "generated_cells")
+        if generated_cells is None:
+            generated_cells = total_cells
+
         cover: dict[str, object] | None = None
         homepage_cards_with_index: list[tuple[int, dict[str, object]]] = []
         for run_asset in run_assets:
@@ -508,6 +521,9 @@ class SupabaseWriter:
             "x_count": x_count,
             "y_count": y_count,
             "total_cells": total_cells,
+            "status": status,
+            "generated_cells": generated_cells,
+            "published_at": datetime.now(timezone.utc).isoformat(),
             "model_name": optional_str(payload.get("model_name"), field="model_name"),
             "model_description_zh": optional_str(
                 payload.get("model_description_zh"),

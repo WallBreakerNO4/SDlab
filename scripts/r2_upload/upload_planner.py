@@ -21,7 +21,11 @@ from .manifest import (
     current_view_object_key,
     view_manifest_object_key,
 )
-from .path_safety import normalize_run_dir, resolve_metadata_image_paths
+from .path_safety import (
+    PathResolutionError,
+    normalize_run_dir,
+    resolve_metadata_image_paths,
+)
 from .r2_keys import (
     bucket_for,
     cache_control_for,
@@ -33,11 +37,15 @@ from .run_assets import RunAssetsScan, asset_scan_report, scan_run_assets
 from .upload_contracts import (
     BucketScope,
     Category,
+    EvaluationStatus,
+    EVALUATION_STATUS_COMPLETE,
+    EVALUATION_STATUS_IN_PROGRESS,
     PlannedImageTask,
     PlannedUpload,
     RunPlan,
     _DERIVED_IMAGE_VARIANTS,
     _IMAGE_VARIANTS,
+    snapshot_stats_report,
 )
 from .upload_discovery import _resolve_run_dir_name, _resolve_selected_run_dirs
 from .upload_io import (
@@ -51,7 +59,7 @@ from .upload_io import (
     _write_intermediate_cache_metadata,
     _write_intermediate_variant,
 )
-from .variants import inspect_image_metadata, plan_image_variants
+from .variants import IMAGE_DECODE_ERRORS, inspect_image_metadata, plan_image_variants
 from scripts.generation.prompt_grid import (
     ARTIST_WEIGHT_PROFILE_IDENTITY,
     Y_ARTIST_CHAIN,
@@ -265,7 +273,16 @@ def _fold_metadata_records_for_upload(
         if not _is_publishable_metadata_record(metadata_record):
             continue
 
-        image_paths = resolve_metadata_image_paths(run_dir, metadata_record)
+        try:
+            image_paths = resolve_metadata_image_paths(run_dir, metadata_record)
+        except (PathResolutionError, OSError) as exc:
+            LOG.warning(
+                "metadata 记录的图片路径无法解析，已跳过: x_index=%s y_index=%s (%s)",
+                _int_with_default(metadata_record.get("x_index"), default=0),
+                _int_with_default(metadata_record.get("y_index"), default=0),
+                exc,
+            )
+            continue
         if not image_paths:
             continue
 
@@ -1143,41 +1160,52 @@ def _build_run_asset_payloads(
     uploads: list[PlannedUpload] = []
     batch_index = 1_000_000
 
-    if assets.cover_image is not None:
-        cover_asset = assets.cover_image.to_payload()
-        cover_source_path = _resolve_run_asset_source_path(cover_asset)
-        cover_payload, cover_uploads = _build_run_asset_payload(
-            run_dir_name=run_dir_name,
-            run_intermediate_dir=run_intermediate_dir,
-            asset=cover_asset,
-            asset_role="cover",
-            asset_index=0,
-            batch_index=batch_index,
-            category=resolve_asset_category(cover_source_path),
-            plan_image_variants_fn=plan_image_variants_fn,
-            inspect_image_metadata_fn=inspect_image_metadata_fn,
-        )
-        asset_rows.append(cover_payload)
-        uploads.extend(cover_uploads)
+    def _collect_asset(
+        asset: dict[str, object],
+        *,
+        asset_role: str,
+        asset_index: int,
+    ) -> None:
+        nonlocal batch_index
+        try:
+            source_path = _resolve_run_asset_source_path(asset)
+            payload, asset_uploads = _build_run_asset_payload(
+                run_dir_name=run_dir_name,
+                run_intermediate_dir=run_intermediate_dir,
+                asset=asset,
+                asset_role=asset_role,
+                asset_index=asset_index,
+                batch_index=batch_index,
+                category=resolve_asset_category(source_path),
+                plan_image_variants_fn=plan_image_variants_fn,
+                inspect_image_metadata_fn=inspect_image_metadata_fn,
+            )
+        except (*IMAGE_DECODE_ERRORS, PathResolutionError) as exc:
+            LOG.warning(
+                "run 级静态资源无法读取或编码，已跳过: role=%s asset=%s (%s: %s)",
+                asset_role,
+                asset.get("repo_relative_path"),
+                type(exc).__name__,
+                exc,
+            )
+        else:
+            asset_rows.append(payload)
+            uploads.extend(asset_uploads)
         batch_index += 1
 
+    if assets.cover_image is not None:
+        _collect_asset(
+            assets.cover_image.to_payload(),
+            asset_role="cover",
+            asset_index=0,
+        )
+
     for asset_index, homepage_asset in enumerate(assets.homepage_images):
-        homepage_asset_payload = homepage_asset.to_payload()
-        homepage_source_path = _resolve_run_asset_source_path(homepage_asset_payload)
-        homepage_payload, homepage_uploads = _build_run_asset_payload(
-            run_dir_name=run_dir_name,
-            run_intermediate_dir=run_intermediate_dir,
-            asset=homepage_asset_payload,
+        _collect_asset(
+            homepage_asset.to_payload(),
             asset_role="homepage_card",
             asset_index=asset_index,
-            batch_index=batch_index,
-            category=resolve_asset_category(homepage_source_path),
-            plan_image_variants_fn=plan_image_variants_fn,
-            inspect_image_metadata_fn=inspect_image_metadata_fn,
         )
-        asset_rows.append(homepage_payload)
-        uploads.extend(homepage_uploads)
-        batch_index += 1
 
     return asset_rows, uploads
 
@@ -1205,7 +1233,11 @@ def _build_run_asset_category_resolver(
                 existing_path_category, task.category
             )
 
-        sha256 = _sha256_file(resolved)
+        try:
+            sha256 = _sha256_file(resolved)
+        except OSError:
+            # 坏图 / 缺失图片不参与资产分类推断；上传阶段会跳过并警告。
+            continue
         existing_sha_category = sha_category.get(sha256)
         if existing_sha_category is None:
             sha_category[sha256] = task.category
@@ -1601,6 +1633,68 @@ def _build_image_payload(
     return image_payload, uploads
 
 
+def _build_image_payload_or_skip(
+    *,
+    run_dir_name: str,
+    run_intermediate_dir: Path,
+    image_path: Path,
+    metadata_record: dict[str, object],
+    category: Category,
+    batch_index: int,
+    plan_image_variants_fn: Callable[
+        [Path], list[dict[str, object]]
+    ] = plan_image_variants,
+    inspect_image_metadata_fn: Callable[
+        [Path], dict[str, object]
+    ] = inspect_image_metadata,
+) -> tuple[dict[str, object], list[PlannedUpload]] | None:
+    """坏图跳过并警告；返回 None 表示该图片不计入本次快照。"""
+    try:
+        return _build_image_payload(
+            run_dir_name=run_dir_name,
+            run_intermediate_dir=run_intermediate_dir,
+            image_path=image_path,
+            metadata_record=metadata_record,
+            category=category,
+            batch_index=batch_index,
+            plan_image_variants_fn=plan_image_variants_fn,
+            inspect_image_metadata_fn=inspect_image_metadata_fn,
+        )
+    except (*IMAGE_DECODE_ERRORS, PathResolutionError) as exc:
+        LOG.warning(
+            "图片无法读取或编码，已跳过: x_index=%s y_index=%s image=%s (%s: %s)",
+            _int_with_default(metadata_record.get("x_index"), default=0),
+            _int_with_default(metadata_record.get("y_index"), default=0),
+            image_path.name,
+            type(exc).__name__,
+            exc,
+        )
+        return None
+
+
+def _count_generated_cells(images_rows: list[dict[str, object]]) -> int:
+    cells: set[tuple[int, int]] = set()
+    for row in images_rows:
+        cells.add(
+            (
+                _int_with_default(row.get("x_index"), default=0),
+                _int_with_default(row.get("y_index"), default=0),
+            )
+        )
+    return len(cells)
+
+
+def _resolve_snapshot_status(
+    *,
+    generated_cells: int,
+    planned_cells: int,
+    complete_override: bool,
+) -> EvaluationStatus:
+    if complete_override or generated_cells >= planned_cells:
+        return EVALUATION_STATUS_COMPLETE
+    return EVALUATION_STATUS_IN_PROGRESS
+
+
 def _build_run_plan(
     run_dir: Path,
     *,
@@ -1608,6 +1702,7 @@ def _build_run_plan(
     category_override: Category | None,
     remaining_limit: int | None,
     image_workers: int,
+    complete_override: bool = False,
     on_images_discovered: Callable[[int], None] | None = None,
     on_image_planned: Callable[[], None] | None = None,
     thread_pool_cls: type[ThreadPoolExecutor] = ThreadPoolExecutor,
@@ -1674,10 +1769,11 @@ def _build_run_plan(
         ] * len(image_tasks)
         with thread_pool_cls(max_workers=image_workers) as pool:
             future_to_task: dict[
-                Future[tuple[dict[str, object], list[PlannedUpload]]], PlannedImageTask
+                Future[tuple[dict[str, object], list[PlannedUpload]] | None],
+                PlannedImageTask,
             ] = {
                 pool.submit(
-                    _build_image_payload,
+                    _build_image_payload_or_skip,
                     run_dir_name=run_dir_name,
                     run_intermediate_dir=run_intermediate_dir,
                     image_path=task.image_path,
@@ -1698,7 +1794,7 @@ def _build_run_plan(
 
         for item in ordered_results:
             if item is None:
-                raise RuntimeError("missing planned image payload result")
+                continue
             image_payload, uploads = item
             images_rows.append(image_payload)
             image_uploads.extend(uploads)
@@ -1726,6 +1822,16 @@ def _build_run_plan(
         "run_assets": run_assets_rows,
     }
     db_payload.update(_build_run_db_fields(run_json, run_dir_name=run_dir_name))
+
+    planned_cells = _int_with_default(db_payload.get("total_cells"), default=0)
+    generated_cells = _count_generated_cells(images_rows)
+    snapshot_status = _resolve_snapshot_status(
+        generated_cells=generated_cells,
+        planned_cells=planned_cells,
+        complete_override=complete_override,
+    )
+    db_payload["status"] = snapshot_status
+    db_payload["generated_cells"] = generated_cells
 
     workflow_upload = _build_workflow_download_upload(
         run_json, run_dir_name=run_dir_name
@@ -1849,6 +1955,9 @@ def _build_run_plan(
         artifact_uploads=[workflow_upload] if workflow_upload is not None else [],
         manifest_uploads=manifest_uploads,
         asset_scan=asset_scan,
+        snapshot_status=snapshot_status,
+        generated_cells=generated_cells,
+        planned_cells=planned_cells,
     )
 
 
@@ -1868,6 +1977,7 @@ def _build_plans(
     selected_run_dirs = _resolve_selected_run_dirs(args)
     category_override = cast(Category | None, getattr(args, "category", None))
     limit_value = cast(int | None, getattr(args, "limit", None))
+    complete_override = bool(getattr(args, "complete", False))
 
     LOG.info(
         "building upload plans: run_count=%s limit=%s intermediate_root=%s image_workers=%s",
@@ -1904,6 +2014,7 @@ def _build_plans(
                     category_override=category_override,
                     remaining_limit=remaining,
                     image_workers=image_workers,
+                    complete_override=complete_override,
                     on_images_discovered=_grow_image_total,
                     on_image_planned=_tick_image_progress,
                     thread_pool_cls=thread_pool_cls,
@@ -1963,6 +2074,9 @@ def _dry_run_summary(plans: list[RunPlan]) -> dict[str, object]:
         "intermediate_dirs": [str(plan.intermediate_dir) for plan in plans],
         "asset_scans": [
             asset_scan_report(plan.run_dir_name, plan.asset_scan) for plan in plans
+        ],
+        "snapshot_stats": [
+            snapshot_stats_report(plan) for plan in plans
         ],
         "processed_grid_images": processed_grid_images,
         "planned_grid_image_variant_uploads": planned_grid_image_variant_uploads,

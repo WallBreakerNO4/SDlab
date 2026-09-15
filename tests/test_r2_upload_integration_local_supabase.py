@@ -6,6 +6,8 @@ import json
 import os
 import shutil
 import sys
+import time
+import uuid
 from pathlib import Path
 from typing import Any, cast
 
@@ -37,6 +39,9 @@ class _FakeR2Client:
         self, bucket_name: str, key: str, *, bucket_scope: str
     ) -> bytes | None:
         _ = bucket_scope
+        return self._object_bodies.get((bucket_name, key))
+
+    def read_body(self, bucket_name: str, key: str) -> bytes | None:
         return self._object_bodies.get((bucket_name, key))
 
     def upload(self, plan: object) -> None:
@@ -88,6 +93,7 @@ def _prepare_run_dir(tmp_path: Path) -> Path:
                 "run_id": _RUN_DIR_NAME,
                 "run_key": _RUN_DIR_NAME,
                 "run_dir": _RUN_DIR_NAME,
+                "created_at": "2026-05-01T00:00:00Z",
             },
             ensure_ascii=False,
         ),
@@ -260,6 +266,7 @@ def _prepare_run_dir_with_scanned_assets(
                 "run_id": _RUN_ASSETS_DIR_NAME,
                 "run_key": _RUN_ASSETS_DIR_NAME,
                 "run_dir": _RUN_ASSETS_DIR_NAME,
+                "created_at": "2026-05-01T00:00:00Z",
                 "config_path": "data/models/example/config.yaml",
             },
             ensure_ascii=False,
@@ -368,3 +375,143 @@ def test_local_supabase_integration_scans_run_assets_on_publish(
     ]
     assert all(isinstance(key, str) and key for key in homepage_keys)
     assert len(set(homepage_keys)) == 2
+
+
+def _prepare_run_dir_in_progress(tmp_path: Path) -> tuple[Path, str]:
+    """2 个计划单元格、本次快照只有 1 格：应判定为进行中。"""
+    run_dir_name = f"local-supabase-status-run-{uuid.uuid4().hex[:8]}"
+    target = tmp_path / run_dir_name
+    shutil.copytree(_RUN_FIXTURE_DIR, target)
+    (target / "run.json").write_text(
+        json.dumps(
+            {
+                "run_id": run_dir_name,
+                "run_key": run_dir_name,
+                "run_dir": run_dir_name,
+                "created_at": "2026-05-01T00:00:00Z",
+                "selection": {
+                    "x_columns": [
+                        {"type": "normal", "description": {"zh": "列 1"}},
+                        {"type": "normal", "description": {"zh": "列 2"}},
+                    ],
+                    "y_indexes": [0],
+                    "x_count": 2,
+                    "y_count": 1,
+                    "total_cells": 2,
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return target, run_dir_name
+
+
+def _read_run_list_status(
+    client: object, run_dir_name: str
+) -> dict[str, object]:
+    typed_client = cast(Any, client)
+    response = (
+        typed_client.table("run_list_items")
+        .select("status,generated_cells,published_at")
+        .eq("run_dir", run_dir_name)
+        .execute()
+    )
+    rows = getattr(response, "data", None)
+    assert isinstance(rows, list)
+    assert len(rows) == 1
+    row = rows[0]
+    assert isinstance(row, dict)
+    return row
+
+
+def _read_current_manifest(
+    fake_r2: _FakeR2Client, run_dir_name: str
+) -> dict[str, object]:
+    body = fake_r2.read_body(
+        "itest-public", f"runs/{run_dir_name}/view/current.json"
+    )
+    assert body is not None
+    parsed = json.loads(body.decode("utf-8"))
+    assert isinstance(parsed, dict)
+    return parsed
+
+
+def test_local_supabase_integration_publishes_snapshot_status(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    if os.getenv(_RUN_FLAG) != "1":
+        pytest.skip(f"仅在 {_RUN_FLAG}=1 时运行本地 Supabase 集成回归。")
+
+    supabase_url, service_role_key = _require_local_supabase_env()
+
+    from scripts.r2_upload.supabase_writer import _default_client_factory
+
+    supabase_client = _default_client_factory(supabase_url, service_role_key)
+
+    fake_r2 = _FakeR2Client()
+    run_dir, run_dir_name = _prepare_run_dir_in_progress(tmp_path)
+    monkeypatch.setenv("R2_PUBLIC_BUCKET", "itest-public")
+    monkeypatch.setenv("R2_PRIVATE_BUCKET", "itest-private")
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.R2Client.from_env",
+        classmethod(lambda cls, dry_run, **kwargs: fake_r2),
+    )
+
+    first_exit = main(["--run-dir", str(run_dir)])
+    first_payload = _read_stdout_json(capsys)
+    assert first_exit == 0
+    assert first_payload.get("snapshot_stats") == [
+        {
+            "run_dir": run_dir_name,
+            "status": "in_progress",
+            "generated_cells": 1,
+            "planned_cells": 2,
+        }
+    ]
+
+    first_row = _read_run_list_status(supabase_client, run_dir_name)
+    assert first_row.get("status") == "in_progress"
+    assert first_row.get("generated_cells") == 1
+    first_published_at = first_row.get("published_at")
+    assert isinstance(first_published_at, str) and first_published_at
+
+    first_manifest = _read_current_manifest(fake_r2, run_dir_name)
+    assert first_manifest.get("status") == "in_progress"
+    assert first_manifest.get("generated_cells") == 1
+
+    uploads_after_first = fake_r2.upload_calls
+
+    # 内容无变化的重复发布：不重复写 R2 对象。
+    second_exit = main(["--run-dir", str(run_dir)])
+    assert second_exit == 0
+    _ = _read_stdout_json(capsys)
+    assert fake_r2.upload_calls == uploads_after_first
+
+    # --complete 收口：同一 release 也刷新当前指针与发布时间。
+    time.sleep(0.02)
+    third_exit = main(["--complete", "--run-dir", str(run_dir)])
+    third_payload = _read_stdout_json(capsys)
+    assert third_exit == 0
+    assert third_payload.get("snapshot_stats") == [
+        {
+            "run_dir": run_dir_name,
+            "status": "complete",
+            "generated_cells": 1,
+            "planned_cells": 2,
+        }
+    ]
+    assert fake_r2.upload_calls > uploads_after_first
+
+    third_row = _read_run_list_status(supabase_client, run_dir_name)
+    assert third_row.get("status") == "complete"
+    assert third_row.get("generated_cells") == 1
+    third_published_at = third_row.get("published_at")
+    assert isinstance(third_published_at, str)
+    assert third_published_at > first_published_at
+
+    third_manifest = _read_current_manifest(fake_r2, run_dir_name)
+    assert third_manifest.get("status") == "complete"
+    assert third_manifest.get("generated_cells") == 1

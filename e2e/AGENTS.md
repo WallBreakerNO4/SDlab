@@ -21,6 +21,8 @@
 | 滚动恢复 | `task-13-scroll-restore.spec.ts` | 弹窗关闭后恢复滚动位置 |
 | Mixer prompt parts 渲染 | `task-13-mixer-prompt-parts.spec.ts` | Mixer 的 y_prompt_parts（Artist/Common Prompt）前端分栏渲染 |
 | 画师串收藏 | `task-14-style-favorites.spec.ts` | 未登录弹登录框/收藏页门控 + 已登录 toggle/面板跳转/收藏页 + 对比页 BlurHash 回退 |
+| 首页评测状态 | `task-11-homepage-status.spec.ts` | no-env mock 下的首页排序（published_at）与「评测中」徽章（中英文） |
+| no-env mock 运行时 | `no-env-webserver.cjs`、`mock-supabase-rest.cjs`、`no-env-home-run-list.json` | 假 Supabase REST 端点 + next build/start 启动器 + 首页固定数据 |
 | 模型详情顶栏 Markdown | `model-detail-markdown.spec.ts` | mock 模式下渲染允许的 Markdown，并验证链接安全属性（外链新窗口/禁图等） |
 | model view 合约 | `model-view-test-helpers.spec.ts` | 校验 mock helper 的 URL 契约（公开/私有变体 pattern） |
 | model view mock 工具 | `model-view-test-helpers.ts` | `MOCK_MODEL_VIEW_RUN_DIR` 等 mock run 常量与 URL pattern，供无数据依赖的 spec 复用 |
@@ -49,6 +51,7 @@ E2E_SERVER=start pnpm test:e2e
 - 新增 spec 时命名建议：`task-{N}-{描述}.spec.ts`
 - 已登录用例：global setup 用 `SUPABASE_SERVICE_ROLE_KEY` 经 admin API（generate_link + 手工截 fragment tokens + @supabase/ssr cookie 编码）把测试用户 session 写入 `test-results/e2e-auth-state.json`，用例侧 `test.use({ storageState })` 复用；缺环境变量（`.env` 由 `process.loadEnvFile` 加载）时 setup 不写 state、已登录用例 skip；global teardown 清空该测试用户的 `user_style_favorites`
 - 无密钥入口：`playwright.no-env.config.ts` 不注册 global setup/teardown，先构建再启动 3100 端口；`e2e/block-env-file-access.cjs` 同时阻断测试进程与 Next 子进程读取 `.env*`，清除继承的 service-role 变量，测试产物只写 `/tmp/sdlab-playwright-no-env/`
+- no-env webServer 走 `e2e/no-env-webserver.cjs`：先启动 `e2e/mock-supabase-rest.cjs` 的假 Supabase REST 端点（固定数据在 `e2e/no-env-home-run-list.json`），再执行 `next build` / `next start`，保证首页与详情页的服务端渲染查询在无密钥模式下有确定性数据
 
 ## 反模式
 

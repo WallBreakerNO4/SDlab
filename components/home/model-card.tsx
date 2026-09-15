@@ -4,6 +4,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 
 import { BlurhashCanvas } from "@/components/comfyui/blurhash-canvas";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Link } from "@/i18n/navigation";
 
@@ -345,6 +346,7 @@ export function ModelCard({
 }: ModelCardProps) {
   const modelName = modelSummary.model?.name || modelSummary.run_dir;
   const locale = useLocale();
+  const t = useTranslations("modelCard");
   const description = modelSummary.model?.description;
   const modelDesc =
     description?.[locale as "zh" | "en"] ?? description?.zh ?? description?.en;
@@ -387,6 +389,16 @@ export function ModelCard({
           />
 
           <div className="absolute inset-0 bg-linear-to-t from-background/80 via-background/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+          {modelSummary.status === "in_progress" ? (
+            <Badge
+              variant="outline"
+              data-testid="model-status-badge"
+              className="absolute left-3 top-3 z-10 rounded-none border-primary/30 bg-background/85 px-2 py-0.5 font-mono text-[10px] tracking-[0.2em] text-primary backdrop-blur-sm"
+            >
+              {t("inProgress")}
+            </Badge>
+          ) : null}
 
           <div className="absolute bottom-4 right-4 translate-x-2 opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-[transform,opacity] duration-300 ease-out text-primary">
             <span className="font-bold text-xl leading-none">→</span>

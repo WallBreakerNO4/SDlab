@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
+
+
+LOG = logging.getLogger(__name__)
 
 
 def _sha256_hex(data: bytes) -> str:
@@ -42,16 +46,28 @@ def _load_run_json(run_dir: Path) -> dict[str, object]:
 def _load_metadata_records(run_dir: Path) -> list[dict[str, object]]:
     metadata_path = run_dir / "metadata.jsonl"
     rows: list[dict[str, object]] = []
-    with metadata_path.open("r", encoding="utf-8") as handle:
+    # errors="replace"：写入中断留下的非 UTF-8 残行按坏行走跳过 + 警告。
+    with metadata_path.open("r", encoding="utf-8", errors="replace") as handle:
         for line_number, raw_line in enumerate(handle, start=1):
             stripped = raw_line.strip()
             if not stripped:
                 continue
-            parsed = cast(object, json.loads(stripped))
-            if not isinstance(parsed, dict):
-                raise ValueError(
-                    f"metadata.jsonl 第 {line_number} 行必须是对象: {metadata_path}"
+            try:
+                parsed = cast(object, json.loads(stripped))
+            except json.JSONDecodeError:
+                LOG.warning(
+                    "metadata.jsonl 第 %s 行不是有效 JSON，已跳过: %s",
+                    line_number,
+                    metadata_path,
                 )
+                continue
+            if not isinstance(parsed, dict):
+                LOG.warning(
+                    "metadata.jsonl 第 %s 行不是对象，已跳过: %s",
+                    line_number,
+                    metadata_path,
+                )
+                continue
             rows.append(cast(dict[str, object], parsed))
     return rows
 

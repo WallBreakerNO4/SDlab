@@ -6,18 +6,25 @@ import json
 import logging
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from dataclasses import replace
+from typing import cast
 
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
+from .manifest import rewrite_current_manifest_status
 from .r2_client import R2Client, UploadPlan
 from .run_assets import asset_scan_report
 from .supabase_writer import SupabaseWriter, estimate_upload_index_records
 from .upload_contracts import (
     BucketScope,
+    EvaluationStatus,
+    EVALUATION_STATUS_COMPLETE,
     PlannedUpload,
     RunPlan,
     UploadScriptError,
+    EVALUATION_STATUSES,
+    snapshot_stats_report,
 )
 
 LOG = logging.getLogger(__name__)
@@ -88,14 +95,73 @@ def _manifest_release_id(payload: bytes | None) -> str | None:
     return release_id.strip()
 
 
-def _should_publish_current(
+def _current_manifest_status(payload: bytes | None) -> EvaluationStatus | None:
+    if payload is None:
+        return None
+    try:
+        parsed = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    status = parsed.get("status")
+    if isinstance(status, str) and status in EVALUATION_STATUSES:
+        return cast(EvaluationStatus, status)
+    return None
+
+
+def _effective_snapshot_status(
+    *,
+    planned_status: EvaluationStatus,
+    remote_payload: bytes | None,
+) -> EvaluationStatus:
+    if remote_payload is None:
+        return planned_status
+    # 缺少状态字段的历史发布数据统一视为已完结；已完结状态单调不回退。
+    remote_status = _current_manifest_status(remote_payload)
+    if remote_status is None or remote_status == EVALUATION_STATUS_COMPLETE:
+        return EVALUATION_STATUS_COMPLETE
+    return planned_status
+
+
+def _apply_status_monotonicity(
+    *,
+    plan: RunPlan,
+    current_upload: PlannedUpload,
+    remote_payload: bytes | None,
+) -> tuple[PlannedUpload, EvaluationStatus]:
+    effective_status = _effective_snapshot_status(
+        planned_status=plan.snapshot_status,
+        remote_payload=remote_payload,
+    )
+    if effective_status == plan.snapshot_status:
+        return current_upload, effective_status
+
+    body_bytes = current_upload.body_bytes
+    if body_bytes is None:
+        raise RuntimeError("planned current manifest is missing body bytes")
+    updated_bytes = rewrite_current_manifest_status(
+        body_bytes, status=effective_status
+    )
+    return (
+        replace(
+            current_upload,
+            body_bytes=updated_bytes,
+            byte_size=len(updated_bytes),
+        ),
+        effective_status,
+    )
+
+
+def _resolve_current_publish(
     *,
     plan: RunPlan,
     current_upload: PlannedUpload,
     r2_client: R2Client,
     bucket_names: dict[BucketScope, str],
     force_publish: bool,
-) -> bool:
+) -> tuple[PlannedUpload, EvaluationStatus, bool]:
+    """返回（状态收口后的当前指针上传、生效状态、是否需要上传指针）。"""
     planned_release_id = _manifest_release_id(current_upload.body_bytes)
     if planned_release_id is None:
         raise RuntimeError("planned current manifest is invalid")
@@ -106,18 +172,25 @@ def _should_publish_current(
         current_upload.key,
         bucket_scope=current_upload.bucket_scope,
     )
+    if remote_payload is not None:
+        remote_release_id = _manifest_release_id(remote_payload)
+        if remote_release_id != planned_release_id and not force_publish:
+            raise UploadScriptError(
+                f"run_dir={plan.run_dir_name} 已发布不同 release；请使用 -F/--force-publish",
+                category="argument",
+            )
+
+    effective_upload, effective_status = _apply_status_monotonicity(
+        plan=plan,
+        current_upload=current_upload,
+        remote_payload=remote_payload,
+    )
     if remote_payload is None:
-        return True
-
-    remote_release_id = _manifest_release_id(remote_payload)
-    if remote_release_id == planned_release_id:
-        return False
-    if force_publish:
-        return True
-
-    raise UploadScriptError(
-        f"run_dir={plan.run_dir_name} 已发布不同 release；请使用 -F/--force-publish",
-        category="argument",
+        return effective_upload, effective_status, True
+    return (
+        effective_upload,
+        effective_status,
+        remote_payload != effective_upload.body_bytes,
     )
 
 
@@ -221,16 +294,25 @@ def _execute(
 
     publish_current_by_run: dict[str, bool] = {}
     current_upload_by_run: dict[str, PlannedUpload] = {}
+    effective_status_by_run: dict[str, EvaluationStatus] = {}
     for plan in plans:
         current_upload = _current_manifest_upload(plan)
-        current_upload_by_run[plan.run_dir_name] = current_upload
-        publish_current_by_run[plan.run_dir_name] = _should_publish_current(
+        (
+            effective_upload,
+            effective_status,
+            should_publish,
+        ) = _resolve_current_publish(
             plan=plan,
             current_upload=current_upload,
             r2_client=r2_client,
             bucket_names=bucket_names,
             force_publish=force_publish,
         )
+        if effective_status != plan.snapshot_status:
+            plan.upload_index_payload["status"] = effective_status
+        current_upload_by_run[plan.run_dir_name] = effective_upload
+        publish_current_by_run[plan.run_dir_name] = should_publish
+        effective_status_by_run[plan.run_dir_name] = effective_status
 
     LOG.info(
         "start upload execution: run_count=%s image_upload_count=%s artifact_upload_count=%s db_record_count=%s upload_concurrency=%s",
@@ -329,6 +411,13 @@ def _execute(
         "run_dirs": [plan.run_dir_name for plan in plans],
         "asset_scans": [
             asset_scan_report(plan.run_dir_name, plan.asset_scan) for plan in plans
+        ],
+        "snapshot_stats": [
+            snapshot_stats_report(
+                plan,
+                status=effective_status_by_run[plan.run_dir_name],
+            )
+            for plan in plans
         ],
         "processed_grid_images": processed_images,
         "uploaded_variant_uploads": uploaded,

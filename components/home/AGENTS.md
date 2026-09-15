@@ -11,7 +11,7 @@
 
 | 场景             | 位置                     | 备注                                                                                |
 | ---------------- | ------------------------ | ----------------------------------------------------------------------------------- |
-| 模型卡片         | `model-card.tsx`         | 封面图（cover）+ 描述展开收起 + 主页缩略图水平卷轴（HorizontalScrollList）          |
+| 模型卡片         | `model-card.tsx`         | 封面图（cover）+ 描述展开收起 + 主页缩略图水平卷轴（HorizontalScrollList）+ 进行中评测的「评测中」徽章（`status === "in_progress"`） |
 | 预览大图弹窗     | `preview-dialog.tsx`     | 主页缩略图大图预览（基于 `components/ui/dialog.tsx`）；仅主页缩略图点击触发           |
 | 封面图/主页缩略图 | `API: /api/comfyui/runs` | 首页 runs 列表返回 `assets.cover` 与 `assets.homepage_cards`                        |
 | 图片源构建       | `lib/r2-url.ts`          | R2 公开 URL 生成                                                                    |
@@ -20,6 +20,7 @@
 ## 约定（本目录特有）
 
 - 封面图（cover）来自 `assets.cover`，统一走 `resolvePreferredImageSource()` 优先选 display → thumb 降级。
+- 进行中评测（`RunSummary.status === "in_progress"`）在封面图左上角显示「评测中」徽章（`modelCard.inProgress`，中英文文案齐全）；首页目录按 `published_at` 降序，由 `lib/run-list.ts` 查询排序。
 - 主页缩略图（homepage_cards）来自 `assets.homepage_cards[]`，同样走 display/thumb 降级。
 - `CardImage` 子组件使用 `<picture>` + `<source>` 支持 avif/webp 格式，配合 blurhash canvas 做加载占位。
 - `HorizontalScrollList` 实现无限滚动效果：通过 `copyCount` 份循环复制 + 滚动位置归位（middleCopyIndex），支持左右箭头按钮与平滑滚动；滚动条用 `scrollbar-none` 隐藏。

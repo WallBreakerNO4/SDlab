@@ -24,7 +24,7 @@
 | 模型指南 sitemap      | `model-guides-sitemap.ts` | `buildGuideSitemapEntries()`:仅为实际存在的指南语言生成 sitemap 条目与 hreflang;被 `app/sitemap.ts` 消费 |
 | 构建期生成模块        | `generated/`（子目录）    | `model-guides.ts`:`pnpm guides:build` 由 `loaders/model-guide-data-builder.ts` 生成,提交到仓库;含元数据与正文,服务端使用,不要在客户端直接 import |
 | 站点根 URL 常量            | `site-origin.ts`      | `SITE_ORIGIN`:`https://sdlab.wall-breaker-no4.xyz` |
-| 首页 run 列表查询          | `run-list.ts`         | `listRunSummaries()`:`unstable_cache` 5min + tag `run-list`,查 `run_list_items` 视图并拼装 `assets.cover` / `assets.homepage_cards` |
+| 首页 run 列表查询          | `run-list.ts`         | `listRunSummaries()`:`unstable_cache` 5min + tag `run-list`,查 `run_list_items` 视图，按 `published_at` 降序，拼装 `assets.cover` / `assets.homepage_cards` 并归一化 `status`（缺失按已完结） |
 | 浏览者偏好鉴权与写入       | `server-user-preferences.ts` | `server-only`;`requireViewerForPreferenceWrite()` + `setViewerShowNsfwPreference()` |
 | NSFW cookie 工具           | `viewer-nsfw-cookie.ts` | `VIEWER_SHOW_NSFW_COOKIE` / `DEFAULT_SHOW_NSFW` / `setViewerShowNsfwCookie()` |
 | Prompt 法典共享类型        | `prompt-types.ts`     | `TagNode` / `ChoiceNode` / `Prompt` / `Entry` / `TocNode` / `TargetModel` / `WeightMode` / `FileIndex` / `FileData` |

@@ -3,7 +3,11 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
 
-import type { RunAssetSummary, RunSummary } from "@/lib/comfyui-types";
+import {
+  normalizeEvaluationStatus,
+  type RunAssetSummary,
+  type RunSummary,
+} from "@/lib/comfyui-types";
 import { getPublicEnv } from "@/lib/env/public";
 import { publicObjectUrl } from "@/lib/r2-url";
 import type {
@@ -124,9 +128,9 @@ export async function loadRunSummariesUncached(): Promise<RunSummary[]> {
   const { data, error } = await supabase
     .from("run_list_items")
     .select(
-      "run_id, run_dir, created_at, x_count, y_count, total_cells, model_name, model_description_zh, model_description_en, model_homepage, model_huggingface, model_civitai, cover, homepage_cards",
+      "run_id, run_dir, created_at, published_at, x_count, y_count, total_cells, status, model_name, model_description_zh, model_description_en, model_homepage, model_huggingface, model_civitai, cover, homepage_cards",
     )
-    .order("created_at", { ascending: false })
+    .order("published_at", { ascending: false })
     .limit(50);
 
   if (error) {
@@ -162,6 +166,7 @@ export async function loadRunSummariesUncached(): Promise<RunSummary[]> {
       x_count: xCount,
       y_count: yCount,
       total_cells: totalCells,
+      status: normalizeEvaluationStatus(row.status),
       model: readModelMetadata(row),
       assets:
         cover || homepageCards
