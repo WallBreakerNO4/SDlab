@@ -16,8 +16,8 @@
 | 首页 runs 列表      | `app/[locale]/page.tsx`                          | 拉 `/api/comfyui/runs`；消费封面图 / 主页缩略图字段与评测状态（进行中卡片带「评测中」徽章）            |
 | 首页客户端组件       | `app/home-page-client.tsx`                       | `useTranslations("home")` 驱动多语言 Hero/Models 区域          |
 | 模型详情页（入口）   | `app/[locale]/models/[runDir]/page.tsx`          | locale 校验 + runDir 校验 → 委托 `ModelDetailClientPage`      |
-| 模型详情页（组件）   | `app/models/[runDir]/model-detail-client.tsx`    | 拉取 view bootstrap JSON + 虚拟网格 + workflow 下载           |
-| 收藏模型对比页       | `app/[locale]/favorites/page.tsx`                | 登录门控 + 收藏行 × 已发布模型列矩阵；noindex                 |
+| 模型详情页（组件）   | `app/models/[runDir]/model-detail-client.tsx`    | 拉取 view bootstrap JSON + 虚拟网格 + workflow 下载；进行中评测渲染横幅与「待生成」占位 |
+| 收藏模型对比页       | `app/[locale]/favorites/page.tsx`                | 登录门控 + 收藏行 × 已完结评测列矩阵；进行中评测为禁用条目；noindex |
 | 单收藏对比详情       | `app/[locale]/favorites/[styleKey]/page.tsx`     | 同一 `style_key` 的跨模型详情；委托 `FavoriteComparisonDetail` |
 | 模型指南页           | `app/[locale]/guides/[modelKey]/page.tsx`        | 静态预渲染的 Markdown 指南；draft 草稿不发布；locale 缺失重定向 |
 | Auth 回调页         | `app/auth/callback/route.ts`                     | OAuth 回跳处理                                                |
@@ -53,6 +53,8 @@
 - 脚本侧适配 run 级封面图与主页缩略图资产；网页首页通过 `/api/comfyui/runs` 返回的 `assets.cover` / `assets.homepage_cards` 消费这些字段。
 - 首页使用独立的封面图/主页缩略图字段；不要把 run 详情页的展示页缩略图语义直接挪作首页卡片素材。
 - 首页模型目录按 `run_list_items.published_at` 降序（每次发布刷新该时间）；缺失 `status` 的历史行按已完结处理，进行中评测在卡片上显示「评测中」徽章。
+- 详情页从 `view/current.json` 的可选 `status` 判定评测状态：进行中显示横幅，且「行已就绪但无图」的单元格显示「待生成」；已完结与缺字段的历史数据维持「缺失」。
+- 模型对比目录返回每个评测的 `status` 并按 `published_at` 排序；进行中评测在对比页以禁用条目加「评测中」标记呈现，矩阵列与 slice 只消费已完结评测，缺失状态字段按已完结处理。
 - SEO：`sitemap.ts` 为每个页面生成两个 locale 的条目并添加 hreflang alternates；模型指南页仅对实际存在语言的指南生成条目（经 `buildGuideSitemapEntries()`）。`robots.ts` 允许所有爬虫爬取页面但禁止 `/api/` 和 `/auth/`。二者均引用 `lib/site-origin.ts` 的 `SITE_ORIGIN`。
 - 页面 fetch 后先做 type guard，再进入渲染状态机；错误态与 not-found 分开处理。
 - 图片路径/对象 key 不在页面层手拼；公开变体走 `publicObjectUrl()`，私有对象走 `privateObjectProxyUrl(key, grant)` 构建的 `/api/private-object` URL。

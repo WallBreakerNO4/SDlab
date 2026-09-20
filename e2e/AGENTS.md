@@ -22,10 +22,12 @@
 | Mixer prompt parts 渲染 | `task-13-mixer-prompt-parts.spec.ts` | Mixer 的 y_prompt_parts（Artist/Common Prompt）前端分栏渲染 |
 | 画师串收藏 | `task-14-style-favorites.spec.ts` | 未登录弹登录框/收藏页门控 + 已登录 toggle/面板跳转/收藏页 + 对比页 BlurHash 回退 |
 | 首页评测状态 | `task-11-homepage-status.spec.ts` | no-env mock 下的首页排序（published_at）与「评测中」徽章（中英文） |
+| 详情页评测状态 | `task-13-pre-release-status.spec.ts` | mock 当前的 `status`：进行中横幅（中英文）、「待生成」/「缺失」占位、缺状态字段按已完结 |
+| 对比页评测状态 | `task-13-comparison-status.spec.ts` | 已登录用例（缺 Supabase 环境变量时 skip）：进行中评测禁用条目 + 徽章 + 说明，矩阵与 slice 只含已完结评测 |
 | no-env mock 运行时 | `no-env-webserver.cjs`、`mock-supabase-rest.cjs`、`no-env-home-run-list.json` | 假 Supabase REST 端点 + next build/start 启动器 + 首页固定数据 |
 | 模型详情顶栏 Markdown | `model-detail-markdown.spec.ts` | mock 模式下渲染允许的 Markdown，并验证链接安全属性（外链新窗口/禁图等） |
 | model view 合约 | `model-view-test-helpers.spec.ts` | 校验 mock helper 的 URL 契约（公开/私有变体 pattern） |
-| model view mock 工具 | `model-view-test-helpers.ts` | `MOCK_MODEL_VIEW_RUN_DIR` 等 mock run 常量与 URL pattern，供无数据依赖的 spec 复用 |
+| model view mock 工具 | `model-view-test-helpers.ts` | `MOCK_MODEL_VIEW_RUN_DIR` 等 mock run 常量与 URL pattern；`runStatus` / `emptyRowIndexes` / `failedRowIndexes` 可构造进行中评测、无图单元格与加载失败行 |
 | no-env blocker 验证 | `no-env-blocker.spec.ts` | 验证 no-env 配置下 worker 预加载了环境文件阻断器（配合 `no-env-node-options.ts` / `env-file-path.cjs`） |
 | 已登录态机制 | `global-setup.ts` / `global-teardown.ts` / `e2e-auth-state.ts` | service role admin 链路建 session 写 storageState；teardown 清空测试用户收藏 |
 

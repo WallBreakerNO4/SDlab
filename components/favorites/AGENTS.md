@@ -15,6 +15,7 @@
 | `favorites-page.tsx` | 收藏矩阵主工作区：登录门控、分页、模型显隐、slice/row 加载、预览和取消收藏 |
 | `favorite-comparison-detail.tsx` | 单个 `style_key` 跨模型、跨 X 测试场景的详情矩阵 |
 | `comparison-loader.ts` | 目录/slice fetch、私有 row URL、row cache 与有界并发加载 |
+| `comparison-in-progress-note.tsx` | 进行中评测不参与对比的次要说明（主对比页与单收藏详情页共用） |
 
 ## For AI Agents
 
@@ -24,6 +25,7 @@
 - 对比目录每页最多 40 条；slice 每次最多提交 40 个 style keys 和 12 个 run dirs。客户端切片只能进一步收紧上限，不能放宽服务端边界。
 - 所有 placement 的 `y_index` 均为 0-based，并直接对应 `rows/{viewer_variant}/{y_index}.json`；不要为 UI 展示提前改成 1-based。
 - 首次目录响应携带模型目录，后续 cursor 页只合并收藏；隐藏模型状态存于 `sdlab:favorites:hidden-models`，模型集合变化后必须清理失效 runDir。
+- 目录模型的 `status` 为 `in_progress` 时只在模型选择器渲染禁用条目 + 「评测中」标记；矩阵列与 slice 请求只消费 `getCompleteModels()` / `getVisibleModels()` 过滤后的已完结评测，缺失 `status` 的历史数据按已完结处理。存在进行中评测时，主对比页与单收藏详情页共用 `comparison-in-progress-note.tsx` 显示次要说明，不要各写一份。
 - `comparison-loader.ts` 的 row cache key 包含 `runDir/releaseId/viewerVariant/yIndex`；grant 刷新不应改变同一对象的 row cache 身份。
 - row manifest 的 `items[].blurhash` 是可选字段：item 级缺失时使用 slice placement 的 `blurhashes: [x_index, batch_index, blurhash][]` 回退。前端为 slice BlurHash 构建 `run/y/x/batch` lookup，row item 自带值始终优先。
 - row 状态必须区分 `loading` 与 `missing`：有 placement 且 row 请求仍在进行时保持 loading，占位可由 Skeleton/BlurHash 承接；只有确认该模型无 placement 时才是 missing，不能在异步请求尚未完成时提前显示“暂无图片”。

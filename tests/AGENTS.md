@@ -46,13 +46,14 @@
 | NovelAI 重试            | `test_novelai_retry.py`                                   | retry / retry-incomplete 回放与守卫码捞回 |
 | 历史 run 回填           | `test_backfill_run_style_items.py`                        | Y 资产 sha256 重放/git stub、集合校验、幂等 upsert、dry-run |
 | 画师串收藏 label        | `style-favorites.test.ts`                                 | 仅覆盖 `isStyleFavoriteLabel()` 的空白、1000 字符上限 |
-| 模型对比部分合约        | `style-comparison.test.ts`、`comparison-matrix-utils.test.ts` | cursor、limit、slice body 边界、目录/详情 guard、viewer cookie、cache URL、BlurHash lookup |
+| 模型对比部分合约        | `style-comparison.test.ts`、`comparison-matrix-utils.test.ts` | cursor、limit、slice body 边界、目录/详情 guard、目录 status/published_at 归一化与排序、viewer cookie、cache URL、BlurHash lookup |
+| 详情视图状态 guard       | `model-detail-types.test.ts`                              | `isCurrentRunView()` 接受可选 `status`，缺字段历史数据兼容、非法取值拒绝 |
 | 无环境文件测试入口      | `env-file-path.test.ts`、`no-env-node-options.test.ts`     | Node 测试入口的路径与参数防护 |
 | 模型指南数据层          | `model-guides.test.ts`                                    | `parseModelGuide()` frontmatter 契约、`buildGuideIndex()` / `resolveGuideLocale()` / `resolveGuidePath()` |
 | 指南 sitemap 条目       | `sitemap.test.ts`                                         | `buildGuideSitemapEntries()` 只含实际存在语言 + hreflang alternates |
 | 模型详情 response guard | `model-detail-types.test.ts`                              | `isModelDetailResponse()` 本地化描述字段校验 |
 | 模型描述 Markdown URL   | `model-description-markdown.test.ts`                      | `transformModelDescriptionUrl()` 拒绝斜杠网络路径引用 |
-| 对比 RPC 迁移防回归     | `style-comparison-rpc-migration.test.ts`                  | security-invoker RPC、grants、BlurHash RPC、EXPLAIN 验收脚本、模型缓存 300s 约束 |
+| 对比 RPC 迁移防回归     | `style-comparison-rpc-migration.test.ts`                  | security-invoker RPC、grants、BlurHash RPC、目录 status/published_at 重建迁移、EXPLAIN 验收脚本、模型缓存 300s 约束 |
 | 跨语言契约常量一致性     | `test_contract_constants.py`、`contract-constants.test.ts` | run key / style_key / y_index 与上限常量在 Python、TS、SQL 三侧镜像的共享样本、文本范式与 SQL CHECK/上限守卫；样本在 `tests/fixtures/contract-constants.json` |
 
 ## 约定（本目录特有）
@@ -62,7 +63,7 @@
 - pyright：测试文件可用文件级 `# pyright:` 放宽 unknown 类型（因 fake/mocks）
 - 固定样例资产放在 `tests/fixtures/`；共享 setup 写在测试文件 helper 中，没有顶层 `conftest.py`
 - TypeScript 测试使用 `node:assert/strict` + `node:test`，通过 `pnpm test` 执行 `node --import tsx --test tests/*.test.ts`；不要混入 Playwright 浏览器断言。
-- 模型对比单测未覆盖 slice response guard，也未覆盖 `mergeComparisonFavorites()`、`getVisibleModels()`、`reconcileHiddenRunDirs()`、`flattenRowSlides()`；修改这些逻辑时应补对应测试。
+- 模型对比单测未覆盖 slice response guard，也未覆盖 `mergeComparisonFavorites()`、`reconcileHiddenRunDirs()`、`flattenRowSlides()`；`getCompleteModels()` / `hasInProgressModels()` / `getVisibleModels()` 已覆盖进行中与隐藏过滤；修改这些逻辑时应补对应测试。
 - 修改 placement / row 逻辑时，应增加或保持对 0-based `y_index` 结构的测试；单测不等同于 E2E。
 - 修改 run key / style_key / y_index 及其上限常量（含 SQL migration 内的 CHECK 与 RPC 边界）时，必须同步所有镜像并通过 `test_contract_constants.py` + `contract-constants.test.ts` 的守卫；接受/拒绝行为样本统一维护在 `tests/fixtures/contract-constants.json`，不要在守卫里另抄一份样本。`collectionIdNormalization` 样本仅由 Python 侧消费。
 

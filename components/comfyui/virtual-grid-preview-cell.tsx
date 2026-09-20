@@ -1,3 +1,5 @@
+import { useTranslations } from "next-intl";
+
 import { GridImage } from "./grid-image";
 import { pickBestVariants } from "./virtual-grid-utils";
 import type { RunViewAccess } from "@/app/models/[runDir]/model-detail-types";
@@ -19,6 +21,8 @@ type VirtualGridPreviewCellProps = {
   isAuthenticated: boolean;
   currentUserId: string | null;
   grant: string | null;
+  /** 进行中评测：行已就绪但无图的单元格显示「待生成」而不是「缺失」。 */
+  isInProgress: boolean;
   onRefreshViewAccess: () => Promise<RunViewAccess | null>;
   onRequireLogin: () => void;
   onOpenCellDialog: (
@@ -46,12 +50,14 @@ export function VirtualGridPreviewCell({
   isAuthenticated,
   currentUserId,
   grant,
+  isInProgress,
   onRefreshViewAccess,
   onRequireLogin,
   onOpenCellDialog,
   onThumbLoad,
   globallyLoadedKeys,
 }: VirtualGridPreviewCellProps) {
+  const t = useTranslations("virtualGrid");
   const rowCell =
     rowEntry && rowEntry.status === "ready"
       ? (rowEntry.cellsByX.get(xIndex) ?? null)
@@ -79,10 +85,12 @@ export function VirtualGridPreviewCell({
 
   const placeholderLabel =
     rowEntry && rowEntry.status === "error"
-      ? "加载失败"
+      ? t("loadFailed")
       : rowEntry
-        ? "缺失"
-        : "加载中";
+        ? isInProgress
+          ? t("pending")
+          : t("missing")
+        : t("loading");
 
   const previewNode = showImage ? (
     <div
@@ -94,7 +102,9 @@ export function VirtualGridPreviewCell({
           thumbVariants={thumbVariants}
           blurhash={effectiveBlurhash}
           alt={
-            yLabel && xLabel ? `${yLabel} × ${xLabel}` : yLabel || xLabel || "图片预览"
+            yLabel && xLabel
+              ? `${yLabel} × ${xLabel}`
+              : yLabel || xLabel || t("imagePreview")
           }
           currentUserId={currentUserId}
           grant={grant}

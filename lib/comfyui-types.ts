@@ -168,6 +168,10 @@ export function normalizeEvaluationStatus(
   return value === "in_progress" ? "in_progress" : "complete";
 }
 
+export function isEvaluationStatus(value: unknown): value is EvaluationStatus {
+  return value === "in_progress" || value === "complete";
+}
+
 export function isCellStatus(status: string): status is CellStatus {
   return ["success", "failed", "skipped", "missing"].includes(status);
 }

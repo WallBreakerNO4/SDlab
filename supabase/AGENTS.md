@@ -18,6 +18,7 @@
 | 首页评测状态列        | `migrations/20260915095701_add_run_list_items_status_and_published_at.sql` | `run_list_items` 新增 `status` / `generated_cells` / `published_at`；历史行回填为已完结 / `total_cells` / `created_at`，并建 `published_at desc` 索引 |
 | 模型对比查询索引      | `migrations/20260720120000_add_style_comparison_indexes.sql` | 收藏 keyset 分页索引 + style/run placement 覆盖索引 |
 | 模型对比 RPC           | `migrations/20260720130000_add_style_comparison_rpcs.sql` | authenticated slice 聚合 + 公共模型目录聚合；均为 `SECURITY INVOKER` |
+| 对比目录评测状态        | `migrations/20260920102643_add_style_comparison_models_status.sql` | 目录 RPC 返回 `status` 与 `published_at`，排序按 `published_at` 回退 `created_at`；重建函数后重新声明原 grants |
 | 对比 BlurHash RPC      | `migrations/20260720140000_add_style_comparison_slice_blurhash.sql` | 三参数 slice RPC；materialized 有界集合关联 `run_grid_items`，按 NSFW 偏好返回紧凑 BlurHash tuple |
 | RPC 性能验收           | `tests/style_comparison_rpc_explain.sql` | 用真实 viewer fixture 验证 1×1、1×6、40×12，并校验最大 slice 的 40/480/12 及 SFW/NSFW BlurHash 数量 |
 | CLI 临时状态          | `.temp/`、`.branches/`                                        | `supabase` CLI 生成；不要当源码修改                |
@@ -31,7 +32,7 @@
 - 模型对比依赖 `(user_id, created_at desc, style_key)` 收藏分页索引和 `(style_key, run_dir) include (y_index)` placement 索引；新增查询形态时用新迁移调整，不改已提交迁移。
 - `get_style_comparison_slice` 只授予 `authenticated`，必须保持 `SECURITY INVOKER`、显式 `(select auth.uid())`、函数内 40 style / 12 run 上限和固定异常文案；不得接受客户端 `user_id` 参数。overload 形式同时提供两参数与三参数版本：三参数版本通过 `p_include_nsfw` 控制 `run_grid_items.category`，requested/owned/target placement CTE 必须 `MATERIALIZED`，BlurHash tuple 按 `x_index, batch_index` 稳定排序。清理旧版本函数需另开迁移。
 - BlurHash 数据读取 `run_grid_items.blurhash` 字段。
-- `get_style_comparison_models` 只授予 `anon, authenticated`，一次 JOIN 已发布视图、列表投影和 run X columns；它只服务共享 5 分钟缓存，不得混入用户收藏或 grant。
+- `get_style_comparison_models` 只授予 `anon, authenticated`，一次 JOIN 已发布视图、列表投影和 run X columns，返回 `status` 与 `published_at`（排序按 `published_at` 回退 `created_at`）；它只服务共享 5 分钟缓存，不得混入用户收藏或 grant。
 - 新函数默认执行权限必须显式从 `PUBLIC`（以及受限角色）撤销后再按最小角色集合 `GRANT`；不要依赖 PostgreSQL 的默认函数权限。
 - 不要在迁移文件中硬编码凭证或环境特定值
 - 本地重置：`pnpm dlx supabase db reset` 以已提交的 migrations 重建数据库；不跟踪 seed 数据文件

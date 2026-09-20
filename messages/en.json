@@ -81,7 +81,8 @@
     "expandDescription": "Expand model description",
     "collapseDescription": "Collapse model description",
     "descriptionRegionLabel": "Full model description",
-    "guide": "Usage guide"
+    "guide": "Usage guide",
+    "inProgressBanner": "This model is still being evaluated. Full results are coming — you can browse the partial results in the meantime."
   },
   "virtualGrid": {
     "toolsLabel": "Tools",
@@ -89,6 +90,10 @@
     "openTools": "Open Grid Tools",
     "collapseTools": "Collapse Tool Panel",
     "loadFailed": "Load Failed",
+    "missing": "Missing",
+    "loading": "Loading",
+    "imagePreview": "Image preview",
+    "pending": "Pending",
     "clickToCopy": "Click to copy",
     "searchPrompt": "Search Row Prompt",
     "searchPlaceholder": "Search Artist or Common Prompt...",
@@ -200,5 +205,7 @@
     ,"syncModeHelpTitle": "Sync switching"
     ,"syncModeHelpDescription": "Controls how the arrow buttons switch images: Single switches only the current image; Column switches every favorited row in that model's column together; All switches the entire matrix together. In Column and All modes, the scene description in each column header follows the currently shown image."
     ,"jumpToModelRow": "Jump to row {row} in {model}"
+    ,"modelInProgress": "In progress"
+    ,"comparisonInProgressNote": "Models under evaluation don't take part in comparisons yet; they join automatically once complete."
   }
 }

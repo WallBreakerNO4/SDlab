@@ -29,6 +29,7 @@ import { ModelDetailHeader } from "./model-detail-header";
 import { GridSkeleton, SummarySkeleton } from "./model-detail-skeletons";
 import { useModelDetailData } from "./use-model-detail-data";
 import { Link } from "@/i18n/navigation";
+import { normalizeEvaluationStatus } from "@/lib/comfyui-types";
 import { SITE_ORIGIN } from "@/lib/site-origin";
 
 export function ModelDetailClientPage({
@@ -61,6 +62,9 @@ export function ModelDetailClientPage({
   const isGridLoading = gridLoadState === "loading";
   const isDetailReady = detailLoadState === "ready" && detailData !== null;
   const isGridReady = gridLoadState === "ready" && gridData !== null;
+  // 缺失状态字段的历史发布数据按已完结处理。
+  const evaluationStatus = normalizeEvaluationStatus(currentView?.status);
+  const isInProgress = evaluationStatus === "in_progress";
 
   const breadcrumbTitle = isDetailReady
     ? detailData.run.model?.name || detailData.run.run_dir
@@ -135,6 +139,16 @@ export function ModelDetailClientPage({
         />
       ) : null}
 
+      {isDetailReady && isInProgress ? (
+        <div
+          role="status"
+          data-testid="model-in-progress-banner"
+          className="border-primary/25 bg-primary/5 text-foreground/80 rounded-sm border px-3 py-2 text-xs leading-relaxed"
+        >
+          {t("inProgressBanner")}
+        </div>
+      ) : null}
+
       <div className="flex min-h-0 flex-1 flex-col">
         {isGridLoading ? <GridSkeleton /> : null}
 
@@ -146,6 +160,7 @@ export function ModelDetailClientPage({
               grid={gridData}
               blurhashMap={blurhashMap}
               showNsfw={showNsfw}
+              evaluationStatus={evaluationStatus}
               currentView={currentView}
               viewAccess={viewAccess}
               onRefreshViewAccess={refreshViewAccess}

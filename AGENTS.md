@@ -19,7 +19,7 @@
 - Mixer metadata 会额外持久化 `y_common_prompt`；展示页 bootstrap 通过可选 `yPromptParts` 向前端提供 Artist/Common Prompt 拆分，首列分别复制，缺失部分不渲染。
 - NovelAI 生图链路（config v2 + `backend=novelai`）独立于 ComfyUI：`novelai_generate.py` 复用 runner 的网格/metadata/重试/协调模块，`novelai_client.py` 封装 SDK 与 Anlas 守卫；守卫决策见 `docs/adr/0001`、`docs/adr/0002`、`docs/adr/0003`。
 - 画师提示词收藏（Style Favorites）：登录用户可在详情页收藏 Y 轴画师串、在 `/[locale]/favorites` 查看并跨模型跳转；收藏身份用 `style_key`（`{collection_id}:{item_index}`），跨 run 匹配只比较 style_key，永不比较 prompt 字符串；`y_index` 一律 0-based，仅收藏页拼跳转 URL 时 `#{y_index + 1}`。
-- Style Comparison（模型对比收藏）：`/[locale]/favorites` 以收藏画师串为行、已发布模型为列展示同风格结果，`/[locale]/favorites/[styleKey]` 提供单收藏详情；目录 API 使用 keyset cursor 且每页最多 40 条，slice 每次最多 40 个 style key / 12 个 run，模型目录缓存 5 分钟。
+- Style Comparison（模型对比收藏）：`/[locale]/favorites` 以收藏画师串为行、已完结评测为列展示同风格结果，`/[locale]/favorites/[styleKey]` 提供单收藏详情；进行中评测在对比页是禁用条目并带「评测中」标记，矩阵列与 slice 只含已完结评测。目录 API 使用 keyset cursor 且每页最多 40 条，slice 每次最多 40 个 style key / 12 个 run，模型目录缓存 5 分钟。
 - Model Guide（模型使用指南）：与 `model_key` 绑定的 Markdown 使用经验文章，路由 `/[locale]/guides/[modelKey]`；源资产 `data/model-guides/*.md`（含 `.en.md` 变体），构建期经 `loaders/model-guide-data-builder.ts`（`pnpm guides:build`）编译为 `lib/generated/model-guides.ts`；frontmatter `draft: true` 的草稿不进入公开索引、页面、SEO metadata 与 sitemap。
 
 ## 结构
@@ -179,7 +179,8 @@
 - 路径与 URL：API 入口的 `runDir` 先用 `lib/comfyui-types.ts:isValidRunDir()` 判形态；共享路径处理再走 `lib/comfyui-path.ts`；R2 URL 统一走 `lib/r2-url.ts`。
 - 前端：大网格必须虚拟化；图片优先消费 R2 display/thumb 变体并配合 blurhash 占位，这套变体统一称为“展示页缩略图”。
 - 前端首页：`/api/comfyui/runs` 输出封面图/主页缩略图字段；不要把 run 详情页的展示页缩略图直接挪作首页卡片素材。
-- 模型对比：收藏目录分页上限固定为 40；slice 请求最多 40 个 `style_key`、12 个 `run_dir`；`run_style_items.y_index` 与所有前端 placement 均保持 0-based。
+- 模型对比：收藏目录分页上限固定为 40；slice 请求最多 40 个 `style_key`、12 个 `run_dir`；`run_style_items.y_index` 与所有前端 placement 均保持 0-based；进行中评测不进入矩阵列与 slice 请求，只能在对比页以禁用条目呈现，缺失状态字段的历史数据按已完结处理。
+- 详情页评测状态：`view/current.json` 的可选 `status` 决定进行中横幅；进行中评测里「行已就绪但无图」的单元格显示「待生成」，已完结评测维持「缺失」。
 - 模型对比缓存：`getCachedPublishedRuns()` 通过 `unstable_cache` 缓存已发布模型目录 5 分钟；私有对象 route 必须先验证 grant 和 key 范围，再查询去 grant 的共享边缘 cache，cache URL 必须保留对象 `key`。
 - Prompt 法典浏览器：运行时只消费 `public/data/prompts/*.json` 构建产物；源 YAML `data/prompt-codex/*.yaml` 是只读输入资产，不要在 Web 侧直接读取。目标模型/权重模式/Choice 选择的状态边界分别在 `lib/prompt-model-context.tsx` 与 `lib/prompt-choice-context.tsx`，格式化文本统一走 `lib/prompt-formatter.ts:formatPrompt()`。
 - SEO：所有页面 `generateMetadata` 统一使用 `lib/metadata-utils.ts:buildSeoMetadata()` 构建 OG/Twitter Card/canonical/hreflang 标签，不要手写重复模板。模型详情页的 `og:image` 通过 `lib/model-metadata.ts:getModelMetadata()` 从 Supabase 查询封面图 URL。JSON-LD 结构化数据使用 `components/json-ld.tsx` 的客户端组件注入，不消耗 Worker CPU。

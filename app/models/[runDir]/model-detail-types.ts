@@ -1,3 +1,5 @@
+import { isEvaluationStatus, type EvaluationStatus } from "@/lib/comfyui-types";
+
 import type {
   RunGridIndexData,
   RunGridXColumn,
@@ -54,6 +56,8 @@ export type CurrentRunView = {
   release_id: string;
   bootstrap_sfw_key: string;
   public_row_prefix: string;
+  /** 缺失状态字段的历史发布数据按已完结处理（消费侧归一化）。 */
+  status?: EvaluationStatus;
 };
 
 export type RunBootstrapResponse = ModelDetailResponse & RunGridIndexData;
@@ -192,7 +196,10 @@ export function isCurrentRunView(value: unknown): value is CurrentRunView {
     typeof value.run_dir === "string" &&
     typeof value.release_id === "string" &&
     typeof value.bootstrap_sfw_key === "string" &&
-    typeof value.public_row_prefix === "string"
+    typeof value.public_row_prefix === "string" &&
+    (value.status === undefined ||
+      value.status === null ||
+      isEvaluationStatus(value.status))
   );
 }
 

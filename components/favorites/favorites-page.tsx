@@ -17,6 +17,7 @@ import { AuthLoginDialog } from "@/components/auth-login-dialog";
 import { BlurhashCanvas } from "@/components/comfyui/blurhash-canvas";
 import { GridImage } from "@/components/comfyui/grid-image";
 import { useRenderableVariantSource } from "@/components/comfyui/use-renderable-variant-source";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -51,6 +52,7 @@ import { deleteStyleFavorite } from "@/lib/style-favorites";
 import {
   flattenRowSlides,
   getVisibleModels,
+  hasInProgressModels,
   mergeComparisonFavorites,
   reconcileHiddenRunDirs,
   type ComparisonModel,
@@ -65,6 +67,7 @@ import {
   resolveComparisonRowState,
   type ComparisonRowState,
 } from "./comparison-loader";
+import { ComparisonInProgressNote } from "./comparison-in-progress-note";
 import {
   buildComparisonBlurhashLookup,
   getComparisonBlurhash,
@@ -394,6 +397,7 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
   }, []);
 
   const favorites = useMemo(() => mergeComparisonFavorites(pages), [pages]);
+  const hasInProgress = useMemo(() => hasInProgressModels(models), [models]);
   const visibleModels = useMemo(
     () => getVisibleModels(models, hidden),
     [models, hidden],
@@ -708,6 +712,7 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
             <p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground">
               {t("comparisonDescription")}
             </p>
+            {hasInProgress ? <ComparisonInProgressNote /> : null}
           </div>
           <div className="flex items-center gap-2">
             <ToggleGroup
@@ -767,19 +772,34 @@ function ComparisonWorkspace({ userId }: { userId: string }) {
               <DropdownMenuContent align="end" className="w-72">
                 <DropdownMenuLabel>{t("modelSelector")}</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {models.map((model) => (
-                  <DropdownMenuCheckboxItem
-                    key={model.run_dir}
-                    checked={!hidden.has(model.run_dir)}
-                    onCheckedChange={() => toggleHidden(model.run_dir)}
-                    onSelect={(event) => event.preventDefault()}
-                    className="truncate"
-                  >
-                    <span className="truncate">
-                      {model.name ?? model.run_dir}
-                    </span>
-                  </DropdownMenuCheckboxItem>
-                ))}
+                {models.map((model) => {
+                  const inProgress = model.status === "in_progress";
+                  return (
+                    <DropdownMenuCheckboxItem
+                      key={model.run_dir}
+                      checked={!inProgress && !hidden.has(model.run_dir)}
+                      disabled={inProgress}
+                      onCheckedChange={() => {
+                        if (!inProgress) toggleHidden(model.run_dir);
+                      }}
+                      onSelect={(event) => event.preventDefault()}
+                      className="truncate"
+                    >
+                      <span className="truncate">
+                        {model.name ?? model.run_dir}
+                      </span>
+                      {inProgress ? (
+                        <Badge
+                          variant="outline"
+                          data-testid="comparison-model-status-badge"
+                          className="border-primary/30 text-primary ml-auto shrink-0 rounded-none px-1.5 font-mono text-[10px] tracking-[0.2em]"
+                        >
+                          {t("modelInProgress")}
+                        </Badge>
+                      ) : null}
+                    </DropdownMenuCheckboxItem>
+                  );
+                })}
               </DropdownMenuContent>
             </DropdownMenu>
             {nextCursor ? (
