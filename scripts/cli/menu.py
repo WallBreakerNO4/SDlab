@@ -258,7 +258,7 @@ def _handle_upload(backend: QuestionaryMenuBackend) -> None:
         "选择上传方式",
         [
             MenuChoice("normal", "普通上传"),
-            MenuChoice("force", "强制重新发布现有 Run"),
+            MenuChoice("force", "强制发布（快照回退时）"),
         ],
         allow_back=True,
     )

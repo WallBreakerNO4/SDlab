@@ -55,7 +55,10 @@ def build_parser() -> argparse.ArgumentParser:
         "-F",
         "--force-publish",
         action="store_true",
-        help="Republish an existing run and replace its current view pointer.",
+        help=(
+            "Force publish a snapshot that rolls back the current website "
+            "snapshot (fewer generated cells)."
+        ),
     )
     _ = parser.add_argument(
         "--complete",

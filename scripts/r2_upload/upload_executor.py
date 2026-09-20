@@ -6,7 +6,7 @@ import json
 import logging
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import cast
 
 from tqdm import tqdm
@@ -80,46 +80,67 @@ def _current_manifest_upload(plan: RunPlan) -> PlannedUpload:
     return matches[0]
 
 
-def _manifest_release_id(payload: bytes | None) -> str | None:
+@dataclass(frozen=True)
+class _CurrentManifestFacts:
+    release_id: str | None
+    status: EvaluationStatus | None
+    generated_cells: int | None
+
+
+def _parse_current_manifest(payload: bytes | None) -> _CurrentManifestFacts:
+    """解析发布视图当前指针（view/current.json）；字段缺失或不可用时为 None。"""
+    empty = _CurrentManifestFacts(release_id=None, status=None, generated_cells=None)
     if payload is None:
-        return None
+        return empty
     try:
         parsed = json.loads(payload)
     except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
+        return empty
     if not isinstance(parsed, dict):
-        return None
-    release_id = parsed.get("release_id")
-    if not isinstance(release_id, str) or not release_id.strip():
-        return None
-    return release_id.strip()
+        return empty
 
+    release_id_raw = parsed.get("release_id")
+    release_id = (
+        release_id_raw.strip()
+        if isinstance(release_id_raw, str) and release_id_raw.strip()
+        else None
+    )
 
-def _current_manifest_status(payload: bytes | None) -> EvaluationStatus | None:
-    if payload is None:
-        return None
-    try:
-        parsed = json.loads(payload)
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    if not isinstance(parsed, dict):
-        return None
-    status = parsed.get("status")
-    if isinstance(status, str) and status in EVALUATION_STATUSES:
-        return cast(EvaluationStatus, status)
-    return None
+    status_raw = parsed.get("status")
+    status = (
+        cast(EvaluationStatus, status_raw)
+        if isinstance(status_raw, str) and status_raw in EVALUATION_STATUSES
+        else None
+    )
+
+    generated_cells_raw = parsed.get("generated_cells")
+    generated_cells = (
+        generated_cells_raw
+        if isinstance(generated_cells_raw, int)
+        and not isinstance(generated_cells_raw, bool)
+        and generated_cells_raw >= 0
+        else None
+    )
+
+    return _CurrentManifestFacts(
+        release_id=release_id,
+        status=status,
+        generated_cells=generated_cells,
+    )
 
 
 def _effective_snapshot_status(
     *,
     planned_status: EvaluationStatus,
-    remote_payload: bytes | None,
+    remote_facts: _CurrentManifestFacts | None,
 ) -> EvaluationStatus:
-    if remote_payload is None:
+    if remote_facts is None:
         return planned_status
     # 缺少状态字段的历史发布数据统一视为已完结；已完结状态单调不回退。
-    remote_status = _current_manifest_status(remote_payload)
-    if remote_status is None or remote_status == EVALUATION_STATUS_COMPLETE:
+    if (
+        remote_facts.status is None
+        or remote_facts.status == EVALUATION_STATUS_COMPLETE
+    ):
         return EVALUATION_STATUS_COMPLETE
     return planned_status
 
@@ -128,11 +149,11 @@ def _apply_status_monotonicity(
     *,
     plan: RunPlan,
     current_upload: PlannedUpload,
-    remote_payload: bytes | None,
+    remote_facts: _CurrentManifestFacts | None,
 ) -> tuple[PlannedUpload, EvaluationStatus]:
     effective_status = _effective_snapshot_status(
         planned_status=plan.snapshot_status,
-        remote_payload=remote_payload,
+        remote_facts=remote_facts,
     )
     if effective_status == plan.snapshot_status:
         return current_upload, effective_status
@@ -161,9 +182,13 @@ def _resolve_current_publish(
     bucket_names: dict[BucketScope, str],
     force_publish: bool,
 ) -> tuple[PlannedUpload, EvaluationStatus, bool]:
-    """返回（状态收口后的当前指针上传、生效状态、是否需要上传指针）。"""
-    planned_release_id = _manifest_release_id(current_upload.body_bytes)
-    if planned_release_id is None:
+    """返回（状态收口后的当前指针上传、生效状态、是否需要上传指针）。
+
+    同一评测的再次发布默认自动取代网站当前快照；仅当本次快照的已产出格数
+    少于网站当前快照（快照回退）且未显式强推时拒绝。历史当前快照缺少
+    `generated_cells` 时跳过回退检查；内容无变化时不上传新指针。
+    """
+    if _parse_current_manifest(current_upload.body_bytes).release_id is None:
         raise RuntimeError("planned current manifest is invalid")
 
     bucket_name = bucket_names[current_upload.bucket_scope]
@@ -172,18 +197,30 @@ def _resolve_current_publish(
         current_upload.key,
         bucket_scope=current_upload.bucket_scope,
     )
-    if remote_payload is not None:
-        remote_release_id = _manifest_release_id(remote_payload)
-        if remote_release_id != planned_release_id and not force_publish:
-            raise UploadScriptError(
-                f"run_dir={plan.run_dir_name} 已发布不同 release；请使用 -F/--force-publish",
-                category="argument",
-            )
+    remote_facts = (
+        None if remote_payload is None else _parse_current_manifest(remote_payload)
+    )
+
+    if (
+        remote_facts is not None
+        and remote_facts.generated_cells is not None
+        and plan.generated_cells < remote_facts.generated_cells
+        and not force_publish
+    ):
+        raise UploadScriptError(
+            (
+                f"run_dir={plan.run_dir_name} 本次快照已产出 "
+                f"{plan.generated_cells} 格，少于网站当前快照的 "
+                f"{remote_facts.generated_cells} 格；快照回退需使用 "
+                "-F/--force-publish"
+            ),
+            category="argument",
+        )
 
     effective_upload, effective_status = _apply_status_monotonicity(
         plan=plan,
         current_upload=current_upload,
-        remote_payload=remote_payload,
+        remote_facts=remote_facts,
     )
     if remote_payload is None:
         return effective_upload, effective_status, True

@@ -13,7 +13,7 @@
 
 | 任务                      | 位置                     | 备注                                                                                 |
 | ------------------------- | ------------------------ | ------------------------------------------------------------------------------------ |
-| 上传主入口与 CLI          | `upload_images_to_r2.py` | `build_parser()`；`-F/--force-publish`；`--complete` 人工收口状态；编排编码/上传/写入；4 条 tqdm 进度条          |
+| 上传主入口与 CLI          | `upload_images_to_r2.py` | `build_parser()`；`-F/--force-publish`（仅快照回退时需显式强推）；`--complete` 人工收口状态；编排编码/上传/写入；4 条 tqdm 进度条          |
 | R2 存储客户端             | `r2_client.py`           | boto3 S3 兼容；`R2Client` + 重试 + 结构化错误（`R2ClientError` 含 retryable 标志）   |
 | Supabase 批量写入         | `supabase_writer.py`     | `SupabaseWriter.upsert_upload_index()`；分批 upsert + 并发写入；含 `_build_run_style_item_rows()` 从 image payload 的 `y_style_key` upsert `run_style_items`（on_conflict=`run_id,style_key`）；`run_list_items` 写入 `status` / `generated_cells` / `published_at`（缺失状态按已完结、格数回退 `total_cells`） |
 | 上传规划与变体            | `upload_planner.py`      | `_build_run_plan()`；多变体规划 + ThreadPoolExecutor 并发编码；把 `y_style_key` 写入 grid_items 字段并规划 `run_style_items` 行；Mixer metadata 缺 `y_common_prompt` 时按 run 快照中的 Y YAML SHA256 严格回填 |
@@ -21,7 +21,7 @@
 | 图片编码参数              | `encoding_params.py`     | webp/avif 质量/尺寸参数；展示页缩略图中的 thumb 尺寸为 display 一半（向下取整，≥1）  |
 | 变体图片处理              | `variants.py`            | PIL 缩放 + 编码；生成展示页缩略图所需的 display/thumb webp/avif                      |
 | 上传合约类型              | `upload_contracts.py`    | `PlannedUpload`/`UploadResult` 等 dataclass                                          |
-| 上传执行器                | `upload_executor.py`     | 并发上传调度                                                                         |
+| 上传执行器                | `upload_executor.py`     | 并发上传调度；发布前判定当前快照自动取代 / 快照回退拦截（`-F` 显式强推）与已完结状态单调收口 |
 | 上传 I/O                  | `upload_io.py`           | 文件读写工具                                                                         |
 | 上传发现                  | `upload_discovery.py`    | 从 metadata.jsonl 发现待上传图片                                                     |
 | 上传运行时                | `upload_runtime.py`      | 运行时环境初始化                                                                     |
@@ -71,8 +71,8 @@ supabase_writer.py → 批量 upsert 到 Supabase（runs + snapshots + projectio
 - 评测状态写入 `view/current.json` 当前指针的 `status` / `generated_cells`；同一 `release_id` 下状态收口（如 `--complete`）也会刷新当前指针；已完结状态单调不回退，缺状态字段的历史快照按已完结处理。
 - bucket 分配：normal category → public bucket；advance/nsfw → private bucket
 - 上传支持可配置并发（`--upload-workers`）和 dry-run 模式
-- 普通上传允许首次发布与相同 `release_id` 的幂等恢复；不同 release 必须显式使用 `-F/--force-publish`，且仅支持单个 `--run-dir`
-- 发布顺序固定为不可变资源 → Supabase 数据/`run_view_index` → 可变 `view/current.json`；强制发布不重复上传已存在的内容寻址图片
+- 同一评测的重复发布默认自动取代网站当前快照；仅当本次快照已产出格数少于网站当前快照（回退）时必须显式使用 `-F/--force-publish`（仅支持单个 `--run-dir`）；网站当前快照缺 `generated_cells`（历史数据）时跳过回退检查
+- 发布顺序固定为不可变资源 → Supabase 数据/`run_view_index` → 可变 `view/current.json`；自动取代与强制发布都复用内容寻址资源，不重复上传已存在图片；内容无变化时不上传新指针
 - Mixer metadata 缺少 `y_common_prompt` 时，上传规划校验 run 快照中的 Y YAML SHA256，并按 Y prompt 身份在内存中严格回填；不会改写本地 `metadata.jsonl`
 - Mixer bootstrap 以可选 `yPromptParts` 暴露 Artist/Common Prompt，并保留 `yLabels` 字段；view schema 为 v2
 - Style Favorites 上传链路：从 image payload 的 `y_style_key` 提取并 upsert `run_style_items`（`run_id,style_key,y_index,label`）；缺少该字段的 run 由 `scripts/other/backfill_run_style_items.py` 回填

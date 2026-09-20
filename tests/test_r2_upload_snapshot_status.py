@@ -572,7 +572,7 @@ def test_missing_remote_status_is_treated_as_complete(
     writer = _CapturingSupabaseWriter()
     _install_fake_backends(monkeypatch, fake_r2=fake_r2, writer=writer)
 
-    # 历史快照缺少 status 字段：按已完结处理并保持单调。
+    # 历史快照缺少 status 字段：按已完结处理并保持单调；缺 generated_cells 自动跳过回退检查。
     legacy_pointer = {
         "schema_version": 2,
         "run_dir": "legacy-pointer-run",
@@ -590,7 +590,7 @@ def test_missing_remote_status_is_treated_as_complete(
         json.dumps(legacy_pointer, ensure_ascii=False).encode("utf-8"),
     )
 
-    assert main(["-F", "--run-dir", str(run_dir)]) == 0
+    assert main(["--run-dir", str(run_dir)]) == 0
     payload = _read_stdout_json(capsys)
 
     assert payload.get("mode") == "execute"
@@ -599,6 +599,62 @@ def test_missing_remote_status_is_treated_as_complete(
     current_body = fake_r2.body_for("runs/legacy-pointer-run/view/current.json")
     assert current_body is not None
     assert json.loads(current_body.decode("utf-8"))["status"] == "complete"
+
+
+def test_legacy_remote_without_generated_cells_skips_rollback_check(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _write_png(tmp_path / "legacy-cells-run/images/x0-y0.png")
+    run_dir = _write_run_fixture(
+        tmp_path,
+        run_name="legacy-cells-run",
+        metadata_records=[
+            _success_record(x_index=0, y_index=0, image_path="images/x0-y0.png")
+        ],
+    )
+    fake_r2 = _FakeR2Client()
+    writer = _CapturingSupabaseWriter()
+    _install_fake_backends(monkeypatch, fake_r2=fake_r2, writer=writer)
+
+    # 历史快照有 status 但没有 generated_cells：本地只有 1/2 格也跳过回退检查。
+    legacy_pointer = {
+        "schema_version": 2,
+        "run_dir": "legacy-cells-run",
+        "release_id": "deadbeefdeadbeefdead",
+        "status": "in_progress",
+        "bootstrap_sfw_key": (
+            "runs/legacy-cells-run/view/v2/deadbeefdeadbeefdead/bootstrap.sfw.json"
+        ),
+        "public_row_prefix": (
+            "runs/legacy-cells-run/view/v2/deadbeefdeadbeefdead/rows/public/"
+        ),
+    }
+    fake_r2.seed_object(
+        "dummy-public",
+        "runs/legacy-cells-run/view/current.json",
+        json.dumps(legacy_pointer, ensure_ascii=False).encode("utf-8"),
+    )
+
+    assert main(["--run-dir", str(run_dir)]) == 0
+    payload = _read_stdout_json(capsys)
+
+    assert payload.get("mode") == "execute"
+    assert _snapshot_stats(payload) == [
+        {
+            "run_dir": "legacy-cells-run",
+            "status": "in_progress",
+            "generated_cells": 1,
+            "planned_cells": 2,
+        }
+    ]
+    current_body = fake_r2.body_for("runs/legacy-cells-run/view/current.json")
+    assert current_body is not None
+    current_manifest = json.loads(current_body.decode("utf-8"))
+    assert current_manifest["release_id"] != "deadbeefdeadbeefdead"
+    assert current_manifest["generated_cells"] == 1
+    assert current_manifest["status"] == "in_progress"
 
 
 def test_published_status_never_regresses_after_complete(
@@ -618,15 +674,15 @@ def test_published_status_never_regresses_after_complete(
     writer = _CapturingSupabaseWriter()
     _install_fake_backends(monkeypatch, fake_r2=fake_r2, writer=writer)
 
-    # 先以 complete 状态发布（人工收口），再用缺格的新快照显式强推。
+    # 先以 complete 状态发布（人工收口），再替换图片内容（格数持平的新 release）。
     assert main(["--complete", "--run-dir", str(run_dir)]) == 0
     _ = _read_stdout_json(capsys)
     assert fake_r2.upload_calls > 0
 
-    # 替换图片内容触发新 release；快照仍只有 1/2 格。
+    # 格数持平：不需要 -F，自动取代当前快照；已完结状态保持。
     _write_png(run_dir / "images/x0-y0.png", size=(12, 10))
 
-    assert main(["-F", "--run-dir", str(run_dir)]) == 0
+    assert main(["--run-dir", str(run_dir)]) == 0
     payload = _read_stdout_json(capsys)
 
     assert payload.get("mode") == "execute"

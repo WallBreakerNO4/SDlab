@@ -170,7 +170,7 @@
 - Python 运行资产：`scripts/generation/runner_config.py` 会把 run 目录下的 `image.*` 识别为封面图、`images/*` 识别为主页缩略图源资产并写进生图快照；上传链路不再消费该快照，而是在发布时按同一识别规则现场扫描 `run.json` `config_path` 指向的资产目录（多个 `image.*` 报错），把扫描结果写入 R2 + Supabase 快照。
 - Anima Artist Mixer：`workflow.anima_artist_mixer: true` 仅允许 `backend=comfyui` 且 `model.family=anima`；workflow 必须是 KSampler 的 model/positive 同时连到启用的 `AnimaArtistCrossAttn`，再由 `AnimaArtistPack` 接收 `base_prompt` 与 `artist_chain`。
 - NovelAI 链路：`backend=novelai` 不消费 workflow/api.json；Anlas 守卫只做免费资格参数校验（面积 ≤ 1024×1024、步数 ≤ 28、单张）与 V5 电量守卫，绝不依据 Anlas 余额推断计费（ADR 0002）；V5 电量低于阈值默认暂停生成、轮询等待回充后自动继续（默认等待上限 24h，超时回退真中止），`--battery-hard-stop` 显式启用旧真中止模式；硬停时未提交格子保持 incomplete，用 `--retry-incomplete` 恢复（ADR 0003）。
-- 重发已发布 run 使用上传 CLI 的 `-F/--force-publish`；普通模式遇到不同 `release_id` 会拒绝。强制发布仍复用内容寻址资源，并在 Supabase 写入完成后最后覆盖 `view/current.json`。
+- 重发已发布 run 默认自动取代网站当前快照；仅当新快照已产出格数少于网站当前快照（快照回退）时拒绝并要求 `-F/--force-publish`（仍限单个 `--run-dir`）。内容无变化的重复发布幂等跳过；强制发布仍复用内容寻址资源，并在 Supabase 写入完成后最后覆盖 `view/current.json`。
 - 发布时按快照内容自动判定评测状态：计划单元格全部有图 → `complete`，否则 `in_progress`；`--complete` 人工收口，已完结状态不回退（含历史快照缺状态字段按已完结处理）。状态与 `generated_cells` 写入 `view/current.json` 与 `run_list_items`；首页按 `published_at` 降序并为进行中评测显示「评测中」徽章。
 - API：`app/api/**/route.ts` 保持 `runtime = "nodejs"`；错误响应返回固定短文案，不透出绝对路径、stack、凭证。
 - Supabase：ComfyUI API 统一用 `createSupabaseAuthClient()`；浏览器端认证统一用 `createSupabaseBrowserClient()`；`app/auth/callback/route.ts` 为 PKCE 交换 session 的例外。

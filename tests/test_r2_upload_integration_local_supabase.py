@@ -425,6 +425,41 @@ def _read_run_list_status(
     return row
 
 
+def _append_second_cell(run_dir: Path) -> None:
+    image_path = run_dir / "images/x1-y0.png"
+    Image.new("RGB", (8, 6), (90, 40, 10)).save(image_path, format="PNG")
+    with (run_dir / "metadata.jsonl").open("a", encoding="utf-8") as handle:
+        _ = handle.write(
+            json.dumps(
+                {
+                    "status": "success",
+                    "x_index": 1,
+                    "y_index": 0,
+                    "batch_index": 1,
+                    "x_info_type": "normal",
+                    "local_image_path": "images/x1-y0.png",
+                    "positive_prompt": "second cell prompt",
+                    "prompt_hash": "second-cell-prompt-hash",
+                },
+                ensure_ascii=False,
+            )
+            + "\n"
+        )
+
+
+def _remove_second_cell(run_dir: Path) -> None:
+    metadata_path = run_dir / "metadata.jsonl"
+    kept: list[str] = []
+    for line in metadata_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        record = json.loads(line)
+        if record.get("x_index") == 1:
+            continue
+        kept.append(line)
+    metadata_path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+
+
 def _read_current_manifest(
     fake_r2: _FakeR2Client, run_dir_name: str
 ) -> dict[str, object]:
@@ -515,3 +550,80 @@ def test_local_supabase_integration_publishes_snapshot_status(
     third_manifest = _read_current_manifest(fake_r2, run_dir_name)
     assert third_manifest.get("status") == "complete"
     assert third_manifest.get("generated_cells") == 1
+
+
+def test_local_supabase_integration_replaces_snapshot_and_blocks_rollback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    if os.getenv(_RUN_FLAG) != "1":
+        pytest.skip(f"仅在 {_RUN_FLAG}=1 时运行本地 Supabase 集成回归。")
+
+    supabase_url, service_role_key = _require_local_supabase_env()
+
+    from scripts.r2_upload.supabase_writer import _default_client_factory
+
+    supabase_client = _default_client_factory(supabase_url, service_role_key)
+
+    fake_r2 = _FakeR2Client()
+    run_dir, run_dir_name = _prepare_run_dir_in_progress(tmp_path)
+    monkeypatch.setenv("R2_PUBLIC_BUCKET", "itest-public")
+    monkeypatch.setenv("R2_PRIVATE_BUCKET", "itest-private")
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.R2Client.from_env",
+        classmethod(lambda cls, dry_run, **kwargs: fake_r2),
+    )
+
+    assert main(["--run-dir", str(run_dir)]) == 0
+    _ = _read_stdout_json(capsys)
+    first_manifest = _read_current_manifest(fake_r2, run_dir_name)
+    assert first_manifest["generated_cells"] == 1
+    first_release_id = first_manifest["release_id"]
+
+    # 补上第二格：格数增加，不需要 -F 自动取代网站当前快照。
+    _append_second_cell(run_dir)
+
+    second_exit = main(["--run-dir", str(run_dir)])
+    second_payload = _read_stdout_json(capsys)
+    assert second_exit == 0
+    assert second_payload.get("snapshot_stats") == [
+        {
+            "run_dir": run_dir_name,
+            "status": "complete",
+            "generated_cells": 2,
+            "planned_cells": 2,
+        }
+    ]
+    second_manifest = _read_current_manifest(fake_r2, run_dir_name)
+    assert second_manifest["release_id"] != first_release_id
+    assert second_manifest["generated_cells"] == 2
+    assert second_manifest["status"] == "complete"
+    second_row = _read_run_list_status(supabase_client, run_dir_name)
+    assert second_row.get("generated_cells") == 2
+    assert second_row.get("status") == "complete"
+    uploads_before_rollback = fake_r2.upload_calls
+
+    # 回退：移除第二格 → 拒绝并要求 -F，当前快照与 R2 对象均不变。
+    _remove_second_cell(run_dir)
+
+    rollback_exit = main(["--run-dir", str(run_dir)])
+    rollback_payload = _read_stdout_json(capsys)
+    assert rollback_exit == 2
+    assert rollback_payload.get("category") == "argument"
+    assert "-F/--force-publish" in str(rollback_payload.get("message"))
+    assert fake_r2.upload_calls == uploads_before_rollback
+    assert _read_current_manifest(fake_r2, run_dir_name) == second_manifest
+
+    # 显式强推：回退快照生效，已完结状态单调不回退。
+    force_exit = main(["-F", "--run-dir", str(run_dir)])
+    force_payload = _read_stdout_json(capsys)
+    assert force_exit == 0
+    assert force_payload.get("force_publish") is True
+    forced_manifest = _read_current_manifest(fake_r2, run_dir_name)
+    assert forced_manifest["release_id"] == first_release_id
+    assert forced_manifest["generated_cells"] == 1
+    assert forced_manifest["status"] == "complete"
+    forced_row = _read_run_list_status(supabase_client, run_dir_name)
+    assert forced_row.get("generated_cells") == 1
+    assert forced_row.get("status") == "complete"

@@ -23,7 +23,11 @@ def _sha256_file(path: Path) -> str:
 
 
 def _write_run_fixture(
-    root: Path, *, run_name: str, include_workflow_download: bool = False
+    root: Path,
+    *,
+    run_name: str,
+    include_workflow_download: bool = False,
+    planned_cells: int | None = None,
 ) -> Path:
     run_dir = root / run_name
     images_dir = run_dir / "images"
@@ -38,6 +42,17 @@ def _write_run_fixture(
         "run_dir": run_name,
         "created_at": "2026-01-01T00:00:00Z",
     }
+    if planned_cells is not None:
+        run_payload["selection"] = {
+            "x_columns": [
+                {"type": "normal", "description": {"zh": f"列 {index + 1}"}}
+                for index in range(planned_cells)
+            ],
+            "y_indexes": [0],
+            "x_count": planned_cells,
+            "y_count": 1,
+            "total_cells": planned_cells,
+        }
     if include_workflow_download:
         workflow_download_path = run_dir / "workflow.json"
         workflow_download_path.write_text('{"version":1}\n', encoding="utf-8")
@@ -66,12 +81,50 @@ def _write_run_fixture(
     return run_dir
 
 
+def _append_cell_record(run_dir: Path, *, x_index: int) -> None:
+    image_rel = f"images/x{x_index}-y0.png"
+    Image.new("RGB", (8, 6), (10 + x_index, 20, 30)).save(
+        run_dir / image_rel, format="PNG"
+    )
+    with (run_dir / "metadata.jsonl").open("a", encoding="utf-8") as handle:
+        _ = handle.write(
+            json.dumps(
+                {
+                    "status": "success",
+                    "x_index": x_index,
+                    "y_index": 0,
+                    "local_image_path": image_rel,
+                    "x_info_type": "normal",
+                },
+                ensure_ascii=False,
+            )
+            + "\n"
+        )
+
+
+def _keep_only_first_cell(run_dir: Path) -> None:
+    metadata_path = run_dir / "metadata.jsonl"
+    kept = [
+        line
+        for line in metadata_path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and json.loads(line).get("x_index") == 0
+    ]
+    metadata_path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+
+
 class _FakeR2Client:
     def __init__(self) -> None:
         self._objects: set[tuple[str, str]] = set()
         self._object_bodies: dict[tuple[str, str], bytes] = {}
         self.upload_calls: int = 0
         self.uploaded_keys: list[tuple[str, str]] = []
+
+    def body_for(self, bucket_name: str, key: str) -> bytes | None:
+        return self._object_bodies.get((bucket_name, key))
+
+    def seed_object(self, bucket_name: str, key: str, body: bytes) -> None:
+        self._objects.add((bucket_name, key))
+        self._object_bodies[(bucket_name, key)] = body
 
     def head_exists(self, bucket_name: str, key: str, *, bucket_scope: str) -> bool:
         _ = bucket_scope
@@ -332,12 +385,20 @@ def test_execute_uses_r2_upload_concurrency_from_env(
     assert 4 in _CapturingExecutor.seen_max_workers
 
 
-def test_changed_release_requires_force_publish(
+def _current_manifest(fake_r2: _FakeR2Client, run_dir_name: str) -> dict[str, object]:
+    body = fake_r2.body_for("dummy-public", f"runs/{run_dir_name}/view/current.json")
+    assert body is not None
+    parsed = json.loads(body.decode("utf-8"))
+    assert isinstance(parsed, dict)
+    return parsed
+
+
+def test_changed_release_replaces_current_snapshot_without_force(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    run_dir = _write_run_fixture(tmp_path, run_name="force-publish-run")
+    run_dir = _write_run_fixture(tmp_path, run_name="auto-replace-run")
     monkeypatch.setenv("R2_PUBLIC_BUCKET", "dummy-public")
     monkeypatch.setenv("R2_PRIVATE_BUCKET", "dummy-private")
     fake_r2 = _FakeR2Client()
@@ -354,23 +415,257 @@ def test_changed_release_requires_force_publish(
     assert main(["--run-dir", str(run_dir)]) == 0
     first_payload = _read_stdout_json(capsys)
     assert first_payload["force_publish"] is False
+    first_manifest = _current_manifest(fake_r2, "auto-replace-run")
     uploads_after_first = fake_r2.upload_calls
 
+    # 格数持平、内容变化：不需要 -F，自动取代当前快照。
     metadata_path = run_dir / "metadata.jsonl"
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     metadata["positive_prompt"] = "changed prompt"
     metadata["prompt_hash"] = "changed-hash"
     metadata_path.write_text(json.dumps(metadata) + "\n", encoding="utf-8")
 
+    assert main(["--run-dir", str(run_dir)]) == 0
+    second_payload = _read_stdout_json(capsys)
+    assert second_payload["mode"] == "execute"
+    assert second_payload["force_publish"] is False
+    assert fake_r2.upload_calls > uploads_after_first
+
+    second_manifest = _current_manifest(fake_r2, "auto-replace-run")
+    assert second_manifest["release_id"] != first_manifest["release_id"]
+
+    # 内容无变化的重复发布：不产生新版本、不写新对象。
+    uploads_after_second = fake_r2.upload_calls
+    assert main(["--run-dir", str(run_dir)]) == 0
+    _ = _read_stdout_json(capsys)
+    assert fake_r2.upload_calls == uploads_after_second
+    assert _current_manifest(fake_r2, "auto-replace-run") == second_manifest
+
+
+def test_cell_growth_replaces_current_snapshot_without_force(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_dir = _write_run_fixture(
+        tmp_path,
+        run_name="cell-growth-run",
+        planned_cells=2,
+    )
+    monkeypatch.setenv("R2_PUBLIC_BUCKET", "dummy-public")
+    monkeypatch.setenv("R2_PRIVATE_BUCKET", "dummy-private")
+    fake_r2 = _FakeR2Client()
+
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.R2Client.from_env",
+        classmethod(lambda cls, dry_run, **kwargs: fake_r2),
+    )
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.SupabaseWriter.from_env",
+        classmethod(lambda cls, dry_run, **kwargs: _NoopSupabaseWriter()),
+    )
+
+    assert main(["--run-dir", str(run_dir)]) == 0
+    _ = _read_stdout_json(capsys)
+    first_manifest = _current_manifest(fake_r2, "cell-growth-run")
+    assert first_manifest["generated_cells"] == 1
+    assert first_manifest["status"] == "in_progress"
+
+    # 补上第二格：格数增加，仍然不需要 -F。
+    _append_cell_record(run_dir, x_index=1)
+
+    assert main(["--run-dir", str(run_dir)]) == 0
+    payload = _read_stdout_json(capsys)
+    assert payload["force_publish"] is False
+    assert payload["snapshot_stats"] == [
+        {
+            "run_dir": "cell-growth-run",
+            "status": "complete",
+            "generated_cells": 2,
+            "planned_cells": 2,
+        }
+    ]
+
+    second_manifest = _current_manifest(fake_r2, "cell-growth-run")
+    assert second_manifest["release_id"] != first_manifest["release_id"]
+    assert second_manifest["generated_cells"] == 2
+    assert second_manifest["status"] == "complete"
+
+
+def test_snapshot_rollback_requires_force_publish(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_dir = _write_run_fixture(
+        tmp_path,
+        run_name="rollback-run",
+        planned_cells=2,
+    )
+    _append_cell_record(run_dir, x_index=1)
+    monkeypatch.setenv("R2_PUBLIC_BUCKET", "dummy-public")
+    monkeypatch.setenv("R2_PRIVATE_BUCKET", "dummy-private")
+    fake_r2 = _FakeR2Client()
+
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.R2Client.from_env",
+        classmethod(lambda cls, dry_run, **kwargs: fake_r2),
+    )
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.SupabaseWriter.from_env",
+        classmethod(lambda cls, dry_run, **kwargs: _NoopSupabaseWriter()),
+    )
+
+    assert main(["--run-dir", str(run_dir)]) == 0
+    _ = _read_stdout_json(capsys)
+    first_manifest = _current_manifest(fake_r2, "rollback-run")
+    assert first_manifest["generated_cells"] == 2
+    uploads_after_first = fake_r2.upload_calls
+
+    # 格数变少：拒绝并要求显式 -F，当前快照与对象均不变。
+    _keep_only_first_cell(run_dir)
+
     assert main(["--run-dir", str(run_dir)]) == 2
     rejected_payload = _read_stdout_json(capsys)
     assert rejected_payload["category"] == "argument"
+    assert "-F/--force-publish" in str(rejected_payload["message"])
     assert fake_r2.upload_calls == uploads_after_first
+    assert _current_manifest(fake_r2, "rollback-run") == first_manifest
 
+    # 显式强推后生效；已完结状态单调不回退。
     assert main(["-F", "--run-dir", str(run_dir)]) == 0
-    force_payload = _read_stdout_json(capsys)
-    assert force_payload["force_publish"] is True
+    forced_payload = _read_stdout_json(capsys)
+    assert forced_payload["force_publish"] is True
+    forced_manifest = _current_manifest(fake_r2, "rollback-run")
+    assert forced_manifest["generated_cells"] == 1
+    assert forced_manifest["status"] == "complete"
     assert fake_r2.upload_calls > uploads_after_first
+
+
+def test_all_runs_judges_each_snapshot_independently(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_root = tmp_path / "outputs"
+    grown_run = _write_run_fixture(
+        run_root,
+        run_name="grown-run",
+        planned_cells=2,
+    )
+    _append_cell_record(grown_run, x_index=1)
+    equal_run = _write_run_fixture(
+        run_root,
+        run_name="equal-run",
+        planned_cells=2,
+    )
+    monkeypatch.setenv("R2_PUBLIC_BUCKET", "dummy-public")
+    monkeypatch.setenv("R2_PRIVATE_BUCKET", "dummy-private")
+    fake_r2 = _FakeR2Client()
+    for run_name, generated_cells in (("grown-run", 1), ("equal-run", 1)):
+        fake_r2.seed_object(
+            "dummy-public",
+            f"runs/{run_name}/view/current.json",
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "run_dir": run_name,
+                    "release_id": "seed-release",
+                    "status": "in_progress",
+                    "generated_cells": generated_cells,
+                },
+                ensure_ascii=False,
+            ).encode("utf-8"),
+        )
+
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.R2Client.from_env",
+        classmethod(lambda cls, dry_run, **kwargs: fake_r2),
+    )
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.SupabaseWriter.from_env",
+        classmethod(lambda cls, dry_run, **kwargs: _NoopSupabaseWriter()),
+    )
+
+    assert main(["--all-runs", "--run-root", str(run_root)]) == 0
+    payload = _read_stdout_json(capsys)
+    assert payload["mode"] == "execute"
+    assert payload["force_publish"] is False
+
+    stats_raw = payload["snapshot_stats"]
+    assert isinstance(stats_raw, list)
+    stats_by_run = {
+        str(item["run_dir"]): item
+        for item in stats_raw
+        if isinstance(item, dict)
+    }
+    assert stats_by_run["grown-run"]["generated_cells"] == 2
+    assert stats_by_run["grown-run"]["status"] == "complete"
+    assert stats_by_run["equal-run"]["generated_cells"] == 1
+    assert stats_by_run["equal-run"]["status"] == "in_progress"
+
+    grown_manifest = _current_manifest(fake_r2, "grown-run")
+    equal_manifest = _current_manifest(fake_r2, "equal-run")
+    assert grown_manifest["release_id"] != "seed-release"
+    assert grown_manifest["generated_cells"] == 2
+    assert equal_manifest["release_id"] != "seed-release"
+    assert equal_manifest["generated_cells"] == 1
+
+
+def test_all_runs_rollback_refusal_blocks_batch_before_writes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_root = tmp_path / "outputs"
+    grown_run = _write_run_fixture(
+        run_root,
+        run_name="grown-run",
+        planned_cells=2,
+    )
+    _append_cell_record(grown_run, x_index=1)
+    rollback_run = _write_run_fixture(
+        run_root,
+        run_name="rollback-run",
+        planned_cells=2,
+    )
+    monkeypatch.setenv("R2_PUBLIC_BUCKET", "dummy-public")
+    monkeypatch.setenv("R2_PRIVATE_BUCKET", "dummy-private")
+    fake_r2 = _FakeR2Client()
+    for run_name, generated_cells in (("grown-run", 1), ("rollback-run", 2)):
+        fake_r2.seed_object(
+            "dummy-public",
+            f"runs/{run_name}/view/current.json",
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "run_dir": run_name,
+                    "release_id": "seed-release",
+                    "status": "in_progress",
+                    "generated_cells": generated_cells,
+                },
+                ensure_ascii=False,
+            ).encode("utf-8"),
+        )
+
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.R2Client.from_env",
+        classmethod(lambda cls, dry_run, **kwargs: fake_r2),
+    )
+    monkeypatch.setattr(
+        "scripts.r2_upload.upload_images_to_r2.SupabaseWriter.from_env",
+        classmethod(lambda cls, dry_run, **kwargs: _NoopSupabaseWriter()),
+    )
+
+    # 批次中任一评测回退：整批在写入前被拒绝，前进的那个也不得取代当前快照。
+    assert main(["--all-runs", "--run-root", str(run_root)]) == 2
+    payload = _read_stdout_json(capsys)
+    assert payload["mode"] == "error"
+    assert payload["category"] == "argument"
+    assert "rollback-run" in str(payload["message"])
+    assert fake_r2.upload_calls == 0
+    assert _current_manifest(fake_r2, "grown-run")["release_id"] == "seed-release"
+    assert _current_manifest(fake_r2, "rollback-run")["release_id"] == "seed-release"
 
 
 def test_current_manifest_is_published_after_supabase_write(
