@@ -291,6 +291,9 @@ node_modules/
 /outputs
 DBbackup/
 
+# 本地开发种子数据（生产库导出的真实数据副本，永不进仓库；见 supabase/AGENTS.md）
+supabase/seed.sql
+
 # 历史遗留防御：.sisyphus/ 为已弃用的 oh-my-openagent 插件目录，
 # 当前代码不再生成（E2E 产物已改用 test-results/），此处忽略仅为兜底防止误提交
 .sisyphus/

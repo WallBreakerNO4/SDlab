@@ -151,9 +151,11 @@ max_indexes = 5
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
-site_url = "http://127.0.0.1:3000"
+# 本地网站实际跑在 http://localhost:3000（e2e 与浏览器习惯均用 localhost）
+site_url = "http://localhost:3000"
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# `/auth/callback?next=...` 形态的回跳依赖通配符匹配
+additional_redirect_urls = ["http://localhost:3000/**", "http://127.0.0.1:3000/**"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to the local API URL (http://127.0.0.1:<port>/auth/v1).
@@ -391,7 +393,9 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # OAuth Providers (website login)
 # --------------------------------------------------------------------------
 
-# GitHub OAuth — fully configured in Supabase Dashboard
+# GitHub OAuth — 本地栈使用 GitHub dev OAuth App（与生产 App 分开注册，
+# callback 填 http://localhost:54321/auth/v1/callback）；
+# 凭据放项目根目录 .env（config.toml 的 env() 只读根 .env，见 supabase/AGENTS.md）
 [auth.external.github]
 enabled = true
 client_id = "env(SUPABASE_AUTH_EXTERNAL_GITHUB_CLIENT_ID)"
@@ -399,18 +403,18 @@ secret = "env(SUPABASE_AUTH_EXTERNAL_GITHUB_SECRET)"
 redirect_uri = ""
 url = ""
 
-# Google OAuth
+# Google OAuth — 本地栈不配置（本地登录只走 GitHub，见 supabase/AGENTS.md）
 [auth.external.google]
-enabled = true
-client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
-secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+enabled = false
+client_id = ""
+secret = ""
 redirect_uri = ""
 url = ""
 
-# Microsoft (Azure) OAuth
+# Microsoft (Azure) OAuth — 本地栈不配置（本地登录只走 GitHub，见 supabase/AGENTS.md）
 [auth.external.azure]
-enabled = true
-client_id = "env(SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_ID)"
-secret = "env(SUPABASE_AUTH_EXTERNAL_AZURE_SECRET)"
+enabled = false
+client_id = ""
+secret = ""
 redirect_uri = ""
 url = ""

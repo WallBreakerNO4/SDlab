@@ -300,3 +300,13 @@ single-context 布局：根目录 `CONTEXT.md` + `docs/adr/`。详见 `docs/agen
 | 契约区（`supabase/`、`data/` 分账、`docs/`、`CONTEXT.md`） | 两侧共用 | — | 变更按接口变更处理，两侧一起过；`data/` 产权分账见 `data/AGENTS.md` |
 
 **硬规则**：介绍本仓库或为网站做改动时，主体永远是网站；生图脚本只作为内容的来源提及，不得当作产品的一部分。
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
