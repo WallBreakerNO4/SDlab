@@ -6,7 +6,7 @@
 ## 概览
 
 - Supabase 项目配置与数据库迁移文件。用于本地开发环境和远程 Supabase 项目同步；`.temp/` / `.branches/` 是 CLI 生成状态，不是源码。
-- 本地数据库开发环境（「本地开发阶段」）通过官方 seed.sql 流程复现生产数据：`supabase/seed.sql`（git 忽略，生产库导出的真实数据副本）+ `db reset`（迁移 + 种子一起重放）；网站经 `pnpm dev:local` 连本地库，普通 `pnpm dev` 保持连远端、行为零变化。架构决策见 `docs/adr/0007`，领域术语见根 `CONTEXT.md`。
+- 本地数据库开发环境（「本地开发阶段」）通过官方 seed.sql 流程复现生产数据：`supabase/seed.sql`（git 忽略，生产库导出的真实数据副本）+ `db reset`（迁移 + 种子一起重放）；网站经 `pnpm dev:local` 连本地库，普通 `pnpm dev` 保持连远端、行为零变化。架构决策见父工单 issue #17（Implementation Decisions），领域术语见根 `CONTEXT.md`。
 
 ## 去哪儿看
 
@@ -113,29 +113,29 @@ pnpm dev:local    # dotenv-cli 注入 .env.local-db 后跑 next dev
      "select id, email from auth.users order by created_at desc limit 5;"
    ```
 
-3. 把下面 SQL 中的 `<LOCAL_USER_ID>` 替换为该 id 后，在本地库执行（幂等，可重复跑）：
+3. 把下面 SQL 中的 `<LOCAL_USER_ID>` 替换为该 id 后，在本地库执行（幂等，可重复跑）。
+
+   语义说明：回填是**叠加归属**——把种子副本里悬空的偏好/收藏行**复制**到本地登录身份名下；悬空原行保留不删（RLS 使其只对原 user_id 可见，对本地登录无副作用），下次 `db reset` 随种子重放自然消除。不要用 `DELETE` 清悬空行：那会连生产数据副本里其他真实用户的行一起删掉，破坏「真实数据量」的验证意义。
 
    ```sql
-   -- 回填 NSFW 偏好归属：把生产数据副本的偏好行全部指向本地登录身份
+   -- 回填 NSFW 偏好归属：本地身份尚无偏好行时，取一份生产悬空偏好行复制过来
    insert into public.user_preferences (user_id, show_nsfw)
-   values ('<LOCAL_USER_ID>', false)
+   select '<LOCAL_USER_ID>', show_nsfw
+   from public.user_preferences
+   where user_id <> '<LOCAL_USER_ID>'
+   order by updated_at desc
+   limit 1
    on conflict (user_id) do nothing;
 
-   -- 回填画师串收藏归属：同 style_key 只保留本地身份下的一条，生产悬空行删除
-   delete from public.user_style_favorites
-   where user_id <> '<LOCAL_USER_ID>'
-     and style_key in (
-       select style_key from public.user_style_favorites where user_id = '<LOCAL_USER_ID>'
-     );
+   -- 回填画师串收藏归属：把全部生产悬空收藏行复制到本地登录身份名下
    insert into public.user_style_favorites (user_id, style_key, label, created_at)
    select '<LOCAL_USER_ID>', style_key, label, created_at
    from public.user_style_favorites
    where user_id <> '<LOCAL_USER_ID>'
    on conflict (user_id, style_key) do nothing;
-   delete from public.user_style_favorites where user_id <> '<LOCAL_USER_ID>';
    ```
 
    执行方式：`docker exec supabase_db_images-script psql -U postgres -d postgres -c "<SQL>"`，或粘贴进 Studio（`http://127.0.0.1:54323`）的 SQL Editor。
 4. 刷新页面确认收藏 / 对比 / 法典入口在真实数据量下可见。
 
-> 这是手册化的手工流程，不做成脚本：回填只在本地开发时使用，频率为每次 `db reset` 后一次。
+> 这是手册化的手工流程，不做成脚本：回填只在本地开发时使用，频率为每次 `db reset` 后一次。SQL 首次执行约 `INSERT 0 1`（偏好）+ `INSERT 0 19`（收藏，行数随种子浮动），重复执行两次均 `INSERT 0 0` 即幂等生效。
