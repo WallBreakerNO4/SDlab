@@ -400,7 +400,9 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 enabled = true
 client_id = "env(SUPABASE_AUTH_EXTERNAL_GITHUB_CLIENT_ID)"
 secret = "env(SUPABASE_AUTH_EXTERNAL_GITHUB_SECRET)"
-redirect_uri = ""
+# 必须与 GitHub dev OAuth App 注册的 callback 精确一致；
+# 不设此值时 GoTrue 默认用 127.0.0.1，与 localhost 不匹配会触发 GitHub 警告页
+redirect_uri = "http://localhost:54321/auth/v1/callback"
 url = ""
 
 # Google OAuth — 本地栈不配置（本地登录只走 GitHub，见 supabase/AGENTS.md）

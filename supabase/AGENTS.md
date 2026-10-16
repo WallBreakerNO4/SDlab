@@ -66,11 +66,13 @@ pnpm dlx supabase db reset     # 重放全部迁移 + 导入 seed.sql；搞砸�
 ### 2. 导出生产数据种子（手动低频，需要刷新数据副本时重跑）
 
 ```bash
-pnpm dlx supabase db dump --data-only -f supabase/seed.sql
+pnpm dlx supabase db dump --data-only -f supabase/seed.sql \
+  -x "auth.users,auth.sessions,auth.refresh_tokens,auth.identities,auth.flow_state,auth.mfa_amr_claims,auth.mfa_factors,auth.mfa_challenges,auth.mfa_recovery_code_sets,auth.mfa_recovery_codes,auth.one_time_tokens,auth.audit_log_entries"
 ```
 
 - 从 linked 远端项目导出（首次会引导 `supabase login` + `supabase link`）；约 140MB，不进 git。
-- dump 使用 replica 会话模式落地，生产数据里的悬空 user_id 引用（指向本地不存在的 auth 用户）不影响导入。
+- **`-x` 排除清单不可省**：当前 CLI 版本的 `--data-only` 会把 auth schema 也 dump 下来（users/sessions/refresh_tokens 等真实生产会话数据）。混进种子会导致本地栈出现「幽灵登录」——浏览器里残留的生产会话 cookie 命中种子副本后被本地 GoTrue 直接换发新会话，看似登录成功实则从未走本地 OAuth，且违背「auth schema 留空」设计。
+- dump 使用 replica 会话模式落地，排除 auth 后 public 侧指向 `auth.users` 的悬空 user_id 不影响导入（FK 在 `session_replication_role = replica` 下跳过校验，RLS 使悬空行不可见）。
 - 只做幂等覆盖：想完全重建就先 `db reset` 再导入。
 
 ### 3. 用本地库启动网站
@@ -88,8 +90,7 @@ pnpm dev:local    # dotenv-cli 注入 .env.local-db 后跑 next dev
 本地栈登录走 GitHub OAuth，须单独注册一个 dev OAuth App（与生产 App 分开——一个 OAuth App 只有一个 callback URL）：
 
 1. 打开 https://github.com/settings/developers → **New OAuth App**；
-2. Homepage URL 填 `http://localhost:3000`，Authorization callback URL 填 `http://localhost:54321/auth/v1/callback`（GitHub 官方允许 localhost http 回调）；
-3. 把 Client ID / Client Secret 写进**根 `.env`**：
+2. Homepage URL 填 `http://localhost:3000`，Authorization callback URL 填 `http://localhost:54321/auth/v1/callback`（GitHub 官方允许 localhost http 回调）；3. 把 Client ID / Client Secret 写进**根 `.env`**：
 
    ```bash
    SUPABASE_AUTH_EXTERNAL_GITHUB_CLIENT_ID=<client id>
@@ -98,6 +99,8 @@ pnpm dev:local    # dotenv-cli 注入 .env.local-db 后跑 next dev
 
    注意必须放根 `.env`——`config.toml` 的 `env()` 只读项目根目录的 `.env`，且 `supabase start` 没有 `--env-file` flag；
 4. `pnpm dlx supabase stop --no-backup && pnpm dlx supabase start` 让凭据生效。
+
+> callback URL 三处必须**精确一致**（GitHub 要求逐字匹配，`127.0.0.1` ≠ `localhost`）：GitHub App 注册值、`config.toml` 的 `redirect_uri`（已显式设置为 `http://localhost:54321/auth/v1/callback`，不设时 GoTrue 默认用 `127.0.0.1` 会导致 GitHub 弹警告页）、以及本手册的指引值。若历史上注册过 `127.0.0.1` 形态的 callback，可在 GitHub App 设置页改掉。
 
 本地只配 GitHub；Google / Azure 在 `config.toml` 中 `enabled = false`，不要为本地栈重新启用。
 
