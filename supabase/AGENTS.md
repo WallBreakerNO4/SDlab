@@ -82,8 +82,10 @@ pnpm dev:local    # dotenv-cli 注入 .env.local-db 后跑 next dev
 ```
 
 - `.env.local-db` 只放本地数据库连接变量（URL / service role key / publishable key 及镜像），值从 `pnpm dlx supabase status -o env` 抄；文件缺失时创建它（参考根 `.env.example` 说明段）。
+  - ⚠️ **手工抄写，不要重定向**：`status -o env > .env.local-db` 会写入 CLI 内部键名（`ANON_KEY` / `API_URL` / `SERVICE_ROLE_KEY`...），Web/Python 消费的 `NEXT_PUBLIC_SUPABASE_URL` 等四个变量名一个都不对——症状是页面数据正常（服务端读 `.env` 的远端配置）但浏览器登录打到生产栈、图片只剩 blurhash。变量名对应关系：`API_URL` → `NEXT_PUBLIC_SUPABASE_URL` / `SUPABASE_URL`，`SERVICE_ROLE_KEY` → `SUPABASE_SERVICE_ROLE_KEY`，`PUBLISHABLE_KEY` → `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`。
 - 其余机密（R2 凭据等）由根 `.env` 补漏：进程 env 优先于 Next 自动加载的 `.env`。
 - 普通 `pnpm dev` 不加载 `.env.local-db`（非 Next 标准名），保持连远端库、行为零变化。
+- **切换 env 后清 Turbopack dev 缓存**：Turbopack 持久缓存（`.next/dev`）不感知 dotenv-cli 注入的进程 env 变化，`NEXT_PUBLIC_*` 客户端值可能复用上次编译的内联结果。在 `pnpm dev` 与 `pnpm dev:local` 之间切换后，若浏览器行为可疑（登录跳生产、图片加载异常），先 `rm -rf .next/dev` 再重启。验证方法：F12 Network 看页面 chunk，搜 `127.0.0.1:54321` 应命中、`supabase.co` 不应出现。
 
 ### 4. GitHub dev OAuth App（一次性注册）
 
