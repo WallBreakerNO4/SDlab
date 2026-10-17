@@ -12,7 +12,6 @@ from .upload_contracts import BucketScope, UploadScriptError
 
 
 DEFAULT_RUN_ROOT = "outputs"
-LOCAL_FLAG = "--local"
 
 
 def _env_optional_str(name: str) -> str | None:
@@ -45,21 +44,6 @@ def _configure_logging() -> None:
 
 def _autoload_dotenv(*, local: bool = False) -> None:
     load_env_files(local=local)
-
-
-def _argv_requests_local(argv: list[str] | None) -> bool:
-    """在正式解析前判定 `--local`，因为 env 文件必须在 build_parser 之前加载。"""
-    probe = argparse.ArgumentParser(add_help=False)
-    _ = probe.add_argument(LOCAL_FLAG, action="store_true")
-    _ = probe.add_argument("-h", "--help", action="store_true")
-    try:
-        known, _ = probe.parse_known_args(argv)
-    except SystemExit:
-        return False
-    # 帮助信息不该因为缺少 .env.local-db 而打不开。
-    if bool(known.help):
-        return False
-    return bool(known.local)
 
 
 def _parse_env_optional_int(name: str) -> int | None:

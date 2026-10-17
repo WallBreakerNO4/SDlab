@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 from collections.abc import MutableMapping
 from pathlib import Path
@@ -10,6 +11,7 @@ from dotenv import dotenv_values, find_dotenv
 
 DEFAULT_ENV_FILENAME = ".env"
 LOCAL_DB_ENV_FILENAME = ".env.local-db"
+LOCAL_FLAG = "--local"
 
 # `--local` 只切换数据库目标；local-db 里若混入 R2 变量，既不覆盖也不加载，
 # 否则一次手滑就会把资源写到别处。R2 配置始终来自进程 env 或 `.env`。
@@ -32,6 +34,21 @@ class EnvConfigError(RuntimeError):
         super().__init__(message)
         self.code = code
         self.context = dict(context or {})
+
+
+def argv_requests_local(argv: list[str] | None) -> bool:
+    """在正式解析前判定 `--local`，因为 env 文件必须在 build_parser 之前加载。"""
+    probe = argparse.ArgumentParser(add_help=False)
+    _ = probe.add_argument(LOCAL_FLAG, action="store_true")
+    _ = probe.add_argument("-h", "--help", action="store_true")
+    try:
+        known, _ = probe.parse_known_args(argv)
+    except SystemExit:
+        return False
+    # 帮助信息不该因为缺少 .env.local-db 而打不开。
+    if bool(known.help):
+        return False
+    return bool(known.local)
 
 
 def load_env_files(

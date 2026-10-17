@@ -45,7 +45,8 @@
 | NovelAI 生图入口        | `test_novelai_generate.py`                                | NovelAI 生图 argparse + 流程测试 |
 | NovelAI Anlas 守卫      | `test_novelai_anlas_guard.py`                             | 免费资格参数校验、V5 电量守卫（低电量等待回充 / `--battery-hard-stop` 硬停 / 等待超时与 Ctrl+C 中断）、守卫错误码与 SDK 占位参数 |
 | NovelAI 重试            | `test_novelai_retry.py`                                   | retry / retry-incomplete 回放与守卫码捞回 |
-| 历史 run 回填           | `test_backfill_run_style_items.py`                        | Y 资产 sha256 重放/git stub、集合校验、幂等 upsert、dry-run |
+| 历史 run 回填           | `test_backfill_run_style_items.py`                        | Y 资产 sha256 重放/git stub、集合校验、幂等 upsert、dry-run、`--local` 切库 |
+| 删除 run `--local` 安全  | `test_delete_run_local.py`                                | 本地模式零 R2 调用/零删除，默认路径保留 R2 + 数据库删除 |
 | 画师串收藏 label        | `style-favorites.test.ts`                                 | 仅覆盖 `isStyleFavoriteLabel()` 的空白、1000 字符上限 |
 | 模型对比部分合约        | `style-comparison.test.ts`、`comparison-matrix-utils.test.ts` | cursor、limit、slice body 边界、目录/详情 guard、目录 status/published_at 归一化与排序、viewer cookie、cache URL、BlurHash lookup |
 | 详情视图状态 guard       | `model-detail-types.test.ts`                              | `isCurrentRunView()` 接受可选 `status`，缺字段历史数据兼容、非法取值拒绝 |

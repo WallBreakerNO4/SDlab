@@ -256,8 +256,10 @@ pnpm guides:build
 pnpm test:e2e
 E2E_SERVER=start pnpm test:e2e -- -g "task 13"
 pnpm dlx supabase start
-pnpm dlx supabase db reset
+pnpm dlx supabase db reset      # 本地重放全部迁移 + 种子
 pnpm dlx supabase migration new <name>
+# 迁移纪律：新迁移必须先在本地 `db reset` 验证通过，再推远端
+pnpm dlx supabase db push
 ```
 
 ## 分层文档

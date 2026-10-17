@@ -474,6 +474,91 @@ def test_main_dry_run_prints_matrix_and_writes_nothing(
     assert "run-b: 跳过（本地无产物目录）" in out
 
 
+def test_build_parser_accepts_local_flag() -> None:
+    from scripts.other.backfill_run_style_items import build_parser
+
+    args = build_parser().parse_args(["--local", "--dry-run", "--run-root", "runs"])
+
+    assert args.local is True
+    assert args.dry_run is True
+    assert args.run_root == "runs"
+
+
+def _write_env_files(tmp_path: Path) -> None:
+    (tmp_path / ".env.local-db").write_text(
+        "SUPABASE_URL=http://127.0.0.1:54321\n"
+        "SUPABASE_SERVICE_ROLE_KEY=local-service-key\n",
+        encoding="utf-8",
+    )
+    (tmp_path / ".env").write_text(
+        "SUPABASE_URL=https://prod.example.supabase.co\n"
+        "SUPABASE_SERVICE_ROLE_KEY=prod-service-key\n",
+        encoding="utf-8",
+    )
+
+
+def test_main_local_targets_local_database(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
+    _write_env_files(tmp_path)
+    captured: list[tuple[str, str]] = []
+
+    def _factory(url: str, key: str) -> _FakeSupabaseClient:
+        captured.append((url, key))
+        return _FakeSupabaseClient(runs=[])
+
+    exit_code = main(
+        ["--local", "--run-root", str(tmp_path / "outputs")],
+        client_factory=_factory,
+        repo_root=tmp_path,
+    )
+
+    assert exit_code == 0
+    assert captured == [("http://127.0.0.1:54321", "local-service-key")]
+
+
+def test_main_default_path_targets_remote_database(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
+    _write_env_files(tmp_path)
+    captured: list[tuple[str, str]] = []
+
+    def _factory(url: str, key: str) -> _FakeSupabaseClient:
+        captured.append((url, key))
+        return _FakeSupabaseClient(runs=[])
+
+    exit_code = main(
+        ["--run-root", str(tmp_path / "outputs")],
+        client_factory=_factory,
+        repo_root=tmp_path,
+    )
+
+    assert exit_code == 0
+    assert captured == [
+        ("https://prod.example.supabase.co", "prod-service-key")
+    ]
+
+
+def test_main_local_without_env_file_reports_config_error(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        "scripts.env_loading.find_dotenv",
+        lambda *args, **kwargs: "",
+    )
+
+    exit_code = main(["--local", "--run-root", "outputs"])
+
+    assert exit_code == 1
+    assert ".env.local-db" in capsys.readouterr().err
+
+
 def test_main_continues_after_failed_run_and_exit_code_reflects_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

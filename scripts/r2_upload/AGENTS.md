@@ -33,7 +33,7 @@
 | Supabase 环境             | `supabase_env.py`        | 环境变量读取（URL/key）                                                              |
 | Supabase 数据归一化       | `supabase_normalize.py`  | 行数据归一化为 PostgREST 格式                                                        |
 | 清空 bucket 工具          | `clear_bucket.py`        | 交互式清空 R2 bucket                                                                 |
-| 删除 run 数据            | `delete_run.py`             | 删除指定 run 的 Supabase 记录 + R2 对象;`--run-dir` / `--dry-run` / `--yes`;`python -m scripts.r2_upload.delete_run` |
+| 删除 run 数据            | `delete_run.py`             | 删除指定 run 的 Supabase 记录 + R2 对象;`--run-dir` / `--dry-run` / `--yes` / `--local`;`--local` 只删本地开发库的行并跳过全部 R2 删除;`python -m scripts.r2_upload.delete_run` |
 
 ## 核心流程
 
@@ -71,6 +71,7 @@ supabase_writer.py → 批量 upsert 到 Supabase（runs + snapshots + projectio
 - 评测状态写入 `view/current.json` 当前指针的 `status` / `generated_cells`；同一 `release_id` 下状态收口（如 `--complete`）也会刷新当前指针；已完结状态单调不回退，缺状态字段的历史快照按已完结处理。
 - bucket 分配：normal category → public bucket；advance/nsfw → private bucket
 - `--local`（本地开发阶段）：Supabase 写入目标切到本地开发库，R2 仍向生产真实上传并幂等跳过已存在对象；env 由 `scripts/env_loading.py` 先加载 `.env.local-db`（只接受数据库键并覆盖进程残留的远端连接变量，R2 等非数据库键不加载）再用 `.env` 补漏其余机密；`.env.local-db` 缺失时报 `config` 错误，绝不静默回退远端。不带旗标时只读 `.env`，行为与既有完全一致。
+- 删除 run 的 `--local`（本地开发阶段）：本地库是生产库的镜像，`--local` 只删除本地库的 `runs` 行（级联子表），绝不构造 S3 客户端、绝不删除生产 R2 对象，并打印「已跳过 R2 对象删除」提示；不带旗标时维持「删远端行 + R2 对象」的既有行为。预览统计在 `--local` 下同样跳过 R2。
 - 上传支持可配置并发（`--upload-workers`）和 dry-run 模式
 - 同一评测的重复发布默认自动取代网站当前快照；仅当本次快照已产出格数少于网站当前快照（回退）时必须显式使用 `-F/--force-publish`（仅支持单个 `--run-dir`）；网站当前快照缺 `generated_cells`（历史数据）时跳过回退检查
 - 发布顺序固定为不可变资源 → Supabase 数据/`run_view_index` → 可变 `view/current.json`；自动取代与强制发布都复用内容寻址资源，不重复上传已存在图片；内容无变化时不上传新指针

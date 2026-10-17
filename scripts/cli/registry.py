@@ -58,6 +58,11 @@ _DEFAULT_ENTRIES: tuple[MenuEntry, ...] = (
         label="删除 Run（数据库 + R2）",
         entrypoint="scripts.r2_upload.delete_run:main",
     ),
+    MenuEntry(
+        key="backfill_style_items",
+        label="回填画师串收藏数据",
+        entrypoint="scripts.other.backfill_run_style_items:main",
+    ),
 )
 
 _BY_KEY = MappingProxyType({entry.key: entry for entry in _DEFAULT_ENTRIES})

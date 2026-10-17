@@ -6,6 +6,7 @@ import argparse
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
+from ..env_loading import LOCAL_FLAG, argv_requests_local
 from .r2_client import R2Client
 from .supabase_writer import SupabaseWriter
 from .upload_contracts import RunPlan, _CATEGORY_CHOICES, _EXIT_CODES_BY_CATEGORY
@@ -13,8 +14,6 @@ from .upload_executor import _execute
 from .upload_io import _to_json_line
 from .upload_planner import _build_plans, _dry_run_summary
 from .upload_runtime import (
-    LOCAL_FLAG,
-    _argv_requests_local,
     _autoload_dotenv,
     _configure_logging,
     _resolve_default_run_root,
@@ -125,7 +124,7 @@ def _execute_plans(
 
 def main(argv: list[str] | None = None) -> int:
     try:
-        _autoload_dotenv(local=_argv_requests_local(argv))
+        _autoload_dotenv(local=argv_requests_local(argv))
         parser = build_parser()
         args = parser.parse_args(argv)
         _validate_args(args, parser)

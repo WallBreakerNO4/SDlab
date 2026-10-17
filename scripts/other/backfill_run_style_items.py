@@ -27,6 +27,11 @@ if __package__ in {None, ""}:
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
 
+from scripts.env_loading import (  # noqa: E402
+    EnvConfigError,
+    argv_requests_local,
+    load_env_files,
+)
 from scripts.r2_upload.postgrest_http import _PostgrestHTTPClient  # noqa: E402
 from scripts.r2_upload.supabase_env import (  # noqa: E402
     MissingRequiredEnvError,
@@ -34,7 +39,6 @@ from scripts.r2_upload.supabase_env import (  # noqa: E402
 )
 from scripts.r2_upload.supabase_normalize import extract_rows_from_data  # noqa: E402
 from scripts.r2_upload.upload_runtime import (  # noqa: E402
-    _autoload_dotenv,
     _resolve_default_run_root,
 )
 
@@ -447,6 +451,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="只打印计划，不写库。",
     )
+    _ = parser.add_argument(
+        "--local",
+        action="store_true",
+        help=(
+            "只切换数据库目标到本地开发库（.env.local-db）；"
+            "默认写入远端生产库"
+        ),
+    )
     return parser
 
 
@@ -456,8 +468,14 @@ def main(
     client_factory: ClientFactory | None = None,
     repo_root: Path | None = None,
 ) -> int:
+    local = argv_requests_local(argv)
+    try:
+        load_env_files(local=local)
+    except EnvConfigError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
     args = build_parser().parse_args(argv)
-    _autoload_dotenv()
     resolved_repo_root = repo_root or REPO_ROOT
 
     try:
@@ -466,6 +484,8 @@ def main(
     except MissingRequiredEnvError:
         print(_MISSING_ENV_MESSAGE, file=sys.stderr)
         return 1
+    if local:
+        print("数据库目标: 本地开发库（--local）")
     factory = client_factory or _default_client_factory
     try:
         client = factory(supabase_url, service_role_key)

@@ -12,22 +12,18 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from collections.abc import Callable
+from typing import Any
 
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
-from dotenv import find_dotenv, load_dotenv
 
+from scripts.env_loading import EnvConfigError, argv_requests_local, load_env_files
 from scripts.run_naming import validate_run_key
 
 from .postgrest_http import _PostgrestHTTPClient, _PostgrestHTTPError, _to_postgrest_eq_filter
 from .supabase_env import MissingRequiredEnvError, require_env
-
-
-def _autoload_dotenv() -> None:
-    dotenv_path = find_dotenv(filename=".env", usecwd=True)
-    if dotenv_path:
-        _ = load_dotenv(dotenv_path=dotenv_path, encoding="utf-8")
 
 
 class _ConfigError(Exception):
@@ -65,9 +61,9 @@ def _build_supabase_client() -> _PostgrestHTTPClient:
     )
 
 
-def list_remote_runs() -> list[str]:
+def list_db_runs(*, local: bool = False) -> list[str]:
     """查询 Supabase runs 表，返回所有评测的 run_dir 名称列表。"""
-    _autoload_dotenv()
+    load_env_files(local=local)
     client = _build_supabase_client()
     data = client.request_json(
         method="GET",
@@ -93,8 +89,13 @@ def _get_buckets() -> list[tuple[str, str]]:
     return [(public, "public"), (private, "private")]
 
 
-def _delete_r2_objects(run_dir: str, dry_run: bool) -> dict[str, int]:
-    s3 = _build_s3_client()
+def _delete_r2_objects(
+    run_dir: str,
+    dry_run: bool,
+    *,
+    s3_client: Any | None = None,
+) -> dict[str, int]:
+    s3 = _build_s3_client() if s3_client is None else s3_client
     buckets = _get_buckets()
     prefix = f"runs/{run_dir}/"
     result: dict[str, int] = {}
@@ -152,10 +153,12 @@ def _delete_r2_objects(run_dir: str, dry_run: bool) -> dict[str, int]:
     return result
 
 
-def _get_db_run_count(run_dir: str) -> int:
-    client = _build_supabase_client()
+def _get_db_run_count(
+    run_dir: str, *, client: _PostgrestHTTPClient | None = None
+) -> int:
+    db = _build_supabase_client() if client is None else client
     try:
-        data = client.request_json(
+        data = db.request_json(
             method="GET",
             table_name="runs",
             query_params=(
@@ -173,10 +176,12 @@ def _get_db_run_count(run_dir: str) -> int:
     return 0
 
 
-def _delete_supabase_run(run_dir: str) -> int:
-    client = _build_supabase_client()
+def _delete_supabase_run(
+    run_dir: str, *, client: _PostgrestHTTPClient | None = None
+) -> int:
+    db = _build_supabase_client() if client is None else client
     try:
-        data = client.request_json(
+        data = db.request_json(
             method="DELETE",
             table_name="runs",
             query_params=(("run_dir", _to_postgrest_eq_filter(run_dir)),),
@@ -209,10 +214,32 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="跳过交互确认",
     )
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        help=(
+            "只删除本地开发数据库的行（.env.local-db），"
+            "绝不删除生产 R2 对象"
+        ),
+    )
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    *,
+    s3_client_factory: Callable[[], Any] | None = None,
+    supabase_client_factory: Callable[[], _PostgrestHTTPClient] | None = None,
+) -> int:
+    local = argv_requests_local(argv)
+    try:
+        load_env_files(local=local)
+    except EnvConfigError as exc:
+        print(f"配置错误: {exc}", file=sys.stderr)
+        return 2
+    except Exception:
+        pass
+
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -223,21 +250,25 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        _autoload_dotenv()
-    except Exception:
-        pass
-
-    try:
-        _require_env_safe("R2_ENDPOINT")
         _require_env_safe("SUPABASE_URL")
-    except _ConfigError as exc:
+        _require_env_safe("SUPABASE_SERVICE_ROLE_KEY")
+        if not local:
+            _require_env_safe("R2_ENDPOINT")
+    except (MissingRequiredEnvError, _ConfigError) as exc:
         print(f"配置错误: {exc}", file=sys.stderr)
         return 2
 
+    make_s3_client = s3_client_factory or _build_s3_client
+    make_supabase_client = supabase_client_factory or _build_supabase_client
+
     # 预览模式仍显示统计
     try:
-        r2_deleted_preview = _delete_r2_objects(run_dir, dry_run=True)
-        db_count = _get_db_run_count(run_dir)
+        r2_deleted_preview: dict[str, int] = {}
+        if not local:
+            r2_deleted_preview = _delete_r2_objects(
+                run_dir, dry_run=True, s3_client=make_s3_client()
+            )
+        db_count = _get_db_run_count(run_dir, client=make_supabase_client())
     except ClientError as exc:
         print(f"R2 API 错误: {exc}", file=sys.stderr)
         return 1
@@ -250,13 +281,24 @@ def main(argv: list[str] | None = None) -> int:
 
     total_r2_preview = sum(r2_deleted_preview.values())
 
-    if total_r2_preview == 0 and db_count == 0:
-        print(f"未找到 run_dir={run_dir} 的任何数据（R2 和数据库均为空），无需删除。")
+    if db_count == 0 and (local or total_r2_preview == 0):
+        if local:
+            print(
+                f"未找到 run_dir={run_dir} 的任何数据（本地数据库为空），无需删除。"
+            )
+        else:
+            print(
+                f"未找到 run_dir={run_dir} 的任何数据（R2 和数据库均为空），无需删除。"
+            )
         return 0
 
     # 输出统计信息
     print(f"目标 run: {run_dir}")
-    print(f"  R2 对象 ({' + '.join(r2_deleted_preview.keys()) or '无'}): {total_r2_preview} 个")
+    if local:
+        print("  数据库目标: 本地开发库（--local）")
+        print("  R2: 已跳过 R2 对象删除（本地库是生产库镜像，生产对象不受影响）")
+    else:
+        print(f"  R2 对象 ({' + '.join(r2_deleted_preview.keys()) or '无'}): {total_r2_preview} 个")
     print(f"  数据库记录: {db_count} 条 runs 记录（含所有关联子表数据）")
 
     if args.dry_run:
@@ -276,15 +318,18 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
     try:
-        # 1. 删除 R2 对象
-        r2_deleted = _delete_r2_objects(run_dir, dry_run=False)
-        for label, count in r2_deleted.items():
-            print(f"  R2 [{label}]: 已删除 {count} 个对象")
-        if not r2_deleted:
-            print("  R2: 无对象待删除")
+        # 1. 删除 R2 对象；本地开发阶段只删镜像库的行，不碰生产对象
+        if not local:
+            r2_deleted = _delete_r2_objects(
+                run_dir, dry_run=False, s3_client=make_s3_client()
+            )
+            for label, count in r2_deleted.items():
+                print(f"  R2 [{label}]: 已删除 {count} 个对象")
+            if not r2_deleted:
+                print("  R2: 无对象待删除")
 
         # 2. 删除数据库记录（CASCADE 自动处理子表）
-        db_deleted = _delete_supabase_run(run_dir)
+        db_deleted = _delete_supabase_run(run_dir, client=make_supabase_client())
         print(f"  数据库: 已删除 {db_deleted} 条 runs 记录（级联删除所有关联子表数据）")
 
         return 0
