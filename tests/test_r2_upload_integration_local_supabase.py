@@ -8,10 +8,12 @@ import shutil
 import sys
 import time
 import uuid
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
+from dotenv import dotenv_values
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,9 +22,24 @@ sys.path.insert(0, str(ROOT))
 from scripts.r2_upload.upload_images_to_r2 import main
 
 _RUN_FLAG = "SDSL_RUN_LOCAL_SUPABASE_INTEGRATION"
+_LOCAL_DB_ENV_FILE = ROOT / ".env.local-db"
 _RUN_FIXTURE_DIR = ROOT / "tests/fixtures/run_minimal"
 _RUN_DIR_NAME = "local-supabase-run"
 _RUN_ASSETS_DIR_NAME = "local-supabase-assets-run"
+
+
+@pytest.fixture(autouse=True)
+def _restore_repo_cwd_and_process_env() -> Iterator[None]:
+    """`--local` 会改写进程 env；测试结束后恢复，避免污染同进程其它用例。"""
+    original_cwd = Path.cwd()
+    env_snapshot = dict(os.environ)
+    os.chdir(ROOT)
+    try:
+        yield
+    finally:
+        os.chdir(original_cwd)
+        os.environ.clear()
+        os.environ.update(env_snapshot)
 
 
 class _FakeR2Client:
@@ -66,20 +83,35 @@ def _read_stdout_json(capsys: pytest.CaptureFixture[str]) -> dict[str, object]:
 
 
 def _require_local_supabase_env() -> tuple[str, str]:
-    supabase_url = os.getenv("SUPABASE_URL", "").strip()
+    """从 .env.local-db 读取本地库连接信息，供测试侧断言使用。
+
+    `main(--local)` 会自己加载同一份文件；测试侧独立解析一次，以便保留
+    「数据库目标必须是本地栈」的防御性断言。
+    """
+    if not _LOCAL_DB_ENV_FILE.is_file():
+        pytest.fail(
+            f"启用本地 Supabase 集成回归时必须存在 {_LOCAL_DB_ENV_FILE.name}"
+            f"（{_LOCAL_DB_ENV_FILE}）。"
+        )
+
+    values = dotenv_values(_LOCAL_DB_ENV_FILE)
+    supabase_url = (values.get("SUPABASE_URL") or "").strip()
     if not supabase_url:
-        pytest.fail("启用本地 Supabase 集成测试时必须设置 SUPABASE_URL。")
+        pytest.fail(f"{_LOCAL_DB_ENV_FILE.name} 必须包含 SUPABASE_URL。")
     if not (
         supabase_url.startswith("http://localhost:")
         or supabase_url.startswith("http://127.0.0.1:")
     ):
         pytest.fail(
-            "启用本地 Supabase 集成测试时，SUPABASE_URL 必须指向 localhost 或 127.0.0.1。"
+            f"本地 Supabase 集成测试要求 {_LOCAL_DB_ENV_FILE.name} 的 "
+            "SUPABASE_URL 指向 localhost 或 127.0.0.1。"
         )
 
-    service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    service_role_key = (values.get("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
     if not service_role_key:
-        pytest.fail("启用本地 Supabase 集成测试时必须设置 SUPABASE_SERVICE_ROLE_KEY。")
+        pytest.fail(
+            f"{_LOCAL_DB_ENV_FILE.name} 必须包含 SUPABASE_SERVICE_ROLE_KEY。"
+        )
 
     return supabase_url, service_role_key
 
@@ -192,7 +224,7 @@ def test_local_supabase_integration_with_fake_r2_is_idempotent(
         classmethod(lambda cls, dry_run, **kwargs: fake_r2),
     )
 
-    first_exit = main(["--run-dir", str(run_dir)])
+    first_exit = main(["--local", "--run-dir", str(run_dir)])
     first_payload = _read_stdout_json(capsys)
     assert first_exit == 0
     assert first_payload.get("mode") == "execute"
@@ -212,7 +244,7 @@ def test_local_supabase_integration_with_fake_r2_is_idempotent(
 
     uploaded_after_first = fake_r2.upload_calls
 
-    second_exit = main(["--run-dir", str(run_dir)])
+    second_exit = main(["--local", "--run-dir", str(run_dir)])
     second_payload = _read_stdout_json(capsys)
     assert second_exit == 0
     assert second_payload.get("mode") == "execute"
@@ -325,7 +357,7 @@ def test_local_supabase_integration_scans_run_assets_on_publish(
         classmethod(lambda cls, dry_run, **kwargs: fake_r2),
     )
 
-    first_exit = main(["--run-dir", str(run_dir)])
+    first_exit = main(["--local", "--run-dir", str(run_dir)])
     first_payload = _read_stdout_json(capsys)
     assert first_exit == 0
     assert first_payload.get("mode") == "execute"
@@ -356,7 +388,7 @@ def test_local_supabase_integration_scans_run_assets_on_publish(
         color=(70, 80, 90),
     )
 
-    second_exit = main(["--run-dir", str(run_dir)])
+    second_exit = main(["--local", "--run-dir", str(run_dir)])
     second_payload = _read_stdout_json(capsys)
     assert second_exit == 0
     assert second_payload.get("mode") == "execute"
@@ -495,7 +527,7 @@ def test_local_supabase_integration_publishes_snapshot_status(
         classmethod(lambda cls, dry_run, **kwargs: fake_r2),
     )
 
-    first_exit = main(["--run-dir", str(run_dir)])
+    first_exit = main(["--local", "--run-dir", str(run_dir)])
     first_payload = _read_stdout_json(capsys)
     assert first_exit == 0
     assert first_payload.get("snapshot_stats") == [
@@ -520,14 +552,14 @@ def test_local_supabase_integration_publishes_snapshot_status(
     uploads_after_first = fake_r2.upload_calls
 
     # 内容无变化的重复发布：不重复写 R2 对象。
-    second_exit = main(["--run-dir", str(run_dir)])
+    second_exit = main(["--local", "--run-dir", str(run_dir)])
     assert second_exit == 0
     _ = _read_stdout_json(capsys)
     assert fake_r2.upload_calls == uploads_after_first
 
     # --complete 收口：同一 release 也刷新当前指针与发布时间。
     time.sleep(0.02)
-    third_exit = main(["--complete", "--run-dir", str(run_dir)])
+    third_exit = main(["--local", "--complete", "--run-dir", str(run_dir)])
     third_payload = _read_stdout_json(capsys)
     assert third_exit == 0
     assert third_payload.get("snapshot_stats") == [
@@ -575,7 +607,7 @@ def test_local_supabase_integration_replaces_snapshot_and_blocks_rollback(
         classmethod(lambda cls, dry_run, **kwargs: fake_r2),
     )
 
-    assert main(["--run-dir", str(run_dir)]) == 0
+    assert main(["--local", "--run-dir", str(run_dir)]) == 0
     _ = _read_stdout_json(capsys)
     first_manifest = _read_current_manifest(fake_r2, run_dir_name)
     assert first_manifest["generated_cells"] == 1
@@ -584,7 +616,7 @@ def test_local_supabase_integration_replaces_snapshot_and_blocks_rollback(
     # 补上第二格：格数增加，不需要 -F 自动取代网站当前快照。
     _append_second_cell(run_dir)
 
-    second_exit = main(["--run-dir", str(run_dir)])
+    second_exit = main(["--local", "--run-dir", str(run_dir)])
     second_payload = _read_stdout_json(capsys)
     assert second_exit == 0
     assert second_payload.get("snapshot_stats") == [
@@ -607,7 +639,7 @@ def test_local_supabase_integration_replaces_snapshot_and_blocks_rollback(
     # 回退：移除第二格 → 拒绝并要求 -F，当前快照与 R2 对象均不变。
     _remove_second_cell(run_dir)
 
-    rollback_exit = main(["--run-dir", str(run_dir)])
+    rollback_exit = main(["--local", "--run-dir", str(run_dir)])
     rollback_payload = _read_stdout_json(capsys)
     assert rollback_exit == 2
     assert rollback_payload.get("category") == "argument"
@@ -616,7 +648,7 @@ def test_local_supabase_integration_replaces_snapshot_and_blocks_rollback(
     assert _read_current_manifest(fake_r2, run_dir_name) == second_manifest
 
     # 显式强推：回退快照生效，已完结状态单调不回退。
-    force_exit = main(["-F", "--run-dir", str(run_dir)])
+    force_exit = main(["--local", "-F", "--run-dir", str(run_dir)])
     force_payload = _read_stdout_json(capsys)
     assert force_exit == 0
     assert force_payload.get("force_publish") is True

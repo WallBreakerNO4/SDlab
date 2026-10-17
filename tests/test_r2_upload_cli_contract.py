@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import sys
 from pathlib import Path
 
@@ -122,3 +123,49 @@ def test_dry_run_prints_structured_summary_placeholder(
     output = capsys.readouterr().out
     assert "planned_grid_image_variant_uploads" in output
     assert "planned_uploads" in output
+
+
+def test_build_parser_accepts_local_flag_with_existing_options() -> None:
+    args = build_parser().parse_args(
+        ["--local", "--dry-run", "-F", "--complete", "--run-dir", "run-a"]
+    )
+
+    assert args.local is True
+    assert args.dry_run is True
+    assert args.force_publish is True
+    assert args.complete is True
+
+
+def test_main_local_help_works_without_env_file(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        "scripts.env_loading.find_dotenv",
+        lambda *args, **kwargs: "",
+    )
+
+    exit_code = main(["--local", "--help"])
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "--local" in output
+
+
+def test_main_local_without_env_file_reports_config_error(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        "scripts.env_loading.find_dotenv",
+        lambda *args, **kwargs: "",
+    )
+
+    exit_code = main(["--local", "--run-dir", "run-a"])
+
+    output = capsys.readouterr().out.strip()
+    payload = json.loads(output)
+    assert exit_code == 3
+    assert payload["category"] == "config"
+    assert payload["code"] == "missing_env_file"
+    assert ".env.local-db" in payload["message"]

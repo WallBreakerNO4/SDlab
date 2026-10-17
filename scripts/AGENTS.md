@@ -26,6 +26,7 @@
 | R2 客户端                  | `scripts/r2_upload/r2_client.py`                           | boto3 S3 兼容 + 重试                          |
 | Supabase 批量写入          | `scripts/r2_upload/supabase_writer.py`                     | PostgREST upsert + 分批                       |
 | 对外导出                   | `scripts/__init__.py`                                      | `__all__` 统一导出                            |
+| Python env 文件加载        | `scripts/env_loading.py`                                   | 默认只读 `.env`；`--local` 先读 `.env.local-db`（仅数据库键、覆盖进程值）再由 `.env` 补漏 |
 | run 配置路径枚举           | `scripts/run_config_path.py`                               | `DATA_MODELS_DIR` / `iter_run_config_files()`：枚举 `data/models/*/config.yaml`，被 menu/runner_config/upload 多处复用 |
 | run 命名与键校验           | `scripts/run_naming.py`                                    | `RUN_KEY_RE` / `validate_run_key()`：run key 形态校验（小写 kebab-case） |
 

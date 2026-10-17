@@ -240,6 +240,7 @@ uv run pytest -q tests/test_novelai_generate.py tests/test_novelai_anlas_guard.p
 # R2 上传
 uv run python -m scripts.r2_upload.upload_images_to_r2 --help
 uv run python -m scripts.r2_upload.upload_images_to_r2 --dry-run --run-dir outputs/run-xxx
+uv run python -m scripts.r2_upload.upload_images_to_r2 --local --run-dir outputs/run-xxx
 
 # Web
 pnpm dev

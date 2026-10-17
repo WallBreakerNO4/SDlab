@@ -29,7 +29,8 @@
 | R2 上传 CLI                   | `test_r2_upload_cli_contract.py`/`test_r2_upload_cli_dry_run.py`   | CLI 合约 + dry-run（含发布时资产扫描）              |
 | run 资产扫描契约              | `test_r2_upload_run_assets.py`                                      | 上传端与生图侧 `_load_assets` 的接受/拒绝一致性    |
 | R2 幂等性                     | `test_r2_upload_idempotency.py`                                    | 重复上传幂等                                        |
-| R2 本地 Supabase 集成         | `test_r2_upload_integration_local_supabase.py`                     | 需本地 Supabase                                     |
+| R2 本地 Supabase 集成         | `test_r2_upload_integration_local_supabase.py`                     | 需本地 Supabase 栈 + `.env.local-db`；用例以 `--local` 运行 |
+| Python env 加载               | `test_env_loading.py`                                              | `--local` 加载顺序、缺失报错、默认路径零回归 |
 | Supabase writer               | `test_supabase_writer.py`/`test_supabase_writer_postgrest_http.py` | upsert + HTTP mock                                  |
 | Mixer prompt parts 上传       | `test_r2_upload_mixer_prompt_parts.py`                             | 上传链路 Mixer prompt parts enrich/legacy 兼容      |
 | CLI 菜单                      | `test_main_menu_*.py`（6 个）                                      | 菜单触发/循环/边界                                  |
