@@ -6,26 +6,20 @@ import "./e2e/block-env-file-access.cjs";
 import { mergeNodeRequireOption } from "./e2e/no-env-node-options";
 
 const e2ePort = process.env.E2E_PORT ?? "3100";
+const mockSupabasePort = process.env.E2E_MOCK_SUPABASE_PORT ?? "3199";
 const e2eBaseUrl = `http://localhost:${e2ePort}`;
 
 delete process.env.SUPABASE_URL;
 delete process.env.SUPABASE_SERVICE_ROLE_KEY;
-process.env.NEXT_PUBLIC_SUPABASE_URL = e2eBaseUrl;
+process.env.NEXT_PUBLIC_SUPABASE_URL = `http://127.0.0.1:${mockSupabasePort}`;
 process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "e2e-public-key";
 process.env.NEXT_PUBLIC_R2_PUBLIC_BASE_URL = e2eBaseUrl;
 process.env.R2_PUBLIC_BASE_URL = e2eBaseUrl;
 
+// Next 服务端渲染依赖 Supabase 查询；no-env 模式由本地 mock REST 端点提供固定数据。
 const envBlocker = path.resolve("e2e/block-env-file-access.cjs");
-const nextCli = path.resolve("node_modules/.bin/next");
 const nodeOptions = mergeNodeRequireOption(process.env.NODE_OPTIONS, envBlocker);
 process.env.NODE_OPTIONS = nodeOptions;
-
-function quoteShellArgument(value: string): string {
-  return `'${value.replaceAll("'", `'"'"'`)}'`;
-}
-
-const explicitNodeOptions = quoteShellArgument(nodeOptions);
-const explicitNextCli = quoteShellArgument(nextCli);
 
 export default defineConfig({
   testDir: "./e2e",
@@ -42,7 +36,7 @@ export default defineConfig({
     video: "retain-on-failure",
   },
   webServer: {
-    command: `NODE_OPTIONS=${explicitNodeOptions} ${explicitNextCli} build && NODE_OPTIONS=${explicitNodeOptions} ${explicitNextCli} start -p ${e2ePort}`,
+    command: "node e2e/no-env-webserver.cjs",
     url: e2eBaseUrl,
     reuseExistingServer: false,
     timeout: 300_000,

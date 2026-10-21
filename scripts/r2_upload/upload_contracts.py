@@ -8,8 +8,17 @@ from typing import Literal
 
 from scripts.run_naming import RUN_KEY_RE
 
+from .run_assets import RunAssetsScan
+
 Category = Literal["normal", "advance", "nsfw"]
 BucketScope = Literal["public", "private"]
+EvaluationStatus = Literal["in_progress", "complete"]
+
+EVALUATION_STATUS_IN_PROGRESS: EvaluationStatus = "in_progress"
+EVALUATION_STATUS_COMPLETE: EvaluationStatus = "complete"
+EVALUATION_STATUSES: frozenset[EvaluationStatus] = frozenset(
+    {EVALUATION_STATUS_IN_PROGRESS, EVALUATION_STATUS_COMPLETE}
+)
 
 _RUN_DIR_NAME_RE = RUN_KEY_RE
 _CATEGORY_CHOICES: tuple[Category, Category, Category] = (
@@ -83,6 +92,24 @@ class RunPlan:
     image_uploads: list[PlannedUpload]
     artifact_uploads: list[PlannedUpload]
     manifest_uploads: list[PlannedUpload]
+    asset_scan: RunAssetsScan
+    snapshot_status: EvaluationStatus
+    generated_cells: int
+    planned_cells: int
+
+
+def snapshot_stats_report(
+    plan: RunPlan,
+    *,
+    status: EvaluationStatus | None = None,
+) -> dict[str, object]:
+    """dry-run 与执行报告共享的快照状态摘要（status 可传生效状态）。"""
+    return {
+        "run_dir": plan.run_dir_name,
+        "status": status if status is not None else plan.snapshot_status,
+        "generated_cells": plan.generated_cells,
+        "planned_cells": plan.planned_cells,
+    }
 
 
 @dataclass(frozen=True)

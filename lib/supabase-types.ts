@@ -37,6 +37,9 @@ export interface SupabaseRunListItemRow {
   x_count: number | null;
   y_count: number | null;
   total_cells: number | null;
+  status?: string | null;
+  generated_cells?: number | null;
+  published_at?: string | null;
   model_name?: string | null;
   model_description_zh?: string | null;
   model_description_en?: string | null;

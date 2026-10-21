@@ -7,8 +7,7 @@ import logging
 import os
 from pathlib import Path
 
-from dotenv import find_dotenv, load_dotenv
-
+from ..env_loading import load_env_files
 from .upload_contracts import BucketScope, UploadScriptError
 
 
@@ -43,10 +42,8 @@ def _configure_logging() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
 
-def _autoload_dotenv() -> None:
-    dotenv_path = find_dotenv(filename=".env", usecwd=True)
-    if dotenv_path:
-        _ = load_dotenv(dotenv_path=dotenv_path, encoding="utf-8")
+def _autoload_dotenv(*, local: bool = False) -> None:
+    load_env_files(local=local)
 
 
 def _parse_env_optional_int(name: str) -> int | None:
@@ -142,6 +139,11 @@ def _validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) ->
         getattr(args, "all_runs", False)
     ):
         parser.error("--force-publish 仅可与单个 --run-dir 一起使用")
+
+    if bool(getattr(args, "complete", False)) and bool(
+        getattr(args, "all_runs", False)
+    ):
+        parser.error("--complete 仅可与单个 --run-dir 一起使用")
 
     concurrency = getattr(args, "concurrency", None)
     if concurrency is not None and int(concurrency) < 1:

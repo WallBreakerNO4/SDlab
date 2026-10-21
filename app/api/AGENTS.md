@@ -16,7 +16,7 @@
 | Viewer API 细则  | `app/api/viewer/AGENTS.md`             | NSFW 偏好、收藏 CRUD、模型对比目录/详情/slice |
 | 浏览者 NSFW 偏好   | `app/api/viewer/preferences/nsfw/route.ts` | GET 读 cookie / PATCH 写 Supabase `user_preferences` + cookie |
 | 画师串收藏 API     | `app/api/viewer/style-favorites/route.ts`、`app/api/viewer/style-favorites/[styleKey]/route.ts` | GET 列表 / PUT upsert / DELETE；未登录 401 |
-| 模型对比目录/详情  | `app/api/viewer/style-comparison/route.ts`、`app/api/viewer/style-comparison/[styleKey]/route.ts` | keyset 分页（每页最多 40）+ 已发布模型目录 |
+| 模型对比目录/详情  | `app/api/viewer/style-comparison/route.ts`、`app/api/viewer/style-comparison/[styleKey]/route.ts` | keyset 分页（每页最多 40）+ 已发布模型目录（含 `status`） |
 | 模型对比 slice     | `app/api/viewer/style-comparison/slice/route.ts` | 最多 40 个 style keys / 12 个 run dirs，返回 placement + media grants |
 | Web Vitals 上报    | `app/api/telemetry/web-vitals/route.ts` | 接收并 `console.log` 记录，204 空响应，不落库 |
 | 共享鉴权客户端   | `lib/supabase-auth.ts`                 | `createSupabaseAuthClient()`              |

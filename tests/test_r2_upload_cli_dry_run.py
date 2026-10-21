@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT))
 
 from scripts.r2_upload.upload_images_to_r2 import main
 from scripts.r2_upload.manifest import build_view_release
+from scripts.r2_upload import upload_planner as upload_planner_module
 from scripts.r2_upload.upload_planner import (
     _build_run_plan,
     _build_run_asset_category_resolver,
@@ -29,6 +30,14 @@ from scripts.r2_upload.upload_planner import (
 )
 from scripts.r2_upload.upload_contracts import PlannedImageTask
 from scripts.r2_upload.upload_runtime import _resolve_image_workers
+
+
+@pytest.fixture(autouse=True)
+def _isolated_repo_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """把上传端的仓库根锚定到当前测试的临时目录，避免扫描真实 data/models。"""
+    monkeypatch.setattr(upload_planner_module, "_REPO_ROOT", tmp_path)
 
 
 def _sha256_file(path: Path) -> str:
@@ -41,17 +50,41 @@ def _write_png(path: Path, *, size: tuple[int, int] = (8, 6)) -> None:
     image.save(path, format="PNG")
 
 
-def _write_jpeg(path: Path, *, size: tuple[int, int] = (8, 6)) -> None:
+def _write_jpeg(
+    path: Path,
+    *,
+    size: tuple[int, int] = (8, 6),
+    color: tuple[int, int, int] = (10, 20, 30),
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    image = Image.new("RGB", size, (10, 20, 30))
+    image = Image.new("RGB", size, color)
     image.save(path, format="JPEG")
+
+
+def _write_model_assets(
+    repo_root: Path,
+    *,
+    cover_name: str | None = None,
+    homepage_names: tuple[str, ...] = (),
+) -> Path:
+    """在临时仓库根的 data/models/example 下写入生图侧资产。"""
+    model_dir = repo_root / "data/models/example"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    if cover_name is not None:
+        _write_jpeg(model_dir / cover_name)
+    for homepage_name in homepage_names:
+        seed = sum(homepage_name.encode("utf-8"))
+        _write_jpeg(
+            model_dir / "images" / homepage_name,
+            color=(seed % 256, (seed * 7) % 256, (seed * 13) % 256),
+        )
+    return model_dir
 
 
 def _extended_run_json(
     *,
     run_dir: Path,
     run_dir_value: str | None = None,
-    include_run_assets: bool = False,
     run_assets_payload: dict[str, object] | None = None,
 ) -> dict[str, object]:
     run_name = run_dir_value if run_dir_value is not None else run_dir.name
@@ -123,25 +156,6 @@ def _extended_run_json(
     }
     if run_assets_payload is not None:
         payload["assets"] = run_assets_payload
-    elif include_run_assets:
-        cover_path = run_dir / "repo-assets/image.jpg"
-        homepage_path = run_dir / "repo-assets/images/homepage.jpg"
-        _write_jpeg(cover_path)
-        _write_jpeg(homepage_path)
-        payload["assets"] = {
-            "cover_image": {
-                "path": str(cover_path),
-                "repo_relative_path": "data/models/example/image.jpg",
-                "sha256": _sha256_file(cover_path),
-            },
-            "homepage_images": [
-                {
-                    "path": str(homepage_path),
-                    "repo_relative_path": "data/models/example/images/homepage.jpg",
-                    "sha256": _sha256_file(homepage_path),
-                }
-            ],
-        }
     return payload
 
 
@@ -151,7 +165,6 @@ def _write_run_fixture(
     run_name: str,
     use_multi_paths: bool = False,
     run_json_run_dir: str | None = None,
-    include_run_assets: bool = False,
     run_assets_payload: dict[str, object] | None = None,
 ) -> Path:
     run_dir = root / run_name
@@ -183,7 +196,6 @@ def _write_run_fixture(
             _extended_run_json(
                 run_dir=run_dir,
                 run_dir_value=run_json_run_dir,
-                include_run_assets=include_run_assets,
                 run_assets_payload=run_assets_payload,
             ),
             ensure_ascii=False,
@@ -291,11 +303,12 @@ def test_cli_dry_run_includes_cover_and_homepage_asset_variants(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    run_dir = _write_run_fixture(
+    _write_model_assets(
         tmp_path,
-        run_name="asset-run",
-        include_run_assets=True,
+        cover_name="image.jpg",
+        homepage_names=("homepage.jpg",),
     )
+    run_dir = _write_run_fixture(tmp_path, run_name="asset-run")
 
     exit_code = main(["--dry-run", "--run-dir", str(run_dir)])
 
@@ -321,29 +334,12 @@ def test_cli_dry_run_includes_png_cover_asset_variants_with_original_extension(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    cover_path = tmp_path / "repo-assets/image.png"
-    homepage_path = tmp_path / "repo-assets/images/card.jpeg"
-    _write_png(cover_path)
-    _write_jpeg(homepage_path)
-    run_assets_payload = {
-        "cover_image": {
-            "path": str(cover_path),
-            "repo_relative_path": "data/models/custom/image.png",
-            "sha256": _sha256_file(cover_path),
-        },
-        "homepage_images": [
-            {
-                "path": str(homepage_path),
-                "repo_relative_path": "data/models/custom/images/card.jpeg",
-                "sha256": _sha256_file(homepage_path),
-            }
-        ],
-    }
-    run_dir = _write_run_fixture(
+    _write_model_assets(
         tmp_path,
-        run_name="png-cover-run",
-        run_assets_payload=run_assets_payload,
+        cover_name="image.png",
+        homepage_names=("card.jpeg",),
     )
+    run_dir = _write_run_fixture(tmp_path, run_name="png-cover-run")
 
     exit_code = main(["--dry-run", "--run-dir", str(run_dir)])
 
@@ -360,6 +356,184 @@ def test_cli_dry_run_includes_png_cover_asset_variants_with_original_extension(
     ]
     assert any("display_webp.webp" in key for key in planned_asset_keys)
     assert any("thumb_webp.webp" in key for key in planned_asset_keys)
+
+
+def test_cli_dry_run_scans_assets_added_after_run_snapshot(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    stale_cover_path = tmp_path / "repo-assets/image.jpg"
+    _write_jpeg(stale_cover_path, color=(200, 10, 10))
+    stale_cover_sha256 = _sha256_file(stale_cover_path)
+    run_dir = _write_run_fixture(
+        tmp_path,
+        run_name="stale-assets-run",
+        run_assets_payload={
+            "cover_image": {
+                "path": str(stale_cover_path),
+                "repo_relative_path": "data/models/example/image.jpg",
+                "sha256": stale_cover_sha256,
+            },
+            "homepage_images": [],
+        },
+    )
+    # 生图启动后补放：覆盖图被替换，并追加两张主页缩略图。
+    _write_model_assets(
+        tmp_path,
+        cover_name="image.jpg",
+        homepage_names=("a.jpg", "b.jpg"),
+    )
+    current_cover_sha256 = _sha256_file(
+        tmp_path / "data/models/example/image.jpg"
+    )
+
+    first_exit = main(["--dry-run", "--run-dir", str(run_dir)])
+
+    assert first_exit == 0
+    first_payload = _read_stdout_json(capsys)
+    assert first_payload.get("planned_run_asset_variant_uploads") == 12
+    assert first_payload.get("asset_scans") == [
+        {
+            "run_dir": "stale-assets-run",
+            "cover_image": "data/models/example/image.jpg",
+            "homepage_images": [
+                "data/models/example/images/a.jpg",
+                "data/models/example/images/b.jpg",
+            ],
+        }
+    ]
+    first_asset_keys = [
+        str(cast(dict[str, object], item).get("key"))
+        for item in cast(list[object], first_payload["planned_uploads"])
+        if isinstance(item, dict)
+    ]
+    assert any(current_cover_sha256 in key for key in first_asset_keys)
+    assert all(stale_cover_sha256 not in key for key in first_asset_keys)
+
+    # 再次补放后，下一次发布的计划继续反映磁盘现状。
+    _write_model_assets(tmp_path, homepage_names=("c.jpg",))
+
+    second_exit = main(["--dry-run", "--run-dir", str(run_dir)])
+
+    assert second_exit == 0
+    second_payload = _read_stdout_json(capsys)
+    assert second_payload.get("planned_run_asset_variant_uploads") == 16
+    homepage_report = cast(
+        list[object],
+        cast(dict[str, object], cast(list[object], second_payload["asset_scans"])[0])[
+            "homepage_images"
+        ],
+    )
+    assert homepage_report == [
+        "data/models/example/images/a.jpg",
+        "data/models/example/images/b.jpg",
+        "data/models/example/images/c.jpg",
+    ]
+
+
+def test_build_run_plan_persists_scanned_assets_into_run_json_snapshot(
+    tmp_path: Path,
+) -> None:
+    _write_model_assets(
+        tmp_path,
+        cover_name="image.png",
+        homepage_names=("a.jpg", "b.jpg"),
+    )
+    stale_homepage_path = tmp_path / "repo-assets/stale-homepage.jpg"
+    _write_jpeg(stale_homepage_path, color=(200, 10, 10))
+    run_dir = _write_run_fixture(
+        tmp_path,
+        run_name="scan-snapshot-run",
+        run_assets_payload={
+            "cover_image": None,
+            "homepage_images": [
+                {
+                    "path": str(stale_homepage_path),
+                    "repo_relative_path": "data/models/example/images/stale.jpg",
+                    "sha256": _sha256_file(stale_homepage_path),
+                }
+            ],
+        },
+    )
+
+    plan = _build_run_plan(
+        run_dir,
+        intermediate_root=tmp_path / "_r2_upload_intermediate",
+        category_override=None,
+        remaining_limit=None,
+        image_workers=1,
+    )
+
+    run_json = cast(dict[str, object], plan.upload_index_payload["run_json"])
+    assets = cast(dict[str, object], run_json["assets"])
+    cover = cast(dict[str, object], assets["cover_image"])
+    homepage_images = cast(list[dict[str, object]], assets["homepage_images"])
+
+    assert cover["repo_relative_path"] == "data/models/example/image.png"
+    assert "path" not in cover
+    assert [item["repo_relative_path"] for item in homepage_images] == [
+        "data/models/example/images/a.jpg",
+        "data/models/example/images/b.jpg",
+    ]
+
+
+def test_cli_dry_run_ignores_stale_snapshot_assets_when_disk_has_none(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    stale_cover_path = tmp_path / "repo-assets/image.jpg"
+    stale_homepage_path = tmp_path / "repo-assets/images/homepage.jpg"
+    _write_jpeg(stale_cover_path)
+    _write_jpeg(stale_homepage_path)
+    run_dir = _write_run_fixture(
+        tmp_path,
+        run_name="cleared-assets-run",
+        run_assets_payload={
+            "cover_image": {
+                "path": str(stale_cover_path),
+                "repo_relative_path": "data/models/example/image.jpg",
+                "sha256": _sha256_file(stale_cover_path),
+            },
+            "homepage_images": [
+                {
+                    "path": str(stale_homepage_path),
+                    "repo_relative_path": "data/models/example/images/homepage.jpg",
+                    "sha256": _sha256_file(stale_homepage_path),
+                }
+            ],
+        },
+    )
+    # 资产目录存在但两类资产都已被移除，快照不再作为资产来源。
+    _write_model_assets(tmp_path)
+
+    exit_code = main(["--dry-run", "--run-dir", str(run_dir)])
+
+    assert exit_code == 0
+    payload = _read_stdout_json(capsys)
+    assert payload.get("planned_run_asset_variant_uploads") == 0
+    assert payload.get("asset_scans") == [
+        {
+            "run_dir": "cleared-assets-run",
+            "cover_image": None,
+            "homepage_images": [],
+        }
+    ]
+
+
+def test_cli_dry_run_errors_when_multiple_cover_images(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _write_model_assets(tmp_path, cover_name="image.jpg")
+    _write_model_assets(tmp_path, cover_name="image.png")
+    run_dir = _write_run_fixture(tmp_path, run_name="multi-cover-run")
+
+    exit_code = main(["--dry-run", "--run-dir", str(run_dir)])
+
+    payload = _read_stdout_json(capsys)
+    assert exit_code != 0
+    assert payload.get("mode") == "error"
+    assert "多个 image.*" in str(payload.get("message"))
 
 
 def test_build_run_plan_embeds_image_variants_in_public_row_manifest(

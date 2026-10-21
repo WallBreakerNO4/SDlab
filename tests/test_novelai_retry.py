@@ -2,7 +2,7 @@
 
 """NovelAI retry 接线测试：守卫硬停后 --retry-failed/--retry-incomplete/--retry-error-code 的恢复路径。
 
-照 test_retry_incomplete_integration.py 先例伪造 run 目录（run.json + metadata.jsonl），
+照 test_retry_incomplete_integration.py 先例伪造评测目录（run.json + metadata.jsonl），
 钉外部可观察行为：目标 cell 选择、错误码过滤、strict 一致性校验拒绝。
 """
 
@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import json
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -421,13 +422,13 @@ def test_retry_failed_recovers_only_failed_cells(
 
     assert exit_code == 0
     rows = _read_jsonl(run_dir / "metadata.jsonl")
-    # 原始 2 条 + 只为失败格补 1 条 dry-run 记录；成功格不得重跑。
+    # 原始 2 条 + 只为失败单元格补 1 条 dry-run 记录；成功单元格不得重跑。
     assert len(rows) == 3
     new_records = [row for row in rows if row.get("skip_reason") == "dry_run"]
     assert len(new_records) == 1
     assert new_records[0]["x_index"] == 0
     assert new_records[0]["y_index"] == 1
-    # strict 一致性：新记录携带原 run 的指纹与派生 seed。
+    # strict 一致性：新记录携带原评测的指纹与派生 seed。
     assert new_records[0]["workflow_api_sha256"] == _expected_fingerprint()
     assert new_records[0]["seed"] == derive_seed(BASE_SEED, 0, 1)
 
@@ -620,6 +621,9 @@ class _FakeImage:
 
 
 class _FakeGuardClient:
+    # 入口会把该事件转交协调器；fake 客户端同样要满足这份合约。
+    battery_wait_stop = threading.Event()
+
     def __init__(self, *, api_key: str | None = None, **kwargs: Any) -> None:
         # 模拟环境变量已提供 key 的场景，让入口通过 key 存在性检查。
         self._api_key = api_key or "fake-key"
@@ -680,7 +684,7 @@ def test_retry_battery_low_hard_stop_leaves_remaining_cells_incomplete(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """电量耗尽触发真中止：停止提交剩余格子，未提交格子保持 incomplete。"""
+    """电量耗尽触发真中止：停止提交剩余单元格，未提交单元格保持 incomplete。"""
     failed_first = _metadata_record(
         tmp_path,
         status="failed",
@@ -702,6 +706,9 @@ def test_retry_battery_low_hard_stop_leaves_remaining_cells_incomplete(
     )
 
     class _BatteryDrainedClient:
+        # 入口会把该事件转交协调器；fake 客户端同样要满足这份合约。
+        battery_wait_stop = threading.Event()
+
         def __init__(self, *, api_key: str | None = None, **kwargs: Any) -> None:
             self._api_key = api_key or "fake-key"
             self.calls: list[dict[str, object]] = []

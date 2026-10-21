@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-06 | Updated: 2026-08-23 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-09-04 -->
 
 # Agent Guide (sd-style-lab/images-script)
 
@@ -6,7 +6,7 @@
 
 ## 概览
 
-- 仓库分两条主线：Next.js 站点负责展示 runs / grid / 图片；Python 脚本负责生图、上传 R2、写入 Supabase。
+- **项目身份（先读）**：本仓库托管一个产品与其内部生产线——产品是面向用户的网站（Next.js 站点，负责展示 runs / grid / 图片）；Python 脚本（`main.py`、`scripts/`，ComfyUI / NovelAI 生图、上传 R2、写入 Supabase）是作者自用的内部工具，不是用户可见功能。介绍或修改本仓库时，主体永远是网站；完整边界见文末「项目身份与受众」。
 - 网站数据链路以 Supabase + R2 为准；Web 侧没有本地文件降级读取。
 - 术语约定：由上传脚本生成的 `display_*` / `thumb_*` 变体统一称为“展示页缩略图”；run 级 `image.*` 统一称为“封面图”，同级 `images/*` 统一称为“主页缩略图”。三者不是同一套资源，讨论与实现时必须明确区分。
 - 脚本侧识别并上传封面图/主页缩略图资产；网页首页通过 `/api/comfyui/runs` 消费 `assets.cover` / `assets.homepage_cards`，run 详情页通过 view bootstrap JSON 消费展示页缩略图。
@@ -17,8 +17,9 @@
 - Prompt 法典浏览器（路由 `/[locale]/prompts`）是面向用户的功能：客户端从 `public/data/prompts/*.json` 加载结构化 Prompt，渲染 Tag/Choice/多角色卡片并按目标模型格式化复制；源资产在 `data/prompt-codex/*.yaml`，运行时不直接读源 YAML。
 - ComfyUI 生图链路支持 Anima Artist Mixer：`workflow.anima_artist_mixer` 会把 Y 轴 general 标签留在正向 prompt，artists 标签单独写入 `artist_chain`；hash、回放与 strict retry 都把两者视为同一份生图输入。
 - Mixer metadata 会额外持久化 `y_common_prompt`；展示页 bootstrap 通过可选 `yPromptParts` 向前端提供 Artist/Common Prompt 拆分，首列分别复制，缺失部分不渲染。
+- NovelAI 生图链路（config v2 + `backend=novelai`）独立于 ComfyUI：`novelai_generate.py` 复用 runner 的网格/metadata/重试/协调模块，`novelai_client.py` 封装 SDK 与 Anlas 守卫；守卫决策见 `docs/adr/0001`、`docs/adr/0002`、`docs/adr/0003`。
 - 画师提示词收藏（Style Favorites）：登录用户可在详情页收藏 Y 轴画师串、在 `/[locale]/favorites` 查看并跨模型跳转；收藏身份用 `style_key`（`{collection_id}:{item_index}`），跨 run 匹配只比较 style_key，永不比较 prompt 字符串；`y_index` 一律 0-based，仅收藏页拼跳转 URL 时 `#{y_index + 1}`。
-- Style Comparison（模型对比收藏）：`/[locale]/favorites` 以收藏画师串为行、已发布模型为列展示同风格结果，`/[locale]/favorites/[styleKey]` 提供单收藏详情；目录 API 使用 keyset cursor 且每页最多 40 条，slice 每次最多 40 个 style key / 12 个 run，模型目录缓存 5 分钟。
+- Style Comparison（模型对比收藏）：`/[locale]/favorites` 以收藏画师串为行、已完结评测为列展示同风格结果，`/[locale]/favorites/[styleKey]` 提供单收藏详情；进行中评测在对比页是禁用条目并带「评测中」标记，矩阵列与 slice 只含已完结评测。目录 API 使用 keyset cursor 且每页最多 40 条，slice 每次最多 40 个 style key / 12 个 run，模型目录缓存 5 分钟。
 - Model Guide（模型使用指南）：与 `model_key` 绑定的 Markdown 使用经验文章，路由 `/[locale]/guides/[modelKey]`；源资产 `data/model-guides/*.md`（含 `.en.md` 变体），构建期经 `loaders/model-guide-data-builder.ts`（`pnpm guides:build`）编译为 `lib/generated/model-guides.ts`；frontmatter `draft: true` 的草稿不进入公开索引、页面、SEO metadata 与 sitemap。
 
 ## 结构
@@ -26,7 +27,7 @@
 ```text
 ./
 ├── app/                    # App Router 页面与 API route
-│   ├── [locale]/           # 区域化页面入口（layout + 首页 + info + privacy-policy + models + prompts + favorites）
+│   ├── [locale]/           # 区域化页面入口（layout + 首页 + info + privacy-policy + models + prompts + favorites + guides）
 │   ├── api/comfyui/        # runs/access/workflow/style-items
 │   ├── api/viewer/         # 浏览者偏好 + 画师串收藏 + 模型对比目录/切片
 │   ├── api/private-object/ # 使用 media grant 读取私有 R2 对象
@@ -46,17 +47,17 @@
 │   ├── env/                # 环境变量集中读取
 │   └── generated/          # 构建期生成模块（model-guides 等）
 ├── scripts/                # Python 生图、上传、CLI、辅助转换
-│   ├── generation/         # 核心 runner + ComfyUI 客户端
+│   ├── generation/         # 核心 runner + ComfyUI/NovelAI 客户端
 │   ├── r2_upload/          # R2 上传 + Supabase 写入
 │   ├── cli/                # 交互菜单与入口注册
 │   └── other/              # CSV/YAML 资产转换工具
 ├── tests/                  # pytest + Node node:test（合约与可观测输出）
 ├── e2e/                    # Playwright 端到端
 ├── supabase/               # 本地配置与迁移
-├── docs/                   # ADR 与项目术语表（见 docs/AGENTS.md）
+├── docs/                   # 设计决策记录（ADR）+ agent 协作文档（见 docs/AGENTS.md）
 ├── DBbackup/               # 本地数据库备份 SQL（git 忽略，见 DBbackup/AGENTS.md）
 ├── data/                   # 只读输入资产
-│   ├── models/             # 模型配置（config.yaml + api.json + workflow.json）
+│   ├── models/             # 模型配置（config.yaml；ComfyUI 另含 api.json + workflow.json）
 │   ├── prompts/            # X/Y prompt 资产（YAML + CSV）
 │   ├── prompt-codex/       # Prompt 法典源 YAML（所长 NovelAI 个人法典）
 │   └── model-guides/       # 模型引导文章 Markdown（含 .en.md 变体）
@@ -65,6 +66,7 @@
 ├── public/                 # 静态资源（favicon + data/prompts 法典 JSON 产物）
 ├── types/                  # Next 生成类型（只读）
 ├── middleware.ts           # I18N 路由 + Supabase session refresh
+├── CONTEXT.md              # 领域术语表（domain 文档，与 docs/adr/ 配套）
 └── main.py                 # Python 顶层入口（委托到 scripts）
 ```
 
@@ -78,6 +80,7 @@
 | Prompt 网格/画师链    | `scripts/generation/prompt_grid.py`                                                                  | Y 轴 general/artists 拆分、权重 profile、prompt + artist chain hash               |
 | Workflow 参数注入     | `scripts/generation/workflow_patch.py`                                                               | 标准 CLIPTextEncode 与 AnimaArtistPack 两种注入拓扑                               |
 | 并发 runner           | `scripts/generation/runner_coordinator.py`                                                           | ThreadPoolExecutor 双池                                                           |
+| NovelAI 生图链路      | `scripts/generation/novelai_generate.py`、`novelai_client.py`                                        | `backend=novelai` 直连生图 + Anlas 守卫；决策见 `docs/adr/0001`/`0002`/`0003`      |
 | ComfyUI 通信          | `scripts/generation/comfyui_client.py`                                                               | HTTP / WS / 错误码                                                                |
 | R2 上传入口           | `scripts/r2_upload/upload_images_to_r2.py`                                                           | 编码、上传、写 Supabase                                                           |
 | 上传规划              | `scripts/r2_upload/upload_planner.py`                                                                | 多变体规划 + 并发编码；也处理 run 级静态图片资产上传                              |
@@ -132,6 +135,7 @@
 | `main`                            | function  | `main.py`                                        | Python CLI 总入口                                                  |
 | `run`                             | function  | `scripts/generation/comfyui_part1_generate.py`   | 生图主流程                                                         |
 | `run_retry`                       | function  | `scripts/generation/comfyui_part1_generate.py`   | retry / replay 入口                                                |
+| `novelai_worker`                  | function  | `scripts/generation/novelai_client.py`           | NovelAI 单格生成：守卫校验 + V5 电量守卫（等待回充/硬停）+ SDK 调用   |
 | `GET`                             | function  | `app/api/comfyui/runs/route.ts`                  | runs 列表 API                                                      |
 | `GET`                             | function  | `app/api/comfyui/run/[runDir]/access/route.ts`   | 媒体授权 API                                                       |
 | `GET`                             | function  | `app/api/comfyui/run/[runDir]/workflow/route.ts` | workflow 下载 API                                                  |
@@ -139,13 +143,14 @@
 | `privateObjectProxyUrl`           | function  | `lib/r2-url.ts`                                  | 使用媒体 grant 构建私有对象代理 URL                                |
 | `isValidRunDir`                   | function  | `lib/comfyui-types.ts`                           | runDir 形态校验                                                    |
 | `assertSafeRelativeImagePath`     | function  | `lib/comfyui-path.ts`                            | 相对图片路径校验                                                   |
+| `scan_run_assets`                 | function  | `scripts/r2_upload/run_assets.py`                | 发布时现场扫描封面图/主页缩略图，与生图侧规则契约对齐              |
 | `buildSeoMetadata`                | function  | `lib/metadata-utils.ts`                          | SEO metadata 构建                                                  |
 | `getModelMetadata`                | function  | `lib/model-metadata.ts`                          | 模型 SEO metadata                                                  |
 | `JsonLdWebsite`                   | component | `components/json-ld.tsx`                         | WebSite schema                                                     |
 | `JsonLdBreadcrumbList`            | component | `components/json-ld.tsx`                         | BreadcrumbList schema                                              |
 | `SITE_ORIGIN`                     | const     | `lib/site-origin.ts`                             | 站点根 URL                                                         |
 | `formatPrompt`                    | function  | `lib/prompt-formatter.ts`                        | 结构化 Prompt → 目标模型文本（novelai / comfyui + anima 权重模式） |
-| `listRunSummaries`                | function  | `lib/run-list.ts`                                | 首页 run 列表查询，`unstable_cache` 5min + tag `run-list`          |
+| `listRunSummaries`                | function  | `lib/run-list.ts`                                | 首页 run 列表查询，`unstable_cache` 5min + tag `run-list`，按 `published_at` 降序并归一化 `status` |
 | `requireViewerForPreferenceWrite` | function  | `lib/server-user-preferences.ts`                 | 浏览者偏好写入的前置鉴权                                           |
 | `PromptBrowserPage`               | component | `components/prompt/prompt-browser-page.tsx`      | 法典浏览器页面骨架                                                 |
 | `patch_workflow`                  | function  | `scripts/generation/workflow_patch.py`           | 注入标准 prompt 或 Anima Artist Mixer 参数                         |
@@ -162,9 +167,11 @@
 
 - 语言边界：Node/Next 不直接调用 Python；网站只消费 Supabase + R2，不读取 Python 内部实现。
 - Python：I/O 统一 `pathlib.Path`；生图产物固定为 `run.json` + `metadata.jsonl` + `images/`；写盘后保持 flush/fsync 语义。
-- Python 运行资产：`scripts/generation/runner_config.py` 会把 run 目录下的 `image.*` 识别为封面图、`images/*` 识别为主页缩略图源资产；上传链路会继续把这些 run 级资产写入 R2 + Supabase。
+- Python 运行资产：`scripts/generation/runner_config.py` 会把 run 目录下的 `image.*` 识别为封面图、`images/*` 识别为主页缩略图源资产并写进生图快照；上传链路不再消费该快照，而是在发布时按同一识别规则现场扫描 `run.json` `config_path` 指向的资产目录（多个 `image.*` 报错），把扫描结果写入 R2 + Supabase 快照。
 - Anima Artist Mixer：`workflow.anima_artist_mixer: true` 仅允许 `backend=comfyui` 且 `model.family=anima`；workflow 必须是 KSampler 的 model/positive 同时连到启用的 `AnimaArtistCrossAttn`，再由 `AnimaArtistPack` 接收 `base_prompt` 与 `artist_chain`。
-- 重发已发布 run 使用上传 CLI 的 `-F/--force-publish`；普通模式遇到不同 `release_id` 会拒绝。强制发布仍复用内容寻址资源，并在 Supabase 写入完成后最后覆盖 `view/current.json`。
+- NovelAI 链路：`backend=novelai` 不消费 workflow/api.json；Anlas 守卫只做免费资格参数校验（面积 ≤ 1024×1024、步数 ≤ 28、单张）与 V5 电量守卫，绝不依据 Anlas 余额推断计费（ADR 0002）；V5 电量低于阈值默认暂停生成、轮询等待回充后自动继续（默认等待上限 24h，超时回退真中止），`--battery-hard-stop` 显式启用旧真中止模式；硬停时未提交格子保持 incomplete，用 `--retry-incomplete` 恢复（ADR 0003）。
+- 重发已发布 run 默认自动取代网站当前快照；仅当新快照已产出格数少于网站当前快照（快照回退）时拒绝并要求 `-F/--force-publish`（仍限单个 `--run-dir`）。内容无变化的重复发布幂等跳过；强制发布仍复用内容寻址资源，并在 Supabase 写入完成后最后覆盖 `view/current.json`。
+- 发布时按快照内容自动判定评测状态：计划单元格全部有图 → `complete`，否则 `in_progress`；`--complete` 人工收口，已完结状态不回退（含历史快照缺状态字段按已完结处理）。状态与 `generated_cells` 写入 `view/current.json` 与 `run_list_items`；首页按 `published_at` 降序并为进行中评测显示「评测中」徽章。
 - API：`app/api/**/route.ts` 保持 `runtime = "nodejs"`；错误响应返回固定短文案，不透出绝对路径、stack、凭证。
 - Supabase：ComfyUI API 统一用 `createSupabaseAuthClient()`；浏览器端认证统一用 `createSupabaseBrowserClient()`；`app/auth/callback/route.ts` 为 PKCE 交换 session 的例外。
 - Middleware 例外：`middleware.ts` 不能 import `lib/supabase-auth.ts`，因为后者依赖 `server-only` + `next/headers`。
@@ -172,7 +179,8 @@
 - 路径与 URL：API 入口的 `runDir` 先用 `lib/comfyui-types.ts:isValidRunDir()` 判形态；共享路径处理再走 `lib/comfyui-path.ts`；R2 URL 统一走 `lib/r2-url.ts`。
 - 前端：大网格必须虚拟化；图片优先消费 R2 display/thumb 变体并配合 blurhash 占位，这套变体统一称为“展示页缩略图”。
 - 前端首页：`/api/comfyui/runs` 输出封面图/主页缩略图字段；不要把 run 详情页的展示页缩略图直接挪作首页卡片素材。
-- 模型对比：收藏目录分页上限固定为 40；slice 请求最多 40 个 `style_key`、12 个 `run_dir`；`run_style_items.y_index` 与所有前端 placement 均保持 0-based。
+- 模型对比：收藏目录分页上限固定为 40；slice 请求最多 40 个 `style_key`、12 个 `run_dir`；`run_style_items.y_index` 与所有前端 placement 均保持 0-based；进行中评测不进入矩阵列与 slice 请求，只能在对比页以禁用条目呈现，缺失状态字段的历史数据按已完结处理。
+- 详情页评测状态：`view/current.json` 的可选 `status` 决定进行中横幅；进行中评测里「行已就绪但无图」的单元格显示「待生成」，已完结评测维持「缺失」。
 - 模型对比缓存：`getCachedPublishedRuns()` 通过 `unstable_cache` 缓存已发布模型目录 5 分钟；私有对象 route 必须先验证 grant 和 key 范围，再查询去 grant 的共享边缘 cache，cache URL 必须保留对象 `key`。
 - Prompt 法典浏览器：运行时只消费 `public/data/prompts/*.json` 构建产物；源 YAML `data/prompt-codex/*.yaml` 是只读输入资产，不要在 Web 侧直接读取。目标模型/权重模式/Choice 选择的状态边界分别在 `lib/prompt-model-context.tsx` 与 `lib/prompt-choice-context.tsx`，格式化文本统一走 `lib/prompt-formatter.ts:formatPrompt()`。
 - SEO：所有页面 `generateMetadata` 统一使用 `lib/metadata-utils.ts:buildSeoMetadata()` 构建 OG/Twitter Card/canonical/hreflang 标签，不要手写重复模板。模型详情页的 `og:image` 通过 `lib/model-metadata.ts:getModelMetadata()` 从 Supabase 查询封面图 URL。JSON-LD 结构化数据使用 `components/json-ld.tsx` 的客户端组件注入，不消耗 Worker CPU。
@@ -223,12 +231,16 @@ uv run python main.py --help
 uv run python main.py --config data/models/example/config.yaml
 uv run python main.py --config data/models/example/config.yaml --dry-run
 uv run python main.py --config data/models/Anima-base-1.0-Artist-Mixer/config.yaml --dry-run
+uv run python main.py --config data/models/nai-diffusion-5-full/config.yaml --dry-run
 uv run pytest -q
 uv run pytest -q tests/test_prompt_grid.py
+# NovelAI 定向回归
+uv run pytest -q tests/test_novelai_generate.py tests/test_novelai_anlas_guard.py tests/test_novelai_retry.py
 
 # R2 上传
 uv run python -m scripts.r2_upload.upload_images_to_r2 --help
 uv run python -m scripts.r2_upload.upload_images_to_r2 --dry-run --run-dir outputs/run-xxx
+uv run python -m scripts.r2_upload.upload_images_to_r2 --local --run-dir outputs/run-xxx
 
 # Web
 pnpm dev
@@ -244,8 +256,10 @@ pnpm guides:build
 pnpm test:e2e
 E2E_SERVER=start pnpm test:e2e -- -g "task 13"
 pnpm dlx supabase start
-pnpm dlx supabase db reset
+pnpm dlx supabase db reset      # 本地重放全部迁移 + 种子
 pnpm dlx supabase migration new <name>
+# 迁移纪律：新迁移必须先在本地 `db reset` 验证通过，再推远端
+pnpm dlx supabase db push
 ```
 
 ## 分层文档
@@ -254,9 +268,9 @@ pnpm dlx supabase migration new <name>
 - `components/AGENTS.md`、`components/ui/AGENTS.md`、`components/comfyui/AGENTS.md`、`components/favorites/AGENTS.md`、`components/home/AGENTS.md`、`components/prompt/AGENTS.md`：业务组件、UI primitives、虚拟网格/图片渲染、收藏对比与 Prompt 法典浏览器约定。
 - `i18n/AGENTS.md`、`messages/AGENTS.md`：国际化路由配置与翻译消息约定。
 - `lib/AGENTS.md`、`lib/env/AGENTS.md`：Supabase/R2/路径安全/共享类型边界与环境变量读取。
-- `scripts/AGENTS.md`、`scripts/generation/AGENTS.md`、`scripts/r2_upload/AGENTS.md`、`scripts/cli/AGENTS.md`、`scripts/other/AGENTS.md`：Python 主代码域与子系统边界。
+- `scripts/AGENTS.md`、`scripts/generation/AGENTS.md`、`scripts/r2_upload/AGENTS.md`、`scripts/cli/AGENTS.md`、`scripts/other/AGENTS.md`：Python 内部工具代码域与子系统边界。
 - `tests/AGENTS.md`、`e2e/AGENTS.md`、`supabase/AGENTS.md`、`data/AGENTS.md`、`hooks/AGENTS.md`、`types/AGENTS.md`、`public/AGENTS.md`：测试、迁移、资产、hooks、生成类型、静态资源的局部规则。
-- `docs/AGENTS.md`、`DBbackup/AGENTS.md`：设计决策记录（ADR）与术语表的维护约定；本地数据库备份说明（git 忽略）。
+- `docs/AGENTS.md`、`DBbackup/AGENTS.md`：设计决策记录（`docs/adr/`）与 agent 协作文档（`docs/agents/`）的维护约定，领域术语表在根目录 `CONTEXT.md`；本地数据库备份说明（git 忽略）。
 
 ## Agent skills
 
@@ -271,3 +285,31 @@ Issue 与 spec 统一追踪在本仓库的 GitHub Issues，操作走 `gh` CLI。
 ### Domain docs
 
 single-context 布局：根目录 `CONTEXT.md` + `docs/adr/`。详见 `docs/agents/domain.md`。
+
+<!-- MANUAL: 以下为手工维护内容，deepinit 重生成时原样保留 -->
+
+## 任务边界（agent 必读）
+
+你是一个 coding agent，你的上下文有限，因此你只需要专注于用户分配给你的任务，或者按照 skill 的方法分配给你的那一项任务。不要做超出这项任务的事。
+
+## 项目身份与受众（agent 必读）
+
+本仓库同时托管**一个产品**与其**内部生产线**：
+
+| 区域 | 身份 | 受众 | agent 行为准则 |
+| --- | --- | --- | --- |
+| 网站（`app/`、`components/`、`lib/`、`i18n/`、`messages/`、`public/` 等） | 产品主体 | 最终用户 | 一切关于产品 / 功能 / 展示的表述以网站为准；改动面向用户体验 |
+| 生图流水线（`main.py`、`scripts/`） | 内部工具 | 仅作者本人 | 不描述为用户可见功能；不为其设计 UI、用户体系、i18n、SEO 等产品能力 |
+| 契约区（`supabase/`、`data/` 分账、`docs/`、`CONTEXT.md`） | 两侧共用 | — | 变更按接口变更处理，两侧一起过；`data/` 产权分账见 `data/AGENTS.md` |
+
+**硬规则**：介绍本仓库或为网站做改动时，主体永远是网站；生图脚本只作为内容的来源提及，不得当作产品的一部分。
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

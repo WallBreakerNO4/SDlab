@@ -1,11 +1,11 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-08-23 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-09-04 -->
 
 # tests/ — pytest + Node node:test 约定
 
 ## 概览
 
-- Python 测试使用 pytest，覆盖 generation runner、YAML 配置、R2 上传、CLI、资产转换和重试；TypeScript 测试使用 Node `node:test` + `tsx`，覆盖收藏 label 校验与模型对比的部分边界/guard。整体偏“可观测输出”：验证文件生成、YAML/JSON 字段合约、结构化错误与边界上限。
+- Python 测试使用 pytest，覆盖 generation runner、NovelAI 链路、YAML 配置、R2 上传、CLI、资产转换和重试；TypeScript 测试使用 Node `node:test` + `tsx`，覆盖收藏 label、模型指南数据层、sitemap 条目与模型对比的边界/guard。整体偏“可观测输出”：验证文件生成、YAML/JSON 字段合约、结构化错误与边界上限。
 
 ## 去哪儿看
 
@@ -26,9 +26,11 @@
 | R2 变体/编码                  | `test_r2_variants.py`/`test_r2_encoding_params.py`                 | 变体规划 + 编码参数                                 |
 | R2 keys/路径安全              | `test_r2_keys.py`/`test_r2_path_safety.py`                         | key 生成 + 路径校验                                 |
 | R2 manifest                   | `test_r2_manifest.py`                                              | 上传清单生成                                        |
-| R2 上传 CLI                   | `test_r2_upload_cli_contract.py`/`test_r2_upload_cli_dry_run.py`   | CLI 合约 + dry-run                                  |
+| R2 上传 CLI                   | `test_r2_upload_cli_contract.py`/`test_r2_upload_cli_dry_run.py`   | CLI 合约 + dry-run（含发布时资产扫描）              |
+| run 资产扫描契约              | `test_r2_upload_run_assets.py`                                      | 上传端与生图侧 `_load_assets` 的接受/拒绝一致性    |
 | R2 幂等性                     | `test_r2_upload_idempotency.py`                                    | 重复上传幂等                                        |
-| R2 本地 Supabase 集成         | `test_r2_upload_integration_local_supabase.py`                     | 需本地 Supabase                                     |
+| R2 本地 Supabase 集成         | `test_r2_upload_integration_local_supabase.py`                     | 需本地 Supabase 栈 + `.env.local-db`；用例以 `--local` 运行 |
+| Python env 加载               | `test_env_loading.py`                                              | `--local` 加载顺序、缺失报错、默认路径零回归 |
 | Supabase writer               | `test_supabase_writer.py`/`test_supabase_writer_postgrest_http.py` | upsert + HTTP mock                                  |
 | Mixer prompt parts 上传       | `test_r2_upload_mixer_prompt_parts.py`                             | 上传链路 Mixer prompt parts enrich/legacy 兼容      |
 | CLI 菜单                      | `test_main_menu_*.py`（6 个）                                      | 菜单触发/循环/边界                                  |
@@ -41,10 +43,20 @@
 | negative prompt               | `test_negative_prompt_append.py`                                   | 负面提示词拼接                                      |
 | 重试失败项幂等性        | `test_idempotent_retry_failed.py`                         | 验证重复重试不重复生成 |
 | NovelAI 生图入口        | `test_novelai_generate.py`                                | NovelAI 生图 argparse + 流程测试 |
-| 历史 run 回填           | `test_backfill_run_style_items.py`                        | Y 资产 sha256 重放/git stub、集合校验、幂等 upsert、dry-run |
+| NovelAI Anlas 守卫      | `test_novelai_anlas_guard.py`                             | 免费资格参数校验、V5 电量守卫（低电量等待回充 / `--battery-hard-stop` 硬停 / 等待超时与 Ctrl+C 中断）、守卫错误码与 SDK 占位参数 |
+| NovelAI 重试            | `test_novelai_retry.py`                                   | retry / retry-incomplete 回放与守卫码捞回 |
+| 历史 run 回填           | `test_backfill_run_style_items.py`                        | Y 资产 sha256 重放/git stub、集合校验、幂等 upsert、dry-run、`--local` 切库 |
+| 删除 run `--local` 安全  | `test_delete_run_local.py`                                | 本地模式零 R2 调用/零删除，默认路径保留 R2 + 数据库删除 |
 | 画师串收藏 label        | `style-favorites.test.ts`                                 | 仅覆盖 `isStyleFavoriteLabel()` 的空白、1000 字符上限 |
-| 模型对比部分合约        | `style-comparison.test.ts`、`comparison-matrix-utils.test.ts` | cursor、limit、slice body 边界、目录/详情 guard、viewer cookie、cache URL、BlurHash lookup |
+| 模型对比部分合约        | `style-comparison.test.ts`、`comparison-matrix-utils.test.ts` | cursor、limit、slice body 边界、目录/详情 guard、目录 status/published_at 归一化与排序、viewer cookie、cache URL、BlurHash lookup |
+| 详情视图状态 guard       | `model-detail-types.test.ts`                              | `isCurrentRunView()` 接受可选 `status`，缺字段历史数据兼容、非法取值拒绝 |
 | 无环境文件测试入口      | `env-file-path.test.ts`、`no-env-node-options.test.ts`     | Node 测试入口的路径与参数防护 |
+| 模型指南数据层          | `model-guides.test.ts`                                    | `parseModelGuide()` frontmatter 契约、`buildGuideIndex()` / `resolveGuideLocale()` / `resolveGuidePath()` |
+| 指南 sitemap 条目       | `sitemap.test.ts`                                         | `buildGuideSitemapEntries()` 只含实际存在语言 + hreflang alternates |
+| 模型详情 response guard | `model-detail-types.test.ts`                              | `isModelDetailResponse()` 本地化描述字段校验 |
+| 模型描述 Markdown URL   | `model-description-markdown.test.ts`                      | `transformModelDescriptionUrl()` 拒绝斜杠网络路径引用 |
+| 对比 RPC 迁移防回归     | `style-comparison-rpc-migration.test.ts`                  | security-invoker RPC、grants、BlurHash RPC、目录 status/published_at 重建迁移、EXPLAIN 验收脚本、模型缓存 300s 约束 |
+| 跨语言契约常量一致性     | `test_contract_constants.py`、`contract-constants.test.ts` | run key / style_key / y_index 与上限常量在 Python、TS、SQL 三侧镜像的共享样本、文本范式与 SQL CHECK/上限守卫；样本在 `tests/fixtures/contract-constants.json` |
 
 ## 约定（本目录特有）
 
@@ -53,11 +65,13 @@
 - pyright：测试文件可用文件级 `# pyright:` 放宽 unknown 类型（因 fake/mocks）
 - 固定样例资产放在 `tests/fixtures/`；共享 setup 写在测试文件 helper 中，没有顶层 `conftest.py`
 - TypeScript 测试使用 `node:assert/strict` + `node:test`，通过 `pnpm test` 执行 `node --import tsx --test tests/*.test.ts`；不要混入 Playwright 浏览器断言。
-- 模型对比单测未覆盖 slice response guard，也未覆盖 `mergeComparisonFavorites()`、`getVisibleModels()`、`reconcileHiddenRunDirs()`、`flattenRowSlides()`；修改这些逻辑时应补对应测试。
+- 模型对比单测未覆盖 slice response guard，也未覆盖 `mergeComparisonFavorites()`、`reconcileHiddenRunDirs()`、`flattenRowSlides()`；`getCompleteModels()` / `hasInProgressModels()` / `getVisibleModels()` 已覆盖进行中与隐藏过滤；修改这些逻辑时应补对应测试。
 - 修改 placement / row 逻辑时，应增加或保持对 0-based `y_index` 结构的测试；单测不等同于 E2E。
+- 修改 run key / style_key / y_index 及其上限常量（含 SQL migration 内的 CHECK 与 RPC 边界）时，必须同步所有镜像并通过 `test_contract_constants.py` + `contract-constants.test.ts` 的守卫；接受/拒绝行为样本统一维护在 `tests/fixtures/contract-constants.json`，不要在守卫里另抄一份样本。`collectionIdNormalization` 样本仅由 Python 侧消费。
 
 ## 运行
 
 - Python：`uv run pytest -q`（支持单文件 / `::` / `-k`）
 - TypeScript：`pnpm test`
 - Artist Mixer 定向回归：`uv run pytest -q tests/test_prompt_grid.py tests/test_run_replay.py tests/test_runner_config.py tests/test_runner_dry_run.py tests/test_workflow_patch.py`
+- NovelAI 定向回归：`uv run pytest -q tests/test_novelai_generate.py tests/test_novelai_anlas_guard.py tests/test_novelai_retry.py`

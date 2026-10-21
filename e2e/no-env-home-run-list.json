@@ -1,0 +1,60 @@
+[
+  {
+    "run_id": "e2e-in-progress-run",
+    "run_dir": "e2e-in-progress-run",
+    "created_at": "2026-08-01T00:00:00Z",
+    "published_at": "2026-08-10T00:00:00Z",
+    "x_count": 2,
+    "y_count": 1,
+    "total_cells": 2,
+    "status": "in_progress",
+    "model_name": "E2E In Progress Model",
+    "model_description_zh": "用于首页「评测中」徽章的确定性数据。",
+    "model_description_en": "Deterministic homepage data for the in-progress badge.",
+    "model_homepage": null,
+    "model_huggingface": null,
+    "model_civitai": null,
+    "cover": {
+      "width": 512,
+      "height": 768,
+      "blurhash": null,
+      "blurhash_width": null,
+      "blurhash_height": null,
+      "display_webp_r2_key": "runs/e2e-in-progress-run/media/cover/display_webp.webp",
+      "display_avif_r2_key": null,
+      "thumb_webp_r2_key": "runs/e2e-in-progress-run/media/cover/thumb_webp.webp",
+      "thumb_avif_r2_key": null
+    },
+    "homepage_cards": [
+      {
+        "width": 512,
+        "height": 768,
+        "blurhash": null,
+        "blurhash_width": null,
+        "blurhash_height": null,
+        "display_webp_r2_key": "runs/e2e-in-progress-run/media/card/display_webp.webp",
+        "display_avif_r2_key": null,
+        "thumb_webp_r2_key": "runs/e2e-in-progress-run/media/card/thumb_webp.webp",
+        "thumb_avif_r2_key": null
+      }
+    ]
+  },
+  {
+    "run_id": "e2e-complete-run",
+    "run_dir": "e2e-complete-run",
+    "created_at": "2026-08-05T00:00:00Z",
+    "published_at": "2026-08-02T00:00:00Z",
+    "x_count": 2,
+    "y_count": 1,
+    "total_cells": 2,
+    "status": "complete",
+    "model_name": "E2E Complete Model",
+    "model_description_zh": "用于对照的已完结首页数据。",
+    "model_description_en": "Deterministic homepage data for a completed model.",
+    "model_homepage": null,
+    "model_huggingface": null,
+    "model_civitai": null,
+    "cover": null,
+    "homepage_cards": []
+  }
+]

@@ -75,7 +75,7 @@ def test_upload_basic_flow_uses_selected_run_dir(
 
     monkeypatch.setattr("scripts.r2_upload.upload_images_to_r2.main", _fake_upload_main)
     fake_questionary = _FakeQuestionary(
-        selects=["upload", "run-a", "normal", "__exit__"],
+        selects=["upload", "run-a", "normal", "remote", "__exit__"],
         texts=[],
         confirms=[False, True],
     )
@@ -107,7 +107,7 @@ def test_upload_force_publish_mode_adds_short_flag(
 
     monkeypatch.setattr("scripts.r2_upload.upload_images_to_r2.main", _fake_upload_main)
     fake_questionary = _FakeQuestionary(
-        selects=["upload", "run-force", "force", "__exit__"],
+        selects=["upload", "run-force", "force", "remote", "__exit__"],
         texts=[],
         confirms=[False, True],
     )
@@ -133,7 +133,7 @@ def test_upload_advanced_flow_collects_optional_args(
 
     monkeypatch.setattr("scripts.r2_upload.upload_images_to_r2.main", _fake_upload_main)
     fake_questionary = _FakeQuestionary(
-        selects=["upload", "run-b", "normal", "advance", "__exit__"],
+        selects=["upload", "run-b", "normal", "remote", "advance", "__exit__"],
         texts=["custom-root", "4", "12"],
         confirms=[True, True, True],
     )
@@ -177,7 +177,7 @@ def test_upload_menu_uses_comfyui_out_dir_for_run_discovery(
 
     monkeypatch.setattr("scripts.r2_upload.upload_images_to_r2.main", _fake_upload_main)
     fake_questionary = _FakeQuestionary(
-        selects=["upload", "run-env", "normal", "__exit__"],
+        selects=["upload", "run-env", "normal", "remote", "__exit__"],
         texts=[],
         confirms=[False, True],
     )
@@ -224,3 +224,157 @@ def test_upload_without_run_dirs_prints_env_specific_hint(
 
     assert exit_code == 0
     assert f"未找到可上传的生成结果目录（{custom_root.as_posix()}/）。" in outputs
+
+
+def test_upload_local_mode_passes_local_flag(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "outputs" / "run-local").mkdir(parents=True)
+    calls: list[list[str] | None] = []
+
+    def _fake_upload_main(argv: list[str] | None = None) -> int:
+        calls.append(argv)
+        return 0
+
+    monkeypatch.setattr("scripts.r2_upload.upload_images_to_r2.main", _fake_upload_main)
+    fake_questionary = _FakeQuestionary(
+        selects=["upload", "run-local", "normal", "local", "__exit__"],
+        texts=[],
+        confirms=[False, True],
+    )
+    monkeypatch.setattr("scripts.cli.menu._load_questionary", lambda: fake_questionary)
+
+    outputs: list[str] = []
+    exit_code = run_menu(MenuIO(print_func=outputs.append))
+
+    assert exit_code == 0
+    assert calls == [["--run-dir", "run-local", "--local"]]
+    assert any("--local" in output for output in outputs)
+
+
+def test_delete_menu_remote_mode_does_not_pass_local_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str] | None] = []
+    list_calls: list[bool] = []
+
+    def _fake_list_db_runs(*, local: bool = False) -> list[str]:
+        list_calls.append(local)
+        return ["run-a"]
+
+    def _fake_delete_main(argv: list[str] | None = None) -> int:
+        calls.append(argv)
+        return 0
+
+    monkeypatch.setattr(
+        "scripts.r2_upload.delete_run.list_db_runs", _fake_list_db_runs
+    )
+    monkeypatch.setattr("scripts.r2_upload.delete_run.main", _fake_delete_main)
+    fake_questionary = _FakeQuestionary(
+        selects=["other", "delete_run", "remote", "run-a", "__exit__"],
+        texts=[],
+        confirms=[True],
+    )
+    monkeypatch.setattr("scripts.cli.menu._load_questionary", lambda: fake_questionary)
+
+    outputs: list[str] = []
+    exit_code = run_menu(MenuIO(print_func=outputs.append))
+
+    assert exit_code == 0
+    assert list_calls == [False]
+    assert calls == [["--run-dir", "run-a"]]
+    assert any("R2: runs/run-a/" in output for output in outputs)
+
+
+def test_delete_menu_local_mode_passes_local_flag_and_skips_r2_hint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str] | None] = []
+    list_calls: list[bool] = []
+
+    def _fake_list_db_runs(*, local: bool = False) -> list[str]:
+        list_calls.append(local)
+        return ["run-local"]
+
+    def _fake_delete_main(argv: list[str] | None = None) -> int:
+        calls.append(argv)
+        return 0
+
+    monkeypatch.setattr(
+        "scripts.r2_upload.delete_run.list_db_runs", _fake_list_db_runs
+    )
+    monkeypatch.setattr("scripts.r2_upload.delete_run.main", _fake_delete_main)
+    fake_questionary = _FakeQuestionary(
+        selects=["other", "delete_run", "local", "run-local", "__exit__"],
+        texts=[],
+        confirms=[True],
+    )
+    monkeypatch.setattr("scripts.cli.menu._load_questionary", lambda: fake_questionary)
+
+    outputs: list[str] = []
+    exit_code = run_menu(MenuIO(print_func=outputs.append))
+
+    assert exit_code == 0
+    assert list_calls == [True]
+    assert calls == [["--run-dir", "run-local", "--local"]]
+    assert any("已跳过 R2 对象删除" in output for output in outputs)
+
+
+def test_backfill_menu_entry_exists() -> None:
+    entries = list(iter_entries(include_disabled=True))
+    entry = next((item for item in entries if item.key == "backfill_style_items"), None)
+
+    assert entry is not None
+    assert entry.entrypoint == "scripts.other.backfill_run_style_items:main"
+
+
+def test_backfill_menu_local_mode_passes_local_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str] | None] = []
+
+    def _fake_backfill_main(argv: list[str] | None = None) -> int:
+        calls.append(argv)
+        return 0
+
+    monkeypatch.setattr(
+        "scripts.other.backfill_run_style_items.main", _fake_backfill_main
+    )
+    fake_questionary = _FakeQuestionary(
+        selects=["other", "backfill_style_items", "local", "__exit__"],
+        texts=[],
+        confirms=[True],
+    )
+    monkeypatch.setattr("scripts.cli.menu._load_questionary", lambda: fake_questionary)
+
+    exit_code = run_menu(MenuIO(print_func=lambda value: None))
+
+    assert exit_code == 0
+    assert calls == [["--local"]]
+
+
+def test_backfill_menu_remote_mode_omits_local_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str] | None] = []
+
+    def _fake_backfill_main(argv: list[str] | None = None) -> int:
+        calls.append(argv)
+        return 0
+
+    monkeypatch.setattr(
+        "scripts.other.backfill_run_style_items.main", _fake_backfill_main
+    )
+    fake_questionary = _FakeQuestionary(
+        selects=["other", "backfill_style_items", "remote", "__exit__"],
+        texts=[],
+        confirms=[True],
+    )
+    monkeypatch.setattr("scripts.cli.menu._load_questionary", lambda: fake_questionary)
+
+    exit_code = run_menu(MenuIO(print_func=lambda value: None))
+
+    assert exit_code == 0
+    assert calls == [[]]

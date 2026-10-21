@@ -6,32 +6,34 @@
 ## 概览
 
 - 完整的图片上传管线：从本地 run 产物读取 → 多变体编码（webp/avif）→ R2 上传 → Supabase 索引写入；同目录也提供 run 数据删除工具。
-- 术语约定：本目录生成的 `display_*` / `thumb_*` 变体统一称为“展示页缩略图”；run 级 `image.*` 属于封面图，`images/*` 属于主页缩略图集合。两类首页图片资产会随 run 级静态资源一起上传，Web 侧首页通过 `/api/comfyui/runs` 返回的 `assets.cover` / `assets.homepage_cards` 消费它们。
+- 术语约定：本目录生成的 `display_*` / `thumb_*` 变体统一称为“展示页缩略图”；run 级 `image.*` 属于封面图，`images/*` 属于主页缩略图集合。两类首页图片资产在发布时从 run 目录现场扫描后随发布上传，Web 侧首页通过 `/api/comfyui/runs` 返回的 `assets.cover` / `assets.homepage_cards` 消费它们。
+- 发布时按发布快照内容判定评测状态：计划的单元格全部有图 → `complete`，否则 `in_progress`；`--complete` 可人工收口；已完结状态单调不回退（含历史快照缺状态字段按已完结处理）。状态与已产出格数写入 `view/current.json` 当前指针与 `run_list_items`。
 
 ## 去哪儿改
 
 | 任务                      | 位置                     | 备注                                                                                 |
 | ------------------------- | ------------------------ | ------------------------------------------------------------------------------------ |
-| 上传主入口与 CLI          | `upload_images_to_r2.py` | `build_parser()`；`-F/--force-publish`；编排编码/上传/写入；4 条 tqdm 进度条          |
+| 上传主入口与 CLI          | `upload_images_to_r2.py` | `build_parser()`；`--local` 切本地库（R2 仍生产）；`-F/--force-publish`（仅快照回退时需显式强推）；`--complete` 人工收口状态；编排编码/上传/写入；4 条 tqdm 进度条          |
 | R2 存储客户端             | `r2_client.py`           | boto3 S3 兼容；`R2Client` + 重试 + 结构化错误（`R2ClientError` 含 retryable 标志）   |
-| Supabase 批量写入         | `supabase_writer.py`     | `SupabaseWriter.upsert_upload_index()`；分批 upsert + 并发写入；含 `_build_run_style_item_rows()` 从 image payload 的 `y_style_key` upsert `run_style_items`（on_conflict=`run_id,style_key`） |
+| Supabase 批量写入         | `supabase_writer.py`     | `SupabaseWriter.upsert_upload_index()`；分批 upsert + 并发写入；含 `_build_run_style_item_rows()` 从 image payload 的 `y_style_key` upsert `run_style_items`（on_conflict=`run_id,style_key`）；`run_list_items` 写入 `status` / `generated_cells` / `published_at`（缺失状态按已完结、格数回退 `total_cells`） |
 | 上传规划与变体            | `upload_planner.py`      | `_build_run_plan()`；多变体规划 + ThreadPoolExecutor 并发编码；把 `y_style_key` 写入 grid_items 字段并规划 `run_style_items` 行；Mixer metadata 缺 `y_common_prompt` 时按 run 快照中的 Y YAML SHA256 严格回填 |
 | R2 key 生成与 bucket 映射 | `r2_keys.py`             | key 格式：`runs/{run_dir}/{variant}_{filename}`；normal→public, advance/nsfw→private |
 | 图片编码参数              | `encoding_params.py`     | webp/avif 质量/尺寸参数；展示页缩略图中的 thumb 尺寸为 display 一半（向下取整，≥1）  |
 | 变体图片处理              | `variants.py`            | PIL 缩放 + 编码；生成展示页缩略图所需的 display/thumb webp/avif                      |
 | 上传合约类型              | `upload_contracts.py`    | `PlannedUpload`/`UploadResult` 等 dataclass                                          |
-| 上传执行器                | `upload_executor.py`     | 并发上传调度                                                                         |
+| 上传执行器                | `upload_executor.py`     | 并发上传调度；发布前判定当前快照自动取代 / 快照回退拦截（`-F` 显式强推）与已完结状态单调收口 |
 | 上传 I/O                  | `upload_io.py`           | 文件读写工具                                                                         |
 | 上传发现                  | `upload_discovery.py`    | 从 metadata.jsonl 发现待上传图片                                                     |
 | 上传运行时                | `upload_runtime.py`      | 运行时环境初始化                                                                     |
 | manifest 生成             | `manifest.py`            | JSON manifest 构建（公开/私有）；row `items[]` 携带可选图片级 BlurHash                |
-| run 级静态资产上传        | `upload_planner.py`      | 识别并规划封面图/主页缩略图资产的上传与 DB 字段                                      |
+| run 级静态资产扫描        | `run_assets.py`          | 发布时扫描 `run.json` `config_path` 指向的资产目录：单个 `image.*` 为封面图、`images/*` 为主页缩略图；多个 `image.*` 报错；识别规则与生图侧 `runner_config._load_assets` 由契约测试对齐 |
+| run 级静态资产上传        | `upload_planner.py`      | 规划封面图/主页缩略图资产的上传与 DB 字段；扫描结果写入持久化 run.json 快照 |
 | 路径安全                  | `path_safety.py`         | R2 key 路径校验                                                                      |
 | PostgREST HTTP            | `postgrest_http.py`      | Supabase PostgREST HTTP 客户端封装                                                   |
 | Supabase 环境             | `supabase_env.py`        | 环境变量读取（URL/key）                                                              |
 | Supabase 数据归一化       | `supabase_normalize.py`  | 行数据归一化为 PostgREST 格式                                                        |
 | 清空 bucket 工具          | `clear_bucket.py`        | 交互式清空 R2 bucket                                                                 |
-| 删除 run 数据            | `delete_run.py`             | 删除指定 run 的 Supabase 记录 + R2 对象;`--run-dir` / `--dry-run` / `--yes`;`python -m scripts.r2_upload.delete_run` |
+| 删除 run 数据            | `delete_run.py`             | 删除指定 run 的 Supabase 记录 + R2 对象;`--run-dir` / `--dry-run` / `--yes` / `--local`;`--local` 只删本地开发库的行并跳过全部 R2 删除;`python -m scripts.r2_upload.delete_run` |
 
 ## 核心流程
 
@@ -62,11 +64,17 @@ supabase_writer.py → 批量 upsert 到 Supabase（runs + snapshots + projectio
 - 上传逻辑与生图逻辑分层：不要反向耦合到 `scripts/generation/` 内部流程
 - 凭证输入优先走环境变量（`R2_*`/`SUPABASE_*`），不在仓库内落盘明文配置
 - 变体命名：`display_webp`/`display_avif`/`thumb_webp`/`thumb_avif`，文档中统称“展示页缩略图”
-- `run/image.*` 与同级 `images/*` 这类 run 级静态资源进入上传与 Supabase 写入链路；在 Web 侧作为独立的封面图/主页缩略图字段建模，不要与展示页缩略图混用。
+- `image.*`（封面图，单个）与 `images/*`（主页缩略图集合）在发布时从 run.json `config_path` 指向的资产目录现场扫描，随发布进入 R2 + Supabase 写入链路；生图写入的 assets 快照不再作为资产来源，持久化 run.json 快照的 assets 以本次扫描结果为准；存在多个 `image.*` 时报错；在 Web 侧作为独立的封面图/主页缩略图字段建模，不要与展示页缩略图混用。
+- dry-run 与执行结果报告包含 `asset_scans`（每个 run 的封面图 / 主页缩略图 repo-relative 路径），发布前可用它确认现场扫描结果。
+- dry-run 与执行结果报告包含 `snapshot_stats`（每个 run 的 `status` / `generated_cells` / `planned_cells`）：计划单元格全部有图 → `complete`，否则 `in_progress`；`--complete` 强制收口。
+- `metadata.jsonl` 坏行与无法读取 / 解码的图片跳过并警告；被跳过的单元格按“未产出”计入状态。
+- 评测状态写入 `view/current.json` 当前指针的 `status` / `generated_cells`；同一 `release_id` 下状态收口（如 `--complete`）也会刷新当前指针；已完结状态单调不回退，缺状态字段的历史快照按已完结处理。
 - bucket 分配：normal category → public bucket；advance/nsfw → private bucket
+- `--local`（本地开发阶段）：Supabase 写入目标切到本地开发库，R2 仍向生产真实上传并幂等跳过已存在对象；env 由 `scripts/env_loading.py` 先加载 `.env.local-db`（只接受数据库键并覆盖进程残留的远端连接变量，R2 等非数据库键不加载）再用 `.env` 补漏其余机密；`.env.local-db` 缺失时报 `config` 错误，绝不静默回退远端。不带旗标时只读 `.env`，行为与既有完全一致。
+- 删除 run 的 `--local`（本地开发阶段）：本地库是生产库的镜像，`--local` 只删除本地库的 `runs` 行（级联子表），绝不构造 S3 客户端、绝不删除生产 R2 对象，并打印「已跳过 R2 对象删除」提示；不带旗标时维持「删远端行 + R2 对象」的既有行为。预览统计在 `--local` 下同样跳过 R2。
 - 上传支持可配置并发（`--upload-workers`）和 dry-run 模式
-- 普通上传允许首次发布与相同 `release_id` 的幂等恢复；不同 release 必须显式使用 `-F/--force-publish`，且仅支持单个 `--run-dir`
-- 发布顺序固定为不可变资源 → Supabase 数据/`run_view_index` → 可变 `view/current.json`；强制发布不重复上传已存在的内容寻址图片
+- 同一评测的重复发布默认自动取代网站当前快照；仅当本次快照已产出格数少于网站当前快照（回退）时必须显式使用 `-F/--force-publish`（仅支持单个 `--run-dir`）；网站当前快照缺 `generated_cells`（历史数据）时跳过回退检查
+- 发布顺序固定为不可变资源 → Supabase 数据/`run_view_index` → 可变 `view/current.json`；自动取代与强制发布都复用内容寻址资源，不重复上传已存在图片；内容无变化时不上传新指针
 - Mixer metadata 缺少 `y_common_prompt` 时，上传规划校验 run 快照中的 Y YAML SHA256，并按 Y prompt 身份在内存中严格回填；不会改写本地 `metadata.jsonl`
 - Mixer bootstrap 以可选 `yPromptParts` 暴露 Artist/Common Prompt，并保留 `yLabels` 字段；view schema 为 v2
 - Style Favorites 上传链路：从 image payload 的 `y_style_key` 提取并 upsert `run_style_items`（`run_id,style_key,y_index,label`）；缺少该字段的 run 由 `scripts/other/backfill_run_style_items.py` 回填

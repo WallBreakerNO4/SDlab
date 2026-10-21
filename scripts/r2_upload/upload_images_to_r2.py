@@ -6,6 +6,7 @@ import argparse
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
+from ..env_loading import LOCAL_FLAG, argv_requests_local
 from .r2_client import R2Client
 from .supabase_writer import SupabaseWriter
 from .upload_contracts import RunPlan, _CATEGORY_CHOICES, _EXIT_CODES_BY_CATEGORY
@@ -52,10 +53,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Preview actions without network or database writes.",
     )
     _ = parser.add_argument(
+        LOCAL_FLAG,
+        action="store_true",
+        help=(
+            "Write Supabase rows to the local development database "
+            "(.env.local-db); R2 uploads still target production."
+        ),
+    )
+    _ = parser.add_argument(
         "-F",
         "--force-publish",
         action="store_true",
-        help="Republish an existing run and replace its current view pointer.",
+        help=(
+            "Force publish a snapshot that rolls back the current website "
+            "snapshot (fewer generated cells)."
+        ),
+    )
+    _ = parser.add_argument(
+        "--complete",
+        action="store_true",
+        help="Force this snapshot to be marked complete (for permanently failed cells).",
     )
     _ = parser.add_argument(
         "--category",
@@ -106,14 +123,16 @@ def _execute_plans(
 
 
 def main(argv: list[str] | None = None) -> int:
-    _autoload_dotenv()
-    parser = build_parser()
     try:
+        _autoload_dotenv(local=argv_requests_local(argv))
+        parser = build_parser()
         args = parser.parse_args(argv)
         _validate_args(args, parser)
     except SystemExit as exc:
         code = exc.code
         return int(code) if isinstance(code, int) else 1
+    except Exception as exc:
+        return _report_error(exc)
 
     try:
         _configure_logging()
@@ -134,27 +153,31 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     except Exception as exc:
-        category = getattr(exc, "category", None)
-        error_code = getattr(exc, "code", None)
-        error_context = getattr(exc, "context", None)
-        exit_code = _exit_code_for_exception(
-            exc,
-            exit_codes_by_category=_EXIT_CODES_BY_CATEGORY,
-        )
-        error_payload = {
-            "mode": "error",
-            "error": exc.__class__.__name__,
-            "message": str(exc),
-            "exit_code": exit_code,
-        }
-        if isinstance(category, str):
-            error_payload["category"] = category
-        if isinstance(error_code, str) and error_code:
-            error_payload["code"] = error_code
-        if isinstance(error_context, dict):
-            error_payload["context"] = dict(error_context)
-        print(_to_json_line(error_payload))
-        return exit_code
+        return _report_error(exc)
+
+
+def _report_error(exc: Exception) -> int:
+    category = getattr(exc, "category", None)
+    error_code = getattr(exc, "code", None)
+    error_context = getattr(exc, "context", None)
+    exit_code = _exit_code_for_exception(
+        exc,
+        exit_codes_by_category=_EXIT_CODES_BY_CATEGORY,
+    )
+    error_payload = {
+        "mode": "error",
+        "error": exc.__class__.__name__,
+        "message": str(exc),
+        "exit_code": exit_code,
+    }
+    if isinstance(category, str):
+        error_payload["category"] = category
+    if isinstance(error_code, str) and error_code:
+        error_payload["code"] = error_code
+    if isinstance(error_context, dict):
+        error_payload["context"] = dict(error_context)
+    print(_to_json_line(error_payload))
+    return exit_code
 
 
 if __name__ == "__main__":

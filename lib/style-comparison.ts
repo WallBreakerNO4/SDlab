@@ -1,4 +1,9 @@
-import { isValidRunDir } from "@/lib/comfyui-types";
+import {
+  isEvaluationStatus,
+  isValidRunDir,
+  normalizeEvaluationStatus,
+  type EvaluationStatus,
+} from "@/lib/comfyui-types";
 import { isStyleKey, type StyleKey } from "@/lib/style-favorites";
 
 export const STYLE_COMPARISON_DEFAULT_LIMIT = 40;
@@ -27,6 +32,10 @@ export type StyleComparisonModel = {
   run_dir: string;
   name: string | null;
   created_at: string;
+  /** 缺失 `published_at` 的历史目录数据回退 `created_at` 排序。 */
+  published_at?: string | null;
+  /** 缺失状态字段的历史数据按已完结处理；消费侧只判断 `in_progress`。 */
+  status?: EvaluationStatus | null;
   x_columns: StyleComparisonXColumn[];
 };
 
@@ -158,7 +167,13 @@ export function normalizeStyleComparisonModelsRpcRows(
       typeof raw.run_dir !== "string" ||
       !isValidRunDir(raw.run_dir) ||
       (typeof raw.name !== "string" && raw.name !== null) ||
-      typeof raw.created_at !== "string"
+      typeof raw.created_at !== "string" ||
+      (raw.published_at !== undefined &&
+        raw.published_at !== null &&
+        typeof raw.published_at !== "string") ||
+      (raw.status !== undefined &&
+        raw.status !== null &&
+        !isEvaluationStatus(raw.status))
     ) {
       return null;
     }
@@ -169,14 +184,17 @@ export function normalizeStyleComparisonModelsRpcRows(
       run_dir: raw.run_dir,
       name: raw.name,
       created_at: raw.created_at,
+      published_at:
+        typeof raw.published_at === "string" ? raw.published_at : null,
+      status: normalizeEvaluationStatus(raw.status),
       x_columns: xColumns,
     });
   }
-  return models.sort(
-    (a, b) =>
-      b.created_at.localeCompare(a.created_at) ||
-      a.run_dir.localeCompare(b.run_dir),
-  );
+  return models.sort((a, b) => {
+    const aTime = a.published_at ?? a.created_at;
+    const bTime = b.published_at ?? b.created_at;
+    return bTime.localeCompare(aTime) || a.run_dir.localeCompare(b.run_dir);
+  });
 }
 
 type SliceRpcRequestScope = {
@@ -341,6 +359,12 @@ function isModel(value: unknown): value is StyleComparisonModel {
     typeof value.run_dir === "string" &&
     (typeof value.name === "string" || value.name === null) &&
     typeof value.created_at === "string" &&
+    (value.published_at === undefined ||
+      value.published_at === null ||
+      typeof value.published_at === "string") &&
+    (value.status === undefined ||
+      value.status === null ||
+      isEvaluationStatus(value.status)) &&
     Array.isArray(value.x_columns) &&
     value.x_columns.every(isXColumn)
   );
@@ -650,11 +674,29 @@ export function mergeComparisonFavorites(
   return result;
 }
 
+/** 缺失状态字段的历史数据按已完结处理：只有明确的 `in_progress` 才视为进行中。 */
+export function isInProgressModel(model: ComparisonModel): boolean {
+  return model.status === "in_progress";
+}
+
+export function getCompleteModels(
+  models: ComparisonModel[],
+): ComparisonModel[] {
+  return models.filter((model) => !isInProgressModel(model));
+}
+
+export function hasInProgressModels(models: ComparisonModel[]): boolean {
+  return models.some(isInProgressModel);
+}
+
+/** 矩阵列只消费已完结评测：进行中评测与用户隐藏的模型都不生成列。 */
 export function getVisibleModels(
   models: ComparisonModel[],
   hiddenRunDirs: ReadonlySet<string>,
 ): ComparisonModel[] {
-  return models.filter((model) => !hiddenRunDirs.has(model.run_dir));
+  return getCompleteModels(models).filter(
+    (model) => !hiddenRunDirs.has(model.run_dir),
+  );
 }
 
 export function reconcileHiddenRunDirs(

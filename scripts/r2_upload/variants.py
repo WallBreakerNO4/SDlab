@@ -8,9 +8,19 @@ from pathlib import Path
 from typing import cast
 
 from blurhash import encode as blurhash_encode
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
+from PIL.Image import DecompressionBombError
 
 from .encoding_params import avif_params, webp_params
+
+# 图片读取 / 解码可能抛出的异常集合：上传端据此跳过坏图并警告。
+IMAGE_DECODE_ERRORS: tuple[type[Exception], ...] = (
+    UnidentifiedImageError,
+    DecompressionBombError,
+    OSError,
+    ValueError,
+    SyntaxError,
+)
 
 
 def thumb_size(width: int, height: int) -> tuple[int, int]:

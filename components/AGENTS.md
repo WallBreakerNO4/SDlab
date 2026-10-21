@@ -28,7 +28,7 @@
 | JSON-LD 结构化数据    | `components/json-ld.tsx`                | `JsonLdWebsite` + `JsonLdBreadcrumbList`，客户端注入 schema.org 标签 |
 | shadcn 配置           | `components.json`                        | aliases、style、cssVariables 等                    |
 | Prompt 法典浏览器 UI  | `components/prompt/`                      | TOC + 虚拟滚动条目 + Tag/Choice/多角色渲染（见 `components/prompt/AGENTS.md`） |
-| 收藏模型对比工作区   | `components/favorites/favorites-page.tsx` | 登录门控 + 收藏分页 + 已发布模型显隐 + 对比矩阵/预览 |
+| 收藏模型对比工作区   | `components/favorites/favorites-page.tsx` | 登录门控 + 收藏分页 + 已发布模型显隐（进行中评测为禁用条目）+ 对比矩阵/预览 |
 | 单收藏对比详情       | `components/favorites/favorite-comparison-detail.tsx` | 单一 `style_key` 的跨模型/测试场景详情 |
 | 收藏组件约定         | `components/favorites/AGENTS.md`          | 对比目录、slice、row cache 与私有媒体约定 |
 | 悬浮登录按钮            | `auth-floating-button.tsx`               | `"use client"`;未登录时悬浮按钮 → `AuthLoginDialog`;已登录显示头像下拉菜单 |

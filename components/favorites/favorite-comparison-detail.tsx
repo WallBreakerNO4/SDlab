@@ -19,6 +19,8 @@ import {
 } from "@/components/ui/dialog";
 import {
   flattenRowSlides,
+  getCompleteModels,
+  hasInProgressModels,
   type ComparisonModel,
   type ComparisonSlice,
   type ComparisonSlide,
@@ -30,6 +32,7 @@ import {
   resolveComparisonRowState,
   type ComparisonRowState,
 } from "./comparison-loader";
+import { ComparisonInProgressNote } from "./comparison-in-progress-note";
 import {
   buildComparisonBlurhashLookup,
   buildVisibleComparisonXColumns,
@@ -53,6 +56,9 @@ export default function FavoriteComparisonDetail({
     label: string;
   } | null>(null);
   const [models, setModels] = useState<ComparisonModel[]>([]);
+  // 矩阵列与 slice 只消费已完结评测；进行中评测只出现在对比页的禁用条目里。
+  const completeModels = useMemo(() => getCompleteModels(models), [models]);
+  const hasInProgress = useMemo(() => hasInProgressModels(models), [models]);
   const [sliceSnapshot, setSliceSnapshot] = useState<{
     variantKey: string;
     data: ComparisonSlice;
@@ -88,13 +94,13 @@ export default function FavoriteComparisonDetail({
   }, [styleKey, user]);
 
   useEffect(() => {
-    if (!favorite || !models.length) return;
+    if (!favorite || !completeModels.length) return;
     const controller = new AbortController();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset stale detail data before loading a new comparison window
     setSliceSnapshot(null);
     setSliceError(false);
     setRows(new Map());
-    const runDirs = models.map((model) => model.run_dir);
+    const runDirs = completeModels.map((model) => model.run_dir);
     Promise.all(
       Array.from({ length: Math.ceil(runDirs.length / 12) }, (_, index) =>
         fetchComparisonSlice(
@@ -151,12 +157,15 @@ export default function FavoriteComparisonDetail({
         if (!controller.signal.aborted) setSliceError(true);
       });
     return () => controller.abort();
-  }, [favorite, models, rowVariantKey, styleKey]);
+  }, [completeModels, favorite, rowVariantKey, styleKey]);
 
   const xColumns = useMemo(
     () =>
-      buildVisibleComparisonXColumns(models[0]?.x_columns ?? [], showNsfw),
-    [models, showNsfw],
+      buildVisibleComparisonXColumns(
+        completeModels[0]?.x_columns ?? [],
+        showNsfw,
+      ),
+    [completeModels, showNsfw],
   );
   const accessByRun = useMemo(
     () =>
@@ -221,8 +230,9 @@ export default function FavoriteComparisonDetail({
             {favorite.label}
           </h1>
           <p className="mt-1 text-xs text-muted-foreground">
-            {t("visibleModels", { count: models.length })}
+            {t("visibleModels", { count: completeModels.length })}
           </p>
+          {hasInProgress ? <ComparisonInProgressNote /> : null}
         </div>
         <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-border/40">
           <table className="w-full min-w-[720px] table-fixed border-collapse text-xs">
@@ -231,7 +241,7 @@ export default function FavoriteComparisonDetail({
                 <th className="sticky top-0 left-0 z-20 w-48 border-r border-border/40 bg-background/85 px-4 py-3 text-left text-[11px] font-semibold tracking-widest text-muted-foreground uppercase backdrop-blur-md">
                   {t("comparisonScene")}
                 </th>
-                {models.map((model) => (
+                {completeModels.map((model) => (
                   <th
                     key={model.run_dir}
                     className="sticky top-0 z-10 w-44 bg-background/85 px-3 py-3 text-left text-[13px] font-semibold backdrop-blur-md"

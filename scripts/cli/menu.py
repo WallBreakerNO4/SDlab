@@ -36,6 +36,10 @@ ANNOTATE_Y_BASE_COMMAND = (
 )
 CLEAR_R2_BASE_COMMAND = "uv run python scripts/r2_upload/clear_bucket.py"
 DELETE_RUN_BASE_COMMAND = "uv run python -m scripts.r2_upload.delete_run --run-dir"
+BACKFILL_BASE_COMMAND = "uv run python scripts/other/backfill_run_style_items.py"
+
+DB_TARGET_REMOTE = "remote"
+DB_TARGET_LOCAL = "local"
 
 
 @dataclass(frozen=True, slots=True)
@@ -258,7 +262,7 @@ def _handle_upload(backend: QuestionaryMenuBackend) -> None:
         "选择上传方式",
         [
             MenuChoice("normal", "普通上传"),
-            MenuChoice("force", "强制重新发布现有 Run"),
+            MenuChoice("force", "强制发布（快照回退时）"),
         ],
         allow_back=True,
     )
@@ -266,6 +270,12 @@ def _handle_upload(backend: QuestionaryMenuBackend) -> None:
         return
     if upload_mode == "force":
         argv.append("-F")
+
+    db_target = _select_database_target(backend)
+    if db_target == "__back__":
+        return
+    if db_target == DB_TARGET_LOCAL:
+        argv.append("--local")
 
     if backend.confirm("是否开启高级参数？", default=False):
         argv.extend(_prompt_upload_advanced_args(backend))
@@ -289,6 +299,7 @@ def _handle_other(backend: QuestionaryMenuBackend) -> None:
             MenuChoice("csv_to_yaml", "CSV to YAML 脚本"),
             MenuChoice("annotate_y_tag_types", "标注 Y YAML tag 类型（Danbooru）"),
             MenuChoice("delete_run", "删除 Run（数据库 + R2）"),
+            MenuChoice("backfill_style_items", "回填画师串收藏数据"),
             MenuChoice("clear_r2", "R2 清空脚本"),
         ],
         allow_back=True,
@@ -303,6 +314,9 @@ def _handle_other(backend: QuestionaryMenuBackend) -> None:
         return
     if selected == "delete_run":
         _handle_delete_run(backend)
+        return
+    if selected == "backfill_style_items":
+        _handle_backfill_style_items(backend)
         return
     if selected == "clear_r2":
         _handle_clear_r2(backend)
@@ -418,12 +432,18 @@ def _handle_clear_r2(backend: QuestionaryMenuBackend) -> None:
 
 
 def _handle_delete_run(backend: QuestionaryMenuBackend) -> None:
-    from scripts.r2_upload.delete_run import list_remote_runs
+    from scripts.r2_upload.delete_run import list_db_runs
+
+    db_target = _select_database_target(backend)
+    if db_target == "__back__":
+        return
+    local = db_target == DB_TARGET_LOCAL
 
     try:
-        run_names = list_remote_runs()
+        run_names = list_db_runs(local=local)
     except Exception as exc:
-        backend.write(f"无法获取远端 run 列表: {exc}")
+        target_label = "本地" if local else "远端"
+        backend.write(f"无法获取{target_label} run 列表: {exc}")
         return
 
     if not run_names:
@@ -438,20 +458,56 @@ def _handle_delete_run(backend: QuestionaryMenuBackend) -> None:
     if selected == "__back__":
         return
 
+    argv = ["--run-dir", selected]
+    if local:
+        argv.append("--local")
+
     plan = ExecutionPlan(
         entry_key="delete_run",
-        argv=["--run-dir", selected],
+        argv=argv,
         base_command=f"{DELETE_RUN_BASE_COMMAND} {selected}",
         success_prefix="删除完成，退出码: ",
         cancel_message="已取消删除操作。",
     )
     backend.write(f"准备删除 run: {selected}")
-    backend.write(f"  - R2: runs/{selected}/ 前缀下所有对象")
+    if local:
+        backend.write("  - R2: 已跳过 R2 对象删除（本地库是生产库镜像）")
+    else:
+        backend.write(f"  - R2: runs/{selected}/ 前缀下所有对象")
     backend.write("  - 数据库: runs 表记录及全部关联数据（级联删除）")
     if not backend.confirm("确认执行删除操作？", default=False):
         backend.write(plan.cancel_message)
         return
     _run_execution_plan(backend, plan)
+
+
+def _handle_backfill_style_items(backend: QuestionaryMenuBackend) -> None:
+    db_target = _select_database_target(backend)
+    if db_target == "__back__":
+        return
+
+    argv = ["--local"] if db_target == DB_TARGET_LOCAL else []
+    _confirm_and_execute(
+        backend,
+        ExecutionPlan(
+            entry_key="backfill_style_items",
+            argv=argv,
+            base_command=BACKFILL_BASE_COMMAND,
+            success_prefix="回填完成，退出码: ",
+            cancel_message="已取消回填。",
+        ),
+    )
+
+
+def _select_database_target(backend: QuestionaryMenuBackend) -> str:
+    return backend.select(
+        "选择数据库目标",
+        [
+            MenuChoice(DB_TARGET_REMOTE, "远端生产数据库（默认）"),
+            MenuChoice(DB_TARGET_LOCAL, "本地开发模式"),
+        ],
+        allow_back=True,
+    )
 
 
 def _confirm_and_execute(

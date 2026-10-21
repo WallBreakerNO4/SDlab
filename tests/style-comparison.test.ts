@@ -6,6 +6,9 @@ import {
   decodeStyleComparisonCursor,
   encodeStyleComparisonCursor,
   buildStyleComparisonPlacements,
+  getCompleteModels,
+  getVisibleModels,
+  hasInProgressModels,
   isStyleComparisonResponse,
   isStyleComparisonDetailResponse,
   isStyleComparisonSliceResponse,
@@ -314,6 +317,8 @@ test("model catalog RPC rows are normalized and malformed payloads are rejected"
         run_dir: "run-1",
         name: "Model",
         created_at: "2026-07-20T00:00:00Z",
+        published_at: null,
+        status: "complete",
         x_columns: [
           {
             x_index: 0,
@@ -332,6 +337,104 @@ test("model catalog RPC rows are normalized and malformed payloads are rejected"
   );
 });
 
+test("model catalog normalizes status and orders by published_at with created_at fallback", () => {
+  const models = normalizeStyleComparisonModelsRpcRows([
+    {
+      run_dir: "run-old",
+      name: "Old",
+      created_at: "2026-07-20T00:00:00Z",
+      published_at: "2026-07-24T00:00:00Z",
+      status: "complete",
+      x_columns: [],
+    },
+    {
+      run_dir: "run-new",
+      name: "New",
+      created_at: "2026-07-23T00:00:00Z",
+      published_at: "2026-07-23T12:00:00Z",
+      status: "in_progress",
+      x_columns: [],
+    },
+    {
+      run_dir: "run-legacy",
+      name: null,
+      created_at: "2026-07-25T00:00:00Z",
+      x_columns: [],
+    },
+  ]);
+
+  assert.ok(models);
+  // published_at 与 created_at 顺序相反；历史行缺 published_at 时回退 created_at。
+  assert.deepEqual(
+    models.map((model) => [model.run_dir, model.status]),
+    [
+      ["run-legacy", "complete"],
+      ["run-old", "complete"],
+      ["run-new", "in_progress"],
+    ],
+  );
+});
+
+test("model catalog rejects malformed status and published_at fields", () => {
+  const base = {
+    run_dir: "run-1",
+    name: "Model",
+    created_at: "2026-07-20T00:00:00Z",
+    x_columns: [],
+  };
+
+  assert.equal(
+    normalizeStyleComparisonModelsRpcRows([{ ...base, status: "paused" }]),
+    null,
+  );
+  assert.equal(
+    normalizeStyleComparisonModelsRpcRows([{ ...base, status: 1 }]),
+    null,
+  );
+  assert.equal(
+    normalizeStyleComparisonModelsRpcRows([{ ...base, published_at: 1 }]),
+    null,
+  );
+});
+
+test("matrix models exclude in-progress evaluations", () => {
+  const model = (
+    runDir: string,
+    status: "in_progress" | "complete",
+  ) => ({
+    run_dir: runDir,
+    name: runDir,
+    created_at: "2026-07-20T00:00:00Z",
+    published_at: null,
+    status,
+    x_columns: [],
+  });
+  const models = [
+    model("run-progress", "in_progress"),
+    model("run-hidden", "complete"),
+    model("run-complete", "complete"),
+  ];
+
+  assert.deepEqual(
+    getCompleteModels(models).map((item) => item.run_dir),
+    ["run-hidden", "run-complete"],
+  );
+  assert.equal(hasInProgressModels(models), true);
+  assert.equal(hasInProgressModels([model("run-complete", "complete")]), false);
+  // 缺 status 的历史数据按已完结处理，不会被矩阵过滤。
+  assert.equal(
+    hasInProgressModels([{ ...model("run-legacy", "complete"), status: null }]),
+    false,
+  );
+
+  const visible = getVisibleModels(models, new Set(["run-hidden"]));
+
+  assert.deepEqual(
+    visible.map((item) => item.run_dir),
+    ["run-complete"],
+  );
+});
+
 test("directory response guard rejects malformed models and accepts valid response", () => {
   const valid: StyleComparisonResponse = {
     favorites: [
@@ -346,6 +449,8 @@ test("directory response guard rejects malformed models and accepts valid respon
         run_dir: "run-1",
         name: "Model",
         created_at: "2026-07-20T00:00:00Z",
+        published_at: "2026-07-21T00:00:00Z",
+        status: "in_progress",
         x_columns: [
           {
             x_index: 0,
@@ -358,7 +463,40 @@ test("directory response guard rejects malformed models and accepts valid respon
     next_cursor: null,
   };
   assert.equal(isStyleComparisonResponse(valid), true);
+  // 历史目录数据缺 status / published_at 时 guard 仍然接受。
+  const legacyModels = [
+    {
+      run_dir: "run-1",
+      name: "Model",
+      created_at: "2026-07-20T00:00:00Z",
+      x_columns: [
+        {
+          x_index: 0,
+          type: "portrait",
+          description: { zh: "头像", en: "Portrait" },
+        },
+      ],
+    },
+  ];
+  assert.equal(
+    isStyleComparisonResponse({ ...valid, models: legacyModels }),
+    true,
+  );
   assert.equal(isStyleComparisonResponse({ ...valid, next_cursor: 1 }), false);
+  assert.equal(
+    isStyleComparisonResponse({
+      ...valid,
+      models: [{ ...valid.models![0], status: "paused" }],
+    }),
+    false,
+  );
+  assert.equal(
+    isStyleComparisonResponse({
+      ...valid,
+      models: [{ ...valid.models![0], published_at: 1 }],
+    }),
+    false,
+  );
   assert.equal(
     isStyleComparisonResponse({
       ...valid,

@@ -21,6 +21,14 @@ function readBlurhashRpcMigration(): string {
   return readFileSync(join(migrationDirectory, migration), "utf8");
 }
 
+function readModelsStatusMigration(): string {
+  const migration = readdirSync(migrationDirectory).find((name) =>
+    name.endsWith("_add_style_comparison_models_status.sql"),
+  );
+  assert.ok(migration, "style comparison models status migration must exist");
+  return readFileSync(join(migrationDirectory, migration), "utf8");
+}
+
 test("slice RPC keeps auth, bounds and joins inside one security-invoker function", () => {
   const sql = readRpcMigration();
 
@@ -61,6 +69,47 @@ test("public model catalog RPC joins all model metadata and has explicit grants"
   assert.match(
     sql,
     /grant execute on function public\.get_style_comparison_models\(\) to anon, authenticated/i,
+  );
+});
+
+test("model catalog RPC adds status and published_at ordering without widening grants", () => {
+  const sql = readModelsStatusMigration();
+
+  assert.match(
+    sql,
+    /drop function if exists public\.get_style_comparison_models\(\)/i,
+  );
+  assert.match(
+    sql,
+    /create or replace function public\.get_style_comparison_models\s*\(/i,
+  );
+  assert.match(sql, /returns table\s*\(/i);
+  assert.match(sql, /^\s*status text\b/im);
+  assert.match(sql, /coalesce\(list_items\.status, 'complete'\) as status/i);
+  assert.match(
+    sql,
+    /coalesce\(list_items\.published_at, list_items\.created_at\)::text as published_at/i,
+  );
+  assert.match(
+    sql,
+    /order by\s+coalesce\(list_items\.published_at, list_items\.created_at\) desc nulls last/i,
+  );
+  assert.match(sql, /security invoker/i);
+  assert.match(sql, /set search_path\s*=\s*''/i);
+  assert.match(sql, /public\.run_view_index/i);
+  assert.match(sql, /public\.run_list_items/i);
+  assert.match(sql, /public\.runs/i);
+  assert.match(
+    sql,
+    /revoke execute on function public\.get_style_comparison_models\(\) from public/i,
+  );
+  assert.match(
+    sql,
+    /grant execute on function public\.get_style_comparison_models\(\) to anon, authenticated/i,
+  );
+  assert.doesNotMatch(
+    sql,
+    /grant execute on function public\.get_style_comparison_models\(\) to public/i,
   );
 });
 

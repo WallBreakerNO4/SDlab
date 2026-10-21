@@ -75,7 +75,7 @@ def select_failed_and_incomplete_cells(
 
     Args:
         metadata_path: Path to metadata.jsonl
-        run_dir: Run directory for resolving relative image paths
+        run_dir: Evaluation directory for resolving relative image paths
         expected_cells: Set of (x_index, y_index) tuples representing the full grid
 
     Returns:
@@ -171,7 +171,7 @@ def _image_exists(record: dict[str, object], run_dir: Path) -> bool:
 
     Args:
         record: Metadata record with local_image_path or local_image_paths
-        run_dir: Run directory for resolving relative paths
+        run_dir: Evaluation directory for resolving relative paths
 
     Returns:
         True if image exists and is a file, False otherwise

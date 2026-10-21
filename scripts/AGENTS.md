@@ -1,11 +1,11 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-06 | Updated: 2026-08-23 -->
+<!-- Generated: 2026-04-06 | Updated: 2026-09-04 -->
 
-# scripts/ — 核心实现（生图 + R2 上传）
+# scripts/ — 内部生图生产线（生图 + R2 上传；非用户面）
 
 ## 概览
 
-- 主"代码域"：生图 runner（generation/）、R2 上传（r2_upload/）、交互菜单（cli/）、辅助转换（other/）。顶层 `main.py` 只做委托。
+- 内部工具代码域（非用户面，仅为网站产出内容）：生图 runner（generation/）、R2 上传（r2_upload/）、交互菜单（cli/）、辅助转换（other/）。顶层 `main.py` 只做委托。
 
 ## 去哪儿改
 
@@ -13,7 +13,9 @@
 | -------------------------- | ---------------------------------------------------------- | --------------------------------------------- |
 | CLI 参数/环境变量/落盘合约 | `scripts/generation/comfyui_part1_generate.py`             | 入口；fresh-run 主链路走 `--config`           |
 | run 配置解析               | `scripts/generation/runner_config.py`                      | 校验 `data/models/*/config.yaml`、v1/v2 schema 与 repo-relative 资产 |
-| 并发协调                   | `scripts/generation/runner_coordinator.py`                 | ThreadPoolExecutor 双池                       |
+| 并发协调                   | `scripts/generation/runner_coordinator.py`                 | ThreadPoolExecutor 双池 + 守卫硬停中止提交    |
+| NovelAI 请求/守卫/错误码   | `scripts/generation/novelai_client.py`                     | `novelai` SDK + `NOVELAI_*` 环境变量 + Anlas 守卫错误码 |
+| NovelAI 生图入口           | `scripts/generation/novelai_generate.py`                   | `backend=novelai` 的 fresh-run / retry / dry-run |
 | ComfyUI 请求/WS/错误码     | `scripts/generation/comfyui_client.py`                     | `ComfyUIClientError`（`code`+`context`）      |
 | workflow JSON 注入         | `scripts/generation/workflow_patch.py`                     | 标准 CLIPTextEncode 与 Anima Artist Mixer 引用链 |
 | prompt 组合/hash/seed      | `scripts/generation/prompt_grid.py`                        | general/artists 拆分；hash 可包含 `artist_chain` |
@@ -24,8 +26,9 @@
 | R2 客户端                  | `scripts/r2_upload/r2_client.py`                           | boto3 S3 兼容 + 重试                          |
 | Supabase 批量写入          | `scripts/r2_upload/supabase_writer.py`                     | PostgREST upsert + 分批                       |
 | 对外导出                   | `scripts/__init__.py`                                      | `__all__` 统一导出                            |
-| run 配置路径枚举           | `scripts/run_config_path.py`                              | `DATA_MODELS_DIR` / `iter_run_config_files()`:枚举 `data/models/*/config.yaml`,被 menu/runner_config/upload 多处复用 |
-| run 命名与键校验           | `scripts/run_naming.py`                                   | `RUN_KEY_RE` / `validate_run_key()`:run key 形态校验(小写 kebab-case) |
+| Python env 文件加载        | `scripts/env_loading.py`                                   | 默认只读 `.env`；`--local` 先读 `.env.local-db`（仅数据库键、覆盖进程值）再由 `.env` 补漏 |
+| run 配置路径枚举           | `scripts/run_config_path.py`                               | `DATA_MODELS_DIR` / `iter_run_config_files()`：枚举 `data/models/*/config.yaml`，被 menu/runner_config/upload 多处复用 |
+| run 命名与键校验           | `scripts/run_naming.py`                                    | `RUN_KEY_RE` / `validate_run_key()`：run key 形态校验（小写 kebab-case） |
 
 ## 子目录职责（避免串层）
 
@@ -35,6 +38,7 @@
 - `scripts/r2_upload/`：R2 上传 + Supabase 写入 + run 删除；不把凭证细节扩散到其他目录
 
 - fresh-run 主链路：`main.py` / 菜单 → `comfyui_part1_generate.py --config ...` → `runner_config.py` → runner\_\* 模块
+- NovelAI 链路：菜单「生图 (NovelAI)」→ `novelai_generate.py --config ...` → `runner_config.py`（v2）→ `novelai_client.py` 每格守卫 + SDK 调用 → 共用协调/落盘/重试模块
 
 ## 约定（本目录特有）
 
@@ -48,3 +52,7 @@
 - 不要把 ComfyUI 的整段响应对象塞进异常 message/context
 - 不要在 tqdm 循环里 `print()`；用 `logging`
 - 不要在 `scripts/cli/` 里复制 `scripts/generation/` 或 `scripts/r2_upload/` 的业务参数解析
+
+<!-- MANUAL: 以下为手工维护内容，deepinit 重生成时原样保留 -->
+
+本目录是作者自用的**内部生图生产线**，不是产品组成：不要为它引入或讨论用户界面、用户体系、i18n、SEO 等产品能力，也不要把它当作产品的一部分来描述。

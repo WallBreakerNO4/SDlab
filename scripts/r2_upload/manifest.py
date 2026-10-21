@@ -9,6 +9,8 @@ from typing import Final, Literal, cast
 
 from scripts.run_naming import validate_run_key
 
+from .upload_contracts import EVALUATION_STATUSES
+
 
 VIEW_SCHEMA_VERSION: Final[int] = 2
 ViewerVariant = Literal["public", "auth_sfw", "auth_nsfw"]
@@ -45,6 +47,25 @@ def view_manifest_object_key(
         f"runs/{normalized_run_dir_name}/view/v{VIEW_SCHEMA_VERSION}/"
         f"{normalized_release_id}/rows/{viewer_variant}/{y_index}.json"
     )
+
+
+def rewrite_current_manifest_status(payload: bytes, *, status: str) -> bytes:
+    """返回把 `status` 写入当前指针后的字节；用于发布时状态单调收口。"""
+    if status not in EVALUATION_STATUSES:
+        raise ValueError(f"unsupported evaluation status: {status}")
+    try:
+        parsed = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("current manifest is not valid JSON") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError("current manifest must be an object")
+    parsed["status"] = status
+    return json.dumps(
+        parsed,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
 
 
 def build_view_release(payload: Mapping[str, object]) -> dict[str, object]:
@@ -142,6 +163,18 @@ def build_view_release(payload: Mapping[str, object]) -> dict[str, object]:
             f"runs/{run_dir}/view/v{VIEW_SCHEMA_VERSION}/{release_id}/rows/public/"
         ),
     }
+
+    status = _optional_non_empty_str(payload.get("status"))
+    if status is not None:
+        if status not in EVALUATION_STATUSES:
+            raise ValueError(f"unsupported evaluation status: {status}")
+        current_manifest["status"] = status
+
+    generated_cells = payload.get("generated_cells")
+    if isinstance(generated_cells, int) and not isinstance(generated_cells, bool):
+        if generated_cells < 0:
+            raise ValueError("generated_cells must be non-negative")
+        current_manifest["generated_cells"] = generated_cells
 
     return {
         "schema_version": VIEW_SCHEMA_VERSION,

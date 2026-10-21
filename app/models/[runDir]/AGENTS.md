@@ -5,7 +5,7 @@
 
 ## 概览
 
-- 模型详情页的客户端组件模块：按 current view → access grant → bootstrap 的顺序建立页面数据，再按可见行拉取 row manifest；渲染虚拟网格 + 模型描述 header + workflow 下载入口。支持 NSFW 视图切换（经 `useUserPreferences()`）。
+- 模型详情页的客户端组件模块：按 current view → access grant → bootstrap 的顺序建立页面数据，再按可见行拉取 row manifest；渲染虚拟网格 + 模型描述 header + workflow 下载入口。支持 NSFW 视图切换（经 `useUserPreferences()`）。进行中评测在 header 下方显示横幅（无进度数字），网格里「行已就绪但无图」的单元格显示「待生成」。
 - 本目录组件由 `app/[locale]/models/[runDir]/page.tsx`（Server Component）消费，不是独立页面路由。
 
 ## 去哪儿看
@@ -25,7 +25,7 @@
 ## 约定（本目录特有）
 
 - 本目录只放客户端组件和类型，不作为独立页面路由；页面入口在 `app/[locale]/models/[runDir]/page.tsx`。
-- `use-model-detail-data.ts` 是本页面核心数据 hook：先拉 `view/current.json`（公开）→ 认证用户再拉 `/api/comfyui/run/{runDir}/access` → 最后拉 bootstrap JSON。
+- `use-model-detail-data.ts` 是本页面核心数据 hook：先拉 `view/current.json`（公开）→ 认证用户再拉 `/api/comfyui/run/{runDir}/access` → 最后拉 bootstrap JSON；`current.json` 的可选 `status` 经 `normalizeEvaluationStatus()` 归一化（缺失按已完结）后驱动横幅与占位文案。
 - bootstrap 只包含 detail + grid 索引/占位数据；实际 row manifest 由 `components/comfyui/use-virtual-grid-rows.ts` 根据可见行按需加载。
 - SFW 场景 bootstrap 通过 `publicObjectUrl()`；NSFW 场景通过 `privateObjectProxyUrl()` + grant token。
 - bootstrap JSON 的 `yLabels` / `yPromptParts`（camelCase）会被归一化为 `y_labels` / `y_prompt_parts`（snake_case）以匹配网格组件预期。

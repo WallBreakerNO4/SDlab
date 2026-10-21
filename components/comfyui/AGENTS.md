@@ -38,7 +38,7 @@
 - 工具栏布局：展开/收起前保存滚动锚点，并用 `setScrollViewportWidthImmediate()` 立即提交目标宽度；不要只等 `ResizeObserver` debounce。
 - 收藏星标：两种行标签形态（Mixer/Legacy）均渲染，未登录点击弹 `AuthLoginDialog`；style-items 映射在 bootstrap ready 后惰性拉取（不限登录态），失败静默隐藏星标、不阻塞网格。
 - 收藏面板 label 取当前 run 网格行标签（style_key↔y_index 客户端 join），不用收藏快照；toggle 乐观更新、失败回滚 + toast，stateful hook 在 `app/models/[runDir]/use-style-favorites.ts`。
-- 状态：组件层核心是 row cache 的 `ready/error` 与图片加载中的占位态；缺失 cell 也要能渲染 blurhash 或空态。
+- 状态：组件层核心是 row cache 的 `ready/error` 与图片加载中的占位态；缺失 cell 也要能渲染 blurhash 或空态。占位文案统一走 `virtualGrid` namespace：进行中评测里 row 已就绪但没有图片的单元格显示「待生成」（`pending`），已完结显示「缺失」（`missing`），加载中 / 加载失败用 `loading` / `loadFailed`。
 - UI primitives：按钮/对话框等交互来自 `components/ui/*`，不要在业务组件里手写 primitives。
 
 ## 反模式

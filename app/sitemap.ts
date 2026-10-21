@@ -16,9 +16,12 @@ function toLastModified(value: string): Date | undefined {
 
 /** 为给定路径生成两个 locale 的 hreflang 映射 */
 function makeLanguages(path: string): Record<string, string> {
+  // 根路径省略 locale 后的尾斜杠（`/zh` 而非 `/zh/`）：仓库未开启 trailingSlash，
+  // 带尾斜杠地址会被 308 重定向。与 buildSeoMetadata() 的根路径归一化保持一致。
+  const normalizedPath = path === "/" ? "" : path;
   const languages: Record<string, string> = {};
   for (const loc of routing.locales) {
-    languages[loc] = `${SITE_ORIGIN}/${loc}${path}`;
+    languages[loc] = `${SITE_ORIGIN}/${loc}${normalizedPath}`;
   }
   return languages;
 }
